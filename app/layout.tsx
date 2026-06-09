@@ -32,11 +32,19 @@ export default function RootLayout({
                   <a href="/" className="hover:text-blue-700">
                     Início
                   </a>
-                  <a href="/" className="hover:text-blue-700">
-                    Categorias
+                  <a
+                    href={siteConfig.links.vadeMecum}
+                    className="hover:text-blue-700"
+                  >
+                    Vade Mecum
                   </a>
-                  <a href="/" className="hover:text-blue-700">
-                    Atualizações
+                  <a
+                    href={siteConfig.links.minhasLeis}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:text-blue-700"
+                  >
+                    Minhas Leis
                   </a>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
