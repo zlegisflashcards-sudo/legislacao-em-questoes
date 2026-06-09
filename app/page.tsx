@@ -1,86 +1,36 @@
-import { LegislacaoCard } from "@/components/legislacao-card";
+import { HomeCategoriasVadeMecum } from "@/components/home-categorias-vade-mecum";
 import { LegislacaoSearch } from "@/components/legislacao-search";
-import {
-  categoriasLegislacao,
-  filtrarDestaquesPorCategoria,
-  filtrarLegislacoesAtivas,
-  getLegislacoes,
-} from "@/lib/legislacoes";
-
-function CategoriaSection({
-  categoria,
-  legislacoes,
-}: {
-  categoria: (typeof categoriasLegislacao)[number];
-  legislacoes: Awaited<ReturnType<typeof getLegislacoes>>;
-}) {
-  const destaques = filtrarDestaquesPorCategoria(legislacoes, categoria.nome);
-
-  return (
-    <section className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-bold text-slate-950">
-            {categoria.nome}
-          </h2>
-          <p className="text-sm leading-6 text-slate-600">
-            {categoria.descricao}
-          </p>
-        </div>
-        <a
-          href={`/categorias/${categoria.slug}`}
-          className="inline-flex w-fit items-center justify-center rounded border border-blue-700 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-        >
-          Ver mais
-        </a>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        {destaques.map((legislacao) => (
-          <LegislacaoCard key={legislacao.slug} legislacao={legislacao} />
-        ))}
-      </div>
-    </section>
-  );
-}
+import { filtrarLegislacoesAtivas, getLegislacoes } from "@/lib/legislacoes";
 
 export default async function Home() {
   const legislacoes = await getLegislacoes();
   const legislacoesAtivas = filtrarLegislacoesAtivas(legislacoes);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-12 px-5 py-10 sm:px-6 sm:py-14">
-      <section className="grid gap-8 rounded bg-white p-6 shadow-sm sm:p-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-        <div className="space-y-4">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
-            Catálogo de legislações
-          </p>
+    <div className="bg-[#171a21]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-12 px-5 py-10 sm:px-6 sm:py-16">
+        <section className="mx-auto flex w-full max-w-xl flex-col gap-5 text-center">
           <div className="space-y-3">
-            <h1 className="max-w-3xl text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
-              Encontre a legislação que você quer revisar
-            </h1>
-            <p className="max-w-2xl text-lg leading-8 text-slate-700">
-              Consulte materiais disponíveis com flashcards, vídeo público,
-              PDF Esquematizado, Legiscast e histórico de atualização
-              legislativa.
+            <p className="text-sm font-semibold leading-6 text-slate-200">
+              Encontre a legislação que você quer estudar.
+            </p>
+            <p className="text-sm leading-6 text-slate-300">
+              Consulte materiais disponíveis com questões em flashcards,
+              legislação esquematizada e Legiscast.
             </p>
           </div>
-        </div>
 
-        <LegislacaoSearch legislacoes={legislacoesAtivas} />
-      </section>
+          <div className="w-full">
+            <LegislacaoSearch legislacoes={legislacoesAtivas} />
+          </div>
+        </section>
 
-      {categoriasLegislacao.map((categoria) => (
-        <CategoriaSection
-          key={categoria.nome}
-          categoria={categoria}
-          legislacoes={legislacoes}
-        />
-      ))}
+        <HomeCategoriasVadeMecum legislacoes={legislacoesAtivas} />
 
-      <footer className="border-t border-slate-200 pt-6 text-center text-sm text-slate-500">
-        Versão Online 1.0
-      </footer>
+        <footer className="border-t border-slate-700 pt-6 text-center text-sm text-slate-400">
+          Versão Online 1.0
+        </footer>
+      </div>
     </div>
   );
 }

@@ -41,10 +41,10 @@ export function LegislacaoSearch({ legislacoes }: LegislacaoSearchProps) {
     normalizedQuery.length >= 2 && sugestoes.length === 0;
 
   return (
-    <div className="rounded border border-slate-200 bg-slate-50 p-4">
+    <div className="rounded-xl border border-blue-200/20 bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-6">
       <label
         htmlFor="busca-legislacao"
-        className="mb-2 block text-sm font-semibold text-slate-800"
+        className="mb-3 block text-sm font-bold uppercase tracking-wide text-[#07306b]"
       >
         Pesquisar legislação
       </label>
@@ -56,20 +56,20 @@ export function LegislacaoSearch({ legislacoes }: LegislacaoSearchProps) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Digite o nome da legislação"
           autoComplete="off"
-          className="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
+          className="h-14 w-full rounded-lg border border-slate-300 bg-slate-50 px-4 text-base font-medium text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[#07306b] focus:bg-white focus:ring-4 focus:ring-blue-100"
         />
 
         {(sugestoes.length > 0 || shouldShowEmptyState) && (
-          <div className="absolute left-0 right-0 top-14 z-10 overflow-hidden rounded border border-slate-200 bg-white shadow-lg">
+          <div className="absolute left-0 right-0 top-16 z-10 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
             {sugestoes.length > 0 ? (
               <ul>
                 {sugestoes.map((legislacao) => (
                   <li key={legislacao.slug}>
                     <a
                       href={`/legislacao/${legislacao.slug}`}
-                      className="block px-4 py-3 hover:bg-blue-50"
+                      className="block px-4 py-3 transition hover:bg-blue-50"
                     >
-                      <span className="block text-sm font-semibold text-slate-950">
+                      <span className="block text-sm font-bold text-slate-950">
                         {legislacao.nome}
                       </span>
                       <span className="mt-1 block text-xs text-slate-600">
