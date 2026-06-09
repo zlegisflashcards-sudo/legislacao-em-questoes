@@ -77,6 +77,10 @@ export default async function Home() {
           legislacoes={legislacoes}
         />
       ))}
+
+      <footer className="border-t border-slate-200 pt-6 text-center text-sm text-slate-500">
+        Versão Online 1.0
+      </footer>
     </div>
   );
 }
