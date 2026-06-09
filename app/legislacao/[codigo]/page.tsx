@@ -13,18 +13,6 @@ type LegislacaoPageProps = {
   }>;
 };
 
-function getCategoriaHref(categoria: string) {
-  if (categoria === "Constituição Federal") {
-    return "/categorias/constituicao-federal";
-  }
-
-  if (categoria === "Códigos") {
-    return "/categorias/codigos";
-  }
-
-  return "/categorias/legislacoes";
-}
-
 export async function generateStaticParams() {
   const legislacoes = await getLegislacoes();
 
@@ -45,109 +33,114 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   const youtubeEmbedUrl = getYoutubeEmbedUrl(legislacao.youtubeUrl);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-6 sm:py-14">
-      <div className="space-y-4">
-        <a
-          href={getCategoriaHref(legislacao.categoria)}
-          className="text-sm font-semibold text-blue-700 hover:text-blue-900"
-        >
-          Voltar para {legislacao.categoria}
-        </a>
+    <div className="bg-[#171a21]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-6 sm:py-14">
+        <div className="space-y-4">
+          <a
+            href="/"
+            className="text-sm font-semibold text-slate-300 hover:text-blue-300"
+          >
+            ← Voltar para a Home
+          </a>
 
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
-              {legislacao.categoria}
-            </p>
-            <h1 className="text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
-              {legislacao.nome}
-            </h1>
-            <p className="max-w-2xl text-lg leading-8 text-slate-700">
-              {legislacao.descricaoCurta}
-            </p>
-          </div>
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                {legislacao.categoria}
+              </p>
+              <h1 className="text-4xl font-bold leading-tight text-white sm:text-5xl">
+                {legislacao.nome}
+              </h1>
+              <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold leading-6 text-slate-200">
+                <a
+                  href={legislacao.hotmartUrl}
+                  className="hover:text-blue-300"
+                >
+                  🎯 Legislação em Questões
+                </a>
+                {legislacao.pdfEsquematizadoUrl ? (
+                  <a
+                    href={legislacao.pdfEsquematizadoUrl}
+                    className="hover:text-blue-300"
+                  >
+                    • 📄 Legislação Esquematizada
+                  </a>
+                ) : (
+                  <span>• 📄 Legislação Esquematizada</span>
+                )}
+                {legislacao.legiscastUrl ? (
+                  <a
+                    href={legislacao.legiscastUrl}
+                    className="hover:text-blue-300"
+                  >
+                    • 🎧 Legiscast
+                  </a>
+                ) : (
+                  <span>• 🎧 Legiscast</span>
+                )}
+              </p>
+              <p className="max-w-2xl text-lg leading-8 text-slate-200">
+                {legislacao.descricaoCurta}
+              </p>
+            </div>
 
-          <div className="rounded border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-semibold text-slate-600">
-              Quantidade de flashcards
-            </p>
-            <p className="mt-2 text-4xl font-bold text-slate-950">
-              {legislacao.quantidadeFlashcards}
-            </p>
+            <div className="rounded-lg border border-blue-200/30 bg-white p-6 shadow-[0_22px_55px_rgba(0,0,0,0.32)]">
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Quantidade de Flashcards
+              </p>
+              <p className="mt-3 flex items-center gap-2 text-4xl font-black text-[#062a5f] sm:text-5xl">
+                <span className="text-sky-400">⚡</span>
+                {legislacao.quantidadeFlashcards}
+                <span className="text-2xl font-bold text-slate-900">
+                  Flashcards
+                </span>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <section className="overflow-hidden rounded border border-slate-200 bg-black shadow-sm">
-        <iframe
-          className="aspect-video w-full"
-          src={youtubeEmbedUrl}
-          title={`Vídeo com questões dos flashcards: ${legislacao.nome}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
+        <section className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+          <iframe
+            className="aspect-video w-full"
+            src={youtubeEmbedUrl}
+            title={`Vídeo com questões dos flashcards: ${legislacao.nome}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </section>
+
+        <section>
+          <div className="rounded-lg border border-blue-200/40 bg-white p-5 shadow-[0_18px_45px_rgba(0,0,0,0.26)]">
+            <p className="text-sm font-semibold uppercase tracking-wide text-[#062a5f]">
+              Última alteração legislativa
+            </p>
+            <p className="mt-3 rounded bg-slate-100 px-4 py-3 text-base font-bold text-slate-950">
+              {legislacao.ultimaAlteracaoLegislativa}
+            </p>
+          </div>
+        </section>
+
+        <section className="flex flex-col items-center rounded-lg bg-[#062a5f] p-6 text-center text-white shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+          <a
+            href={legislacao.hotmartUrl}
+            className="inline-flex w-fit items-center justify-center rounded-lg bg-[#062a5f] px-7 py-4 text-sm font-black text-white shadow-lg ring-1 ring-white/20 hover:bg-blue-900 sm:text-base"
+          >
+            Adquirir Material Completo
+          </a>
+          <div className="mt-5 rounded border border-white/15 bg-black/20 px-4 py-3 text-sm font-semibold leading-6 text-blue-50">
+            ∞ Acesso Vitalício • ⬇️ Acesso Ilimitado • 🔄 Sempre Atualizado*
+          </div>
+          <p className="mt-3 text-xs leading-5 text-blue-100">
+            * Atualizações de legislações específicas podem depender de
+            solicitação do aluno.
+          </p>
+        </section>
+
+        <AcompanharAtualizacoesForm
+          legislacaoCodigo={legislacao.slug}
+          legislacaoNome={legislacao.nome}
         />
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-600">
-            Última alteração legislativa
-          </p>
-          <p className="mt-2 text-base font-semibold text-slate-950">
-            {legislacao.ultimaAlteracaoLegislativa}
-          </p>
-        </div>
-
-        <div className="rounded border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-600">
-            PDF Esquematizado
-          </p>
-          {legislacao.pdfEsquematizadoUrl ? (
-            <a
-              href={legislacao.pdfEsquematizadoUrl}
-              className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-900"
-            >
-              Acessar PDF
-            </a>
-          ) : (
-            <p className="mt-2 text-sm text-slate-600">Não disponível.</p>
-          )}
-        </div>
-
-        <div className="rounded border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-600">Legiscast</p>
-          {legislacao.legiscastUrl ? (
-            <a
-              href={legislacao.legiscastUrl}
-              className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-900"
-            >
-              Acessar Legiscast
-            </a>
-          ) : (
-            <p className="mt-2 text-sm text-slate-600">Não disponível.</p>
-          )}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-4 rounded bg-blue-700 p-6 text-white shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Estude com os flashcards</h2>
-          <p className="text-sm leading-6 text-blue-50">
-            Acesse o material completo pela Hotmart.
-          </p>
-        </div>
-        <a
-          href={legislacao.hotmartUrl}
-          className="inline-flex w-fit items-center justify-center rounded bg-white px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-50"
-        >
-          Comprar
-        </a>
-      </section>
-
-      <AcompanharAtualizacoesForm
-        legislacaoCodigo={legislacao.slug}
-        legislacaoNome={legislacao.nome}
-      />
+      </div>
     </div>
   );
 }

@@ -3,7 +3,9 @@ import { fetchLegislacoesFromGoogleSheets } from "@/lib/google-sheets";
 export type CategoriaLegislacao =
   | "Constituição Federal"
   | "Códigos"
-  | "Legislações";
+  | "Legislações"
+  | "Tratados"
+  | "Legislações Específicas";
 
 export type SimNao = "Sim" | "Não";
 
@@ -41,6 +43,16 @@ export const categoriasLegislacao: Array<{
     slug: "legislacoes",
     nome: "Legislações",
     descricao: "Leis especiais e normas relevantes para concursos.",
+  },
+  {
+    slug: "tratados",
+    nome: "Tratados",
+    descricao: "Tratados e documentos internacionais relevantes para provas.",
+  },
+  {
+    slug: "legislacoes-especificas",
+    nome: "Legislações Específicas",
+    descricao: "Normas específicas organizadas para concursos direcionados.",
   },
 ];
 

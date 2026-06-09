@@ -45,7 +45,7 @@ export function AcompanharAtualizacoesForm({
   }
 
   return (
-    <section className="rounded border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(0,0,0,0.22)]">
       <div className="space-y-2">
         <h2 className="text-2xl font-bold text-slate-950">
           Acompanhar atualizações
@@ -69,7 +69,7 @@ export function AcompanharAtualizacoesForm({
           value={nome}
           onChange={(event) => setNome(event.target.value)}
           placeholder="Seu nome"
-          className="h-12 rounded border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
+          className="h-12 rounded border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-[#062a5f] focus:ring-2 focus:ring-blue-100"
         />
 
         <label htmlFor="email-atualizacoes" className="sr-only">
@@ -82,13 +82,13 @@ export function AcompanharAtualizacoesForm({
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="Seu e-mail"
-          className="h-12 rounded border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
+          className="h-12 rounded border border-slate-300 bg-white px-4 text-base outline-none transition focus:border-[#062a5f] focus:ring-2 focus:ring-blue-100"
         />
 
         <button
           type="submit"
           disabled={status === "loading"}
-          className="inline-flex h-12 items-center justify-center rounded bg-blue-700 px-5 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="inline-flex h-12 items-center justify-center rounded bg-[#062a5f] px-5 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           {status === "loading" ? "Enviando..." : "Acompanhar"}
         </button>

@@ -52,12 +52,38 @@ function parseCsv(csv: string) {
   });
 }
 
-function isCategoria(value: string): value is CategoriaLegislacao {
-  return (
-    value === "Constituição Federal" ||
-    value === "Códigos" ||
-    value === "Legislações"
-  );
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function toCategoria(value: string): CategoriaLegislacao | null {
+  const normalizedValue = normalizeText(value);
+
+  if (normalizedValue === "constituicao federal") {
+    return "Constituição Federal";
+  }
+
+  if (normalizedValue === "codigos") {
+    return "Códigos";
+  }
+
+  if (normalizedValue === "legislacoes") {
+    return "Legislações";
+  }
+
+  if (normalizedValue === "tratados") {
+    return "Tratados";
+  }
+
+  if (normalizedValue === "legislacoes especificas") {
+    return "Legislações Específicas";
+  }
+
+  return null;
 }
 
 function toSimNao(value: string): SimNao {
@@ -66,8 +92,9 @@ function toSimNao(value: string): SimNao {
 
 function rowToLegislacao(row: CsvRow): Legislacao | null {
   const codigo = row.codigo || row.slug;
+  const categoria = toCategoria(row.categoria);
 
-  if (!codigo || !row.nome || !isCategoria(row.categoria)) {
+  if (!codigo || !row.nome || !categoria) {
     return null;
   }
 
@@ -75,7 +102,7 @@ function rowToLegislacao(row: CsvRow): Legislacao | null {
     slug: codigo,
     nome: row.nome,
     descricaoCurta: row.descricaoCurta,
-    categoria: row.categoria,
+    categoria,
     destaqueHome: toSimNao(row.destaqueHome),
     ativo: toSimNao(row.ativo),
     youtubeUrl: row.youtubeUrl,
