@@ -11,6 +11,16 @@ export function AlunoDashboard() {
   const [aluno, setAluno] = useState<Aluno | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [cupomCopiado, setCupomCopiado] = useState(false);
+
+  const produtosMockados = [
+    "Código Penal",
+    "Constituição Federal",
+    "Lei 13.022",
+  ];
+  const pontosMockados = 120;
+  const nivelMockado = "Estudioso";
+  const cupomMockado = "LEGIS20";
 
   useEffect(() => {
     let ativo = true;
@@ -51,6 +61,12 @@ export function AlunoDashboard() {
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  async function copiarCupom() {
+    await navigator.clipboard.writeText(cupomMockado);
+    setCupomCopiado(true);
+    window.setTimeout(() => setCupomCopiado(false), 1800);
   }
 
   if (carregando) {
@@ -106,8 +122,9 @@ export function AlunoDashboard() {
                 {aluno.nome || "Aluno"}
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Esta e a base da sua nova Area do Aluno. As proximas fases vao
-                conectar produtos, compras e beneficios.
+                Este é o painel inicial do Clube de Benefícios. Os dados abaixo
+                são temporários enquanto a integração real de produtos, pontos e
+                cupons ainda não entra em produção.
               </p>
             </div>
 
@@ -123,36 +140,62 @@ export function AlunoDashboard() {
 
         <div className="grid gap-5 md:grid-cols-2">
           <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-bold text-slate-950">Perfil</h2>
-            <dl className="mt-4 space-y-3 text-sm">
-              <div>
-                <dt className="font-semibold text-slate-500">E-mail</dt>
-                <dd className="mt-1 text-slate-900">{aluno.email}</dd>
-              </div>
-              <div>
-                <dt className="font-semibold text-slate-500">Telefone</dt>
-                <dd className="mt-1 text-slate-900">
-                  {aluno.telefone || "Nao informado"}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-semibold text-slate-500">CPF</dt>
-                <dd className="mt-1 text-slate-900">
-                  {aluno.cpf || "Nao informado"}
-                </dd>
-              </div>
-            </dl>
+            <p className="text-sm font-semibold text-blue-700">Meus Produtos</p>
+            <h2 className="mt-2 text-xl font-bold text-slate-950">
+              {produtosMockados.length} produtos
+            </h2>
+            <ul className="mt-4 space-y-2 text-sm font-medium text-slate-700">
+              {produtosMockados.map((produto) => (
+                <li
+                  key={produto}
+                  className="rounded border border-slate-200 bg-slate-50 px-3 py-2"
+                >
+                  {produto}
+                </li>
+              ))}
+            </ul>
           </article>
 
           <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-bold text-slate-950">
-              Estrutura da V2
+            <p className="text-sm font-semibold text-blue-700">Pontos</p>
+            <h2 className="mt-2 text-4xl font-bold text-slate-950">
+              {pontosMockados}
             </h2>
-            <ul className="mt-4 space-y-3 text-sm text-slate-700">
-              <li>Cadastro e login ativos pelo Supabase Auth.</li>
-              <li>Perfil vinculado ao usuario autenticado.</li>
-              <li>Base pronta para produtos adquiridos na Fase 2.</li>
-            </ul>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Pontuação temporária para demonstrar a experiência do Clube de
+              Benefícios.
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-semibold text-blue-700">Nível</p>
+            <h2 className="mt-2 text-3xl font-bold text-slate-950">
+              {nivelMockado}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Nível mockado enquanto as regras reais de fidelidade ainda não
+              foram implementadas.
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-semibold text-blue-700">Cupom atual</p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <code className="rounded border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-lg font-bold text-blue-800">
+                {cupomMockado}
+              </code>
+              <button
+                type="button"
+                onClick={copiarCupom}
+                className="rounded bg-blue-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-800"
+              >
+                {cupomCopiado ? "Cupom copiado" : "Copiar cupom"}
+              </button>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Cupom demonstrativo. A gestão real de cupons fica para fase
+              futura.
+            </p>
           </article>
         </div>
       </section>
