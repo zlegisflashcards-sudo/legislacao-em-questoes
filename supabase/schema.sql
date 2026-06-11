@@ -177,3 +177,155 @@ create policy "Aluno pode atualizar o proprio perfil"
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+create table if not exists public.produtos (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  tipo text not null,
+  hotmart_product_id text not null unique,
+  slug_opcional text,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create index if not exists produtos_ativo_idx
+  on public.produtos (ativo);
+
+create index if not exists produtos_slug_opcional_idx
+  on public.produtos (slug_opcional)
+  where slug_opcional is not null;
+
+drop trigger if exists set_produtos_atualizado_em on public.produtos;
+create trigger set_produtos_atualizado_em
+  before update on public.produtos
+  for each row
+  execute function public.set_atualizado_em();
+
+create table if not exists public.hotmart_eventos (
+  id uuid primary key default gen_random_uuid(),
+  hotmart_event_id text unique,
+  evento text not null,
+  hotmart_product_id text,
+  hotmart_transaction_id text,
+  payload jsonb not null,
+  processado boolean not null default false,
+  erro_processamento text,
+  criado_em timestamptz not null default now()
+);
+
+create index if not exists hotmart_eventos_product_id_idx
+  on public.hotmart_eventos (hotmart_product_id);
+
+create index if not exists hotmart_eventos_transaction_id_idx
+  on public.hotmart_eventos (hotmart_transaction_id);
+
+create index if not exists hotmart_eventos_processado_idx
+  on public.hotmart_eventos (processado);
+
+create table if not exists public.compras (
+  id uuid primary key default gen_random_uuid(),
+  aluno_id uuid not null references public.alunos(id) on delete cascade,
+  produto_id uuid not null references public.produtos(id) on delete restrict,
+  hotmart_product_id text not null,
+  hotmart_transaction_id text unique,
+  hotmart_evento_id uuid references public.hotmart_eventos(id) on delete set null,
+  status text not null default 'pendente',
+  valor_centavos integer,
+  moeda text,
+  comprada_em timestamptz,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint compras_status_check check (
+    status in ('aprovada', 'pendente', 'cancelada', 'reembolsada', 'chargeback', 'manual')
+  )
+);
+
+create index if not exists compras_aluno_idx
+  on public.compras (aluno_id);
+
+create index if not exists compras_produto_idx
+  on public.compras (produto_id);
+
+create index if not exists compras_status_idx
+  on public.compras (status);
+
+create index if not exists compras_hotmart_product_id_idx
+  on public.compras (hotmart_product_id);
+
+drop trigger if exists set_compras_atualizado_em on public.compras;
+create trigger set_compras_atualizado_em
+  before update on public.compras
+  for each row
+  execute function public.set_atualizado_em();
+
+create table if not exists public.aluno_produtos (
+  id uuid primary key default gen_random_uuid(),
+  aluno_id uuid not null references public.alunos(id) on delete cascade,
+  produto_id uuid not null references public.produtos(id) on delete restrict,
+  compra_id uuid references public.compras(id) on delete set null,
+  ativo boolean not null default true,
+  origem text not null default 'compra',
+  adquirido_em timestamptz,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint aluno_produtos_aluno_produto_unique unique (aluno_id, produto_id),
+  constraint aluno_produtos_origem_check check (
+    origem in ('compra', 'importacao', 'manual')
+  )
+);
+
+create index if not exists aluno_produtos_aluno_idx
+  on public.aluno_produtos (aluno_id);
+
+create index if not exists aluno_produtos_produto_idx
+  on public.aluno_produtos (produto_id);
+
+create index if not exists aluno_produtos_ativo_idx
+  on public.aluno_produtos (ativo);
+
+drop trigger if exists set_aluno_produtos_atualizado_em on public.aluno_produtos;
+create trigger set_aluno_produtos_atualizado_em
+  before update on public.aluno_produtos
+  for each row
+  execute function public.set_atualizado_em();
+
+alter table public.produtos enable row level security;
+alter table public.compras enable row level security;
+alter table public.aluno_produtos enable row level security;
+alter table public.hotmart_eventos enable row level security;
+
+drop policy if exists "Alunos autenticados podem ler produtos ativos" on public.produtos;
+create policy "Alunos autenticados podem ler produtos ativos"
+  on public.produtos
+  for select
+  to authenticated
+  using (ativo = true);
+
+drop policy if exists "Aluno pode ler as proprias compras" on public.compras;
+create policy "Aluno pode ler as proprias compras"
+  on public.compras
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.alunos
+      where alunos.id = compras.aluno_id
+        and alunos.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Aluno pode ler os proprios produtos" on public.aluno_produtos;
+create policy "Aluno pode ler os proprios produtos"
+  on public.aluno_produtos
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.alunos
+      where alunos.id = aluno_produtos.aluno_id
+        and alunos.user_id = auth.uid()
+    )
+  );
