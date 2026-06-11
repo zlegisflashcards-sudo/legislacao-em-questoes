@@ -95,3 +95,85 @@ create policy "Permitir leitura publica de comentarios aprovados"
   for select
   to anon
   using (aprovado = true);
+
+create table if not exists public.alunos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  nome text,
+  email text not null,
+  telefone text,
+  cpf text,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create index if not exists alunos_email_idx
+  on public.alunos (lower(trim(email)));
+
+create or replace function public.set_atualizado_em()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.atualizado_em = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists set_alunos_atualizado_em on public.alunos;
+create trigger set_alunos_atualizado_em
+  before update on public.alunos
+  for each row
+  execute function public.set_atualizado_em();
+
+create or replace function public.criar_aluno_para_usuario()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.alunos (user_id, nome, email)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'nome', new.raw_user_meta_data->>'name'),
+    new.email
+  )
+  on conflict (user_id) do update
+    set
+      nome = coalesce(public.alunos.nome, excluded.nome),
+      email = excluded.email;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists criar_aluno_apos_cadastro on auth.users;
+create trigger criar_aluno_apos_cadastro
+  after insert on auth.users
+  for each row
+  execute function public.criar_aluno_para_usuario();
+
+alter table public.alunos enable row level security;
+
+drop policy if exists "Aluno pode ler o proprio perfil" on public.alunos;
+create policy "Aluno pode ler o proprio perfil"
+  on public.alunos
+  for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Aluno pode criar o proprio perfil" on public.alunos;
+create policy "Aluno pode criar o proprio perfil"
+  on public.alunos
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Aluno pode atualizar o proprio perfil" on public.alunos;
+create policy "Aluno pode atualizar o proprio perfil"
+  on public.alunos
+  for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

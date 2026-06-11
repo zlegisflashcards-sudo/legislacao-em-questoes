@@ -38,6 +38,12 @@ export default function RootLayout({
                 >
                   🔐 Minhas leis adquiridas
                 </a>
+                <a
+                  href="/login"
+                  className="text-slate-200 hover:text-white"
+                >
+                  🎁 Clube de Benefícios
+                </a>
                 <div className="flex flex-wrap items-center gap-2">
                   <a
                     href={siteConfig.links.encomendarLegislacao}
