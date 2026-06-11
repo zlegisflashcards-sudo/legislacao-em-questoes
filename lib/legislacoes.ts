@@ -174,6 +174,11 @@ export function getYoutubeEmbedUrl(youtubeUrl: string) {
       return videoId ? `https://www.youtube.com/embed/${videoId}` : youtubeUrl;
     }
 
+    const playlistId = url.searchParams.get("list");
+    if (playlistId) {
+      return `https://www.youtube.com/embed/videoseries?list=${playlistId}`;
+    }
+
     const videoId = url.searchParams.get("v");
     return videoId ? `https://www.youtube.com/embed/${videoId}` : youtubeUrl;
   } catch {

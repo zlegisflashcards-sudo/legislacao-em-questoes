@@ -42,7 +42,7 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
             href={`/legislacao/${legislacao.slug}`}
             className="text-sm font-bold text-[#062a5f] hover:text-blue-800"
           >
-            Ver legislação
+            Estudar
           </a>
         </div>
       </div>

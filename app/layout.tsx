@@ -36,14 +36,14 @@ export default function RootLayout({
                   rel="noreferrer"
                   className="text-slate-200 hover:text-white"
                 >
-                  🔐 Acessar minhas leis
+                  🔐 Minhas leis adquiridas
                 </a>
                 <div className="flex flex-wrap items-center gap-2">
                   <a
                     href={siteConfig.links.encomendarLegislacao}
                     className="inline-flex items-center justify-center rounded bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600"
                   >
-                    Encomendar Legislação
+                    Fazer orçamento de leis exclusivas
                   </a>
                   <a
                     href={siteConfig.links.whatsapp}
@@ -61,70 +61,77 @@ export default function RootLayout({
           <main className="flex-1">{children}</main>
 
           <footer className="border-t border-slate-800 bg-black">
-            <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-5 py-6 text-sm text-slate-400 sm:px-6">
+            <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-5 py-7 text-sm text-slate-400 sm:px-6">
+              <a
+                href="https://www.instagram.com/legis_flashcards/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-200 transition hover:text-blue-300 sm:text-base"
+                aria-label="Instagram"
+              >
+                <img
+                  src="/icons/instagram.png"
+                  alt="Instagram"
+                  className="h-8 w-8 object-contain"
+                />
+                <span>Instagram — Quiz diário de questões</span>
+              </a>
+
               <nav
                 aria-label="Redes sociais e contatos"
-                className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2"
+                className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3"
               >
-                <a
-                  href="https://www.instagram.com/legis_flashcards/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="opacity-75 transition hover:opacity-100"
-                  aria-label="Instagram"
-                >
-                  <img
-                    src="/icons/instagram.png"
-                    alt="Instagram"
-                    className="h-5 w-5 object-contain"
-                  />
-                </a>
                 <a
                   href="https://www.youtube.com/@Legisflashcards"
                   target="_blank"
                   rel="noreferrer"
-                  className="opacity-75 transition hover:opacity-100"
+                  className="opacity-80 transition hover:opacity-100"
                   aria-label="YouTube"
                 >
                   <img
                     src="/icons/youtube.png"
                     alt="YouTube"
-                    className="h-5 w-5 object-contain"
+                    className="h-7 w-7 object-contain"
                   />
                 </a>
                 <a
                   href="https://www.tiktok.com/@legis_flashcards?is_from_webapp=1&sender_device=pc"
                   target="_blank"
                   rel="noreferrer"
-                  className="opacity-75 transition hover:opacity-100"
+                  className="opacity-80 transition hover:opacity-100"
                   aria-label="TikTok"
                 >
                   <img
                     src="/icons/tiktok.png"
                     alt="TikTok"
-                    className="h-5 w-5 object-contain"
+                    className="h-7 w-7 object-contain"
                   />
                 </a>
                 <a
                   href="https://t.me/vademecumflashcards"
                   target="_blank"
                   rel="noreferrer"
-                  className="opacity-75 transition hover:opacity-100"
+                  className="opacity-80 transition hover:opacity-100"
                   aria-label="Comunidade Telegram"
                 >
                   <img
                     src="/icons/telegram.png"
                     alt="Comunidade Telegram"
-                    className="h-5 w-5 object-contain"
+                    className="h-7 w-7 object-contain"
+                  />
+                </a>
+                <a
+                  href="mailto:zlegisflashcards@gmail.com"
+                  className="opacity-80 transition hover:opacity-100"
+                  aria-label="Gmail"
+                >
+                  <img
+                    src="/icons/gmail.png"
+                    alt="Gmail"
+                    className="h-7 w-7 object-contain"
                   />
                 </a>
               </nav>
-              <a
-                href="mailto:zlegisflashcards@gmail.com"
-                className="text-xs text-slate-400 hover:text-blue-300"
-              >
-                zlegisflashcards@gmail.com
-              </a>
             </div>
           </footer>
         </div>

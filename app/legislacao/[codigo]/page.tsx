@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AcompanharAtualizacoesForm } from "@/components/acompanhar-atualizacoes-form";
+import { LegislacaoContentTabs } from "@/components/legislacao-content-tabs";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
@@ -31,6 +31,9 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   }
 
   const youtubeEmbedUrl = getYoutubeEmbedUrl(legislacao.youtubeUrl);
+  const legiscastEmbedUrl = legislacao.legiscastUrl
+    ? getYoutubeEmbedUrl(legislacao.legiscastUrl)
+    : undefined;
 
   return (
     <div className="bg-[#171a21]">
@@ -51,34 +54,6 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
               <h1 className="text-4xl font-bold leading-tight text-white sm:text-5xl">
                 {legislacao.nome}
               </h1>
-              <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold leading-6 text-slate-200">
-                <a
-                  href={legislacao.hotmartUrl}
-                  className="hover:text-blue-300"
-                >
-                  🎯 Legislação em Questões
-                </a>
-                {legislacao.pdfEsquematizadoUrl ? (
-                  <a
-                    href={legislacao.pdfEsquematizadoUrl}
-                    className="hover:text-blue-300"
-                  >
-                    • 📄 Legislação Esquematizada
-                  </a>
-                ) : (
-                  <span>• 📄 Legislação Esquematizada</span>
-                )}
-                {legislacao.legiscastUrl ? (
-                  <a
-                    href={legislacao.legiscastUrl}
-                    className="hover:text-blue-300"
-                  >
-                    • 🎧 Legiscast
-                  </a>
-                ) : (
-                  <span>• 🎧 Legiscast</span>
-                )}
-              </p>
               <p className="max-w-2xl text-lg leading-8 text-slate-200">
                 {legislacao.descricaoCurta}
               </p>
@@ -99,15 +74,12 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
           </div>
         </div>
 
-        <section className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
-          <iframe
-            className="aspect-video w-full"
-            src={youtubeEmbedUrl}
-            title={`Vídeo com questões dos flashcards: ${legislacao.nome}`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-          />
-        </section>
+        <LegislacaoContentTabs
+          questoesUrl={youtubeEmbedUrl}
+          legiscastUrl={legiscastEmbedUrl}
+          esquematizadaUrl={legislacao.pdfEsquematizadoUrl}
+          legislacaoNome={legislacao.nome}
+        />
 
         <section>
           <div className="rounded-lg border border-blue-200/40 bg-white p-5 shadow-[0_18px_45px_rgba(0,0,0,0.26)]">
@@ -135,11 +107,6 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             solicitação do aluno.
           </p>
         </section>
-
-        <AcompanharAtualizacoesForm
-          legislacaoCodigo={legislacao.slug}
-          legislacaoNome={legislacao.nome}
-        />
       </div>
     </div>
   );
