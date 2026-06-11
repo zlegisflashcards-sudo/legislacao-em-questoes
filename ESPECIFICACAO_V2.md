@@ -1,114 +1,60 @@
-# Legis Flashcards V2
+# Legis Flashcards - Direcao Atual
 
-Criar a V2 do Legis Flashcards como uma camada nova, sem alterar a V1.
+## Decisao de produto
 
-## Regra principal
+A V1 continuara sendo o produto principal por enquanto.
 
-A V1 ja esta pronta e funcionando.
+A implementacao atual da V2, incluindo login, Area do Aluno, alunos, fidelidade, pontos, cupons, produtos internos, compras e telas administrativas temporarias, deve ser considerada apenas uma prova de conceito.
 
-Nao alterar, migrar, refatorar ou substituir o catalogo publico atual.
+Essa linha de desenvolvimento fica arquivada. Nao continuar a evolucao da V2 atual.
 
-A V1 continua lendo as legislacoes da planilha/Excel.
+Nao remover o trabalho ja feito na branch `v2-area-aluno`. Apenas parar a evolucao dessa linha.
 
-Nao alterar `/legislacao/[slug]` nem a logica atual da planilha.
+## Foco atual
 
-Ao final, a V1 deve continuar funcionando exatamente como antes.
+Concentrar o desenvolvimento na V1 e em melhorias que aumentem conversao e experiencia de compra.
 
-## Escopo da V2
+## Objetivo da V1
 
-A V2 deve usar Supabase e criar apenas:
+- Catalogo publico.
+- Paginas das legislacoes.
+- Compra avulsa via Hotmart.
+- Futura pagina interna de pagamento com widget Hotmart.
 
-- Area do Aluno;
-- login/cadastro;
-- perfil;
-- produtos adquiridos;
-- historico de compras;
-- pontos;
-- niveis de fidelidade;
-- cupons;
-- notificacoes;
-- atualizacoes;
-- painel administrativo.
+## Regras de continuidade
 
-A Hotmart continua responsavel por pagamento e entrega do conteudo.
+- Nao alterar a leitura atual da planilha/Excel sem necessidade clara para a V1.
+- Nao alterar a logica publica das paginas de legislacao sem objetivo direto de melhoria da V1.
+- Nao continuar implementando login, fidelidade, pontos, cupons, biblioteca do aluno ou painel administrativo da V2 arquivada.
+- Nao implementar novas dependencias da V1 sobre tabelas da prova de conceito da V2.
 
-A V2 apenas registra compras, relacionamento, pontos e beneficios.
+## Futura V2
 
-## Produtos internos da V2
+A futura V2 sera redesenhada do zero como uma plataforma por assinatura.
 
-Criar produtos internos da V2 no Supabase com:
+Possiveis recursos:
 
-- `id`
-- `nome`
-- `tipo`
-- `hotmart_product_id`
-- `slug_opcional`
-- `ativo`
-- `criado_em`
-- `atualizado_em`
+- Meu Vade Mecum.
+- Biblioteca do assinante.
+- Legiscast.
+- Legislacao Esquematizada.
+- Legislacao em Questoes.
+- Pesquisa avancada.
+- Controle de acesso por assinatura.
 
-O identificador principal para conciliar compras deve ser o `hotmart_product_id` recebido da Hotmart.
+Esses recursos ainda nao devem ser implementados. Eles precisam de uma nova especificacao antes do desenvolvimento.
 
-O `slug_opcional` nao deve criar dependencia com a V1.
+## Status da prova de conceito arquivada
 
-## Tabelas
+O trabalho ja realizado pode permanecer no codigo e na branch como referencia tecnica, mas nao deve orientar as proximas entregas de produto.
 
-Criar as seguintes tabelas:
+Itens da prova de conceito:
 
-- `alunos`
-- `produtos`
-- `compras`
-- `aluno_produtos`
-- `movimentacoes_pontos`
-- `niveis_fidelidade`
-- `cupons`
-- `beneficios`
-- `produto_atualizacoes`
-- `notificacoes_aluno`
-- `hotmart_eventos`
-- `importacoes_clientes`
+- rotas de login/cadastro/recuperacao;
+- rota `/aluno`;
+- tabela `alunos`;
+- tabelas de produtos/compras da Fase 2.1;
+- tela temporaria `/admin/produtos`;
+- mocks de Clube de Beneficios.
 
-## Rotas
-
-Criar as seguintes rotas:
-
-- `/login`
-- `/cadastro`
-- `/recuperar-senha`
-- `/aluno`
-- `/aluno/perfil`
-- `/aluno/meus-produtos`
-- `/aluno/fidelidade`
-- `/aluno/cupons`
-- `/aluno/atualizacoes`
-- `/aluno/notificacoes`
-- `/admin`
-- `/admin/alunos`
-- `/admin/compras`
-- `/admin/produtos`
-- `/admin/atualizacoes`
-- `/admin/fidelidade`
-- `/admin/cupons`
-- `/admin/importacoes`
-
-## Regras
-
-- Compra aprovada gera produto ativo para o aluno.
-- Reembolso, cancelamento ou chargeback remove acesso ativo, mas mantem historico.
-- Pontos devem vir de movimentacoes, nao apenas saldo final.
-- Eventos Hotmart devem ser idempotentes.
-- Atualizacoes de produto geram notificacoes so para alunos que possuem o produto.
-- Notificacoes sao independentes das atualizacoes.
-- Cupons personalizados prevalecem sobre cupons por nivel.
-
-## Fases
-
-1. Supabase Auth, tabela `alunos` e Area do Aluno basica.
-2. Produtos, compras, webhook Hotmart e biblioteca.
-3. Pontos, niveis e cupons.
-4. Atualizacoes e notificacoes.
-5. Painel administrativo.
-
-## Criterio essencial
-
-Ao final, a V1 deve continuar funcionando exatamente como antes.
+Esses itens nao fazem parte do foco atual da V1.

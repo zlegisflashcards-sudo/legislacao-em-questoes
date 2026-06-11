@@ -11,6 +11,19 @@ export type ProdutoV2 = {
   atualizado_em: string;
 };
 
+export type NovoProdutoV2 = {
+  nome: string;
+  tipo: string;
+  hotmart_product_id: string;
+  ativo: boolean;
+};
+
+export type AtualizacaoProdutoV2 = {
+  nome?: string;
+  tipo?: string;
+  ativo?: boolean;
+};
+
 export type HotmartEvento = {
   id: string;
   hotmart_event_id: string | null;
@@ -64,6 +77,52 @@ export async function buscarProdutosAtivosV2() {
     .eq("ativo", true)
     .order("nome", { ascending: true })
     .returns<ProdutoV2[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listarProdutosV2() {
+  const { data, error } = await supabase
+    .from("produtos")
+    .select("*")
+    .order("criado_em", { ascending: false })
+    .returns<ProdutoV2[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function cadastrarProdutoV2(produto: NovoProdutoV2) {
+  const { data, error } = await supabase
+    .from("produtos")
+    .insert(produto)
+    .select("*")
+    .single<ProdutoV2>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function atualizarProdutoV2(
+  produtoId: string,
+  atualizacao: AtualizacaoProdutoV2
+) {
+  const { data, error } = await supabase
+    .from("produtos")
+    .update(atualizacao)
+    .eq("id", produtoId)
+    .select("*")
+    .single<ProdutoV2>();
 
   if (error) {
     throw error;

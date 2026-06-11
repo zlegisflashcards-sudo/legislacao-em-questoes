@@ -296,11 +296,30 @@ alter table public.aluno_produtos enable row level security;
 alter table public.hotmart_eventos enable row level security;
 
 drop policy if exists "Alunos autenticados podem ler produtos ativos" on public.produtos;
-create policy "Alunos autenticados podem ler produtos ativos"
+drop policy if exists "DEV authenticated pode ler produtos" on public.produtos;
+create policy "DEV authenticated pode ler produtos"
   on public.produtos
   for select
   to authenticated
-  using (ativo = true);
+  using (true);
+
+drop policy if exists "DEV permitir leitura publica de produtos" on public.produtos;
+drop policy if exists "DEV permitir cadastro publico de produtos" on public.produtos;
+drop policy if exists "DEV authenticated pode cadastrar produtos" on public.produtos;
+create policy "DEV authenticated pode cadastrar produtos"
+  on public.produtos
+  for insert
+  to authenticated
+  with check (true);
+
+drop policy if exists "DEV permitir edicao publica de produtos" on public.produtos;
+drop policy if exists "DEV authenticated pode editar produtos" on public.produtos;
+create policy "DEV authenticated pode editar produtos"
+  on public.produtos
+  for update
+  to authenticated
+  using (true)
+  with check (true);
 
 drop policy if exists "Aluno pode ler as proprias compras" on public.compras;
 create policy "Aluno pode ler as proprias compras"
