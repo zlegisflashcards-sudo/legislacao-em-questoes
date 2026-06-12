@@ -43,7 +43,7 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             href="/"
             className="text-sm font-semibold text-slate-300 hover:text-blue-300"
           >
-            â† Voltar para a Home
+            ← Voltar para a Home
           </a>
 
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
@@ -63,9 +63,8 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                 Quantidade de Flashcards
               </p>
-              <p className="mt-3 flex items-center gap-2 text-4xl font-black text-[#062a5f] sm:text-5xl">
-                <span className="text-sky-400">âš¡</span>
-                {legislacao.quantidadeFlashcards}
+              <p className="mt-3 text-4xl font-black text-[#062a5f] sm:text-5xl">
+                {legislacao.quantidadeFlashcards}{" "}
                 <span className="text-2xl font-bold text-slate-900">
                   Flashcards
                 </span>
@@ -84,7 +83,7 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
         <section>
           <div className="rounded-lg border border-blue-200/40 bg-white p-5 shadow-[0_18px_45px_rgba(0,0,0,0.26)]">
             <p className="text-sm font-semibold uppercase tracking-wide text-[#062a5f]">
-              Ãšltima alteraÃ§Ã£o legislativa
+              Última alteração legislativa
             </p>
             <p className="mt-3 rounded bg-slate-100 px-4 py-3 text-base font-bold text-slate-950">
               {legislacao.ultimaAlteracaoLegislativa}
@@ -100,14 +99,14 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             Adquirir Material Completo
           </a>
           <p className="mt-3 text-xs font-semibold text-blue-100">
-            ðŸ”’ Pagamento seguro via Hotmart
+            🔒 Pagamento seguro via Hotmart
           </p>
           <div className="mt-5 rounded border border-white/15 bg-black/20 px-4 py-3 text-sm font-semibold leading-6 text-blue-50">
-            âˆž Acesso VitalÃ­cio â€¢ â¬‡ï¸ Acesso Ilimitado â€¢ ðŸ”„ Sempre Atualizado*
+            ∞ Acesso Vitalício • ⬇️ Acesso Ilimitado • 🔄 Sempre Atualizado*
           </div>
           <p className="mt-3 text-xs leading-5 text-blue-100">
-            * AtualizaÃ§Ãµes de legislaÃ§Ãµes especÃ­ficas podem depender de
-            solicitaÃ§Ã£o do aluno.
+            * Atualizações de legislações específicas podem depender de
+            solicitação do aluno.
           </p>
         </section>
       </div>
