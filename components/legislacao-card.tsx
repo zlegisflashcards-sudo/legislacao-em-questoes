@@ -22,7 +22,7 @@ export function LegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
           {legislacao.quantidadeFlashcards} flashcards
         </span>
         <a
-          href={`/legislacao/${legislacao.slug}`}
+          href={`/leisflashcards/${legislacao.slug}`}
           className="text-sm font-semibold text-blue-700 hover:text-blue-900"
         >
           Ver detalhes

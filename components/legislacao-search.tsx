@@ -66,7 +66,7 @@ export function LegislacaoSearch({ legislacoes }: LegislacaoSearchProps) {
                 {sugestoes.map((legislacao) => (
                   <li key={legislacao.slug}>
                     <a
-                      href={`/legislacao/${legislacao.slug}`}
+                      href={`/leisflashcards/${legislacao.slug}`}
                       className="block px-4 py-3 transition hover:bg-blue-50"
                     >
                       <span className="block text-sm font-bold text-slate-950">
