@@ -9,10 +9,6 @@ export default function ObrigadoPage() {
           <h1 className="text-4xl font-black leading-tight text-white sm:text-5xl">
             Pagamento confirmado ✅
           </h1>
-          <p className="mx-auto max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
-            Seu acesso ao material Legis Flashcards já pode ser feito pela
-            Hotmart.
-          </p>
         </section>
 
         <section className="grid gap-5">
