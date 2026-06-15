@@ -41,7 +41,7 @@ export function LegislacaoSearch({ legislacoes }: LegislacaoSearchProps) {
     normalizedQuery.length >= 2 && sugestoes.length === 0;
 
   return (
-    <div className="rounded-xl border border-blue-200/20 bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,0.35)] sm:p-6">
+    <div className="rounded-xl bg-white p-5 sm:p-6">
       <label
         htmlFor="busca-legislacao"
         className="mb-3 block text-sm font-bold uppercase tracking-wide text-[#07306b]"

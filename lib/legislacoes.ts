@@ -9,6 +9,11 @@ export type CategoriaLegislacao =
 
 export type SimNao = "Sim" | "Não";
 
+export type StatusAtualizacao =
+  | "Atualizado"
+  | "Em atualização"
+  | "Indisponível";
+
 export type Legislacao = {
   slug: string;
   nome: string;
@@ -22,6 +27,7 @@ export type Legislacao = {
   legiscastUrl?: string;
   hotmartUrl: string;
   ultimaAlteracaoLegislativa: string;
+  statusAtualizacao: StatusAtualizacao;
 };
 
 export const categoriasLegislacao: Array<{
@@ -71,6 +77,7 @@ const legislacoesFallback: Legislacao[] = [
     legiscastUrl: "https://example.com/legiscast/constituicao-federal",
     hotmartUrl: "https://pay.hotmart.com/example-constituicao",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
+    statusAtualizacao: "Atualizado",
   },
   {
     slug: "codigo-penal",
@@ -85,6 +92,7 @@ const legislacoesFallback: Legislacao[] = [
     pdfEsquematizadoUrl: "https://example.com/codigo-penal.pdf",
     hotmartUrl: "https://pay.hotmart.com/example-codigo-penal",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
+    statusAtualizacao: "Atualizado",
   },
   {
     slug: "lei-de-improbidade-administrativa",
@@ -99,6 +107,7 @@ const legislacoesFallback: Legislacao[] = [
     legiscastUrl: "https://example.com/legiscast/improbidade-administrativa",
     hotmartUrl: "https://pay.hotmart.com/example-improbidade",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
+    statusAtualizacao: "Atualizado",
   },
   {
     slug: "legislacao-inativa-exemplo",
@@ -111,6 +120,7 @@ const legislacoesFallback: Legislacao[] = [
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     quantidadeFlashcards: 0,
     hotmartUrl: "https://pay.hotmart.com/example-inativo",
+    statusAtualizacao: "Indisponível",
     ultimaAlteracaoLegislativa: "Não publicada",
   },
 ];

@@ -5,6 +5,7 @@ import {
   filtrarLegislacoesAtivas,
   getLegislacoes,
   getYoutubeEmbedUrl,
+  type StatusAtualizacao,
 } from "@/lib/legislacoes";
 
 type LegislacaoPageProps = {
@@ -12,6 +13,39 @@ type LegislacaoPageProps = {
     slug: string;
   }>;
 };
+
+function getStatusAtualizacaoVisual(status: StatusAtualizacao) {
+  if (status === "Em atualização") {
+    return {
+      label: "Em atualização",
+      cardClass:
+        "rounded-lg border border-yellow-200 bg-yellow-50 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+      labelClass: "text-xs font-bold uppercase tracking-wide text-yellow-700",
+      textClass:
+        "mt-3 rounded bg-white/70 px-4 py-3 text-base font-bold text-slate-950",
+    };
+  }
+
+  if (status === "Indisponível") {
+    return {
+      label: "Indisponível temporariamente",
+      cardClass:
+        "rounded-lg border border-red-200 bg-red-50 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+      labelClass: "text-xs font-bold uppercase tracking-wide text-red-700",
+      textClass:
+        "mt-3 rounded bg-white/70 px-4 py-3 text-base font-bold text-slate-950",
+    };
+  }
+
+  return {
+    label: "Atualizado",
+    cardClass:
+      "rounded-lg border border-green-200 bg-green-50 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+    labelClass: "text-xs font-bold uppercase tracking-wide text-green-700",
+    textClass:
+      "mt-3 rounded bg-white/70 px-4 py-3 text-base font-bold text-slate-950",
+  };
+}
 
 export async function generateStaticParams() {
   const legislacoes = await getLegislacoes();
@@ -34,6 +68,9 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   const legiscastEmbedUrl = legislacao.legiscastUrl
     ? getYoutubeEmbedUrl(legislacao.legiscastUrl)
     : undefined;
+  const statusAtualizacaoVisual = getStatusAtualizacaoVisual(
+    legislacao.statusAtualizacao,
+  );
 
   return (
     <div className="bg-[#171a21]">
@@ -80,12 +117,15 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
           legislacaoNome={legislacao.nome}
         />
 
-        <section>
-          <div className="rounded-lg border border-blue-200/40 bg-white p-5 shadow-[0_18px_45px_rgba(0,0,0,0.26)]">
-            <p className="text-sm font-semibold uppercase tracking-wide text-[#062a5f]">
-              Última alteração legislativa
+        <section className="space-y-3">
+          <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+            Última Alteração Legislativa
+          </p>
+          <div className={statusAtualizacaoVisual.cardClass}>
+            <p className={statusAtualizacaoVisual.labelClass}>
+              {statusAtualizacaoVisual.label}
             </p>
-            <p className="mt-3 rounded bg-slate-100 px-4 py-3 text-base font-bold text-slate-950">
+            <p className={statusAtualizacaoVisual.textClass}>
               {legislacao.ultimaAlteracaoLegislativa}
             </p>
           </div>

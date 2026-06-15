@@ -42,7 +42,7 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
             href={`/leisflashcards/${legislacao.slug}`}
             className="text-sm font-bold text-[#062a5f] hover:text-blue-800"
           >
-            Estudar
+            Saber mais
           </a>
         </div>
       </div>

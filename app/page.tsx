@@ -8,20 +8,26 @@ export default async function Home() {
 
   return (
     <div className="bg-[#171a21]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-12 px-5 py-10 sm:px-6 sm:py-16">
-        <section className="mx-auto flex w-full max-w-xl flex-col gap-5 text-center">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold leading-6 text-slate-200">
-              Encontre a legislação que você quer estudar.
-            </p>
-            <p className="text-sm leading-6 text-slate-300">
-              Consulte materiais disponíveis com questões em flashcards,
-              legislação esquematizada e Legiscast.
-            </p>
+      <div className="mx-auto flex max-w-6xl flex-col gap-12 px-5 py-6 sm:px-6 sm:py-10">
+        <section className="relative">
+          <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-[0_24px_70px_rgba(0,0,0,0.42)]">
+            <picture>
+              <source
+                media="(max-width: 640px)"
+                srcSet="/home-hero-mobile.png"
+              />
+              <img
+                src="/home-hero-desktop.png"
+                alt="Legis Flashcards"
+                className="h-auto min-h-[260px] w-full object-cover sm:min-h-[320px]"
+              />
+            </picture>
           </div>
 
-          <div className="w-full">
-            <LegislacaoSearch legislacoes={legislacoesAtivas} />
+          <div className="relative z-10 -mt-10 w-full sm:-mt-12">
+            <div className="rounded-lg border border-slate-700 bg-white p-4 shadow-[0_18px_48px_rgba(0,0,0,0.28)] sm:p-5">
+              <LegislacaoSearch legislacoes={legislacoesAtivas} />
+            </div>
           </div>
         </section>
 

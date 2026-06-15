@@ -1,4 +1,9 @@
-import type { CategoriaLegislacao, Legislacao, SimNao } from "@/lib/legislacoes";
+import type {
+  CategoriaLegislacao,
+  Legislacao,
+  SimNao,
+  StatusAtualizacao,
+} from "@/lib/legislacoes";
 
 type CsvRow = Record<string, string>;
 
@@ -90,6 +95,20 @@ function toSimNao(value: string): SimNao {
   return value.toLowerCase() === "sim" ? "Sim" : "Não";
 }
 
+function toStatusAtualizacao(value: string): StatusAtualizacao {
+  const normalizedValue = normalizeText(value);
+
+  if (normalizedValue === "em atualizacao") {
+    return "Em atualização";
+  }
+
+  if (normalizedValue === "indisponivel") {
+    return "Indisponível";
+  }
+
+  return "Atualizado";
+}
+
 function rowToLegislacao(row: CsvRow): Legislacao | null {
   const codigo = row.codigo || row.slug;
   const categoria = toCategoria(row.categoria);
@@ -113,6 +132,7 @@ function rowToLegislacao(row: CsvRow): Legislacao | null {
     legiscastUrl: row.legiscastUrl || undefined,
     hotmartUrl: row.hotmartUrl,
     ultimaAlteracaoLegislativa: row.ultimaAlteracaoLegislativa,
+    statusAtualizacao: toStatusAtualizacao(row.statusAtualizacao || ""),
   };
 }
 
