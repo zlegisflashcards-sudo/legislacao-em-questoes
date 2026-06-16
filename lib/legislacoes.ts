@@ -28,6 +28,8 @@ export type Legislacao = {
   hotmartUrl: string;
   ultimaAlteracaoLegislativa: string;
   statusAtualizacao: StatusAtualizacao;
+  incluirNoCombo: boolean;
+  ordemCombo?: number;
 };
 
 export const categoriasLegislacao: Array<{
@@ -78,6 +80,8 @@ const legislacoesFallback: Legislacao[] = [
     hotmartUrl: "https://pay.hotmart.com/example-constituicao",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
     statusAtualizacao: "Atualizado",
+    incluirNoCombo: true,
+    ordemCombo: 1,
   },
   {
     slug: "codigo-penal",
@@ -93,6 +97,8 @@ const legislacoesFallback: Legislacao[] = [
     hotmartUrl: "https://pay.hotmart.com/example-codigo-penal",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
     statusAtualizacao: "Atualizado",
+    incluirNoCombo: true,
+    ordemCombo: 2,
   },
   {
     slug: "lei-de-improbidade-administrativa",
@@ -108,6 +114,8 @@ const legislacoesFallback: Legislacao[] = [
     hotmartUrl: "https://pay.hotmart.com/example-improbidade",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
     statusAtualizacao: "Atualizado",
+    incluirNoCombo: true,
+    ordemCombo: 3,
   },
   {
     slug: "legislacao-inativa-exemplo",
@@ -120,6 +128,7 @@ const legislacoesFallback: Legislacao[] = [
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     quantidadeFlashcards: 0,
     hotmartUrl: "https://pay.hotmart.com/example-inativo",
+    incluirNoCombo: false,
     statusAtualizacao: "Indisponível",
     ultimaAlteracaoLegislativa: "Não publicada",
   },
@@ -141,6 +150,21 @@ export async function getLegislacoes() {
 
 export function filtrarLegislacoesAtivas(legislacoes: Legislacao[]) {
   return legislacoes.filter((legislacao) => legislacao.ativo === "Sim");
+}
+
+export function filtrarLegislacoesDoCombo(legislacoes: Legislacao[]) {
+  return filtrarLegislacoesAtivas(legislacoes)
+    .filter((legislacao) => legislacao.incluirNoCombo)
+    .sort((legislacaoA, legislacaoB) => {
+      const ordemA = legislacaoA.ordemCombo ?? Number.MAX_SAFE_INTEGER;
+      const ordemB = legislacaoB.ordemCombo ?? Number.MAX_SAFE_INTEGER;
+
+      if (ordemA !== ordemB) {
+        return ordemA - ordemB;
+      }
+
+      return legislacaoA.nome.localeCompare(legislacaoB.nome, "pt-BR");
+    });
 }
 
 export function filtrarDestaquesPorCategoria(

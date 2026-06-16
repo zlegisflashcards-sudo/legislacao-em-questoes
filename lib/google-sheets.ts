@@ -109,6 +109,24 @@ function toStatusAtualizacao(value: string): StatusAtualizacao {
   return "Atualizado";
 }
 
+function toBoolean(value: string) {
+  const normalizedValue = normalizeText(value);
+
+  return ["true", "sim", "1", "yes"].includes(normalizedValue);
+}
+
+function toOptionalNumber(value: string) {
+  const normalizedValue = value.trim();
+
+  if (!normalizedValue) {
+    return undefined;
+  }
+
+  const parsedValue = Number(normalizedValue.replace(/\./g, "").replace(",", "."));
+
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+}
+
 function rowToLegislacao(row: CsvRow): Legislacao | null {
   const codigo = row.codigo || row.slug;
   const categoria = toCategoria(row.categoria);
@@ -133,6 +151,8 @@ function rowToLegislacao(row: CsvRow): Legislacao | null {
     hotmartUrl: row.hotmartUrl,
     ultimaAlteracaoLegislativa: row.ultimaAlteracaoLegislativa,
     statusAtualizacao: toStatusAtualizacao(row.statusAtualizacao || ""),
+    incluirNoCombo: toBoolean(row.incluirNoCombo || ""),
+    ordemCombo: toOptionalNumber(row.ordemCombo || ""),
   };
 }
 

@@ -136,17 +136,10 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             href={legislacao.hotmartUrl}
             className="inline-flex w-fit items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] hover:from-[#041d42] hover:to-blue-500 hover:shadow-[0_22px_50px_rgba(37,99,235,0.52)] sm:px-10 sm:text-lg"
           >
-            Adquirir Material Completo
+            Adquirir Flashcards
           </a>
           <p className="mt-3 text-xs font-semibold text-blue-100">
-            🔒 Pagamento seguro via Hotmart
-          </p>
-          <div className="mt-5 rounded border border-white/15 bg-black/20 px-4 py-3 text-sm font-semibold leading-6 text-blue-50">
-            ∞ Acesso Vitalício • ⬇️ Acesso Ilimitado • 🔄 Sempre Atualizado*
-          </div>
-          <p className="mt-3 text-xs leading-5 text-blue-100">
-            * Atualizações de legislações específicas podem depender de
-            solicitação do aluno.
+            ✓ Pagamento seguro via Hotmart
           </p>
         </section>
       </div>
