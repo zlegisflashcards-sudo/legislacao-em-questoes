@@ -98,7 +98,7 @@ export default async function PagamentoPage({ params }: PagamentoPageProps) {
 
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Flashcards
+                {legislacao.unidade}
               </p>
               <p className="mt-2 text-4xl font-black text-[#062a5f]">
                 {legislacao.quantidadeFlashcards}

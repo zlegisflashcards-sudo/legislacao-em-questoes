@@ -92,7 +92,7 @@ export function LegislacaoSearch({
                       </span>
                       <span className="mt-1 block text-xs text-slate-600">
                         {legislacao.categoria} ·{" "}
-                        {legislacao.quantidadeFlashcards} flashcards
+                        {legislacao.quantidadeFlashcards} {legislacao.unidade}
                       </span>
                     </a>
                   </li>

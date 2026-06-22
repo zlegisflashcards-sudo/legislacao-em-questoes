@@ -7,10 +7,13 @@ export type CategoriaLegislacao =
   | "Tratados"
   | "Legislações Específicas";
 
+export type CategoriaCatalogo = "leis" | "vade_mecuns";
+
 export type SimNao = "Sim" | "Não";
 
 export type StatusAtualizacao =
   | "Atualizado"
+  | "Em produção"
   | "Em atualização"
   | "Indisponível";
 
@@ -19,6 +22,8 @@ export type Legislacao = {
   nome: string;
   descricaoCurta: string;
   categoria: CategoriaLegislacao;
+  categoriaCatalogo: CategoriaCatalogo;
+  unidade: string;
   destaqueHome: SimNao;
   ativo: SimNao;
   youtubeUrl: string;
@@ -71,6 +76,8 @@ const legislacoesFallback: Legislacao[] = [
     descricaoCurta:
       "Principais dispositivos constitucionais cobrados em provas e revisões.",
     categoria: "Constituição Federal",
+    categoriaCatalogo: "leis",
+    unidade: "Flashcards",
     destaqueHome: "Sim",
     ativo: "Sim",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -89,6 +96,8 @@ const legislacoesFallback: Legislacao[] = [
     descricaoCurta:
       "Flashcards organizados sobre a parte geral e principais crimes.",
     categoria: "Códigos",
+    categoriaCatalogo: "leis",
+    unidade: "Flashcards",
     destaqueHome: "Sim",
     ativo: "Sim",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -101,21 +110,21 @@ const legislacoesFallback: Legislacao[] = [
     ordemCombo: 2,
   },
   {
-    slug: "lei-de-improbidade-administrativa",
-    nome: "Lei de Improbidade Administrativa",
+    slug: "vade-mecum-carreiras-policiais",
+    nome: "Vade Mecum Carreiras Policiais",
     descricaoCurta:
-      "Material focado nos pontos mais recorrentes da Lei 8.429/1992.",
+      "Conjunto de legislações organizado para carreiras policiais.",
     categoria: "Legislações",
+    categoriaCatalogo: "vade_mecuns",
+    unidade: "Legislações",
     destaqueHome: "Sim",
     ativo: "Sim",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    quantidadeFlashcards: 180,
-    legiscastUrl: "https://example.com/legiscast/improbidade-administrativa",
-    hotmartUrl: "https://pay.hotmart.com/example-improbidade",
+    quantidadeFlashcards: 85,
+    hotmartUrl: "https://pay.hotmart.com/example-vade-mecum",
     ultimaAlteracaoLegislativa: "Em acompanhamento",
     statusAtualizacao: "Atualizado",
-    incluirNoCombo: true,
-    ordemCombo: 3,
+    incluirNoCombo: false,
   },
   {
     slug: "legislacao-inativa-exemplo",
@@ -123,6 +132,8 @@ const legislacoesFallback: Legislacao[] = [
     descricaoCurta:
       "Este item existe apenas para testar a regra de ativo igual a Não.",
     categoria: "Legislações",
+    categoriaCatalogo: "leis",
+    unidade: "Flashcards",
     destaqueHome: "Sim",
     ativo: "Não",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",

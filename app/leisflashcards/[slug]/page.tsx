@@ -15,36 +15,41 @@ type LegislacaoPageProps = {
 };
 
 function getStatusAtualizacaoVisual(status: StatusAtualizacao) {
-  if (status === "Em atualização") {
-    return {
+  const visuals = {
+    Atualizado: {
+      label: "Atualizado",
+      valuePrefix: "",
+      cardClass:
+        "rounded-lg border border-[#ABEFC6] bg-[#ECFDF3] p-5 text-[#067647] shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+    },
+    "Em produção": {
+      label: "Em produção",
+      valuePrefix: "Previsão: ",
+      cardClass:
+        "rounded-lg border border-[#B2DDFF] bg-[#EFF8FF] p-5 text-[#175CD3] shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+    },
+    "Em atualização": {
       label: "Em atualização",
+      valuePrefix: "Previsão: ",
       cardClass:
-        "rounded-lg border border-yellow-200 bg-yellow-50 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
-      labelClass: "text-xs font-bold uppercase tracking-wide text-yellow-700",
-      textClass:
-        "mt-3 rounded bg-white/70 px-4 py-3 text-base font-bold text-slate-950",
-    };
-  }
-
-  if (status === "Indisponível") {
-    return {
-      label: "Indisponível temporariamente",
+        "rounded-lg border border-[#FEDF89] bg-[#FFFAEB] p-5 text-[#B54708] shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+    },
+    Indisponível: {
+      label: "Produção planejada",
+      valuePrefix: "Previsão: ",
       cardClass:
-        "rounded-lg border border-red-200 bg-red-50 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
-      labelClass: "text-xs font-bold uppercase tracking-wide text-red-700",
-      textClass:
-        "mt-3 rounded bg-white/70 px-4 py-3 text-base font-bold text-slate-950",
-    };
-  }
+        "rounded-lg border border-[#EAECF0] bg-[#F9FAFB] p-5 text-[#344054] shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
+    },
+  } satisfies Record<
+    StatusAtualizacao,
+    {
+      label: string;
+      valuePrefix: string;
+      cardClass: string;
+    }
+  >;
 
-  return {
-    label: "Atualizado",
-    cardClass:
-      "rounded-lg border border-green-200 bg-green-50 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.18)]",
-    labelClass: "text-xs font-bold uppercase tracking-wide text-green-700",
-    textClass:
-      "mt-3 rounded bg-white/70 px-4 py-3 text-base font-bold text-slate-950",
-  };
+  return visuals[status];
 }
 
 export async function generateStaticParams() {
@@ -71,6 +76,15 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   const statusAtualizacaoVisual = getStatusAtualizacaoVisual(
     legislacao.statusAtualizacao,
   );
+  const nomeLegislacao = legislacao.nome || "Legislação não identificada";
+  const slugLegislacao = legislacao.slug || "sem-slug";
+  const reportarAtualizacaoSubject = encodeURIComponent(
+    `Atualização reportada — ${nomeLegislacao} | ${slugLegislacao}`,
+  );
+  const reportarAtualizacaoBody = encodeURIComponent(
+    "Alteração legislativa identificada:\n\nFonte ou link oficial:\n\nObservações:\n",
+  );
+  const reportarAtualizacaoUrl = `mailto:zlegisflashcards@gmail.com?subject=${reportarAtualizacaoSubject}&body=${reportarAtualizacaoBody}`;
 
   return (
     <div className="bg-[#171a21]">
@@ -98,12 +112,12 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
 
             <div className="rounded-lg border border-blue-200/30 bg-white p-6 shadow-[0_22px_55px_rgba(0,0,0,0.32)]">
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Quantidade de Flashcards
+                Quantidade
               </p>
               <p className="mt-3 text-4xl font-black text-[#062a5f] sm:text-5xl">
                 {legislacao.quantidadeFlashcards}{" "}
                 <span className="text-2xl font-bold text-slate-900">
-                  Flashcards
+                  {legislacao.unidade}
                 </span>
               </p>
             </div>
@@ -121,13 +135,22 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
           <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
             Última Alteração Legislativa
           </p>
-          <div className={statusAtualizacaoVisual.cardClass}>
-            <p className={statusAtualizacaoVisual.labelClass}>
-              {statusAtualizacaoVisual.label}
-            </p>
-            <p className={statusAtualizacaoVisual.textClass}>
-              {legislacao.ultimaAlteracaoLegislativa}
-            </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className={`flex-1 ${statusAtualizacaoVisual.cardClass}`}>
+              <p className="text-xs font-bold uppercase tracking-wide">
+                {statusAtualizacaoVisual.label}
+              </p>
+              <p className="mt-2 text-base font-bold">
+                {statusAtualizacaoVisual.valuePrefix}
+                {legislacao.ultimaAlteracaoLegislativa}
+              </p>
+            </div>
+            <a
+              href={reportarAtualizacaoUrl}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-bold text-orange-700 shadow-sm transition hover:border-orange-400 hover:bg-orange-100 hover:text-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:self-center"
+            >
+              Reportar atualização
+            </a>
           </div>
         </section>
 

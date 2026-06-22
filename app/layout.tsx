@@ -3,7 +3,7 @@ import { siteConfig } from "@/lib/site-config";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Legislação em Questões",
+  title: "Legislação em Flashcards",
   description: "Catálogo de legislações para estudo com flashcards.",
   icons: {
     icon: "/favicon.png",
@@ -30,7 +30,7 @@ export default function RootLayout({
                   className="h-11 w-11 rounded object-contain"
                 />
                 <span className="text-base font-bold text-white sm:text-lg">
-                  Legislação em Questões
+                  Legislação em Flashcards
                 </span>
               </a>
 
@@ -39,17 +39,11 @@ export default function RootLayout({
                   href={siteConfig.links.minhasLeis}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-slate-200 hover:text-white"
+                  className="inline-flex items-center justify-center rounded bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600"
                 >
                   🔐 Minhas leis adquiridas
                 </a>
                 <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    href={siteConfig.links.encomendarLegislacao}
-                    className="inline-flex items-center justify-center rounded bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-                  >
-                    Fazer orçamento de leis exclusivas
-                  </a>
                   <a
                     href={siteConfig.links.whatsapp}
                     target="_blank"

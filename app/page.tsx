@@ -1,6 +1,7 @@
 import { HomeCategoriasVadeMecum } from "@/components/home-categorias-vade-mecum";
 import { LegislacaoSearch } from "@/components/legislacao-search";
 import { filtrarLegislacoesAtivas, getLegislacoes } from "@/lib/legislacoes";
+import { siteConfig } from "@/lib/site-config";
 
 export default async function Home() {
   const legislacoes = await getLegislacoes();
@@ -33,6 +34,25 @@ export default async function Home() {
                   legislacoes={legislacoesAtivas}
                   variant="dark"
                 />
+                <div className="mt-4 flex flex-col gap-3 rounded-lg border border-blue-300/25 bg-slate-950/55 px-4 py-4 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                  <div className="space-y-1">
+                    <p className="text-sm font-black text-white">
+                      Não encontrou sua legislação?
+                    </p>
+                    <p className="text-xs leading-5 text-slate-300 sm:text-sm">
+                      Podemos transformar ela em flashcards, legislação
+                      esquematizada e Legiscast.
+                    </p>
+                  </div>
+                  <a
+                    href={siteConfig.links.encomendarLegislacao}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-3 text-center text-sm font-black text-white shadow-[0_12px_26px_rgba(37,99,235,0.34)] transition hover:-translate-y-0.5 hover:bg-blue-500 sm:w-auto sm:shrink-0"
+                  >
+                    Solicitar orçamento de legislação
+                  </a>
+                </div>
                 <p className="mt-4 text-center text-xs font-semibold text-slate-300">
                   ∞ Acesso Vitalício • ⬇️ Acesso Ilimitado • 🔄 Sempre
                   Atualizado*

@@ -6,7 +6,7 @@ import {
 const comboCheckoutUrl =
   "https://pay.hotmart.com/B105667368Q?sck=HOTMART_MEM_CA&off=8z92z2aa&bid=1781643392565";
 
-function formatarQuantidadeFlashcards(quantidade: number) {
+function formatarQuantidade(quantidade: number) {
   return quantidade.toLocaleString("pt-BR");
 }
 
@@ -100,10 +100,10 @@ export default async function ComboPage() {
                     {legislacao.nome}
                   </h3>
                   <p className="shrink-0 rounded bg-blue-50 px-3 py-2 text-sm font-bold text-[#062a5f]">
-                    {formatarQuantidadeFlashcards(
+                    {formatarQuantidade(
                       legislacao.quantidadeFlashcards,
                     )}{" "}
-                    flashcards
+                    {legislacao.unidade}
                   </p>
                 </article>
               ))}

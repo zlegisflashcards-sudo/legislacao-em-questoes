@@ -1,4 +1,5 @@
 import type {
+  CategoriaCatalogo,
   CategoriaLegislacao,
   Legislacao,
   SimNao,
@@ -65,7 +66,17 @@ function normalizeText(value: string) {
     .trim();
 }
 
-function toCategoria(value: string): CategoriaLegislacao | null {
+function toCategoriaCatalogo(value: string): CategoriaCatalogo {
+  const normalizedValue = normalizeText(value);
+
+  if (normalizedValue === "vade_mecuns" || normalizedValue === "vade mecuns") {
+    return "vade_mecuns";
+  }
+
+  return "leis";
+}
+
+function toCategoria(value: string): CategoriaLegislacao {
   const normalizedValue = normalizeText(value);
 
   if (normalizedValue === "constituicao federal") {
@@ -88,7 +99,7 @@ function toCategoria(value: string): CategoriaLegislacao | null {
     return "Legislações Específicas";
   }
 
-  return null;
+  return "Legislações";
 }
 
 function toSimNao(value: string): SimNao {
@@ -97,6 +108,10 @@ function toSimNao(value: string): SimNao {
 
 function toStatusAtualizacao(value: string): StatusAtualizacao {
   const normalizedValue = normalizeText(value);
+
+  if (normalizedValue === "em producao") {
+    return "Em produção";
+  }
 
   if (normalizedValue === "em atualizacao") {
     return "Em atualização";
@@ -129,17 +144,18 @@ function toOptionalNumber(value: string) {
 
 function rowToLegislacao(row: CsvRow): Legislacao | null {
   const codigo = row.codigo || row.slug;
-  const categoria = toCategoria(row.categoria);
 
-  if (!codigo || !row.nome || !categoria) {
+  if (!codigo || !row.nome) {
     return null;
   }
 
   return {
     slug: codigo,
     nome: row.nome,
-    descricaoCurta: row.descricaoCurta,
-    categoria,
+    descricaoCurta: row.descricao || row.descricaoCurta,
+    categoria: toCategoria(row.categoriaDetalhe || row.categoriaLegislacao || row.tipo || row.categoria),
+    categoriaCatalogo: toCategoriaCatalogo(row.categoria || ""),
+    unidade: row.unidade || "Flashcards",
     destaqueHome: toSimNao(row.destaqueHome),
     ativo: toSimNao(row.ativo),
     youtubeUrl: row.youtubeUrl,
