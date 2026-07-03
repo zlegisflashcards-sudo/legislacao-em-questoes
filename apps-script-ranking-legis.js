@@ -4,7 +4,7 @@
  * Como usar:
  * 1. Abra a planilha do Ranking Legis.
  * 2. Va em Extensoes > Apps Script.
- * 3. Cole este codigo no editor.
+ * 3. Cole este codigo em um arquivo Codigo.gs no editor.
  * 4. Salve e execute atualizarRankingLegis uma vez para autorizar.
  *
  * Depois disso, preencha apenas a aba "rodada".
@@ -31,6 +31,9 @@ const RANKING_LEGIS_CONFIG = {
     "acertos",
     "ultimaPontuacao",
     "atualizadoEm",
+    "primeiros",
+    "segundos",
+    "terceiros",
   ],
 };
 
@@ -42,12 +45,12 @@ function onOpen() {
     .addToUi();
 }
 
-function onEdit(event) {
-  if (!event || !event.range) {
+function onEdit(e) {
+  if (!e || !e.range) {
     return;
   }
 
-  const sheet = event.range.getSheet();
+  const sheet = e.range.getSheet();
 
   if (sheet.getName() === RANKING_LEGIS_CONFIG.rodadaSheetName) {
     atualizarRankingLegis();
@@ -72,12 +75,12 @@ function instalarGatilhoRankingLegis() {
   SpreadsheetApp.getUi().alert("Gatilho automatico instalado com sucesso.");
 }
 
-function atualizarRankingLegisPorGatilho(event) {
-  if (!event || !event.range) {
+function atualizarRankingLegisPorGatilho(e) {
+  if (!e || !e.range) {
     return;
   }
 
-  const sheet = event.range.getSheet();
+  const sheet = e.range.getSheet();
 
   if (sheet.getName() === RANKING_LEGIS_CONFIG.rodadaSheetName) {
     atualizarRankingLegis();
@@ -99,11 +102,6 @@ function atualizarRankingLegis() {
 
   const rodadaRows = readRows_(rodadaSheet, RANKING_LEGIS_CONFIG.rodadaHeaders);
   const participantes = calcularParticipantes_(rodadaRows);
-  const atualizadoEm = Utilities.formatDate(
-    new Date(),
-    RANKING_LEGIS_CONFIG.timezone,
-    "dd/MM/yyyy HH:mm",
-  );
 
   const rankingValues = participantes.map((participante, index) => [
     index + 1,
@@ -112,7 +110,10 @@ function atualizarRankingLegis() {
     participante.pontos,
     participante.acertos,
     participante.ultimaPontuacao,
-    atualizadoEm,
+    participante.atualizadoEm,
+    participante.primeiros,
+    participante.segundos,
+    participante.terceiros,
   ]);
 
   writeTable_(
@@ -143,10 +144,16 @@ function calcularParticipantes_(rodadaRows) {
         acertos: 0,
         ultimaPontuacaoDate: null,
         ultimaPontuacao: "",
+        atualizadoEmDate: null,
+        atualizadoEm: "",
+        primeiros: 0,
+        segundos: 0,
+        terceiros: 0,
       };
     }
 
     const participante = participantesPorInstagram[instagram];
+    const colocacao = toNumber_(row.colocacao);
     participante.nome = nome;
     participante.pontos += pontosGanhos;
 
@@ -154,9 +161,19 @@ function calcularParticipantes_(rodadaRows) {
       participante.acertos += 1;
     }
 
+    if (colocacao === 1) {
+      participante.primeiros += 1;
+    } else if (colocacao === 2) {
+      participante.segundos += 1;
+    } else if (colocacao === 3) {
+      participante.terceiros += 1;
+    }
+
     if (data && (!participante.ultimaPontuacaoDate || data > participante.ultimaPontuacaoDate)) {
       participante.ultimaPontuacaoDate = data;
-      participante.ultimaPontuacao = Utilities.formatDate(
+      participante.ultimaPontuacao = pontosGanhos;
+      participante.atualizadoEmDate = data;
+      participante.atualizadoEm = Utilities.formatDate(
         data,
         RANKING_LEGIS_CONFIG.timezone,
         "dd/MM/yyyy HH:mm",
@@ -171,6 +188,25 @@ function calcularParticipantes_(rodadaRows) {
 
     if (b.acertos !== a.acertos) {
       return b.acertos - a.acertos;
+    }
+
+    if (b.primeiros !== a.primeiros) {
+      return b.primeiros - a.primeiros;
+    }
+
+    if (b.segundos !== a.segundos) {
+      return b.segundos - a.segundos;
+    }
+
+    if (b.terceiros !== a.terceiros) {
+      return b.terceiros - a.terceiros;
+    }
+
+    const dataB = b.atualizadoEmDate ? b.atualizadoEmDate.getTime() : 0;
+    const dataA = a.atualizadoEmDate ? a.atualizadoEmDate.getTime() : 0;
+
+    if (dataB !== dataA) {
+      return dataB - dataA;
     }
 
     return a.nome.localeCompare(b.nome);
@@ -225,6 +261,7 @@ function readRows_(sheet, expectedHeaders) {
 }
 
 function writeTable_(sheet, headers, values) {
+  sheet.showColumns(1, sheet.getMaxColumns());
   sheet.clearContents();
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
@@ -234,6 +271,17 @@ function writeTable_(sheet, headers, values) {
 
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, headers.length);
+  hideAuxiliaryRankingColumns_(sheet, headers);
+}
+
+function hideAuxiliaryRankingColumns_(sheet, headers) {
+  ["primeiros", "segundos", "terceiros"].forEach((header) => {
+    const columnIndex = headers.indexOf(header) + 1;
+
+    if (columnIndex > 0) {
+      sheet.hideColumns(columnIndex);
+    }
+  });
 }
 
 function normalizarInstagram_(value) {

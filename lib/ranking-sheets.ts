@@ -6,6 +6,9 @@ export type RankingParticipant = {
   acertos: number;
   ultimaPontuacao: string;
   atualizadoEm: string;
+  primeiros: number;
+  segundos: number;
+  terceiros: number;
 };
 
 export type RankingTheme = {
@@ -179,6 +182,9 @@ function rowToRankingParticipant(row: CsvRow): RankingParticipant | null {
     acertos: toNumber(row.acertos),
     ultimaPontuacao: row.ultimaPontuacao?.trim() ?? "",
     atualizadoEm: row.atualizadoEm?.trim() ?? "",
+    primeiros: toNumber(row.primeiros),
+    segundos: toNumber(row.segundos),
+    terceiros: toNumber(row.terceiros),
   };
 }
 
@@ -190,8 +196,33 @@ function rowToTheme(row: CsvRow | undefined): RankingTheme {
       "Questões sobre os principais artigos do tema atual da Liga Legis.",
     cursoUrl: row?.cursoUrl?.trim() || DEFAULT_COURSE_URL,
     instagramUrl: row?.instagramUrl?.trim() || DEFAULT_INSTAGRAM_URL,
-    imagemUrl: row?.imagemUrl?.trim() || "",
+    imagemUrl: normalizeImageUrl(row?.imagemUrl?.trim() || ""),
   };
+}
+
+function normalizeImageUrl(imageUrl: string) {
+  if (!imageUrl) {
+    return "";
+  }
+
+  try {
+    const url = new URL(imageUrl);
+
+    if (url.hostname.includes("drive.google.com")) {
+      const filePathMatch = url.pathname.match(/\/file\/d\/([^/]+)/);
+      const idFromPath = filePathMatch?.[1];
+      const idFromQuery = url.searchParams.get("id");
+      const fileId = idFromPath || idFromQuery;
+
+      if (fileId) {
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
+      }
+    }
+
+    return imageUrl;
+  } catch {
+    return imageUrl;
+  }
 }
 
 function rowToRoundParticipant(
@@ -223,6 +254,25 @@ export function sortRanking(participants: RankingParticipant[]) {
 
       if (participantA.acertos !== participantB.acertos) {
         return participantB.acertos - participantA.acertos;
+      }
+
+      if (participantA.primeiros !== participantB.primeiros) {
+        return participantB.primeiros - participantA.primeiros;
+      }
+
+      if (participantA.segundos !== participantB.segundos) {
+        return participantB.segundos - participantA.segundos;
+      }
+
+      if (participantA.terceiros !== participantB.terceiros) {
+        return participantB.terceiros - participantA.terceiros;
+      }
+
+      const updatedAtA = parseDateValue(participantA.atualizadoEm);
+      const updatedAtB = parseDateValue(participantB.atualizadoEm);
+
+      if (updatedAtA !== updatedAtB) {
+        return updatedAtB - updatedAtA;
       }
 
       return participantA.nome.localeCompare(participantB.nome, "pt-BR");
