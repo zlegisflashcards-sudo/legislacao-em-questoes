@@ -25,25 +25,24 @@ const regrasPontuacao = [
   ["10º comentário correto", "1 ponto"],
 ];
 
-const cardsInformativos = [
-  {
-    icone: "🎯",
-    titulo: "Como funciona?",
-    texto:
-      "Todo dia uma nova questão é postada no Instagram. Os 10 primeiros comentários corretos pontuam e entram no ranking.",
-  },
-  {
-    icone: "🏆",
-    titulo: "Ranking aberto",
-    texto:
-      "Qualquer pessoa pode participar. Estude, participe e mostre que você é o craque dos concursos.",
-  },
-  {
-    icone: "🎁",
-    titulo: "Premiações",
-    texto:
-      "Os melhores colocados ganham prêmios exclusivos e benefícios especiais nos cursos LegisFlashcards.",
-  },
+const premiacaoOficial = [
+  ["1º lugar", "100% OFF"],
+  ["2º lugar", "90% OFF"],
+  ["3º lugar", "80% OFF"],
+  ["4º lugar", "70% OFF"],
+  ["5º lugar", "60% OFF"],
+  ["6º lugar", "50% OFF"],
+  ["7º lugar", "40% OFF"],
+  ["8º lugar", "30% OFF"],
+  ["9º lugar", "20% OFF"],
+  ["10º lugar", "10% OFF"],
+];
+
+const regrasPremiacao = [
+  "Cupons individuais",
+  "Válidos por 24 horas após o encerramento da temporada",
+  "Uso apenas nesse material",
+  "Não cumulativos com outras promoções",
 ];
 
 function formatarPontos(pontos: number) {
@@ -223,69 +222,79 @@ function RankingContent({ data }: { data: RankingLegisData }) {
           </div>
 
           <div className="overflow-x-auto px-5 py-4">
-            <table className="w-full min-w-[760px] border-collapse">
-              <thead>
-                <tr className="border-b border-blue-300/10 text-left text-sm text-slate-300">
-                  <th className="w-20 px-2 py-3 font-black">#</th>
-                  <th className="px-2 py-3 font-black">Nome</th>
-                  <th className="px-2 py-3 font-black">Instagram</th>
-                  <th className="px-2 py-3 text-right font-black">Acertos</th>
-                  <th className="px-2 py-3 text-right font-black">Pontos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.map((participante) => (
-                  <tr
-                    key={participante.instagram}
-                    className="border-b border-blue-300/10 text-sm last:border-b-0"
-                  >
-                    <td className="px-2 py-3">
-                      <span
-                        className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-base font-black ${medalhaClasse(
-                          participante.posicao,
-                        )}`}
-                      >
-                        {participante.posicao}
-                      </span>
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="flex items-center gap-3">
-                        <ParticipantAvatar posicao={participante.posicao} />
-                        <span className="font-bold text-white">
-                          {participante.nome}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 font-medium text-slate-300">
-                      {participante.instagram}
-                    </td>
-                    <td className="px-2 py-3 text-right font-black text-slate-300">
-                      {formatarPontos(participante.acertos)}
-                    </td>
-                    <td
-                      className={`px-2 py-3 text-right text-xl font-black ${
-                        participante.posicao === 1
-                          ? "text-yellow-300"
-                          : participante.posicao === 2
-                            ? "text-slate-300"
-                            : participante.posicao === 3
-                              ? "text-orange-300"
-                              : "text-slate-300"
-                      }`}
-                    >
-                      {formatarPontos(participante.pontos)}
-                    </td>
+            {ranking.length > 0 ? (
+              <table className="w-full min-w-[760px] border-collapse">
+                <thead>
+                  <tr className="border-b border-blue-300/10 text-left text-sm text-slate-300">
+                    <th className="w-20 px-2 py-3 font-black">#</th>
+                    <th className="px-2 py-3 font-black">Nome</th>
+                    <th className="px-2 py-3 font-black">Instagram</th>
+                    <th className="px-2 py-3 text-right font-black">Acertos</th>
+                    <th className="px-2 py-3 text-right font-black">Pontos</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {ranking.map((participante) => (
+                    <tr
+                      key={participante.instagram}
+                      className="border-b border-blue-300/10 text-sm last:border-b-0"
+                    >
+                      <td className="px-2 py-3">
+                        <span
+                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-base font-black ${medalhaClasse(
+                            participante.posicao,
+                          )}`}
+                        >
+                          {participante.posicao}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className="flex items-center gap-3">
+                          <ParticipantAvatar posicao={participante.posicao} />
+                          <span className="font-bold text-white">
+                            {participante.nome}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 font-medium text-slate-300">
+                        {participante.instagram}
+                      </td>
+                      <td className="px-2 py-3 text-right font-black text-slate-300">
+                        {formatarPontos(participante.acertos)}
+                      </td>
+                      <td
+                        className={`px-2 py-3 text-right text-xl font-black ${
+                          participante.posicao === 1
+                            ? "text-yellow-300"
+                            : participante.posicao === 2
+                              ? "text-slate-300"
+                              : participante.posicao === 3
+                                ? "text-orange-300"
+                                : "text-slate-300"
+                        }`}
+                      >
+                        {formatarPontos(participante.pontos)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="rounded-lg border border-blue-300/10 bg-blue-950/24 px-5 py-10 text-center">
+                <p className="text-base font-black text-white">
+                  Nenhum participante pontuou ainda.
+                </p>
+              </div>
+            )}
 
-            <a
-              href={todosParticipantesUrl}
-              className="mt-5 inline-flex w-full items-center justify-center rounded-lg border border-blue-300/10 bg-blue-900/34 px-5 py-4 text-sm font-black text-slate-200 transition hover:border-blue-300/30 hover:bg-blue-800/50"
-            >
-              Ver todos os participantes
-            </a>
+            {ranking.length > 0 ? (
+              <a
+                href={todosParticipantesUrl}
+                className="mt-5 inline-flex w-full items-center justify-center rounded-lg border border-blue-300/10 bg-blue-900/34 px-5 py-4 text-sm font-black text-slate-200 transition hover:border-blue-300/30 hover:bg-blue-800/50"
+              >
+                Ver todos os participantes
+              </a>
+            ) : null}
           </div>
         </article>
 
@@ -376,33 +385,65 @@ function RankingContent({ data }: { data: RankingLegisData }) {
         </aside>
       </section>
 
-      <section className="grid gap-5 rounded-lg border border-blue-400/20 bg-blue-950/28 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.26)] backdrop-blur md:grid-cols-3">
-        {cardsInformativos.map((card) => (
-          <article key={card.titulo} className="flex gap-4 p-2">
-            <span className="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-blue-900/60 text-3xl shadow-inner shadow-blue-300/10">
-              {card.icone}
-            </span>
-            <div className="space-y-2">
-              <h2 className="text-lg font-black text-white">{card.titulo}</h2>
-              <p className="text-sm leading-6 text-slate-300">{card.texto}</p>
+      <section className="overflow-hidden rounded-lg border border-blue-400/25 bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.14),transparent_34%),linear-gradient(135deg,rgba(8,22,52,0.92),rgba(2,8,23,0.96))] shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur">
+        <div className="grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="flex flex-col justify-between gap-8 border-b border-blue-300/10 p-6 sm:p-8 lg:border-b-0 lg:border-r">
+            <div className="space-y-5">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-yellow-400/15 text-4xl shadow-inner shadow-yellow-200/10">
+                🏆
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-200">
+                  Temporada oficial
+                </p>
+                <h2 className="text-3xl font-black leading-tight text-white sm:text-4xl">
+                  Premiação Oficial da Liga
+                </h2>
+                <p className="max-w-xl text-base leading-7 text-slate-300">
+                  Os 10 melhores colocados da temporada recebem cupons
+                  exclusivos de desconto para usar na lei da liga ao final
+                  dela.
+                </p>
+              </div>
             </div>
-          </article>
-        ))}
-      </section>
 
-      <section className="rounded-lg border border-blue-400/25 bg-[linear-gradient(120deg,rgba(7,20,45,0.9),rgba(4,32,78,0.72))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.32)] sm:p-8">
-        <div className="flex items-center gap-5">
-          <span className="inline-flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-yellow-400/15 text-4xl">
-            🏆
-          </span>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-black text-white">
-              Estude. Responda. Pontue. Evolua.
-            </h2>
-            <p className="max-w-xl text-sm leading-6 text-slate-300">
-              O conhecimento é o seu maior diferencial. Aqui, consistência vira
-              pontos e pontos levam você ao topo.
-            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {regrasPremiacao.map((regra) => (
+                <div
+                  key={regra}
+                  className="rounded-md border border-blue-300/10 bg-blue-950/30 px-4 py-3 text-sm font-bold text-slate-200"
+                >
+                  {regra}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-6">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {premiacaoOficial.map(([posicao, desconto], index) => {
+                const destaque =
+                  index === 0
+                    ? "border-yellow-300/50 bg-yellow-400/15 text-yellow-100"
+                    : index === 1
+                      ? "border-slate-200/35 bg-slate-200/10 text-slate-100"
+                      : index === 2
+                        ? "border-orange-300/40 bg-orange-400/12 text-orange-100"
+                        : "border-blue-300/10 bg-blue-950/28 text-slate-100";
+
+                return (
+                  <div
+                    key={posicao}
+                    className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-4 shadow-[0_12px_34px_rgba(0,0,0,0.18)] ${destaque}`}
+                  >
+                    <span className="text-sm font-black">{posicao}</span>
+                    <span className="text-xl font-black sm:text-2xl">
+                      {desconto}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
