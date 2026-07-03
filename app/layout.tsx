@@ -36,6 +36,12 @@ export default function RootLayout({
 
               <nav className="flex flex-col gap-3 text-sm font-medium text-slate-200 sm:flex-row sm:items-center sm:gap-5">
                 <a
+                  href="/ranking-legis"
+                  className="inline-flex items-center justify-center rounded px-3 py-2 text-sm font-semibold text-blue-200 transition hover:bg-blue-950 hover:text-white"
+                >
+                  🏆 Ranking Legis
+                </a>
+                <a
                   href={siteConfig.links.minhasLeis}
                   target="_blank"
                   rel="noreferrer"
