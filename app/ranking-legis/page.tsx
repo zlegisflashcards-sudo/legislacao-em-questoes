@@ -4,6 +4,7 @@ import {
   getRankingLegisData,
   type RankingLegisData,
 } from "@/lib/ranking-sheets";
+import { siteConfig } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Ranking Legis | LegisFlashcards",
@@ -39,10 +40,7 @@ const premiacaoOficial = [
 ];
 
 const regrasPremiacao = [
-  "Cupons individuais",
-  "Válidos por 24 horas após o encerramento da temporada",
-  "Uso apenas nesse material",
-  "Não cumulativos com outras promoções",
+  "Os vencedores têm 24h para solicitar o cupom e comprar com o desconto do prêmio.",
 ];
 
 function formatarPontos(pontos: number) {
@@ -302,7 +300,7 @@ function RankingContent({ data }: { data: RankingLegisData }) {
           <article className="rounded-lg border border-blue-400/25 bg-slate-950/68 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)] backdrop-blur">
             <h2 className="mb-5 flex items-center gap-3 text-xl font-black">
               <span className="text-2xl">📘</span>
-              Tema da Liga
+              Oferta relâmpago da Liga
             </h2>
 
             <div className="flex gap-5">
@@ -310,10 +308,15 @@ function RankingContent({ data }: { data: RankingLegisData }) {
 
               <div className="min-w-0 space-y-3">
                 <h3 className="text-xl font-black leading-tight text-white">
-                  {tema.temaAtual}
+                  Garanta {tema.temaAtual} com desconto
                 </h3>
                 <p className="text-sm leading-6 text-slate-300">
-                  {tema.descricao}
+                  Esta condição especial só fica disponível enquanto a
+                  legislação estiver ativa no Ranking Legis.
+                </p>
+                <p className="text-sm leading-6 text-slate-300">
+                  Quando a Liga acabar, a oferta sai do ar junto. Aproveite
+                  antes do encerramento da rodada.
                 </p>
               </div>
             </div>
@@ -324,7 +327,7 @@ function RankingContent({ data }: { data: RankingLegisData }) {
               rel="noreferrer"
               className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-4 text-center text-sm font-black text-white shadow-[0_14px_30px_rgba(37,99,235,0.32)] transition hover:-translate-y-0.5 hover:bg-blue-500"
             >
-              Comprar curso do tema
+              Garantir desconto antes de acabar
             </a>
           </article>
 
@@ -400,14 +403,13 @@ function RankingContent({ data }: { data: RankingLegisData }) {
                   Premiação Oficial da Liga
                 </h2>
                 <p className="max-w-xl text-base leading-7 text-slate-300">
-                  Os 10 melhores colocados da temporada recebem cupons
-                  exclusivos de desconto para usar na lei da liga ao final
-                  dela.
+                  Os vencedores devem solicitar um cupom de desconto de alguma
+                  lei do catálogo.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3">
               {regrasPremiacao.map((regra) => (
                 <div
                   key={regra}
@@ -416,6 +418,15 @@ function RankingContent({ data }: { data: RankingLegisData }) {
                   {regra}
                 </div>
               ))}
+
+              <a
+                href={siteConfig.links.whatsapp}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-full items-center justify-center rounded-lg bg-green-500 px-5 py-4 text-center text-sm font-black text-white shadow-[0_14px_30px_rgba(34,197,94,0.24)] transition hover:-translate-y-0.5 hover:bg-green-400"
+              >
+                Solicitar cupom pelo WhatsApp
+              </a>
             </div>
           </div>
 
@@ -447,6 +458,37 @@ function RankingContent({ data }: { data: RankingLegisData }) {
           </div>
         </div>
       </section>
+
+      {tema.playlistYoutubeLiga ? (
+        <section className="overflow-hidden rounded-lg border border-red-400/20 bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,0.18),transparent_32%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(2,8,23,0.98))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur sm:p-8">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-5">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-red-300/25 bg-red-500/15 text-3xl text-red-100 shadow-[0_18px_38px_rgba(239,68,68,0.18)]">
+                ▶
+              </div>
+
+              <div className="min-w-0 space-y-3">
+                <h2 className="text-2xl font-black leading-tight text-white sm:text-3xl">
+                  🎥 Continue estudando no YouTube
+                </h2>
+                <p className="max-w-2xl text-base leading-7 text-slate-300">
+                  Resolva dezenas de questões comentadas da legislação desta
+                  rodada e fortaleça sua memorização.
+                </p>
+              </div>
+            </div>
+
+            <a
+              href={tema.playlistYoutubeLiga}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center justify-center rounded-lg bg-red-600 px-6 py-4 text-center text-sm font-black text-white shadow-[0_16px_34px_rgba(220,38,38,0.28)] transition hover:-translate-y-0.5 hover:bg-red-500 sm:min-w-64"
+            >
+              ▶ Assistir playlist da Liga
+            </a>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

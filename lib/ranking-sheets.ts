@@ -17,6 +17,7 @@ export type RankingTheme = {
   cursoUrl: string;
   instagramUrl: string;
   imagemUrl: string;
+  playlistYoutubeLiga: string;
 };
 
 export type RankingRoundParticipant = {
@@ -197,6 +198,7 @@ function rowToTheme(row: CsvRow | undefined): RankingTheme {
     cursoUrl: row?.cursoUrl?.trim() || DEFAULT_COURSE_URL,
     instagramUrl: row?.instagramUrl?.trim() || DEFAULT_INSTAGRAM_URL,
     imagemUrl: normalizeImageUrl(row?.imagemUrl?.trim() || ""),
+    playlistYoutubeLiga: row?.playlistYoutubeLiga?.trim() || "",
   };
 }
 
