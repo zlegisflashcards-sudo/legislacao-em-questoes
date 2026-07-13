@@ -95,3 +95,7 @@ create policy "Permitir leitura publica de comentarios aprovados"
   for select
   to anon
   using (aprovado = true);
+
+-- LegisBot 2
+-- A definição completa, incluindo tipo, índices, gatilho e políticas RLS, está em:
+-- supabase/migrations/20260711150000_create_legisbot_comentarios.sql
