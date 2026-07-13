@@ -12,7 +12,6 @@ export const metadata: Metadata = {
     "Ranking competitivo da comunidade LegisFlashcards para quem responde as questões do Instagram.",
 };
 
-const todosParticipantesUrl = "#ranking-completo";
 const regrasPontuacao = [
   ["1º comentário correto", "10 pontos"],
   ["2º comentário correto", "9 pontos"],
@@ -159,8 +158,62 @@ function ParticipantAvatar({ posicao }: { posicao: number }) {
   );
 }
 
+function RankingRows({
+  participantes,
+}: {
+  participantes: RankingLegisData["ranking"];
+}) {
+  return (
+    <>
+      {participantes.map((participante) => (
+        <tr
+          key={participante.instagram}
+          className="border-b border-blue-300/10 text-sm last:border-b-0"
+        >
+          <td className="px-2 py-3">
+            <span
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-base font-black ${medalhaClasse(
+                participante.posicao,
+              )}`}
+            >
+              {participante.posicao}
+            </span>
+          </td>
+          <td className="px-2 py-3">
+            <div className="flex items-center gap-3">
+              <ParticipantAvatar posicao={participante.posicao} />
+              <span className="font-bold text-white">{participante.nome}</span>
+            </div>
+          </td>
+          <td className="px-2 py-3 font-medium text-slate-300">
+            {participante.instagram}
+          </td>
+          <td className="px-2 py-3 text-right font-black text-slate-300">
+            {formatarPontos(participante.acertos)}
+          </td>
+          <td
+            className={`px-2 py-3 text-right text-xl font-black ${
+              participante.posicao === 1
+                ? "text-yellow-300"
+                : participante.posicao === 2
+                  ? "text-slate-300"
+                  : participante.posicao === 3
+                    ? "text-orange-300"
+                    : "text-slate-300"
+            }`}
+          >
+            {formatarPontos(participante.pontos)}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 function RankingContent({ data }: { data: RankingLegisData }) {
   const { ranking, tema, rodada, atualizadoEm } = data;
+  const rankingInicial = ranking.slice(0, 10);
+  const rankingRestante = ranking.slice(10);
 
   return (
     <>
@@ -232,49 +285,7 @@ function RankingContent({ data }: { data: RankingLegisData }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {ranking.map((participante) => (
-                    <tr
-                      key={participante.instagram}
-                      className="border-b border-blue-300/10 text-sm last:border-b-0"
-                    >
-                      <td className="px-2 py-3">
-                        <span
-                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-base font-black ${medalhaClasse(
-                            participante.posicao,
-                          )}`}
-                        >
-                          {participante.posicao}
-                        </span>
-                      </td>
-                      <td className="px-2 py-3">
-                        <div className="flex items-center gap-3">
-                          <ParticipantAvatar posicao={participante.posicao} />
-                          <span className="font-bold text-white">
-                            {participante.nome}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-2 py-3 font-medium text-slate-300">
-                        {participante.instagram}
-                      </td>
-                      <td className="px-2 py-3 text-right font-black text-slate-300">
-                        {formatarPontos(participante.acertos)}
-                      </td>
-                      <td
-                        className={`px-2 py-3 text-right text-xl font-black ${
-                          participante.posicao === 1
-                            ? "text-yellow-300"
-                            : participante.posicao === 2
-                              ? "text-slate-300"
-                              : participante.posicao === 3
-                                ? "text-orange-300"
-                                : "text-slate-300"
-                        }`}
-                      >
-                        {formatarPontos(participante.pontos)}
-                      </td>
-                    </tr>
-                  ))}
+                  <RankingRows participantes={rankingInicial} />
                 </tbody>
               </table>
             ) : (
@@ -285,13 +296,33 @@ function RankingContent({ data }: { data: RankingLegisData }) {
               </div>
             )}
 
-            {ranking.length > 0 ? (
-              <a
-                href={todosParticipantesUrl}
-                className="mt-5 inline-flex w-full items-center justify-center rounded-lg border border-blue-300/10 bg-blue-900/34 px-5 py-4 text-sm font-black text-slate-200 transition hover:border-blue-300/30 hover:bg-blue-800/50"
-              >
-                Ver todos os participantes
-              </a>
+            {rankingRestante.length > 0 ? (
+              <div className="mt-5">
+                <input
+                  id="ranking-expandir-participantes"
+                  type="checkbox"
+                  className="peer sr-only"
+                  autoComplete="off"
+                />
+                <label
+                  htmlFor="ranking-expandir-participantes"
+                  className="inline-flex w-full cursor-pointer items-center justify-center rounded-lg border border-blue-300/10 bg-blue-900/34 px-5 py-4 text-sm font-black text-slate-200 transition hover:border-blue-300/30 hover:bg-blue-800/50 peer-checked:hidden"
+                >
+                  Ver todos os participantes
+                </label>
+                <label
+                  htmlFor="ranking-expandir-participantes"
+                  className="hidden w-full cursor-pointer items-center justify-center rounded-lg border border-blue-300/10 bg-blue-900/34 px-5 py-4 text-sm font-black text-slate-200 transition hover:border-blue-300/30 hover:bg-blue-800/50 peer-checked:inline-flex"
+                >
+                  Ocultar participantes
+                </label>
+
+                <table className="mt-4 hidden w-full min-w-[760px] border-collapse peer-checked:table">
+                  <tbody>
+                    <RankingRows participantes={rankingRestante} />
+                  </tbody>
+                </table>
+              </div>
             ) : null}
           </div>
         </article>
@@ -300,7 +331,7 @@ function RankingContent({ data }: { data: RankingLegisData }) {
           <article className="rounded-lg border border-blue-400/25 bg-slate-950/68 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)] backdrop-blur">
             <h2 className="mb-5 flex items-center gap-3 text-xl font-black">
               <span className="text-2xl">📘</span>
-              Oferta relâmpago da Liga
+              Tema da Liga
             </h2>
 
             <div className="flex gap-5">
@@ -308,15 +339,10 @@ function RankingContent({ data }: { data: RankingLegisData }) {
 
               <div className="min-w-0 space-y-3">
                 <h3 className="text-xl font-black leading-tight text-white">
-                  Garanta {tema.temaAtual} com desconto
+                  {tema.temaAtual}
                 </h3>
                 <p className="text-sm leading-6 text-slate-300">
-                  Esta condição especial só fica disponível enquanto a
-                  legislação estiver ativa no Ranking Legis.
-                </p>
-                <p className="text-sm leading-6 text-slate-300">
-                  Quando a Liga acabar, a oferta sai do ar junto. Aproveite
-                  antes do encerramento da rodada.
+                  {tema.descricao}
                 </p>
               </div>
             </div>
@@ -327,7 +353,7 @@ function RankingContent({ data }: { data: RankingLegisData }) {
               rel="noreferrer"
               className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-4 text-center text-sm font-black text-white shadow-[0_14px_30px_rgba(37,99,235,0.32)] transition hover:-translate-y-0.5 hover:bg-blue-500"
             >
-              Garantir desconto antes de acabar
+              Adquirir agora
             </a>
           </article>
 

@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { LegislacaoContentTabs } from "@/components/legislacao-content-tabs";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
@@ -7,6 +6,7 @@ import {
   getYoutubeEmbedUrl,
   type StatusAtualizacao,
 } from "@/lib/legislacoes";
+import { siteConfig } from "@/lib/site-config";
 
 type LegislacaoPageProps = {
   params: Promise<{
@@ -70,9 +70,6 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   }
 
   const youtubeEmbedUrl = getYoutubeEmbedUrl(legislacao.youtubeUrl);
-  const legiscastEmbedUrl = legislacao.legiscastUrl
-    ? getYoutubeEmbedUrl(legislacao.legiscastUrl)
-    : undefined;
   const statusAtualizacaoVisual = getStatusAtualizacaoVisual(
     legislacao.statusAtualizacao,
   );
@@ -124,12 +121,29 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
           </div>
         </div>
 
-        <LegislacaoContentTabs
-          questoesUrl={youtubeEmbedUrl}
-          legiscastUrl={legiscastEmbedUrl}
-          esquematizadaUrl={legislacao.pdfEsquematizadoUrl}
-          legislacaoNome={legislacao.nome}
-        />
+        <section>
+          <div className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+            <iframe
+              className="aspect-video w-full bg-black"
+              src={youtubeEmbedUrl}
+              title={`Vídeo: ${legislacao.nome}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        </section>
+
+        <section className="flex flex-col items-center rounded-lg bg-[#062a5f] p-6 text-center text-white shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+          <a
+            href={legislacao.hotmartUrl}
+            className="inline-flex w-fit items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] hover:from-[#041d42] hover:to-blue-500 hover:shadow-[0_22px_50px_rgba(37,99,235,0.52)] sm:px-10 sm:text-lg"
+          >
+            Adquirir Flashcards
+          </a>
+          <p className="mt-3 text-xs font-semibold text-blue-100">
+            ✓ Pagamento seguro via Hotmart
+          </p>
+        </section>
 
         <section className="space-y-3">
           <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
@@ -152,19 +166,64 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
               Reportar atualização
             </a>
           </div>
+
+          <div className="mt-6 space-y-7 rounded-lg border border-blue-200/30 bg-white p-6 text-slate-800 shadow-[0_22px_55px_rgba(0,0,0,0.32)] sm:p-8">
+            <div className="space-y-3">
+              <h2 className="text-xl font-black text-[#062a5f] sm:text-2xl">
+                Como conferir se seus flashcards estão atualizados
+              </h2>
+              <p className="leading-7 text-slate-700">
+                Compare a alteração legislativa exibida no topo do seu
+                flashcard com a Última Alteração Legislativa informada nesta
+                página.
+              </p>
+              <p className="font-bold leading-7 text-slate-900">
+                Se ambas forem iguais, seus flashcards já estão atualizados.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <h2 className="text-xl font-black text-[#062a5f] sm:text-2xl">
+                Meu flashcard está desatualizado. Como atualizar?
+              </h2>
+              <p className="leading-7 text-slate-700">
+                Se o seu flashcard indicar uma alteração legislativa diferente
+                da exibida acima, siga estes passos:
+              </p>
+              <ol className="list-decimal space-y-3 pl-6 leading-7 text-slate-700 marker:font-bold marker:text-[#062a5f]">
+                <li>Exclua o deck desatualizado do Anki.</li>
+                <li>
+                  Acesse &quot;🔐 Minhas Leis Adquiridas&quot; no site da
+                  LegisFlashcards.
+                </li>
+                <li>Baixe a versão mais recente dos flashcards.</li>
+                <li>
+                  Importe o novo arquivo no Anki conforme o passo a passo
+                  ensinado no curso.
+                </li>
+              </ol>
+            </div>
+
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 text-amber-900">
+              <p className="font-black">Importante:</p>
+              <p className="mt-2 leading-7">
+                Para evitar conflitos e manter seu material sincronizado com a
+                versão mais recente, sempre remova a versão antiga antes de
+                importar a nova.
+              </p>
+            </div>
+
+            <a
+              href={siteConfig.links.minhasLeis}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#062a5f] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#041d42] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 sm:w-auto"
+            >
+              🔐 Acessar Minhas Leis Adquiridas
+            </a>
+          </div>
         </section>
 
-        <section className="flex flex-col items-center rounded-lg bg-[#062a5f] p-6 text-center text-white shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
-          <a
-            href={legislacao.hotmartUrl}
-            className="inline-flex w-fit items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] hover:from-[#041d42] hover:to-blue-500 hover:shadow-[0_22px_50px_rgba(37,99,235,0.52)] sm:px-10 sm:text-lg"
-          >
-            Adquirir Flashcards
-          </a>
-          <p className="mt-3 text-xs font-semibold text-blue-100">
-            ✓ Pagamento seguro via Hotmart
-          </p>
-        </section>
       </div>
     </div>
   );

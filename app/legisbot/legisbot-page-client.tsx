@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { limparApresentacao } from "@/lib/legisbot/clean-comment";
 
-const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado", legislacao: "O texto da legislação aparecerá aqui." };
+const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado" };
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
 const ORDEM_VALIDA = /^[A-Za-z0-9._-]{1,20}$/;
 
@@ -11,6 +13,13 @@ type LegisBotPageClientProps = {
   slug: string;
   ordem: string;
   dadosIniciais: DadosLegislacao;
+  legiscast: LegiscastVideo | null;
+};
+
+type LegiscastVideo = {
+  embedUrl: string;
+  watchUrl: string;
+  kind: "playlist" | "video";
 };
 
 type DadosLegislacao = {
@@ -32,13 +41,13 @@ export default function LegisBotPageClient({
   slug,
   ordem,
   dadosIniciais,
+  legiscast,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
   const [source, setSource] = useState<LegisBotApiResponse["source"]>();
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
-  const legislacao = dadosLegislacao.legislacao || fallback.legislacao;
   const [answer, setAnswer] = useState<string | null>(null);
   const [answerState, setAnswerState] = useState<
     "loading" | "processing" | "ready" | "not_found" | "invalid" | "timeout" | "error"
@@ -127,36 +136,47 @@ export default function LegisBotPageClient({
   }
 
   return <div className="legisbot-page" data-theme={theme}>
-    <header className="legisbot-header"><div className="legisbot-header-inner">
+    <header className="legisbot-header"><div className="legisbot-header-inner legisbot-controls">
       <button type="button" onClick={() => history.back()} className="icon-button" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button>
-      <div className="bot-avatar" aria-hidden="true">🤖</div><div className="bot-identity"><strong>LegisBot</strong><span>Seu assistente de legislação</span></div>
       <button type="button" onClick={toggleTheme} className="icon-button theme-button" aria-label={theme === "light" ? "Ativar modo escuro" : "Ativar modo claro"}>{theme === "light" ? "☾" : "☀"}</button>
     </div></header>
     <main className="legisbot-main" data-source={source}>
-      <section className="law-card" aria-labelledby="law-title" data-slug={slug} data-ordem={ordem}>
-        <div className="law-heading"><div className="law-title-wrap"><span className="document-icon" aria-hidden="true">▤</span><div><h1 id="law-title">{assunto}</h1></div></div><span className="order-label">{titulo}</span></div>
-        <div
-          className="law-text"
-          data-sanitized="true"
-          dangerouslySetInnerHTML={{ __html: legislacao }}
-        />
+      <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
+        <span className="legislation-badge">📖 {titulo}</span>
+        <h1>{assunto}</h1>
+      </header>
+
+      <section className="question-block" aria-label="Pergunta feita ao LegisBot">
+        <span className="question-label">👤 Você perguntou:</span>
+        <div className="question-card">🤖 LegisBot, pode me explicar este artigo?</div>
       </section>
-      <section className="conversation" aria-label="Conversa com o LegisBot">
-        <div className="student-message"><div className="student-avatar" aria-hidden="true">👤</div><div><span>Você perguntou:</span><p>🤖 LegisBot, pode me explicar este artigo?</p></div></div>
-        <article className="bot-answer"><div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2>LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
-          <div className="answer-content answer-freeform" aria-live="polite">
-            {answerState === "ready" && answer ? <p>{answer}</p> : null}
-            {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
-            {answerState === "processing" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
-            {answerState === "not_found" ? <p className="answer-status answer-error">Trecho não encontrado.</p> : null}
-            {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
-            {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
-            {answerState === "error" ? <p className="answer-status answer-error">Não foi possível carregar a explicação no momento. Tente novamente mais tarde.</p> : null}
-          </div>
-        </article>
-        <aside className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este comentário foi elaborado com auxílio de inteligência artificial para apoiar seus estudos e pode conter imprecisões. Em caso de dúvidas, consulte a equipe da LegisFlashcards em <a href="https://www.legisflashcards.com.br" target="_blank" rel="noreferrer">www.legisflashcards.com.br</a>.</p></aside>
-        <aside className="legiscast-card"><div className="legiscast-intro"><span className="podcast-icon" aria-hidden="true">🎙️</span><div><h2>Quer aprofundar este tema?</h2><p>O Legiscast explica este artigo com mais contexto, exemplos e fundamentos jurídicos.</p></div></div><div className="focus-note"><span aria-hidden="true">💡</span><p><strong>Atenção:</strong> se o seu objetivo é concurso, priorize primeiro as revisões e as questões no Anki. Use o Legiscast para aprofundar apenas quando sentir necessidade ou tiver dúvidas sobre o conteúdo.</p></div><a href="#" className="legiscast-button" onClick={(e) => e.preventDefault()}>▶️ <span>Ouvir episódio do Legiscast</span></a></aside>
-      </section>
+
+      <article className="bot-answer" aria-labelledby="legisbot-answer-title">
+        <div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2 id="legisbot-answer-title">LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
+        <div className="answer-content answer-freeform" aria-live="polite">
+          {answerState === "ready" && answer ? <div className="markdown-content"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{answer}</ReactMarkdown></div> : null}
+          {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
+          {answerState === "processing" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
+          {answerState === "not_found" ? <p className="answer-status answer-error">Trecho não encontrado.</p> : null}
+          {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
+          {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
+          {answerState === "error" ? <p className="answer-status answer-error">Não foi possível carregar a explicação no momento. Tente novamente mais tarde.</p> : null}
+        </div>
+      </article>
+
+      <div className="legisbot-report"><a href="mailto:zlegisflashcards@gmail.com?subject=Reportar%20erro%20no%20LegisBot">⚑ Reportar erro</a></div>
+
+      <aside className="legiscast-card">
+        <span className="continue-label">▶️ Continue aprendendo</span>
+        <h2>🎧 LegisCast</h2>
+        <p>{legiscast?.kind === "playlist"
+          ? "Explore as aulas desta legislação com explicações, exemplos e foco em concursos públicos."
+          : "Assista à explicação completa deste artigo em formato de aula, com exemplos, comentários e foco em concursos públicos."}</p>
+        {legiscast ? <div className="legiscast-video"><iframe src={legiscast.embedUrl} title={legiscast.kind === "playlist" ? `Playlist do LegisCast sobre ${titulo}` : `LegisCast sobre ${titulo}`} loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : null}
+        <a href={legiscast?.watchUrl ?? "https://www.youtube.com/@Legisflashcards"} target="_blank" rel="noreferrer" className="legiscast-button"><span aria-hidden="true">▶</span> {legiscast?.kind === "playlist" ? "Abrir playlist no YouTube" : "Assistir no YouTube"}</a>
+      </aside>
+
+      <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
     </main>
   </div>;
 }
