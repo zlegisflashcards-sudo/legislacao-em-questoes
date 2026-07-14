@@ -109,13 +109,10 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
 
             <div className="rounded-lg border border-blue-200/30 bg-white p-6 shadow-[0_22px_55px_rgba(0,0,0,0.32)]">
               <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Quantidade
+                {legislacao.unidade}
               </p>
               <p className="mt-3 text-4xl font-black text-[#062a5f] sm:text-5xl">
-                {legislacao.quantidadeFlashcards}{" "}
-                <span className="text-2xl font-bold text-slate-900">
-                  {legislacao.unidade}
-                </span>
+                + de {legislacao.quantidadeFlashcards}
               </p>
             </div>
           </div>
@@ -161,17 +158,34 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             </div>
             <a
               href={reportarAtualizacaoUrl}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-bold text-orange-700 shadow-sm transition hover:border-orange-400 hover:bg-orange-100 hover:text-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:self-center"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-bold text-orange-700 shadow-sm transition hover:border-orange-400 hover:bg-orange-100 hover:text-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:self-stretch"
             >
-              Reportar atualização
+              🚨 Reportar atualização
             </a>
           </div>
 
-          <div className="mt-6 space-y-7 rounded-lg border border-blue-200/30 bg-white p-6 text-slate-800 shadow-[0_22px_55px_rgba(0,0,0,0.32)] sm:p-8">
-            <div className="space-y-3">
-              <h2 className="text-xl font-black text-[#062a5f] sm:text-2xl">
-                Como conferir se seus flashcards estão atualizados
-              </h2>
+          <details className="group mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-[0_14px_34px_rgba(0,0,0,0.2)] transition open:border-blue-200 open:shadow-[0_20px_48px_rgba(0,0,0,0.28)]">
+            <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-5 transition hover:bg-blue-50/80 marker:hidden sm:px-6">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#062a5f] text-lg font-black text-white shadow-sm">
+                ?
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-black leading-snug text-[#062a5f] sm:text-lg">
+                  Como saber se meus flashcards estão atualizados?
+                </span>
+              </span>
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-xl font-bold text-[#062a5f] transition group-open:bg-[#062a5f] group-open:text-white">
+                <span className="group-open:hidden" aria-hidden="true">
+                  +
+                </span>
+                <span className="hidden group-open:inline" aria-hidden="true">
+                  −
+                </span>
+              </span>
+            </summary>
+
+            <div className="space-y-7 border-t border-slate-200 bg-slate-50/70 px-5 py-6 sm:px-6 sm:py-7">
+              <div className="space-y-3">
               <p className="leading-7 text-slate-700">
                 Compare a alteração legislativa exibida no topo do seu
                 flashcard com a Última Alteração Legislativa informada nesta
@@ -221,7 +235,8 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             >
               🔐 Acessar Minhas Leis Adquiridas
             </a>
-          </div>
+            </div>
+          </details>
         </section>
 
       </div>

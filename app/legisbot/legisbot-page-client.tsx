@@ -13,13 +13,6 @@ type LegisBotPageClientProps = {
   slug: string;
   ordem: string;
   dadosIniciais: DadosLegislacao;
-  legiscast: LegiscastVideo | null;
-};
-
-type LegiscastVideo = {
-  embedUrl: string;
-  watchUrl: string;
-  kind: "playlist" | "video";
 };
 
 type DadosLegislacao = {
@@ -41,13 +34,15 @@ export default function LegisBotPageClient({
   slug,
   ordem,
   dadosIniciais,
-  legiscast,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
   const [source, setSource] = useState<LegisBotApiResponse["source"]>();
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
+  const centralLegislacaoUrl = `/leis/${encodeURIComponent(
+    slug.trim().toLowerCase(),
+  )}`;
   const [answer, setAnswer] = useState<string | null>(null);
   const [answerState, setAnswerState] = useState<
     "loading" | "processing" | "ready" | "not_found" | "invalid" | "timeout" | "error"
@@ -130,19 +125,12 @@ export default function LegisBotPageClient({
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, [slug, ordem, dadosIniciais.titulo, dadosIniciais.assunto, dadosIniciais.legislacao]);
-  function toggleTheme() {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next); localStorage.setItem("legisbot-theme", next); document.documentElement.dataset.legisbotTheme = next;
-  }
-
   return <div className="legisbot-page" data-theme={theme}>
-    <header className="legisbot-header"><div className="legisbot-header-inner legisbot-controls">
-      <button type="button" onClick={() => history.back()} className="icon-button" aria-label="Voltar" title="Voltar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg></button>
-      <button type="button" onClick={toggleTheme} className="icon-button theme-button" aria-label={theme === "light" ? "Ativar modo escuro" : "Ativar modo claro"}>{theme === "light" ? "☾" : "☀"}</button>
-    </div></header>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        <span className="legislation-badge">📖 {titulo}</span>
+        <a href={centralLegislacaoUrl} className="legislation-back-link">
+          <span aria-hidden="true">←</span> {titulo}
+        </a>
         <h1>{assunto}</h1>
       </header>
 
@@ -165,16 +153,6 @@ export default function LegisBotPageClient({
       </article>
 
       <div className="legisbot-report"><a href="mailto:zlegisflashcards@gmail.com?subject=Reportar%20erro%20no%20LegisBot">⚑ Reportar erro</a></div>
-
-      <aside className="legiscast-card">
-        <span className="continue-label">▶️ Continue aprendendo</span>
-        <h2>🎧 LegisCast</h2>
-        <p>{legiscast?.kind === "playlist"
-          ? "Explore as aulas desta legislação com explicações, exemplos e foco em concursos públicos."
-          : "Assista à explicação completa deste artigo em formato de aula, com exemplos, comentários e foco em concursos públicos."}</p>
-        {legiscast ? <div className="legiscast-video"><iframe src={legiscast.embedUrl} title={legiscast.kind === "playlist" ? `Playlist do LegisCast sobre ${titulo}` : `LegisCast sobre ${titulo}`} loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : null}
-        <a href={legiscast?.watchUrl ?? "https://www.youtube.com/@Legisflashcards"} target="_blank" rel="noreferrer" className="legiscast-button"><span aria-hidden="true">▶</span> {legiscast?.kind === "playlist" ? "Abrir playlist no YouTube" : "Assistir no YouTube"}</a>
-      </aside>
 
       <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
     </main>

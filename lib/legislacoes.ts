@@ -211,22 +211,42 @@ export function encontrarLegislacaoPorSlug(
 }
 
 export function getYoutubeEmbedUrl(youtubeUrl: string) {
-  try {
-    const url = new URL(youtubeUrl);
+  const trimmedUrl = youtubeUrl.trim();
 
-    if (url.hostname.includes("youtu.be")) {
-      const videoId = url.pathname.replace("/", "");
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : youtubeUrl;
-    }
+  if (!trimmedUrl) return "";
+
+  try {
+    const url = new URL(trimmedUrl);
+    const hostname = url.hostname.replace(/^www\./, "").toLowerCase();
+    const isYoutube =
+      hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+    const isYoutubeShortUrl = hostname === "youtu.be";
 
     const playlistId = url.searchParams.get("list");
-    if (playlistId) {
-      return `https://www.youtube.com/embed/videoseries?list=${playlistId}`;
+    if (playlistId && (isYoutube || isYoutubeShortUrl)) {
+      return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(playlistId)}`;
     }
 
-    const videoId = url.searchParams.get("v");
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : youtubeUrl;
+    if (isYoutube && url.pathname === "/watch") {
+      const videoId = url.searchParams.get("v");
+      if (videoId) {
+        return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+      }
+    }
+
+    if (isYoutubeShortUrl) {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+      if (videoId) {
+        return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+      }
+    }
+
+    if (isYoutube && url.pathname.startsWith("/embed/")) {
+      return trimmedUrl;
+    }
+
+    return trimmedUrl;
   } catch {
-    return youtubeUrl;
+    return trimmedUrl;
   }
 }

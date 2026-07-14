@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  getLegislacaoEmbedUrl,
+  isLegislacaoUrlValida,
+} from "@/lib/legislacao-embed";
 
 type ContentTabId = "esquematizada" | "legiscast" | "questoes";
 
@@ -18,6 +22,62 @@ type LegislacaoContentTabsProps = {
   esquematizadaUrl?: string;
   legislacaoNome: string;
 };
+
+type LegislacaoEmbedProps = {
+  src?: string;
+  title: string;
+  variant?: "document" | "video";
+};
+
+export function LegislacaoEmbed({
+  src,
+  title,
+  variant = "document",
+}: LegislacaoEmbedProps) {
+  const embedUrl =
+    variant === "document" ? getLegislacaoEmbedUrl(src) : src?.trim() ?? "";
+  const exibirTelaCheia =
+    variant === "document" && isLegislacaoUrlValida(embedUrl);
+
+  if (!embedUrl) return null;
+
+  return (
+    <div className="w-full min-w-0 space-y-3">
+      <div className="w-full min-w-0 overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+        <iframe
+          className={
+            variant === "document"
+              ? "h-[72vh] min-h-[520px] w-full max-w-full bg-white sm:min-h-[620px]"
+              : "aspect-video w-full max-w-full bg-black"
+          }
+          src={embedUrl}
+          title={title}
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allow={
+            variant === "video"
+              ? "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              : undefined
+          }
+          allowFullScreen
+        />
+      </div>
+
+      {exibirTelaCheia ? (
+        <div className="flex justify-end">
+          <a
+            href={embedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-[#062a5f] shadow-sm transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+          >
+            Abrir PDF em tela cheia
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function LegislacaoContentTabs({
   questoesUrl,
@@ -58,19 +118,12 @@ export function LegislacaoContentTabs({
 
   return (
     <section className="space-y-4">
-      <div className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+      <div key={activeTab.id}>
         {activeTab.src ? (
-          <iframe
-            key={activeTab.id}
-            className={
-              isDocumentTab
-                ? "h-[72vh] min-h-[520px] w-full bg-white"
-                : "aspect-video w-full bg-black"
-            }
+          <LegislacaoEmbed
             src={activeTab.src}
             title={activeTab.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
+            variant={isDocumentTab ? "document" : "video"}
           />
         ) : (
           <div className="flex h-[360px] items-center justify-center bg-slate-950 px-6 text-center text-sm font-semibold text-slate-300">
