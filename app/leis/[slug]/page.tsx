@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { LegiscastPlaylistPlayer } from "@/components/legiscast-playlist-player";
 import { LegislacaoEmbed } from "@/components/legislacao-content-tabs";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
   getLegislacoes,
-  getYoutubeEmbedUrl,
   type StatusAtualizacao,
 } from "@/lib/legislacoes";
 
@@ -52,9 +52,7 @@ export default async function CentralLegislacaoPage({
 
   if (!legislacao) notFound();
 
-  const legiscastEmbedUrl = legislacao.legiscastUrl
-    ? getYoutubeEmbedUrl(legislacao.legiscastUrl)
-    : undefined;
+  const legiscastUrl = legislacao.legiscastUrl?.trim();
 
   return (
     <div className="bg-[#f7f8fb]">
@@ -86,22 +84,12 @@ export default async function CentralLegislacaoPage({
           ) : null}
         </header>
 
-        {legiscastEmbedUrl ? (
-          <section className="min-w-0 space-y-5" aria-labelledby="legiscast-title">
-            <div className="space-y-2">
-              <h2 id="legiscast-title" className="text-3xl font-black text-[#062a5f]">
-                LegisCast
-              </h2>
-              <p className="text-base leading-7 text-slate-600">
-                Ouça esta legislação enquanto acompanha o texto legal.
-              </p>
-            </div>
-            <LegislacaoEmbed
-              src={legiscastEmbedUrl}
-              title={`LegisCast: ${legislacao.nome}`}
-              variant="video"
-            />
-          </section>
+        {legiscastUrl ? (
+          <LegiscastPlaylistPlayer
+            playlistUrl={legiscastUrl}
+            lawSlug={legislacao.slug}
+            lawTitle={legislacao.nome}
+          />
         ) : null}
 
         {legislacao.pdfEsquematizadoUrl ? (
