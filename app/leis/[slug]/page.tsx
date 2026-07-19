@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { LegisBotCommentsIndex } from "@/components/legisbot-comments-index";
 import { LegiscastPlaylistPlayer } from "@/components/legiscast-playlist-player";
 import { LegislacaoEmbed } from "@/components/legislacao-content-tabs";
+import { buscarComentariosPublicosPorSlug } from "@/lib/legisbot/comentarios-publicos";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
@@ -13,7 +15,7 @@ type CentralLegislacaoPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-const artigosDemonstrativos = ["Art. 1º", "Art. 2º", "Art. 3º", "Art. 4º"];
+export const revalidate = 300;
 
 function getDestaqueAlteracao(status: StatusAtualizacao) {
   return {
@@ -48,7 +50,11 @@ export default async function CentralLegislacaoPage({
   params,
 }: CentralLegislacaoPageProps) {
   const { slug } = await params;
-  const legislacao = encontrarLegislacaoPorSlug(await getLegislacoes(), slug);
+  const [legislacoes, comentarios] = await Promise.all([
+    getLegislacoes(),
+    buscarComentariosPublicosPorSlug(slug),
+  ]);
+  const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) notFound();
 
@@ -104,48 +110,11 @@ export default async function CentralLegislacaoPage({
           </section>
         ) : null}
 
-        <section
-          className="min-w-0 rounded-2xl border border-blue-100 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-8"
-          aria-labelledby="legisbot-preview-title"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span
-                className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 text-2xl shadow-sm"
-                aria-hidden="true"
-              >
-                🤖
-              </span>
-              <h2
-                id="legisbot-preview-title"
-                className="text-2xl font-black leading-tight text-[#062a5f] sm:text-3xl"
-              >
-                Legislação comentada pelo LegisBot
-              </h2>
-            </div>
-            <span className="w-fit rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-blue-700">
-              Em breve
-            </span>
-          </div>
-
-          <p className="mt-5 max-w-3xl leading-7 text-slate-600">
-            Em breve, cada artigo desta legislação poderá ser aberto individualmente
-            para visualizar a explicação produzida pelo LegisBot.
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-3" aria-label="Exemplos de artigos">
-            {artigosDemonstrativos.map((artigo) => (
-              <button
-                key={artigo}
-                type="button"
-                disabled
-                className="cursor-not-allowed rounded-xl border border-blue-100 bg-slate-50 px-5 py-3 text-sm font-bold text-slate-400 shadow-sm"
-              >
-                {artigo}
-              </button>
-            ))}
-          </div>
-        </section>
+        <LegisBotCommentsIndex
+          comentarios={comentarios}
+          hotmartUrl={legislacao.hotmartUrl}
+          adminSlug={legislacao.slug.trim().toUpperCase()}
+        />
       </div>
     </div>
   );

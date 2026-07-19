@@ -33,8 +33,19 @@ export async function obterAdministrador() {
   const refreshToken = store.get(REFRESH_COOKIE)?.value;
   if (!refreshToken) return null;
   const refreshed = await auth.auth.refreshSession({ refresh_token: refreshToken });
-  return !refreshed.error && emailEhAdministrador(refreshed.data.user?.email)
-    ? refreshed.data.user : null;
+  if (refreshed.error || !refreshed.data.session || !emailEhAdministrador(refreshed.data.user?.email)) {
+    return null;
+  }
+
+  try {
+    const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+    store.set(ACCESS_COOKIE, refreshed.data.session.access_token, { ...options, maxAge: refreshed.data.session.expires_in });
+    store.set(REFRESH_COOKIE, refreshed.data.session.refresh_token, { ...options, maxAge: 60 * 60 * 24 * 30 });
+  } catch {
+    // Server Components podem validar a sessão, mas apenas Actions e Route Handlers renovam cookies.
+  }
+
+  return refreshed.data.user;
 }
 
 export async function exigirAdministrador() {

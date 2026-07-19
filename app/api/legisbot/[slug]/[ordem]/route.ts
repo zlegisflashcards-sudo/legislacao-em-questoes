@@ -11,6 +11,7 @@ import {
   sanitizarHtmlLegislacao,
 } from "@/lib/legisbot/sanitize-legal-html";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { sanitizarComentarioHtml } from "@/lib/legisbot/sanitize-comment-html";
 
 export const dynamic = "force-dynamic";
 
@@ -315,7 +316,7 @@ function respostaSucesso(
       success: true,
       source,
       status,
-      comment,
+      comment: comment ? sanitizarComentarioHtml(comment) : null,
       titulo: trecho.titulo,
       assunto: trecho.assunto,
       legislacao: sanitizarHtmlLegislacao(trecho.legislacao),

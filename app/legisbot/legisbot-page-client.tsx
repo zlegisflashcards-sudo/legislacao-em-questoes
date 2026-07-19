@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { useEffect, useState, type ReactNode } from "react";
 import { limparApresentacao } from "@/lib/legisbot/clean-comment";
+import LegisBotCommentContent from "@/components/legisbot-comment-content";
 
 const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado" };
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
@@ -13,6 +12,7 @@ type LegisBotPageClientProps = {
   slug: string;
   ordem: string;
   dadosIniciais: DadosLegislacao;
+  adminShortcut?: ReactNode;
 };
 
 type DadosLegislacao = {
@@ -34,6 +34,7 @@ export default function LegisBotPageClient({
   slug,
   ordem,
   dadosIniciais,
+  adminShortcut,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
@@ -128,9 +129,12 @@ export default function LegisBotPageClient({
   return <div className="legisbot-page" data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        <a href={centralLegislacaoUrl} className="legislation-back-link">
-          <span aria-hidden="true">←</span> {titulo}
-        </a>
+        <div className="legisbot-topic-tools">
+          <a href={centralLegislacaoUrl} className="legislation-back-link">
+            <span aria-hidden="true">←</span> {titulo}
+          </a>
+          {adminShortcut}
+        </div>
         <h1>{assunto}</h1>
       </header>
 
@@ -142,7 +146,7 @@ export default function LegisBotPageClient({
       <article className="bot-answer" aria-labelledby="legisbot-answer-title">
         <div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2 id="legisbot-answer-title">LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
         <div className="answer-content answer-freeform" aria-live="polite">
-          {answerState === "ready" && answer ? <div className="markdown-content"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{answer}</ReactMarkdown></div> : null}
+          {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
           {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
           {answerState === "processing" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
           {answerState === "not_found" ? <p className="answer-status answer-error">Trecho não encontrado.</p> : null}

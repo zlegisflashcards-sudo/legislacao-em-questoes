@@ -30,6 +30,21 @@ export async function entrarAdministrador(_: AdminActionState, formData: FormDat
 
 export async function sairAdministrador() {
   const store = await cookies();
+  const accessToken = store.get(adminCookieNames.access)?.value;
+  const refreshToken = store.get(adminCookieNames.refresh)?.value;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (accessToken && refreshToken && url && key) {
+    try {
+      const auth = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+      const session = await auth.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      if (!session.error) await auth.auth.signOut({ scope: "local" });
+    } catch {
+      // Os cookies locais ainda devem ser removidos quando o Supabase estiver indisponível.
+    }
+  }
+
   store.delete(adminCookieNames.access);
   store.delete(adminCookieNames.refresh);
   redirect("/admin/login");

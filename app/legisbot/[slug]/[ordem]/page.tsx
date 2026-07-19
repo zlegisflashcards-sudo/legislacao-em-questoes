@@ -1,4 +1,5 @@
 import LegisBotPageClient from "@/app/legisbot/legisbot-page-client";
+import AdminEditCommentShortcut from "@/components/admin/admin-edit-comment-shortcut";
 import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 
 type LegisBotPageProps = {
@@ -24,6 +25,7 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
       slug={slug}
       ordem={ordem}
       dadosIniciais={{ titulo, assunto, legislacao }}
+      adminShortcut={<AdminEditCommentShortcut slug={slug} ordem={ordem} />}
     />
   );
 }
