@@ -2,7 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type User } from "@supabase/supabase-js";
 
 const ACCESS_COOKIE = "legisbot_admin_access";
 const REFRESH_COOKIE = "legisbot_admin_refresh";
@@ -23,17 +23,29 @@ export function emailEhAdministrador(email?: string | null): boolean {
   return Boolean(email && emailsAdministradores().includes(email.toLowerCase()));
 }
 
+export function usuarioEhAdministrador(
+  user?: Pick<User, "email" | "app_metadata"> | null,
+): boolean {
+  return Boolean(
+    user && (
+      emailEhAdministrador(user.email)
+      || user.app_metadata?.role === "admin"
+      || user.app_metadata?.admin === true
+    )
+  );
+}
+
 export async function obterAdministrador() {
   const store = await cookies();
   const accessToken = store.get(ACCESS_COOKIE)?.value;
   if (!accessToken) return null;
   const auth = clienteAuth();
   const { data, error } = await auth.auth.getUser(accessToken);
-  if (!error && emailEhAdministrador(data.user?.email)) return data.user;
+  if (!error && usuarioEhAdministrador(data.user)) return data.user;
   const refreshToken = store.get(REFRESH_COOKIE)?.value;
   if (!refreshToken) return null;
   const refreshed = await auth.auth.refreshSession({ refresh_token: refreshToken });
-  if (refreshed.error || !refreshed.data.session || !emailEhAdministrador(refreshed.data.user?.email)) {
+  if (refreshed.error || !refreshed.data.session || !usuarioEhAdministrador(refreshed.data.user)) {
     return null;
   }
 

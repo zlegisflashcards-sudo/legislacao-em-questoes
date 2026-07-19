@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
-import { adminCookieNames, emailEhAdministrador, exigirAdministrador } from "@/lib/admin-auth";
+import { adminCookieNames, exigirAdministrador, usuarioEhAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { LEGISBOT_COMENTARIO_STATUS, type LegisBotComentarioStatus } from "@/lib/legisbot-comentario";
 
@@ -14,13 +14,16 @@ export async function entrarAdministrador(_: AdminActionState, formData: FormDat
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { ok: false, message: "Informe e-mail e senha." };
-  if (!emailEhAdministrador(email)) return { ok: false, message: "Este usuário não possui acesso administrativo." };
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return { ok: false, message: "Supabase Auth não configurado." };
   const auth = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await auth.auth.signInWithPassword({ email, password });
   if (error || !data.session) return { ok: false, message: "E-mail ou senha inválidos." };
+  if (!usuarioEhAdministrador(data.user)) {
+    await auth.auth.signOut({ scope: "local" });
+    return { ok: false, message: "Este usuário não possui acesso administrativo." };
+  }
   const store = await cookies();
   const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
   store.set(adminCookieNames.access, data.session.access_token, { ...options, maxAge: data.session.expires_in });
