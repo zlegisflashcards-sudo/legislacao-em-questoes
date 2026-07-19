@@ -1,0 +1,46 @@
+import "server-only";
+
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+
+const ACCESS_COOKIE = "legisbot_admin_access";
+const REFRESH_COOKIE = "legisbot_admin_refresh";
+
+function emailsAdministradores(): string[] {
+  return (process.env.LEGISBOT_ADMIN_EMAILS ?? process.env.LEGISBOT_ADMIN_EMAIL ?? "")
+    .split(",").map((email) => email.trim().toLowerCase()).filter(Boolean);
+}
+
+function clienteAuth() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) throw new Error("Supabase Auth não configurado.");
+  return createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+export function emailEhAdministrador(email?: string | null): boolean {
+  return Boolean(email && emailsAdministradores().includes(email.toLowerCase()));
+}
+
+export async function obterAdministrador() {
+  const store = await cookies();
+  const accessToken = store.get(ACCESS_COOKIE)?.value;
+  if (!accessToken) return null;
+  const auth = clienteAuth();
+  const { data, error } = await auth.auth.getUser(accessToken);
+  if (!error && emailEhAdministrador(data.user?.email)) return data.user;
+  const refreshToken = store.get(REFRESH_COOKIE)?.value;
+  if (!refreshToken) return null;
+  const refreshed = await auth.auth.refreshSession({ refresh_token: refreshToken });
+  return !refreshed.error && emailEhAdministrador(refreshed.data.user?.email)
+    ? refreshed.data.user : null;
+}
+
+export async function exigirAdministrador() {
+  const user = await obterAdministrador();
+  if (!user) redirect("/admin/login");
+  return user;
+}
+
+export const adminCookieNames = { access: ACCESS_COOKIE, refresh: REFRESH_COOKIE };

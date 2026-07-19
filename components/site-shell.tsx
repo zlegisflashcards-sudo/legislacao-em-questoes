@@ -5,7 +5,12 @@ import { siteConfig } from "@/lib/site-config";
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname === "/legisbot" || pathname.startsWith("/legisbot/")) return <>{children}</>;
+  if (
+    pathname === "/legisbot" ||
+    pathname.startsWith("/legisbot/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/")
+  ) return <>{children}</>;
 
   const socials = [
     ["youtube", "https://www.youtube.com/@Legisflashcards", "YouTube"],
