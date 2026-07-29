@@ -3,6 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { limparApresentacao } from "@/lib/legisbot/clean-comment";
 import LegisBotCommentContent from "@/components/legisbot-comment-content";
+import LegisBotCommunity from "@/components/legisbot-community";
+import { legalHtmlToPlainText } from "@/lib/legisbot-community";
 
 const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado" };
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
@@ -41,6 +43,7 @@ export default function LegisBotPageClient({
   const [source, setSource] = useState<LegisBotApiResponse["source"]>();
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
+  const textoLegal = legalHtmlToPlainText(dadosLegislacao.legislacao);
   const centralLegislacaoUrl = `/leis/${encodeURIComponent(
     slug.trim().toLowerCase(),
   )}`;
@@ -138,6 +141,8 @@ export default function LegisBotPageClient({
         <h1>{assunto}</h1>
       </header>
 
+      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><p>{textoLegal}</p></section> : null}
+
       <section className="question-block" aria-label="Pergunta feita ao LegisBot">
         <span className="question-label">👤 Você perguntou:</span>
         <div className="question-card">🤖 LegisBot, pode me explicar este artigo?</div>
@@ -157,6 +162,8 @@ export default function LegisBotPageClient({
       </article>
 
       <div className="legisbot-report"><a href="mailto:zlegisflashcards@gmail.com?subject=Reportar%20erro%20no%20LegisBot">⚑ Reportar erro</a></div>
+
+      <LegisBotCommunity slug={slug} ordem={ordem} />
 
       <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
     </main>
