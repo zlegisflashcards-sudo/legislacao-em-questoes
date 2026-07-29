@@ -54,7 +54,7 @@ export function StudentAccount() {
       if (!validatePublicName(publicName)) {
         setMessage("Use um nome público de 3 a 50 caracteres, sem símbolos especiais."); return;
       }
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: authEmail,
         password,
         options: {
@@ -62,9 +62,26 @@ export function StudentAccount() {
           data: { nome_publico: publicName },
         },
       });
-      setMessage(error
-        ? "Não foi possível criar a conta. O e-mail ou nome público pode já estar em uso."
-        : "Conta criada. Confira seu e-mail para confirmar o cadastro.");
+      if (error) {
+        setMessage("Não foi possível criar a conta. O e-mail ou nome público pode já estar em uso.");
+        return;
+      }
+      if (data.session && data.user) {
+        const profileResult = await supabase
+          .from("perfis_publicos")
+          .select("id,nome_publico")
+          .eq("id", data.user.id)
+          .maybeSingle();
+        setEmail(data.user.email ?? authEmail);
+        setProfile((profileResult.data as PublicProfile | null) ?? {
+          id: data.user.id,
+          nome_publico: publicName,
+        });
+        setMode("profile");
+        setMessage("Conta criada com sucesso. Você já está conectado.");
+        return;
+      }
+      setMessage("Conta criada. Confira seu e-mail para confirmar o cadastro.");
     } finally { setPending(false); }
   }
 
