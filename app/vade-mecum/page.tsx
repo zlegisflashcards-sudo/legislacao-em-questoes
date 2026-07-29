@@ -12,7 +12,7 @@ export default async function VadeMecumPage() {
     <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-10 sm:px-6 sm:py-14">
       <div className="space-y-3">
         <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
-          Vade Mecum
+          Por concurso
         </p>
         <h1 className="text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
           Catálogo completo de legislações

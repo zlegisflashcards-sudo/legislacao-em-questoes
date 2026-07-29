@@ -1,9 +1,11 @@
 import Script from "next/script";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
+  getVadeMecumHotmartUrl,
   getLegislacoes,
+  isVadeMecum,
 } from "@/lib/legislacoes";
 
 type PagamentoPageProps = {
@@ -57,6 +59,16 @@ export default async function PagamentoPage({ params }: PagamentoPageProps) {
   const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) {
+    notFound();
+  }
+
+  if (isVadeMecum(legislacao)) {
+    const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
+
+    if (hotmartUrl) {
+      redirect(hotmartUrl);
+    }
+
     notFound();
   }
 

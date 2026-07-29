@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Legislacao } from "@/lib/legislacoes";
+import {
+  getVadeMecumHotmartUrl,
+  isVadeMecum,
+  type Legislacao,
+} from "@/lib/legislacoes";
 
 type LegislacaoSearchProps = {
   legislacoes: Legislacao[];
@@ -81,22 +85,59 @@ export function LegislacaoSearch({
           <div className="absolute left-0 right-0 top-16 z-10 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
             {sugestoes.length > 0 ? (
               <ul>
-                {sugestoes.map((legislacao) => (
-                  <li key={legislacao.slug}>
-                    <a
-                      href={`/leisflashcards/${legislacao.slug}`}
-                      className="block px-4 py-3 transition hover:bg-blue-50"
-                    >
+                {sugestoes.map((legislacao) => {
+                  const isProdutoPorConcurso = isVadeMecum(legislacao);
+                  const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
+                  const content = (
+                    <>
                       <span className="block text-sm font-bold text-slate-950">
                         {legislacao.nome}
                       </span>
                       <span className="mt-1 block text-xs text-slate-600">
-                        {legislacao.categoria} ·{" "}
+                        {isProdutoPorConcurso
+                          ? "Por concurso"
+                          : legislacao.categoria}{" "}
+                        ·{" "}
                         {legislacao.quantidadeFlashcards} {legislacao.unidade}
                       </span>
-                    </a>
-                  </li>
-                ))}
+                    </>
+                  );
+
+                  return (
+                    <li key={legislacao.slug}>
+                      {isProdutoPorConcurso && !hotmartUrl ? (
+                        <div
+                          aria-disabled="true"
+                          className="flex cursor-not-allowed items-center justify-between gap-4 px-4 py-3 opacity-60"
+                        >
+                          <span>{content}</span>
+                          <span className="shrink-0 text-xs font-bold text-slate-600">
+                            Indisponível
+                          </span>
+                        </div>
+                      ) : (
+                        <a
+                          href={
+                            isProdutoPorConcurso
+                              ? hotmartUrl!
+                              : `/leisflashcards/${legislacao.slug}`
+                          }
+                          target={
+                            isProdutoPorConcurso ? "_blank" : undefined
+                          }
+                          rel={
+                            isProdutoPorConcurso
+                              ? "noopener noreferrer"
+                              : undefined
+                          }
+                          className="block px-4 py-3 transition hover:bg-blue-50"
+                        >
+                          {content}
+                        </a>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="px-4 py-3 text-sm text-slate-600">

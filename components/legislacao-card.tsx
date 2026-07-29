@@ -1,11 +1,27 @@
-import type { Legislacao } from "@/lib/legislacoes";
+import {
+  getVadeMecumHotmartUrl,
+  isVadeMecum,
+  type Legislacao,
+} from "@/lib/legislacoes";
 
 export function LegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
   const isConstituicaoFederal =
     legislacao.categoria === "Constituição Federal";
+  const isProdutoPorConcurso = isVadeMecum(legislacao);
+  const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
 
   return (
-    <article className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_14px_34px_rgba(15,111,255,0.12)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_42px_rgba(15,111,255,0.2)]">
+    <article className="relative flex h-full min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_14px_34px_rgba(15,111,255,0.12)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_42px_rgba(15,111,255,0.2)]">
+      {isProdutoPorConcurso && hotmartUrl ? (
+        <a
+          href={hotmartUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Ver material completo: ${legislacao.nome}`}
+          className="absolute inset-0 z-10"
+        />
+      ) : null}
+
       <div className="flex min-h-[64px] items-center justify-between gap-3 bg-gradient-to-r from-[#123c74] to-[#07172d] px-5 py-3 text-white">
         <div className="flex min-w-0 items-center gap-3">
           <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1683ff] bg-[#062a5f] text-base text-[#28b7ff] shadow-[0_0_14px_rgba(40,183,255,0.28)]">
@@ -47,12 +63,32 @@ export function LegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
             <span className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed]">
               {legislacao.quantidadeFlashcards} {legislacao.unidade}
             </span>
-            <a
-              href={`/leisflashcards/${legislacao.slug}`}
-              className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
-            >
-              Saiba mais
-            </a>
+            {isProdutoPorConcurso && !hotmartUrl ? (
+              <button
+                type="button"
+                disabled
+                className="relative z-20 inline-flex min-h-12 cursor-not-allowed items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] opacity-50"
+              >
+                Indisponível
+              </button>
+            ) : (
+              <a
+                href={
+                  isProdutoPorConcurso
+                    ? hotmartUrl!
+                    : `/leisflashcards/${legislacao.slug}`
+                }
+                target={isProdutoPorConcurso ? "_blank" : undefined}
+                rel={
+                  isProdutoPorConcurso ? "noopener noreferrer" : undefined
+                }
+                className="relative z-20 inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
+              >
+                {isProdutoPorConcurso
+                  ? "Ver material completo"
+                  : "Saiba mais"}
+              </a>
+            )}
           </div>
         )}
       </div>

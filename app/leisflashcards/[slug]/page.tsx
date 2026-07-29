@@ -1,9 +1,11 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
+  getVadeMecumHotmartUrl,
   getLegislacoes,
   getYoutubeEmbedUrl,
+  isVadeMecum,
   type StatusAtualizacao,
 } from "@/lib/legislacoes";
 import { siteConfig } from "@/lib/site-config";
@@ -66,6 +68,16 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) {
+    notFound();
+  }
+
+  if (isVadeMecum(legislacao)) {
+    const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
+
+    if (hotmartUrl) {
+      redirect(hotmartUrl);
+    }
+
     notFound();
   }
 

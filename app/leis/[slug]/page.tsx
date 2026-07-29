@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { LegisBotCommentsIndex } from "@/components/legisbot-comments-index";
 import { LegiscastPlaylistPlayer } from "@/components/legiscast-playlist-player";
 import { LegislacaoEmbed } from "@/components/legislacao-content-tabs";
@@ -7,7 +7,9 @@ import { buscarComentariosPublicosPorSlug } from "@/lib/legisbot/comentarios-pub
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
+  getVadeMecumHotmartUrl,
   getLegislacoes,
+  isVadeMecum,
   type StatusAtualizacao,
 } from "@/lib/legislacoes";
 
@@ -57,6 +59,16 @@ export default async function CentralLegislacaoPage({
   const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) notFound();
+
+  if (isVadeMecum(legislacao)) {
+    const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
+
+    if (hotmartUrl) {
+      redirect(hotmartUrl);
+    }
+
+    notFound();
+  }
 
   const legiscastUrl = legislacao.legiscastUrl?.trim();
 

@@ -37,6 +37,33 @@ export type Legislacao = {
   ordemCombo?: number;
 };
 
+const vadeMecumSemHotmartAvisados = new Set<string>();
+
+export function isVadeMecum(legislacao: Legislacao) {
+  return legislacao.categoriaCatalogo === "vade_mecuns";
+}
+
+export function getVadeMecumHotmartUrl(legislacao: Legislacao) {
+  if (!isVadeMecum(legislacao)) {
+    return null;
+  }
+
+  const hotmartUrl = legislacao.hotmartUrl?.trim();
+
+  if (
+    !hotmartUrl &&
+    process.env.NODE_ENV === "development" &&
+    !vadeMecumSemHotmartAvisados.has(legislacao.slug)
+  ) {
+    vadeMecumSemHotmartAvisados.add(legislacao.slug);
+    console.warn(
+      `[Legis Flashcards] Produto da seção "Por concurso" sem hotmartUrl: ${legislacao.slug}`,
+    );
+  }
+
+  return hotmartUrl || null;
+}
+
 export const categoriasLegislacao: Array<{
   slug: string;
   nome: CategoriaLegislacao;
