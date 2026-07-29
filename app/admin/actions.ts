@@ -28,7 +28,7 @@ export async function entrarAdministrador(_: AdminActionState, formData: FormDat
   const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
   store.set(adminCookieNames.access, data.session.access_token, { ...options, maxAge: data.session.expires_in });
   store.set(adminCookieNames.refresh, data.session.refresh_token, { ...options, maxAge: 60 * 60 * 24 * 30 });
-  redirect("/admin/legisbot");
+  redirect("/admin");
 }
 
 export async function sairAdministrador() {

@@ -22,6 +22,7 @@ type CommunityResponse = {
   hasMore?: boolean;
   legislationText?: string;
   authenticated?: boolean;
+  canPublishOfficial?: boolean;
 };
 
 type QuoteSelection = { text: string; start: number; end: number };
@@ -62,6 +63,8 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [canPublishOfficial, setCanPublishOfficial] = useState(false);
+  const [publishAsTeam, setPublishAsTeam] = useState(false);
   const [legislationText, setLegislationText] = useState("");
   const [content, setContent] = useState("");
   const [quote, setQuote] = useState<QuoteSelection | null>(null);
@@ -92,6 +95,7 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
       setTotal(result.total ?? 0);
       setHasMore(Boolean(result.hasMore));
       setAuthenticated(Boolean(result.authenticated));
+      setCanPublishOfficial(Boolean(result.canPublishOfficial));
       setLegislationText(result.legislationText ?? "");
     } catch {
       setMessage("Não foi possível carregar os comentários da comunidade.");
@@ -155,12 +159,13 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
             quotedText: quote?.text ?? null,
             quoteStart: quote?.start ?? null,
             quoteEnd: quote?.end ?? null,
+            publishAsTeam,
           }),
         },
       );
       const result = await response.json() as CommunityResponse;
       if (!response.ok) { setMessage(result.message ?? "Não foi possível publicar."); return; }
-      setContent(""); setQuote(null); setReplyTo(null); setMessage("Comentário publicado.");
+      setContent(""); setQuote(null); setReplyTo(null); setPublishAsTeam(false); setMessage("Comentário publicado.");
       await load(1);
     } finally {
       setSubmitting(false);
@@ -216,7 +221,7 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
 
   function CommentCard({ comment, reply = false }: { comment: CommunityComment; reply?: boolean }) {
     const isEditing = editing?.id === comment.id;
-    return <article className={`community-comment ${reply ? "community-reply" : ""}`}>
+    return <article className={`community-comment ${reply ? "community-reply" : ""} ${comment.official ? "community-official" : ""}`}>
       <header className="community-comment-header">
         <strong>{comment.publicName}</strong><span>·</span>
         <time dateTime={comment.createdAt} title={new Date(comment.createdAt).toLocaleString("pt-BR")}>{relativeDate(comment.createdAt)}</time>
@@ -247,6 +252,7 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
       {replyTo ? <div className="community-context"><span>Respondendo a <strong>{replyTo.publicName}</strong></span><button type="button" onClick={() => setReplyTo(null)}>Cancelar resposta</button></div> : null}
       {quote ? <blockquote className="community-quote selected"><span>Trecho destacado da legislação</span><mark>{quote.text}</mark><button type="button" onClick={() => setQuote(null)}>Remover destaque</button></blockquote> : null}
       <div className="community-toolbar" aria-label="Formatação do comentário"><button type="button" onClick={() => insertMarkup("**")}>Negrito</button><button type="button" onClick={() => insertMarkup("*")}>Itálico</button><button type="button" onClick={() => insertMarkup("> ", "")}>Citação</button><button type="button" onClick={() => insertMarkup("- ", "")}>Lista</button><button type="button" onClick={() => setQuoteOpen(true)}>🖍️ Destacar e comentar</button></div>
+      {canPublishOfficial ? <fieldset className="community-identity"><legend>Publicar como</legend><label><input type="radio" name="community_identity" checked={!publishAsTeam} onChange={() => setPublishAsTeam(false)} /> Perfil pessoal</label><label><input type="radio" name="community_identity" checked={publishAsTeam} onChange={() => setPublishAsTeam(true)} /> Legis Flashcards ✓</label></fieldset> : null}
       <textarea ref={editor} value={content} onChange={(event) => setContent(event.target.value)} maxLength={COMMUNITY_MAX_LENGTH} rows={5} placeholder="Escreva sua contribuição para a discussão…" />
       <div className="community-editor-footer"><span>{content.length}/{COMMUNITY_MAX_LENGTH}</span><button type="button" disabled={submitting} onClick={() => void publish()}>{submitting ? "Publicando…" : "Publicar comentário"}</button></div>
     </div> : <div className="community-login-callout"><p>Entre na sua conta para participar da discussão.</p><div><Link href={`/conta?modo=login&retorno=${encodeURIComponent(returnPath)}`}>Entrar</Link><Link href={`/conta?modo=cadastro&retorno=${encodeURIComponent(returnPath)}`}>Criar conta</Link></div></div>}

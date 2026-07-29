@@ -50,6 +50,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   return <main className="admin-shell">
+    <Link className="admin-central-link" href="/admin">← Central Administrativa</Link>
     <header className="admin-header"><div><div className="admin-eyebrow">Administração</div><h1>Comentários do LegisBot</h1><p>{count ?? 0} registro(s) encontrado(s)</p></div><div className="admin-header-actions"><Link className="admin-button secondary" href="/admin/comunidade">Comentários da comunidade</Link><span>{user.email}</span><form action={sairAdministrador}><button className="admin-button secondary">Sair</button></form></div></header>
     {one(query.excluido) ? <div className="admin-alert success">Comentário excluído com sucesso.</div> : null}
     <form className="admin-filters">

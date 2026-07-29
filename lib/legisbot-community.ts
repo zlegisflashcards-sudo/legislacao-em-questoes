@@ -22,6 +22,7 @@ export type CommunityComment = {
   likeCount: number;
   likedByMe: boolean;
   isOwn: boolean;
+  official: boolean;
   replies: CommunityComment[];
 };
 

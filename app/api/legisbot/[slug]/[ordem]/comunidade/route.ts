@@ -17,6 +17,7 @@ import {
   requireRequestUser,
 } from "@/lib/legisbot-community-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { usuarioEhAdministrador } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ type DbComment = {
   curtidas_count: number;
   created_at: string;
   updated_at: string;
+  publicado_como_equipe: boolean;
 };
 
 async function getThreadLaw(slug: string, ordem: string) {
@@ -67,11 +69,12 @@ function serializeComment(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     edited: row.updated_at !== row.created_at,
-    publicName: names.get(row.user_id) ?? "Estudante Legis",
+    publicName: row.publicado_como_equipe ? "Legis Flashcards ✓" : names.get(row.user_id) ?? "Estudante Legis",
     replyingToName: row.respondendo_a_user_id ? names.get(row.respondendo_a_user_id) ?? null : null,
     likeCount: row.curtidas_count,
     likedByMe: likedIds.has(row.id),
     isOwn: currentUserId === row.user_id,
+    official: row.publicado_como_equipe,
     replies: [],
   };
 }
@@ -92,7 +95,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     let rootsQuery = supabase
       .from("legisbot_comentarios_comunidade")
-      .select("id,user_id,parent_id,respondendo_a_user_id,conteudo,trecho_citado,trecho_destacado_inicio,trecho_destacado_fim,status,curtidas_count,created_at,updated_at", { count: "exact" })
+      .select("id,user_id,parent_id,respondendo_a_user_id,conteudo,trecho_citado,trecho_destacado_inicio,trecho_destacado_fim,status,curtidas_count,created_at,updated_at,publicado_como_equipe", { count: "exact" })
       .eq("slug", slug)
       .eq("ordem", ordem)
       .is("parent_id", null)
@@ -110,7 +113,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (rootIds.length) {
       const result = await supabase
         .from("legisbot_comentarios_comunidade")
-        .select("id,user_id,parent_id,respondendo_a_user_id,conteudo,trecho_citado,trecho_destacado_inicio,trecho_destacado_fim,status,curtidas_count,created_at,updated_at")
+        .select("id,user_id,parent_id,respondendo_a_user_id,conteudo,trecho_citado,trecho_destacado_inicio,trecho_destacado_fim,status,curtidas_count,created_at,updated_at,publicado_como_equipe")
         .in("parent_id", rootIds)
         .in("status", ["publicado", "removido"])
         .order("created_at", { ascending: true });
@@ -154,6 +157,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       hasMore: start + roots.length < (count ?? 0),
       legislationText: await getThreadLaw(slug, ordem),
       authenticated: Boolean(user),
+      canPublishOfficial: usuarioEhAdministrador(user),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return communityJsonError(error);
@@ -171,6 +175,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     const validation = validateCommunityContent(String(body.content ?? ""));
     if (!validation.ok) throw new CommunityApiError(400, validation.message);
     const legislation = await getThreadLaw(slug, ordem);
+    const publishAsTeam = body.publishAsTeam === true;
+    if (publishAsTeam && !usuarioEhAdministrador(user)) {
+      throw new CommunityApiError(403, "Somente administradores podem publicar como Legis Flashcards.");
+    }
 
     let quotedText: string | null = null;
     let quoteStart: number | null = null;
@@ -234,6 +242,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       parent_id: parentId,
       respondendo_a_user_id: replyingToUserId,
       status: "publicado",
+      publicado_como_equipe: publishAsTeam,
     });
     if (result.error) throw result.error;
     return Response.json({ success: true, message: "Comentário publicado." }, { status: 201 });
