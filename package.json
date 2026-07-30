@@ -10,6 +10,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
+    "@tiptap/core": "^3.29.2",
+    "@tiptap/extension-table": "^3.29.2",
+    "@tiptap/pm": "^3.29.2",
+    "@tiptap/react": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
+    "marked": "^18.0.7",
     "next": "^15.0.0",
     "openai": "^6.46.0",
     "react": "^19.0.0",

@@ -57,6 +57,11 @@ export async function GET(request: Request, context: RouteContext) {
     return respostaSucesso("database", "gerado", trecho.comentario, trecho);
   }
 
+  // Conteúdo pendente é um rascunho manual do painel: não publica nem dispara IA.
+  if (trecho?.status === "pendente" && trecho.comentario?.trim()) {
+    return respostaErro("Este comentário ainda não foi publicado.", 404);
+  }
+
   const dadosRecebidos = lerDadosRecebidos(request);
 
   if (!trecho) {
@@ -144,11 +149,11 @@ export async function GET(request: Request, context: RouteContext) {
   trecho = bloqueio as LegisBotComentario;
 
   try {
-    const comment = await gerarComentarioLegisBot({
+    const comment = sanitizarComentarioHtml(await gerarComentarioLegisBot({
       titulo: trecho.titulo,
       assunto: trecho.assunto,
       legislacao: trecho.legislacao,
-    });
+    }));
 
     const { data: salvo, error: saveError } = await supabase
       .from(TABELA)

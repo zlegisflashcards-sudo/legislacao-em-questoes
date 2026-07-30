@@ -65,7 +65,7 @@ export default async function AdminCommunityPage({ searchParams }: { searchParam
 
   return <main className="admin-shell">
     <Link className="admin-central-link" href="/admin">← Central Administrativa</Link>
-    <header className="admin-header"><div><div className="admin-eyebrow">Administração</div><h1>Comentários da comunidade</h1><p>{result.count ?? 0} registro(s) encontrado(s)</p></div><div className="admin-header-actions"><Link className="admin-button secondary" href="/admin/legisbot">Comentários do LegisBot</Link><span>{admin.email}</span><form action={sairAdministrador}><button className="admin-button secondary">Sair</button></form></div></header>
+    <header className="admin-header"><div><div className="admin-eyebrow">Administração</div><h1>Comentários da comunidade</h1><p>{result.count ?? 0} registro(s) encontrado(s)</p></div><div className="admin-header-actions"><span>{admin.email}</span><form action={sairAdministrador}><button className="admin-button secondary">Sair</button></form></div></header>
     <form className="admin-filters">
       <label className="admin-search">Buscar conteúdo<input name="q" defaultValue={q} placeholder="Slug, ordem ou conteúdo" /></label>
       <label>Usuário<input name="usuario" defaultValue={userSearch} placeholder="Nome público" /></label>

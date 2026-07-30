@@ -50,8 +50,23 @@ export function validateCommunityContent(value: string) {
 }
 
 export function decodeHtmlEntities(value: string) {
-  return value.replace(/&(#x?[0-9a-f]+|nbsp|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
-    const named: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return value.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]+);/gi, (entity, code: string) => {
+    const caseSensitiveNamed: Record<string, string> = {
+      Aacute: "Á", Acirc: "Â", Agrave: "À", Atilde: "Ã",
+      Eacute: "É", Ecirc: "Ê", Iacute: "Í", Oacute: "Ó",
+      Ocirc: "Ô", Otilde: "Õ", Uacute: "Ú", Ccedil: "Ç",
+      aacute: "á", acirc: "â", agrave: "à", atilde: "ã",
+      eacute: "é", ecirc: "ê", iacute: "í", oacute: "ó",
+      ocirc: "ô", otilde: "õ", uacute: "ú", ccedil: "ç",
+    };
+    const named: Record<string, string> = {
+      nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+      ordm: "º", ordf: "ª", sect: "§", para: "¶", deg: "°",
+      ndash: "–", mdash: "—", hellip: "…", laquo: "«", raquo: "»",
+      lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", middot: "·",
+      copy: "©", reg: "®", euro: "€",
+    };
+    if (caseSensitiveNamed[code]) return caseSensitiveNamed[code];
     const lower = code.toLowerCase();
     if (named[lower]) return named[lower];
     const numeric = lower.startsWith("#x")
@@ -62,12 +77,19 @@ export function decodeHtmlEntities(value: string) {
 }
 
 export function legalHtmlToPlainText(html: string) {
-  return decodeHtmlEntities(
-    html
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p\s*>/gi, "\n")
-      .replace(/<[^>]*>/g, ""),
-  )
+  const textoComEstrutura = html
+    .replace(/\r\n?/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p\s*>\s*<p(?:\s[^>]*)?>/gi, "\n\n")
+    .replace(/<\/(?:div|li)\s*>\s*<p(?:\s[^>]*)?>/gi, "\n\n")
+    .replace(/<\/p\s*>\s*<(?:div|li)(?:\s[^>]*)?>/gi, "\n")
+    .replace(/<\/(?:div|li)\s*>\s*<(?:div|li)(?:\s[^>]*)?>/gi, "\n")
+    .replace(/<\/(?:ul|ol|table|blockquote)\s*>\s*<p(?:\s[^>]*)?>/gi, "\n\n")
+    .replace(/<\/(?:p|div|li|h[1-6]|blockquote|tr|th|td|ul|ol|table|section|article)\s*>/gi, "\n")
+    .replace(/<[^>]*>/g, "");
+
+  return decodeHtmlEntities(textoComEstrutura)
+    .replace(/\u00a0/g, " ")
     .replace(/\r\n?/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")

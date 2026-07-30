@@ -8,6 +8,8 @@ type LegisBotCommentsListProps = {
   comentarios: ComentarioPublicoLegisBot[];
 };
 
+const QUANTIDADE_INICIAL = 4;
+
 export function normalizarTextoPesquisa(texto: string) {
   return texto
     .normalize("NFD")
@@ -54,10 +56,15 @@ export function LegisBotCommentsList({
   comentarios,
 }: LegisBotCommentsListProps) {
   const [pesquisa, setPesquisa] = useState("");
+  const [listaAmpliada, setListaAmpliada] = useState(false);
   const comentariosFiltrados = useMemo(
     () => filtrarComentarios(comentarios, pesquisa),
     [comentarios, pesquisa],
   );
+  const temPesquisa = normalizarTextoPesquisa(pesquisa).length > 0;
+  const comentariosExibidos = temPesquisa || listaAmpliada
+    ? comentariosFiltrados
+    : comentarios.slice(0, QUANTIDADE_INICIAL);
 
   const quantidade = comentarios.length;
 
@@ -101,25 +108,40 @@ export function LegisBotCommentsList({
             ) : null}
           </div>
 
-          {comentariosFiltrados.length ? (
-            <ul className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2" aria-live="polite">
-              {comentariosFiltrados.map((comentario) => (
-                <li key={`${comentario.slug}:${comentario.ordem}`} className="min-w-0">
-                  <Link
-                    href={`/legisbot/${encodeURIComponent(comentario.slug)}/${encodeURIComponent(comentario.ordem)}`}
-                    className="group flex min-h-24 w-full min-w-0 flex-col items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50 p-4 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 sm:flex-row sm:items-center sm:gap-4"
+          {comentariosExibidos.length ? (
+            <>
+              <ul className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2" aria-live="polite">
+                {comentariosExibidos.map((comentario) => (
+                  <li key={`${comentario.slug}:${comentario.ordem}`} className="min-w-0">
+                    <Link
+                      href={`/legisbot/${encodeURIComponent(comentario.slug)}/${encodeURIComponent(comentario.ordem)}`}
+                      className="group flex min-h-24 w-full min-w-0 flex-col items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50 p-4 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 sm:flex-row sm:items-center sm:gap-4"
+                    >
+                      <span className="min-w-0 text-base font-bold leading-6 text-[#062a5f]">
+                        {getRotuloComentario(comentario)}
+                      </span>
+                      <span className="shrink-0 text-sm font-bold text-blue-700" aria-hidden="true">
+                        Ver explicação →
+                      </span>
+                      <span className="sr-only">Abrir explicação do LegisBot</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              {!temPesquisa && quantidade > QUANTIDADE_INICIAL ? (
+                <div className="mt-5 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setListaAmpliada((valorAtual) => !valorAtual)}
+                    aria-expanded={listaAmpliada}
+                    className="min-h-11 rounded-xl border border-blue-200 bg-white px-5 py-2.5 text-sm font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
                   >
-                    <span className="min-w-0 text-base font-bold leading-6 text-[#062a5f]">
-                      {getRotuloComentario(comentario)}
-                    </span>
-                    <span className="shrink-0 text-sm font-bold text-blue-700" aria-hidden="true">
-                      Ver explicação →
-                    </span>
-                    <span className="sr-only">Abrir explicação do LegisBot</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+                    {listaAmpliada ? "Mostrar menos" : "Ampliar lista"}
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5" aria-live="polite">
               <p className="font-bold text-slate-700">

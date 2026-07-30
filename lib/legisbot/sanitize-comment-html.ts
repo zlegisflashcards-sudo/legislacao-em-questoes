@@ -1,17 +1,39 @@
 import sanitizeHtml from "sanitize-html";
 
 const TAGS_PERMITIDAS = [
-  "p", "br", "strong", "b", "em", "i", "ul", "ol", "li", "h2", "h3",
-  "h4", "blockquote", "hr", "table", "thead", "tbody", "tr", "th", "td",
-  "span", "div",
+  "p", "br", "strong", "em", "ul", "ol", "li", "h2", "h3",
+  "blockquote", "hr", "table", "thead", "tbody", "tr", "th", "td",
+  "div", "a",
 ];
 
 export function sanitizarComentarioHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: TAGS_PERMITIDAS,
-    allowedAttributes: {},
+    allowedAttributes: {
+      a: ["href", "title", "target", "rel"],
+      div: ["class"],
+      th: ["scope", "colspan", "rowspan"],
+      td: ["colspan", "rowspan"],
+    },
+    allowedClasses: {
+      div: ["legisbot-highlight"],
+    },
     allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: { a: ["http", "https", "mailto"] },
     allowProtocolRelative: false,
+    transformTags: {
+      b: "strong",
+      i: "em",
+      h4: "h3",
+      a: (_tagName, attribs) => ({
+        tagName: "a",
+        attribs: {
+          ...attribs,
+          target: "_blank",
+          rel: "noopener noreferrer",
+        },
+      }),
+    },
     disallowedTagsMode: "discard",
     nonTextTags: [
       "script", "style", "textarea", "option", "noscript", "iframe", "object",
