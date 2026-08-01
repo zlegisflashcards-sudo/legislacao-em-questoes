@@ -30,6 +30,7 @@ type LegisBotApiResponse = {
   titulo?: string;
   assunto?: string;
   legislacao?: string;
+  reason?: "legisbot_resting";
 };
 
 export default function LegisBotPageClient({
@@ -49,7 +50,7 @@ export default function LegisBotPageClient({
   )}`;
   const [answer, setAnswer] = useState<string | null>(null);
   const [answerState, setAnswerState] = useState<
-    "loading" | "processing" | "ready" | "not_found" | "invalid" | "timeout" | "error"
+    "loading" | "processing" | "ready" | "not_found" | "invalid" | "timeout" | "quota" | "error"
   >("loading");
 
   useEffect(() => {
@@ -111,6 +112,11 @@ export default function LegisBotPageClient({
           return;
         }
 
+        if (result.reason === "legisbot_resting") {
+          setAnswerState("quota");
+          return;
+        }
+
         if (!response.ok || !result.success || !result.comment?.trim()) {
           setAnswerState("error");
           return;
@@ -157,6 +163,7 @@ export default function LegisBotPageClient({
           {answerState === "not_found" ? <p className="answer-status answer-error">Trecho não encontrado.</p> : null}
           {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
           {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
+          {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Não consegui preparar este comentário agora. Tente novamente mais tarde.</p> : null}
           {answerState === "error" ? <p className="answer-status answer-error">Não foi possível carregar a explicação no momento. Tente novamente mais tarde.</p> : null}
         </div>
       </article>

@@ -29,6 +29,13 @@ export type RankingRoundParticipant = {
   pontosGanhos: number;
 };
 
+export type RankingHighlight = {
+  data: string;
+  instagram: string;
+  nome: string;
+  curtidas: number;
+};
+
 type CsvRow = Record<string, string>;
 
 export type RankingLegisData = {
@@ -36,6 +43,7 @@ export type RankingLegisData = {
   tema: RankingTheme;
   rodada: RankingRoundParticipant[];
   atualizadoEm: string;
+  destaqueMaisCurtido: RankingHighlight | null;
 };
 
 const DEFAULT_INSTAGRAM_URL = "https://www.instagram.com/legis_flashcards/";
@@ -67,11 +75,54 @@ function parseCsvLine(line: string) {
   return values;
 }
 
+function splitCsvRecords(csv: string) {
+  const records: string[] = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const char = csv[index];
+    const nextChar = csv[index + 1];
+
+    if (char === '"' && nextChar === '"') {
+      current += char;
+      current += nextChar;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+      current += char;
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !insideQuotes) {
+      if (current.trim()) {
+        records.push(current);
+      }
+
+      current = "";
+
+      if (char === "\r" && nextChar === "\n") {
+        index += 1;
+      }
+
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    records.push(current);
+  }
+
+  return records;
+}
+
 export function parseRankingCsv(csv: string) {
-  const lines = csv
-    .replace(/^\uFEFF/, "")
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0);
+  const lines = splitCsvRecords(csv.replace(/^\uFEFF/, ""));
 
   const [headerLine, ...dataLines] = lines;
 
@@ -101,7 +152,7 @@ function toNumber(value: string) {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
-function parseDateValue(value: string) {
+export function parseRankingDateValue(value: string) {
   const trimmedValue = value.trim();
 
   if (!trimmedValue) {
@@ -194,7 +245,7 @@ function rowToTheme(row: CsvRow | undefined): RankingTheme {
     temaAtual: row?.temaAtual?.trim() || "Tema da Liga",
     descricao:
       row?.descricao?.trim() ||
-      "Questões sobre os principais artigos do tema atual da Liga Legis.",
+      "Questoes sobre os principais artigos do tema atual da Liga Legis.",
     cursoUrl: row?.cursoUrl?.trim() || DEFAULT_COURSE_URL,
     instagramUrl: row?.instagramUrl?.trim() || DEFAULT_INSTAGRAM_URL,
     imagemUrl: normalizeImageUrl(row?.imagemUrl?.trim() || ""),
@@ -227,9 +278,7 @@ function normalizeImageUrl(imageUrl: string) {
   }
 }
 
-function rowToRoundParticipant(
-  row: CsvRow,
-): RankingRoundParticipant | null {
+function rowToRoundParticipant(row: CsvRow): RankingRoundParticipant | null {
   const nome = row.nome?.trim();
   const instagram = row.instagram?.trim();
 
@@ -247,6 +296,21 @@ function rowToRoundParticipant(
   };
 }
 
+function rowToHighlight(row: CsvRow): RankingHighlight | null {
+  const instagram = row.instagram?.trim();
+
+  if (!instagram) {
+    return null;
+  }
+
+  return {
+    data: row.data?.trim() ?? "",
+    instagram,
+    nome: row.nome?.trim() ?? "",
+    curtidas: toNumber(row.curtidas),
+  };
+}
+
 export function sortRanking(participants: RankingParticipant[]) {
   return [...participants]
     .sort((participantA, participantB) => {
@@ -256,25 +320,6 @@ export function sortRanking(participants: RankingParticipant[]) {
 
       if (participantA.acertos !== participantB.acertos) {
         return participantB.acertos - participantA.acertos;
-      }
-
-      if (participantA.primeiros !== participantB.primeiros) {
-        return participantB.primeiros - participantA.primeiros;
-      }
-
-      if (participantA.segundos !== participantB.segundos) {
-        return participantB.segundos - participantA.segundos;
-      }
-
-      if (participantA.terceiros !== participantB.terceiros) {
-        return participantB.terceiros - participantA.terceiros;
-      }
-
-      const updatedAtA = parseDateValue(participantA.atualizadoEm);
-      const updatedAtB = parseDateValue(participantB.atualizadoEm);
-
-      if (updatedAtA !== updatedAtB) {
-        return updatedAtB - updatedAtA;
       }
 
       return participantA.nome.localeCompare(participantB.nome, "pt-BR");
@@ -287,13 +332,16 @@ export function sortRanking(participants: RankingParticipant[]) {
 
 function getLatestRound(roundParticipants: RankingRoundParticipant[]) {
   const latestDate = Math.max(
-    ...roundParticipants.map((participant) => parseDateValue(participant.data)),
+    ...roundParticipants.map((participant) =>
+      parseRankingDateValue(participant.data),
+    ),
   );
 
   const latestParticipants =
     latestDate > 0
       ? roundParticipants.filter(
-          (participant) => parseDateValue(participant.data) === latestDate,
+          (participant) =>
+            parseRankingDateValue(participant.data) === latestDate,
         )
       : roundParticipants;
 
@@ -311,11 +359,30 @@ function getLatestUpdatedAt(participants: RankingParticipant[]) {
     .filter((participant) => participant.atualizadoEm)
     .sort(
       (participantA, participantB) =>
-        parseDateValue(participantB.atualizadoEm) -
-        parseDateValue(participantA.atualizadoEm),
+        parseRankingDateValue(participantB.atualizadoEm) -
+        parseRankingDateValue(participantA.atualizadoEm),
     );
 
   return rankedWithDate[0]?.atualizadoEm ?? "";
+}
+
+function getTopHighlight(highlights: RankingHighlight[]) {
+  return highlights
+    .map((highlight, index) => ({ ...highlight, index }))
+    .sort((highlightA, highlightB) => {
+      if (highlightA.curtidas !== highlightB.curtidas) {
+        return highlightB.curtidas - highlightA.curtidas;
+      }
+
+      const dateA = parseRankingDateValue(highlightA.data);
+      const dateB = parseRankingDateValue(highlightB.data);
+
+      if (dateA !== dateB) {
+        return dateB - dateA;
+      }
+
+      return highlightB.index - highlightA.index;
+    })[0] ?? null;
 }
 
 export function getParticipantInitials(nome: string) {
@@ -334,6 +401,9 @@ export async function getRankingLegisData(): Promise<RankingLegisData> {
     fetchSheetTab(sheetId, "tema"),
     fetchSheetTab(sheetId, "rodada"),
   ]);
+  const highlightRows = await fetchSheetTab(sheetId, "destaques").catch(
+    () => [],
+  );
 
   const ranking = sortRanking(
     rankingRows
@@ -351,11 +421,16 @@ export async function getRankingLegisData(): Promise<RankingLegisData> {
           participant !== null,
       ),
   );
+  const highlights = highlightRows
+    .map(rowToHighlight)
+    .filter((highlight): highlight is RankingHighlight => highlight !== null);
+  const destaqueMaisCurtido = getTopHighlight(highlights);
 
   return {
     ranking,
     tema: rowToTheme(themeRows[0]),
     rodada,
     atualizadoEm: getLatestUpdatedAt(ranking),
+    destaqueMaisCurtido,
   };
 }

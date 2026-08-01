@@ -20,11 +20,17 @@ export type StatusAtualizacao =
 export type Legislacao = {
   slug: string;
   nome: string;
+  tituloCompleto?: string;
+  numeroLei?: string;
+  sigla?: string;
+  termosRelacionados?: string;
+  thumbnailUrl?: string;
   descricaoCurta: string;
   categoria: CategoriaLegislacao;
   categoriaCatalogo: CategoriaCatalogo;
   unidade: string;
   destaqueHome: SimNao;
+  destaqueLegiscast: boolean;
   ativo: SimNao;
   youtubeUrl: string;
   quantidadeFlashcards: number;
@@ -106,6 +112,7 @@ const legislacoesFallback: Legislacao[] = [
     categoriaCatalogo: "leis",
     unidade: "Flashcards",
     destaqueHome: "Sim",
+    destaqueLegiscast: true,
     ativo: "Sim",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     quantidadeFlashcards: 420,
@@ -126,6 +133,7 @@ const legislacoesFallback: Legislacao[] = [
     categoriaCatalogo: "leis",
     unidade: "Flashcards",
     destaqueHome: "Sim",
+    destaqueLegiscast: true,
     ativo: "Sim",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     quantidadeFlashcards: 360,
@@ -145,6 +153,7 @@ const legislacoesFallback: Legislacao[] = [
     categoriaCatalogo: "vade_mecuns",
     unidade: "Legislações",
     destaqueHome: "Sim",
+    destaqueLegiscast: false,
     ativo: "Sim",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     quantidadeFlashcards: 85,
@@ -162,6 +171,7 @@ const legislacoesFallback: Legislacao[] = [
     categoriaCatalogo: "leis",
     unidade: "Flashcards",
     destaqueHome: "Sim",
+    destaqueLegiscast: false,
     ativo: "Não",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     quantidadeFlashcards: 0,

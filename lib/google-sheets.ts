@@ -8,6 +8,15 @@ import type {
 
 type CsvRow = Record<string, string>;
 
+const destaquesLegiscastIniciais = new Set([
+  "cf",
+  "l6513ma",
+  "l14751",
+  "l12896ma",
+  "l10230ma",
+  "l11390ma",
+]);
+
 function parseCsvLine(line: string) {
   const values: string[] = [];
   let current = "";
@@ -103,7 +112,11 @@ function toCategoria(value: string): CategoriaLegislacao {
 }
 
 function toSimNao(value: string): SimNao {
-  return value.toLowerCase() === "sim" ? "Sim" : "Não";
+  const normalizedValue = normalizeText(value);
+
+  return ["sim", "true", "1", "yes"].includes(normalizedValue)
+    ? "Sim"
+    : "Não";
 }
 
 function toStatusAtualizacao(value: string): StatusAtualizacao {
@@ -152,11 +165,27 @@ function rowToLegislacao(row: CsvRow): Legislacao | null {
   return {
     slug: codigo,
     nome: row.nome,
+    tituloCompleto: row.tituloCompleto || row.titulo || row.nome,
+    numeroLei: row.numeroLei || row.numero || undefined,
+    sigla: row.sigla || undefined,
+    termosRelacionados:
+      row.termosRelacionados || row.palavrasChave || row.tags || undefined,
+    thumbnailUrl:
+      row.thumbnailUrl ||
+      row.thumbnail ||
+      row.imagemUrl ||
+      row.imagem ||
+      row.capaUrl ||
+      row.youtubeThumbnailUrl ||
+      undefined,
     descricaoCurta: row.descricao || row.descricaoCurta,
     categoria: toCategoria(row.categoriaDetalhe || row.categoriaLegislacao || row.tipo || row.categoria),
     categoriaCatalogo: toCategoriaCatalogo(row.categoria || ""),
     unidade: row.unidade || "Flashcards",
     destaqueHome: toSimNao(row.destaqueHome),
+    destaqueLegiscast: (row.destaqueLegiscast || "").trim()
+      ? toBoolean(row.destaqueLegiscast)
+      : destaquesLegiscastIniciais.has(codigo.toLowerCase()),
     ativo: toSimNao(row.ativo),
     youtubeUrl: row.youtubeUrl,
     quantidadeFlashcards:

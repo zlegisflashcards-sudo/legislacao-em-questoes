@@ -12,6 +12,7 @@ import {
 } from "@/lib/legisbot/sanitize-legal-html";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { sanitizarComentarioHtml } from "@/lib/legisbot/sanitize-comment-html";
+import { enviarAlertaFaltaDeCreditosOpenAI } from "@/lib/legisbot/openai-quota-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,8 @@ export async function GET(request: Request, context: RouteContext) {
     return respostaSucesso("processing", "pendente", null, trecho, 202);
   }
 
+  const statusAntesDaGeracao = trecho.status;
+
   const { data: bloqueio, error: bloqueioError } = await supabase
     .from(TABELA)
     .update({ status: "processando" })
@@ -180,12 +183,36 @@ export async function GET(request: Request, context: RouteContext) {
       salvo as LegisBotComentario,
     );
   } catch (error) {
-    await marcarComoErro(supabase, trecho.id);
     console.error("[LegisBot] Falha durante a geração.", {
       slug,
       ordem,
       tipo: error instanceof OpenAIServiceError ? "openai" : "interno",
     });
+
+    if (error instanceof OpenAIServiceError && error.details.categoria === "quota") {
+      await restaurarStatusAposFaltaDeCreditos(
+        supabase,
+        trecho.id,
+        statusAntesDaGeracao,
+      );
+      await enviarAlertaFaltaDeCreditosOpenAI(
+        {
+          slug,
+          ordem,
+          titulo: trecho.titulo,
+          assunto: trecho.assunto,
+        },
+        error.details,
+      );
+
+      return respostaErro(
+        "O LegisBot está descansando um pouco. Não consegui preparar este comentário agora. Tente novamente mais tarde.",
+        503,
+        "legisbot_resting",
+      );
+    }
+
+    await marcarComoErro(supabase, trecho.id);
 
     const status = error instanceof OpenAIServiceError && error.temporario ? 503 : 500;
     return respostaErro("Não foi possível gerar o comentário no momento.", status);
@@ -309,6 +336,25 @@ async function marcarComoErro(supabase: SupabaseClient, id: number) {
   }
 }
 
+async function restaurarStatusAposFaltaDeCreditos(
+  supabase: SupabaseClient,
+  id: number,
+  statusAnterior: LegisBotComentario["status"],
+) {
+  const statusSeguro = statusAnterior === "erro" ? "erro" : "pendente";
+  const { error } = await supabase
+    .from(TABELA)
+    .update({ status: statusSeguro })
+    .eq("id", id)
+    .eq("status", "processando");
+
+  if (error) {
+    console.error("[LegisBot] Não foi possível restaurar o estado após falta de créditos.", {
+      id,
+    });
+  }
+}
+
 function respostaSucesso(
   source: "database" | "generated" | "processing",
   status: "gerado" | "pendente",
@@ -331,9 +377,9 @@ function respostaSucesso(
   );
 }
 
-function respostaErro(message: string, status: number) {
+function respostaErro(message: string, status: number, reason?: "legisbot_resting") {
   return NextResponse.json(
-    { success: false, error: message },
+    { success: false, error: message, ...(reason ? { reason } : {}) },
     { status, headers: { "Cache-Control": "no-store" } },
   );
 }

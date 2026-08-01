@@ -94,9 +94,7 @@ export function LegislacaoSearch({
                         {legislacao.nome}
                       </span>
                       <span className="mt-1 block text-xs text-slate-600">
-                        {isProdutoPorConcurso
-                          ? "Por concurso"
-                          : legislacao.categoria}{" "}
+                        {legislacao.categoria}{" "}
                         ·{" "}
                         {legislacao.quantidadeFlashcards} {legislacao.unidade}
                       </span>

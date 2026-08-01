@@ -1,23 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { LegislacaoSearch } from "@/components/legislacao-search";
 import {
   getVadeMecumHotmartUrl,
   isVadeMecum,
   type Legislacao,
 } from "@/lib/legislacoes";
-
-type HomeCategoria = {
-  label: string;
-  id: "constituicao" | "codigos" | "leis" | "vade-mecuns";
-};
-
-const homeCategorias: HomeCategoria[] = [
-  { label: "Constituição Federal", id: "constituicao" },
-  { label: "Códigos", id: "codigos" },
-  { label: "Leis", id: "leis" },
-  { label: "Por concurso", id: "vade-mecuns" },
-];
+import { siteConfig } from "@/lib/site-config";
 
 function isConstituicaoFederal(legislacao: Legislacao) {
   return legislacao.categoria === "Constituição Federal";
@@ -34,16 +24,6 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
 
   return (
     <article className="relative flex min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_46px_rgba(0,104,237,0.25)]">
-      {isProdutoPorConcurso && hotmartUrl ? (
-        <a
-          href={hotmartUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Ver material completo: ${legislacao.nome}`}
-          className="absolute inset-0 z-10"
-        />
-      ) : null}
-
       <div className="flex min-h-[64px] items-center justify-between gap-3 bg-gradient-to-r from-[#123c74] to-[#07172d] px-5 py-3 text-white">
         <div className="flex min-w-0 items-center gap-3">
           <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1683ff] bg-[#062a5f] text-base text-[#28b7ff] shadow-[0_0_14px_rgba(40,183,255,0.28)]">
@@ -97,14 +77,10 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
               <a
                 href={saibaMaisUrl!}
                 target={isProdutoPorConcurso ? "_blank" : undefined}
-                rel={
-                  isProdutoPorConcurso ? "noopener noreferrer" : undefined
-                }
+                rel={isProdutoPorConcurso ? "noopener noreferrer" : undefined}
                 className="relative z-20 inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
               >
-                {isProdutoPorConcurso
-                  ? "Ver material completo"
-                  : "Saiba mais"}
+                Saiba mais
               </a>
             )}
           </div>
@@ -119,77 +95,81 @@ export function HomeCategoriasVadeMecum({
 }: {
   legislacoes: Legislacao[];
 }) {
-  const [categoriaAtiva, setCategoriaAtiva] = useState(homeCategorias[0]);
-
-  const legislacoesDaCategoria = useMemo(() => {
-    if (categoriaAtiva.id === "constituicao") {
-      return legislacoes.filter(
-        (legislacao) =>
-          legislacao.categoriaCatalogo === "leis" &&
-          legislacao.categoria === "Constituição Federal",
-      );
-    }
-
-    if (categoriaAtiva.id === "codigos") {
-      return legislacoes.filter(
-        (legislacao) =>
-          legislacao.categoriaCatalogo === "leis" &&
-          legislacao.categoria === "Códigos",
-      );
-    }
-
-    if (categoriaAtiva.id === "vade-mecuns") {
-      return legislacoes.filter(
-        (legislacao) => legislacao.categoriaCatalogo === "vade_mecuns",
-      );
-    }
-
-    return legislacoes.filter(
-      (legislacao) =>
-        legislacao.categoriaCatalogo === "leis" &&
-        legislacao.categoria !== "Constituição Federal" &&
-        legislacao.categoria !== "Códigos",
-    );
-  }, [categoriaAtiva, legislacoes]);
+  const legislacoesEmDestaque = useMemo(
+    () =>
+      legislacoes.filter(
+        (legislacao) => legislacao.destaqueHome === "Sim",
+      ),
+    [legislacoes],
+  );
 
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-end gap-2 border-b border-slate-700/80">
-        {homeCategorias.map((categoria) => {
-          const isActive = categoria.label === categoriaAtiva.label;
-
-          return (
-            <button
-              key={categoria.label}
-              type="button"
-              onClick={() => setCategoriaAtiva(categoria)}
-              className={[
-                "relative rounded-t-lg px-4 py-3 text-sm font-bold text-white shadow-md transition sm:px-5",
-                isActive
-                  ? "-mb-px translate-y-px bg-[#062a5f] shadow-[0_14px_30px_rgba(6,42,95,0.35)] ring-1 ring-blue-300/30"
-                  : "bg-slate-600 hover:-translate-y-0.5 hover:bg-slate-500",
-              ].join(" ")}
-            >
-              {categoria.label}
-            </button>
-          );
-        })}
+    <div className="space-y-8">
+      <div className="max-w-3xl space-y-2">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">
+          Legislação em Questões
+        </p>
+        <h1 className="text-2xl font-black leading-tight text-white sm:text-4xl">
+          Escolha sua legislação para estudar
+        </h1>
       </div>
 
-      {legislacoesDaCategoria.length > 0 ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {legislacoesDaCategoria.map((legislacao) => (
-            <HomeLegislacaoCard
-              key={legislacao.slug}
-              legislacao={legislacao}
-            />
-          ))}
+      <section className="space-y-4 rounded-[22px] border border-blue-300/20 bg-slate-950/70 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.26)] sm:p-6">
+        <div className="space-y-1">
+          <h2 className="text-xl font-black text-white">
+            Buscar legislações e produtos
+          </h2>
+          <p className="text-sm leading-6 text-slate-300">
+            Digite o nome da lei ou produto para encontrar as opções
+            disponíveis.
+          </p>
         </div>
-      ) : (
-        <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-6 text-sm text-slate-200 shadow-lg">
-          Ainda não há itens ativos nesta categoria.
+
+        <LegislacaoSearch legislacoes={legislacoes} variant="dark" />
+
+        <div className="flex flex-col gap-3 rounded-lg border border-blue-300/20 bg-slate-900/70 px-4 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="space-y-1">
+            <p className="text-sm font-black text-white">
+              Não encontrou sua legislação?
+            </p>
+            <p className="text-xs leading-5 text-slate-300 sm:text-sm">
+              Podemos transformar ela em flashcards, legislação esquematizada e
+              Legiscast.
+            </p>
+          </div>
+          <a
+            href={siteConfig.links.encomendarLegislacao}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-3 text-center text-sm font-black text-white shadow-[0_12px_26px_rgba(37,99,235,0.28)] transition hover:-translate-y-0.5 hover:bg-blue-500 sm:w-auto sm:shrink-0"
+          >
+            Solicitar orçamento de legislação
+          </a>
         </div>
-      )}
-    </section>
+      </section>
+
+      <section className="space-y-5">
+        <div className="max-w-3xl space-y-2">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">
+            Estes produtos estão em alta
+          </p>
+        </div>
+
+        {legislacoesEmDestaque.length > 0 ? (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {legislacoesEmDestaque.map((legislacao) => (
+              <HomeLegislacaoCard
+                key={legislacao.slug}
+                legislacao={legislacao}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-700 bg-slate-900/80 p-6 text-sm text-slate-200 shadow-lg">
+            Ainda não há produtos em destaque na página inicial.
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

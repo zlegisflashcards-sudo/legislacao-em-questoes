@@ -3,7 +3,7 @@ import { SiteShell } from "@/components/site-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Legislação em Flashcards",
+  title: "Legislação em Questões",
   description: "Catálogo de legislações para estudo com flashcards.",
   icons: { icon: "/favicon.png", shortcut: "/favicon.png", apple: "/favicon.png" },
 };
