@@ -19,6 +19,10 @@ export interface LegisBotComentario {
   comentario: string | null;
   status: LegisBotComentarioStatus;
   modelo_ia: string | null;
+  processing_started_at: string | null;
+  retry_after: string | null;
+  attempt_count: number;
+  last_error_category: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,4 +32,3 @@ export type NovoLegisBotComentario = Pick<
   LegisBotComentario,
   "slug" | "ordem" | "titulo" | "assunto" | "legislacao"
 >;
-

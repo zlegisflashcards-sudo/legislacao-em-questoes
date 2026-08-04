@@ -5,22 +5,30 @@ import { limparApresentacao } from "@/lib/legisbot/clean-comment";
 import LegisBotCommentContent from "@/components/legisbot-comment-content";
 import LegisBotCommunity from "@/components/legisbot-community";
 import { legalHtmlToPlainText } from "@/lib/legisbot-community";
+import { supabase } from "@/lib/supabase";
 
 const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado" };
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
 const ORDEM_VALIDA = /^[A-Za-z0-9._-]{1,20}$/;
+
+type DadosLegislacao = { titulo: string; assunto: string; legislacao: string };
+type AnswerState =
+  | "loading"
+  | "processing"
+  | "generating"
+  | "ready"
+  | "not_found"
+  | "invalid"
+  | "timeout"
+  | "quota"
+  | "limited"
+  | "error";
 
 type LegisBotPageClientProps = {
   slug: string;
   ordem: string;
   dadosIniciais: DadosLegislacao;
   adminShortcut?: ReactNode;
-};
-
-type DadosLegislacao = {
-  titulo: string;
-  assunto: string;
-  legislacao: string;
 };
 
 type LegisBotApiResponse = {
@@ -30,7 +38,8 @@ type LegisBotApiResponse = {
   titulo?: string;
   assunto?: string;
   legislacao?: string;
-  reason?: "legisbot_resting";
+  error?: string;
+  reason?: "legisbot_resting" | "rate_limited" | "cooldown" | "attempts_exhausted";
 };
 
 export default function LegisBotPageClient({
@@ -42,20 +51,42 @@ export default function LegisBotPageClient({
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
   const [source, setSource] = useState<LegisBotApiResponse["source"]>();
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [answerState, setAnswerState] = useState<AnswerState>("loading");
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [readRevision, setReadRevision] = useState(0);
+  const [returnPath, setReturnPath] = useState(`/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`);
+
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
   const textoLegal = legalHtmlToPlainText(dadosLegislacao.legislacao);
-  const centralLegislacaoUrl = `/leis/${encodeURIComponent(
-    slug.trim().toLowerCase(),
-  )}`;
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [answerState, setAnswerState] = useState<
-    "loading" | "processing" | "ready" | "not_found" | "invalid" | "timeout" | "quota" | "error"
-  >("loading");
+  const slugNormalizado = slug.trim().toUpperCase();
+  const ordemNormalizada = ordem.trim();
+  const identifiersValid = SLUG_VALIDO.test(slugNormalizado) && ORDEM_VALIDA.test(ordemNormalizada);
+  const apiUrl = `/api/legisbot/${encodeURIComponent(slugNormalizado)}/${encodeURIComponent(ordemNormalizada)}`;
+  const centralLegislacaoUrl = `/leis/${encodeURIComponent(slug.trim().toLowerCase())}`;
+  const loginUrl = `/conta?retorno=${encodeURIComponent(returnPath)}`;
 
   useEffect(() => {
     const saved = localStorage.getItem("legisbot-theme") === "dark" ? "dark" : "light";
-    setTheme(saved); document.documentElement.dataset.legisbotTheme = saved;
+    setTheme(saved);
+    document.documentElement.dataset.legisbotTheme = saved;
+    setReturnPath(`${window.location.pathname}${window.location.search}`);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) setAuthenticated(Boolean(data.session?.user));
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) setAuthenticated(Boolean(session?.user));
+    });
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -65,26 +96,14 @@ export default function LegisBotPageClient({
     const maxRetryAttempts = 12;
 
     async function carregarComentario() {
-      const slugNormalizado = slug.trim().toUpperCase();
-      const ordemNormalizada = ordem.trim();
-
-      if (!SLUG_VALIDO.test(slugNormalizado) || !ORDEM_VALIDA.test(ordemNormalizada)) {
+      if (!identifiersValid) {
         if (active) setAnswerState("invalid");
         return;
       }
-
       try {
-        const query = new URLSearchParams();
-        if (dadosIniciais.titulo) query.set("titulo", dadosIniciais.titulo);
-        if (dadosIniciais.assunto) query.set("assunto", dadosIniciais.assunto);
-        if (dadosIniciais.legislacao) query.set("legislacao", dadosIniciais.legislacao);
-        const sufixoQuery = query.size > 0 ? `?${query.toString()}` : "";
-        const response = await fetch(
-          `/api/legisbot/${encodeURIComponent(slugNormalizado)}/${encodeURIComponent(ordemNormalizada)}${sufixoQuery}`,
-          { cache: "no-store" },
-        );
+        // GET é deliberadamente somente leitura: não envia dados de geração pela query string.
+        const response = await fetch(apiUrl, { cache: "no-store" });
         const result = (await response.json()) as LegisBotApiResponse;
-
         if (!active) return;
 
         if (result.titulo && result.assunto && result.legislacao) {
@@ -95,7 +114,6 @@ export default function LegisBotPageClient({
           });
         }
         setSource(result.source);
-
         if (response.status === 202 || result.source === "processing") {
           retryAttempts += 1;
           if (retryAttempts >= maxRetryAttempts) {
@@ -106,22 +124,14 @@ export default function LegisBotPageClient({
           retryTimer = setTimeout(carregarComentario, 2500);
           return;
         }
-
         if (response.status === 404) {
           setAnswerState("not_found");
           return;
         }
-
-        if (result.reason === "legisbot_resting") {
-          setAnswerState("quota");
-          return;
-        }
-
         if (!response.ok || !result.success || !result.comment?.trim()) {
           setAnswerState("error");
           return;
         }
-
         setAnswer(limparApresentacao(result.comment));
         setAnswerState("ready");
       } catch {
@@ -134,14 +144,70 @@ export default function LegisBotPageClient({
       active = false;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [slug, ordem, dadosIniciais.titulo, dadosIniciais.assunto, dadosIniciais.legislacao]);
+  }, [apiUrl, identifiersValid, readRevision]);
+
+  async function gerarComentario() {
+    if (!identifiersValid || answerState === "generating") return;
+    setStatusMessage("");
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      setAuthenticated(false);
+      return;
+    }
+    setAuthenticated(true);
+    setAnswerState("generating");
+    try {
+      const response = await fetch(`${apiUrl}/generate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(dadosIniciais),
+      });
+      const result = (await response.json()) as LegisBotApiResponse;
+      if (response.status === 401) {
+        setAuthenticated(false);
+        setAnswerState("not_found");
+        return;
+      }
+      if (response.status === 202 || result.source === "processing") {
+        setAnswerState("processing");
+        setReadRevision((value) => value + 1);
+        return;
+      }
+      if (result.reason === "legisbot_resting") {
+        setAnswerState("quota");
+        return;
+      }
+      if (result.reason === "rate_limited" || result.reason === "cooldown" || result.reason === "attempts_exhausted") {
+        setStatusMessage(result.error ?? "A geração não está disponível agora. Tente novamente mais tarde.");
+        setAnswerState("limited");
+        return;
+      }
+      if (!response.ok || !result.success || !result.comment?.trim()) {
+        setStatusMessage(result.error ?? "Não foi possível iniciar a geração.");
+        setAnswerState("error");
+        return;
+      }
+      if (result.titulo && result.assunto && result.legislacao) {
+        setDadosLegislacao({ titulo: result.titulo, assunto: result.assunto, legislacao: result.legislacao });
+      }
+      setSource(result.source);
+      setAnswer(limparApresentacao(result.comment));
+      setAnswerState("ready");
+    } catch {
+      setStatusMessage("Não foi possível iniciar a geração no momento.");
+      setAnswerState("error");
+    }
+  }
+
   return <div className="legisbot-page" data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
         <div className="legisbot-topic-tools">
-          <a href={centralLegislacaoUrl} className="legislation-back-link">
-            <span aria-hidden="true">←</span> {titulo}
-          </a>
+          <a href={centralLegislacaoUrl} className="legislation-back-link"><span aria-hidden="true">←</span> {titulo}</a>
           {adminShortcut}
         </div>
         <h1>{assunto}</h1>
@@ -159,19 +225,20 @@ export default function LegisBotPageClient({
         <div className="answer-content answer-freeform" aria-live="polite">
           {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
           {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
-          {answerState === "processing" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
-          {answerState === "not_found" ? <p className="answer-status answer-error">Trecho não encontrado.</p> : null}
+          {answerState === "processing" || answerState === "generating" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
+          {answerState === "not_found" && authenticated === null ? <p className="answer-status">Verificando sua conta…</p> : null}
+          {answerState === "not_found" && authenticated === false ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado. Entre na sua conta para solicitar a explicação.</p><a className="legisbot-generate-button" href={loginUrl}>Entrar para gerar comentário</a></div> : null}
+          {answerState === "not_found" && authenticated === true ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado.</p><button className="legisbot-generate-button" type="button" onClick={() => void gerarComentario()}>Gerar comentário com o LegisBot</button></div> : null}
           {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
           {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
-          {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Não consegui preparar este comentário agora. Tente novamente mais tarde.</p> : null}
-          {answerState === "error" ? <p className="answer-status answer-error">Não foi possível carregar a explicação no momento. Tente novamente mais tarde.</p> : null}
+          {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Tente novamente mais tarde.</p> : null}
+          {answerState === "limited" ? <p className="answer-status answer-error">{statusMessage}</p> : null}
+          {answerState === "error" ? <p className="answer-status answer-error">{statusMessage || "Não foi possível carregar a explicação no momento. Tente novamente mais tarde."}</p> : null}
         </div>
       </article>
 
       <div className="legisbot-report"><a href="mailto:zlegisflashcards@gmail.com?subject=Reportar%20erro%20no%20LegisBot">⚑ Reportar erro</a></div>
-
       <LegisBotCommunity slug={slug} ordem={ordem} />
-
       <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
     </main>
   </div>;
