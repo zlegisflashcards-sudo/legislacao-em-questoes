@@ -7,7 +7,7 @@
     "build": "next build",
     "test": "vitest run",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint . --no-cache"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
