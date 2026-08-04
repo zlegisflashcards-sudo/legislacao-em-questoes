@@ -1,3 +1,5 @@
+import { isOfflineBuild } from "./build-mode";
+
 export type RankingParticipant = {
   posicao: number;
   nome: string;
@@ -389,7 +391,21 @@ export function getParticipantInitials(nome: string) {
   return getInitials(nome);
 }
 
+export function getOfflineRankingLegisData(): RankingLegisData {
+  return {
+    ranking: [],
+    tema: rowToTheme(undefined),
+    rodada: [],
+    atualizadoEm: "",
+    destaqueMaisCurtido: null,
+  };
+}
+
 export async function getRankingLegisData(): Promise<RankingLegisData> {
+  if (isOfflineBuild()) {
+    return getOfflineRankingLegisData();
+  }
+
   const sheetId = process.env.NEXT_PUBLIC_RANKING_SHEET_ID;
 
   if (!sheetId) {

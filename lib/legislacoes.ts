@@ -1,4 +1,5 @@
-import { fetchLegislacoesFromGoogleSheets } from "@/lib/google-sheets";
+import { isOfflineBuild } from "./build-mode";
+import { fetchLegislacoesFromGoogleSheets } from "./google-sheets";
 
 export type CategoriaLegislacao =
   | "Constituição Federal"
@@ -183,6 +184,10 @@ const legislacoesFallback: Legislacao[] = [
 ];
 
 export async function getLegislacoes() {
+  if (isOfflineBuild()) {
+    return legislacoesFallback;
+  }
+
   const csvUrl = process.env.GOOGLE_SHEETS_CSV_URL;
 
   if (!csvUrl) {

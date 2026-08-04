@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:offline": "node scripts/build-offline.mjs",
     "test": "vitest run",
     "start": "next start",
     "lint": "eslint . --no-cache"

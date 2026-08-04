@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { isOfflineBuild } from "../build-mode";
 
 const TABELA = "legisbot_comentarios";
 
@@ -28,6 +28,12 @@ export async function buscarComentariosPublicosPorSlug(slug: string) {
   const slugNormalizado = slug.trim().toUpperCase();
 
   if (!slugNormalizado) return [];
+
+  if (isOfflineBuild()) {
+    return [];
+  }
+
+  const { supabase } = await import("../supabase");
 
   const { data, error } = await supabase
     .from(TABELA)
