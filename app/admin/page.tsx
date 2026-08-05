@@ -6,6 +6,12 @@ export const dynamic = "force-dynamic";
 
 const panels = [
   {
+    href: "/admin/comercial",
+    icon: "🧾",
+    title: "Gestão comercial",
+    description: "Gerencie o catálogo interno, aquisições, liberações e a trilha de auditoria.",
+  },
+  {
     href: "/admin/legisbot",
     icon: "🤖",
     title: "Painel do LegisBot",
