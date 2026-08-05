@@ -24,6 +24,7 @@ export function StudentAccount() {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [passwordFormOpen, setPasswordFormOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -107,6 +108,34 @@ export function StudentAccount() {
     setPending(false);
   }
 
+  async function updateAuthenticatedPassword(formData: FormData) {
+    setPending(true); setMessage("");
+    const password = String(formData.get("password") ?? "");
+    const confirmation = String(formData.get("confirmation") ?? "");
+    if (password.length < 8 || password !== confirmation) {
+      setMessage("As senhas devem coincidir e ter pelo menos 8 caracteres."); setPending(false); return;
+    }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setMessage("Não foi possível alterar a senha com a sessão atual.");
+    } else {
+      setPasswordFormOpen(false);
+      setMessage("Senha alterada com segurança.");
+    }
+    setPending(false);
+  }
+
+  async function signOut() {
+    setPending(true); setMessage("");
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setMessage("Não foi possível sair agora.");
+      setPending(false);
+      return;
+    }
+    window.location.assign("/");
+  }
+
   async function saveProfile(formData: FormData) {
     if (!profile) return;
     const publicName = String(formData.get("public_name") ?? "").trim();
@@ -122,7 +151,27 @@ export function StudentAccount() {
 
   if (mode === "recover") return <AccountCard title="Definir nova senha" description="Escolha uma nova senha para sua conta."><form action={updatePassword} className="space-y-4"><Field label="Nova senha" name="password" type="password" minLength={8} /><Field label="Confirmar senha" name="confirmation" type="password" minLength={8} /><PrimaryButton pending={pending}>Salvar nova senha</PrimaryButton>{message ? <Status>{message}</Status> : null}</form></AccountCard>;
 
-  if (mode === "profile" && profile) return <AccountCard title="Seu perfil na comunidade" description="Somente o nome público aparece nos comentários. Seu e-mail nunca é exibido publicamente."><form action={saveProfile} className="space-y-4"><Field label="Nome público" name="public_name" defaultValue={profile.nome_publico} /><p className="text-sm text-slate-500">E-mail da conta: {email}</p><div className="flex flex-wrap gap-3"><PrimaryButton pending={pending}>Salvar perfil</PrimaryButton><button type="button" onClick={() => void supabase.auth.signOut().then(() => window.location.reload())} className="rounded-xl border border-slate-300 px-5 py-3 font-bold text-slate-700">Sair</button></div>{message ? <Status>{message}</Status> : null}</form></AccountCard>;
+  if (mode === "profile" && profile) return <div className="space-y-6">
+    <AccountCard title="Seu perfil na comunidade" description="Somente o nome público aparece nos comentários. Seu e-mail nunca é exibido publicamente.">
+      <form action={saveProfile} className="space-y-4">
+        <Field label="Nome público" name="public_name" defaultValue={profile.nome_publico} />
+        <p className="text-sm text-slate-500">E-mail da conta: {email}</p>
+        <PrimaryButton pending={pending}>Salvar perfil</PrimaryButton>
+      </form>
+    </AccountCard>
+    <AccountCard title="Conta" description="Gerencie com segurança a senha e a sessão da sua conta.">
+      <div className="flex flex-wrap gap-3">
+        <button type="button" onClick={() => { setPasswordFormOpen((open) => !open); setMessage(""); }} className="rounded-xl border border-blue-300 px-5 py-3 font-bold text-blue-800">Alterar senha</button>
+        <button type="button" disabled={pending} onClick={() => void signOut()} className="rounded-xl border border-slate-300 px-5 py-3 font-bold text-slate-700 disabled:opacity-60">Sair</button>
+      </div>
+      {passwordFormOpen ? <form action={updateAuthenticatedPassword} className="mt-5 space-y-4">
+        <Field label="Nova senha" name="password" type="password" minLength={8} autoComplete="new-password" />
+        <Field label="Confirmar nova senha" name="confirmation" type="password" minLength={8} autoComplete="new-password" />
+        <PrimaryButton pending={pending}>Salvar nova senha</PrimaryButton>
+      </form> : null}
+      {message ? <Status>{message}</Status> : null}
+    </AccountCard>
+  </div>;
 
   if (mode === "forgot") return <AccountCard title="Recuperar senha" description="Enviaremos um link seguro para o e-mail cadastrado."><form action={sendRecovery} className="space-y-4"><Field label="E-mail" name="email" type="email" /><PrimaryButton pending={pending}>Enviar link de recuperação</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="mt-5 font-bold text-blue-700 hover:underline">← Voltar ao login</button></AccountCard>;
 
@@ -133,8 +182,8 @@ function AccountCard({ title, description, children }: { title: string; descript
   return <div className="space-y-6"><div><h1 className="text-3xl font-black text-[#062a5f]">{title}</h1><p className="mt-2 text-slate-600">{description}</p></div><div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">{children}</div></div>;
 }
 
-function Field({ label, name, type = "text", minLength, defaultValue, placeholder }: { label: string; name: string; type?: string; minLength?: number; defaultValue?: string; placeholder?: string }) {
-  return <label className="block text-sm font-bold text-slate-700">{label}<input name={name} type={type} minLength={minLength} defaultValue={defaultValue} placeholder={placeholder} autoComplete={type === "password" ? "current-password" : undefined} required className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-4 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" /></label>;
+function Field({ label, name, type = "text", minLength, defaultValue, placeholder, autoComplete }: { label: string; name: string; type?: string; minLength?: number; defaultValue?: string; placeholder?: string; autoComplete?: string }) {
+  return <label className="block text-sm font-bold text-slate-700">{label}<input name={name} type={type} minLength={minLength} defaultValue={defaultValue} placeholder={placeholder} autoComplete={autoComplete ?? (type === "password" ? "current-password" : undefined)} required className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-4 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" /></label>;
 }
 
 function PrimaryButton({ pending, children }: { pending: boolean; children: React.ReactNode }) {

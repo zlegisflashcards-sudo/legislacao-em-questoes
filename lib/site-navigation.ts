@@ -6,14 +6,22 @@ export type SiteNavigationItem = {
   external?: boolean;
 };
 
-export const primaryNavigation: readonly SiteNavigationItem[] = [
+const publicNavigation: readonly SiteNavigationItem[] = [
   { label: "Catálogo", href: "/" },
   { label: "LegisCast TV", href: "/legiscast" },
   { label: "Liga das Leis", href: "/ranking-legis" },
   { label: "Minhas leis adquiridas", href: siteConfig.links.minhasLeis, external: true },
-  { label: "Meu perfil", href: "/conta" },
 ] as const;
 
-export function headerActions(authenticated: boolean): SiteNavigationItem[] {
-  return authenticated ? [] : [{ label: "Entrar", href: "/conta?modo=login" }];
+const profileNavigation: SiteNavigationItem = { label: "Meu perfil", href: "/conta" };
+
+export function headerNavigation(authenticated: boolean | null): readonly SiteNavigationItem[] {
+  return authenticated === true ? [...publicNavigation, profileNavigation] : publicNavigation;
+}
+
+export function headerActions(authenticated: boolean | null): readonly SiteNavigationItem[] {
+  if (authenticated === null) return [];
+  return authenticated
+    ? [{ label: "Meu painel", href: "/dashboard" }]
+    : [{ label: "Entrar", href: "/conta?modo=login&retorno=%2Fdashboard" }];
 }
