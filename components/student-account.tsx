@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { safeReturnPath } from "@/lib/safe-return-path";
 
 type PublicProfile = { id: string; nome_publico: string };
 type Mode = "login" | "signup" | "forgot" | "profile" | "recover";
@@ -13,8 +14,7 @@ export function validatePublicName(value: string) {
 
 export function StudentAccount() {
   const params = useSearchParams();
-  const requestedReturn = params.get("retorno") ?? "/";
-  const returnPath = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") ? requestedReturn : "/";
+  const returnPath = safeReturnPath(params.get("retorno"));
   const initialMode: Mode = params.get("recuperar") === "1"
     ? "recover"
     : params.get("modo") === "cadastro" ? "signup" : "login";

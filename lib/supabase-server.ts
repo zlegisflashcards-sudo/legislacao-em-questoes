@@ -20,3 +20,17 @@ export function getSupabaseServerClient(): SupabaseClient {
   return serverClient;
 }
 
+/** Cliente server-side limitado às permissões RLS do usuário autenticado. */
+export function createSupabaseUserClient(accessToken: string): SupabaseClient {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !anonKey) {
+    throw new Error("Configuração pública do Supabase indisponível no servidor.");
+  }
+
+  return createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}
