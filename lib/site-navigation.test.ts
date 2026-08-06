@@ -12,12 +12,16 @@ describe("cabeçalho único", () => {
       "/",
       "/legiscast",
       "/ranking-legis",
-      "https://hotmart.com/pt-br/club/legislacao-em-flashcard",
+      "/conta?modo=login&retorno=%2Fminhas-leis",
     ]);
   });
 
   it("mostra perfil e painel somente para usuário autenticado", () => {
     expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Meu perfil"]);
+    expect(headerNavigation(true).find((item) => item.label === "Minhas leis adquiridas")).toEqual({
+      label: "Minhas leis adquiridas",
+      href: "/minhas-leis",
+    });
     expect(headerNavigation(true).at(-1)).toEqual({ label: "Meu perfil", href: "/conta" });
     expect(headerActions(true)).toEqual([{ label: "Meu painel", href: "/dashboard" }]);
     expect(headerActions(true).some((item) => item.label === "Entrar")).toBe(false);

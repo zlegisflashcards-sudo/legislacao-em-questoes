@@ -1,5 +1,3 @@
-import { siteConfig } from "./site-config";
-
 export type SiteNavigationItem = {
   label: string;
   href: string;
@@ -10,13 +8,17 @@ const publicNavigation: readonly SiteNavigationItem[] = [
   { label: "Catálogo", href: "/" },
   { label: "LegisCast TV", href: "/legiscast" },
   { label: "Liga das Leis", href: "/ranking-legis" },
-  { label: "Minhas leis adquiridas", href: siteConfig.links.minhasLeis, external: true },
 ] as const;
 
 const profileNavigation: SiteNavigationItem = { label: "Meu perfil", href: "/conta" };
 
 export function headerNavigation(authenticated: boolean | null): readonly SiteNavigationItem[] {
-  return authenticated === true ? [...publicNavigation, profileNavigation] : publicNavigation;
+  const studentLawsNavigation: SiteNavigationItem = authenticated === true
+    ? { label: "Minhas leis adquiridas", href: "/minhas-leis" }
+    : { label: "Minhas leis adquiridas", href: "/conta?modo=login&retorno=%2Fminhas-leis" };
+  return authenticated === true
+    ? [...publicNavigation, studentLawsNavigation, profileNavigation]
+    : [...publicNavigation, studentLawsNavigation];
 }
 
 export function headerActions(authenticated: boolean | null): readonly SiteNavigationItem[] {

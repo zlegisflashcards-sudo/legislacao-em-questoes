@@ -1,0 +1,145 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { filterStudentLaws, parseStudentLawRows, studentLawReferenceLabel, studentLawStatusLabel, type StudentLaw } from "./student-laws";
+
+const migration = readFileSync("supabase/migrations/20260806103510_create_student_acquired_laws_rpc.sql", "utf8");
+const server = readFileSync("lib/student-laws-server.ts", "utf8");
+const route = readFileSync("app/api/aluno/minhas-leis/route.ts", "utf8");
+const client = readFileSync("components/student-laws-client.tsx", "utf8");
+const page = readFileSync("app/minhas-leis/page.tsx", "utf8");
+
+const laws: StudentLaw[] = [
+  { id: 1, slug: "cf", titulo: "Constituição Federal", nomeCurto: "CF", descricao: null, codigo: "CF/88", categoria: "Constitucional", thumbnailUrl: null, ordem: 0, totalFlashcards: 845, versaoMaterial: "4.1", revisadoEm: "2026-08-06", publicadoEm: "2026-08-06", situacaoAtualizacao: "atualizado", houveAlteracaoLegislativa: true, referenciaNormativaAtual: "EC 138/2025", tipoReferenciaNormativa: "alteracao" },
+  { id: 2, slug: "cpp", titulo: "Código de Processo Penal", nomeCurto: "CPP", descricao: null, codigo: "DL 3.689", categoria: "Processo Penal", thumbnailUrl: null, ordem: 1, totalFlashcards: 0, versaoMaterial: null, revisadoEm: null, publicadoEm: null, situacaoAtualizacao: "revisao_pendente", houveAlteracaoLegislativa: false, referenciaNormativaAtual: "Decreto-Lei nº 3.689/1941", tipoReferenciaNormativa: "originaria" },
+];
+
+const rpcLaw = {
+  id: 1, slug: "cf", titulo: "Constituição", nome_curto: null, descricao: null, codigo: null,
+  categoria: null, thumbnail_url: null, ordem: 0, fontes_ativas: 2, total_flashcards: 845,
+  versao_material: "4.1", revisado_em: "2026-08-06", publicado_em: "2026-08-06",
+  situacao_atualizacao: "atualizado", houve_alteracao_legislativa: true,
+  referencia_normativa_atual: "EC 138/2025", tipo_referencia_normativa: "alteracao",
+};
+
+describe("dados das leis adquiridas", () => {
+  it("saneia estritamente a resposta da RPC", () => {
+    expect(parseStudentLawRows([rpcLaw])).toEqual([
+      { id: 1, slug: "cf", titulo: "Constituição", nomeCurto: null, descricao: null, codigo: null, categoria: null, thumbnailUrl: null, ordem: 0, totalFlashcards: 845, versaoMaterial: "4.1", revisadoEm: "2026-08-06", publicadoEm: "2026-08-06", situacaoAtualizacao: "atualizado", houveAlteracaoLegislativa: true, referenciaNormativaAtual: "EC 138/2025", tipoReferenciaNormativa: "alteracao" },
+    ]);
+    expect(parseStudentLawRows([{ ...rpcLaw, compra_id: "segredo" }])).toEqual([]);
+    expect(parseStudentLawRows([{ ...rpcLaw, total_flashcards: -1 }])).toEqual([]);
+    expect(parseStudentLawRows([{ ...rpcLaw, revisado_em: "2026-02-30" }])).toEqual([]);
+    expect(parseStudentLawRows([{ ...rpcLaw, situacao_atualizacao: "inventado" }])).toEqual([]);
+    expect(parseStudentLawRows([{ ...rpcLaw, houve_alteracao_legislativa: false }])).toEqual([]);
+  });
+
+  it("centraliza os rótulos editoriais sem distorcer os valores", () => {
+    expect(studentLawStatusLabel("atualizado")).toBe("Material atualizado");
+    expect(studentLawStatusLabel("revisao_pendente")).toBe("Revisão pendente");
+    expect(studentLawStatusLabel("desatualizado")).toBe("Material desatualizado");
+    expect(studentLawStatusLabel("em_revisao")).toBe("Material em revisão");
+    expect(studentLawReferenceLabel("originaria")).toBe("Norma originária");
+    expect(studentLawReferenceLabel("alteracao")).toBe("Última alteração incorporada");
+  });
+
+  it("busca localmente por título, nome curto, código e categoria sem diferenciar acentos ou caixa", () => {
+    expect(filterStudentLaws(laws, "constituicao")).toEqual([laws[0]]);
+    expect(filterStudentLaws(laws, "cpp")).toEqual([laws[1]]);
+    expect(filterStudentLaws(laws, "3.689")).toEqual([laws[1]]);
+    expect(filterStudentLaws(laws, "PROCESSO penal")).toEqual([laws[1]]);
+    expect(filterStudentLaws(laws, "138/2025")).toEqual([laws[0]]);
+    expect(filterStudentLaws(laws, "4.1")).toEqual([laws[0]]);
+    expect(filterStudentLaws(laws, "tributário")).toEqual([]);
+  });
+});
+
+describe("fronteira autenticada das leis adquiridas", () => {
+  it("usa auth.uid e consolida somente liberações e leis ativas", () => {
+    expect(migration).toContain("function public.obter_minhas_leis()");
+    expect(migration).toContain("auth.uid()");
+    expect(migration).toContain("aluno.user_id = auth.uid()");
+    expect(migration).toContain("liberacao.status = 'ativo'");
+    expect(migration).toContain("lei.ativo = true");
+    expect(migration).toContain("pg_catalog.count(*)::bigint as fontes_ativas");
+    expect(migration).toContain("pg_catalog.sum(material.quantidade_itens)");
+    expect(migration).toContain("material.ativo = true");
+    expect(migration).toContain("material.tipo = 'flashcards'");
+    expect(migration).toContain("material.publicado_em desc nulls last");
+    expect(migration).toContain("material.revisado_em desc nulls last");
+    expect(migration).toContain("lei.situacao_atualizacao");
+    expect(migration).toContain("lei.ultima_alteracao_referencia");
+    expect(migration).toContain("lei.norma_originaria_referencia");
+    expect(migration).not.toContain("aluno_produtos");
+    expect(migration).not.toContain("url_externa");
+    expect(migration).not.toContain("observacao_interna");
+    expect(migration).not.toContain("historico_atualizacoes_leis");
+  });
+
+  it("mantém SECURITY DEFINER fechado para anon e sem service role como acesso do aluno", () => {
+    expect(migration).toContain("security definer");
+    expect(migration).toContain("set search_path = pg_catalog");
+    expect(migration).toContain("from public, anon, authenticated, service_role");
+    expect(migration).toContain("to authenticated");
+  });
+
+  it("exige sessão, rejeita aluno_id e usa o token no cliente limitado", () => {
+    expect(server).toContain('url.searchParams.has("aluno_id")');
+    expect(server).toContain("auth.getUser(token)");
+    expect(server).toContain('rpc("obter_minhas_leis")');
+    expect(server).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(client).toContain('Authorization: `Bearer ${token}`');
+    expect(client).toContain("/conta?modo=login&retorno=%2Fminhas-leis");
+  });
+
+  it("expõe apenas GET saneado e desabilita cache privado", () => {
+    expect(route).toContain("export async function GET");
+    expect(route).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);
+    expect(route).toContain('"Cache-Control": "private, no-store, max-age=0"');
+    for (const forbidden of ["compra_id", "produto_id", "administrador", "motivo", "identificador_externo", "url_externa", "observacao_interna", "historico_atualizacoes_leis", "email"]) {
+      expect(route.toLowerCase()).not.toContain(forbidden);
+    }
+  });
+});
+
+describe("interface das leis adquiridas", () => {
+  it("cria a rota oficial e as duas abas", () => {
+    expect(page).toContain("<StudentLawsClient />");
+    expect(client).toContain("Minhas leis adquiridas");
+    expect(client).toContain("Minhas leis");
+    expect(client).toContain("Meu edital");
+  });
+
+  it("mantém o módulo Anki antes da busca", () => {
+    expect(client.indexOf("<AnkiModule />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
+    expect(client).toContain("Conhecer o Anki");
+    expect(client).not.toContain("drive.google.com");
+    expect(client).toContain("um único deck oficial, completo e atualizado");
+    expect(client).toContain("exclua o deck antigo e importe o novo");
+    expect(client).toContain("reinicia o progresso no Anki");
+    expect(client).toContain("Não há atualização incremental");
+  });
+
+  it("exibe resumo editorial sem inventar dados ou campos privados", () => {
+    for (const expected of ["studentLawStatusLabel", "totalFlashcards > 0", "versão", "Atualizado em", "studentLawReferenceLabel"]) expect(client).toContain(expected);
+    expect(client).not.toContain("0 flashcards");
+    expect(client).not.toContain("legislação conferida até");
+    expect(client).not.toContain("url_externa");
+    expect(client).not.toContain("observacao_interna");
+    expect(client).not.toContain("historico_atualizacoes_leis");
+  });
+
+  it("oferece carregamento, erro, vazio, resultado e busca sem resultado", () => {
+    for (const text of ["Carregando suas leis", "Não foi possível carregar suas leis", "Você ainda não possui leis liberadas", "Nenhuma lei encontrada", "lei liberada"]) {
+      expect(client).toContain(text);
+    }
+  });
+
+  it("não simula estudo, edital, progresso ou métricas inexistentes", () => {
+    expect(client).toContain("Abrir estudo — em breve");
+    expect(client).toContain("Montar meu edital — em breve");
+    expect(client.match(/disabled/g)?.length).toBeGreaterThanOrEqual(2);
+    for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
+      expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+  });
+});
