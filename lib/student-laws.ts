@@ -36,6 +36,12 @@ export function studentLawReferenceLabel(type: StudentLawReferenceType) {
   return type === "alteracao" ? "Última alteração incorporada" : "Norma originária";
 }
 
+export function studentLawShortNameForDisplay(law: Pick<StudentLaw, "titulo" | "nomeCurto">) {
+  const shortName = law.nomeCurto?.trim();
+  if (!shortName) return null;
+  return shortName.toLocaleLowerCase("pt-BR") === law.titulo.trim().toLocaleLowerCase("pt-BR") ? null : shortName;
+}
+
 const allowedRpcKeys = new Set([
   "id", "slug", "titulo", "nome_curto", "descricao", "codigo",
   "categoria", "thumbnail_url", "ordem", "fontes_ativas", "total_flashcards",

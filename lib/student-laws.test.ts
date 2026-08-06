@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterStudentLaws, parseStudentLawRows, studentLawReferenceLabel, studentLawStatusLabel, type StudentLaw } from "./student-laws";
+import { filterStudentLaws, parseStudentLawRows, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, type StudentLaw } from "./student-laws";
 
 const migration = readFileSync("supabase/migrations/20260806103510_create_student_acquired_laws_rpc.sql", "utf8");
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/minhas-leis/route.ts", "utf8");
 const client = readFileSync("components/student-laws-client.tsx", "utf8");
+const card = client.slice(client.indexOf("function StudentLawCard"), client.indexOf("function EmptyState"));
 const page = readFileSync("app/minhas-leis/page.tsx", "utf8");
 
 const laws: StudentLaw[] = [
@@ -50,6 +51,17 @@ describe("dados das leis adquiridas", () => {
     expect(filterStudentLaws(laws, "138/2025")).toEqual([laws[0]]);
     expect(filterStudentLaws(laws, "4.1")).toEqual([laws[0]]);
     expect(filterStudentLaws(laws, "tributário")).toEqual([]);
+  });
+
+  it("mantém o nome padrão e só libera um nome curto complementar válido", () => {
+    expect(studentLawShortNameForDisplay({ titulo: "Constituição Federal", nomeCurto: "Recorte PMMA" })).toBe("Recorte PMMA");
+    expect(studentLawShortNameForDisplay({ titulo: "Constituição Federal", nomeCurto: null })).toBeNull();
+    expect(studentLawShortNameForDisplay({ titulo: "Constituição Federal", nomeCurto: "" })).toBeNull();
+    expect(studentLawShortNameForDisplay({ titulo: "Constituição Federal", nomeCurto: "   " })).toBeNull();
+    expect(studentLawShortNameForDisplay({ titulo: "Constituição Federal", nomeCurto: "  CONSTITUIÇÃO FEDERAL  " })).toBeNull();
+
+    const equalShortName = { ...laws[0], nomeCurto: "  CONSTITUIÇÃO FEDERAL  " };
+    expect(filterStudentLaws([equalShortName], "constituição federal")).toEqual([equalShortName]);
   });
 });
 
@@ -119,13 +131,17 @@ describe("interface das leis adquiridas", () => {
     expect(client).toContain("Não há atualização incremental");
   });
 
-  it("exibe resumo editorial sem inventar dados ou campos privados", () => {
-    for (const expected of ["studentLawStatusLabel", "totalFlashcards > 0", "versão", "Atualizado em", "studentLawReferenceLabel"]) expect(client).toContain(expected);
-    expect(client).not.toContain("0 flashcards");
-    expect(client).not.toContain("legislação conferida até");
-    expect(client).not.toContain("url_externa");
-    expect(client).not.toContain("observacao_interna");
-    expect(client).not.toContain("historico_atualizacoes_leis");
+  it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
+    for (const expected of ["law.titulo", "law.codigo", "studentLawShortNameForDisplay", "shortName", "law.totalFlashcards > 0", "Abrir estudo — em breve"]) expect(card).toContain(expected);
+    expect(card.indexOf("law.titulo")).toBeLessThan(card.indexOf("{shortName}"));
+    for (const forbidden of ["law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado"]) {
+      expect(card).not.toContain(forbidden);
+    }
+    expect(card).not.toContain("0 flashcards");
+    expect(card).not.toContain("legislação conferida até");
+    expect(card).not.toContain("url_externa");
+    expect(card).not.toContain("observacao_interna");
+    expect(card).not.toContain("historico_atualizacoes_leis");
   });
 
   it("oferece carregamento, erro, vazio, resultado e busca sem resultado", () => {
