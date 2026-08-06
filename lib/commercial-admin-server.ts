@@ -5,6 +5,9 @@ import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import {
   COMMERCIAL_ORIGINS,
+  EDITORIAL_IMPORTANCE,
+  EDITORIAL_UPDATE_TYPES,
+  LAW_UPDATE_STATUSES,
   MANUAL_ORIGINS,
   MATERIAL_ACTIONS,
   MATERIAL_PROVIDERS,
@@ -17,7 +20,10 @@ import {
   idList,
   limitFrom,
   nonNegativeInteger,
+  optionalIsoDate,
+  optionalNonNegativeInteger,
   optionalString,
+  optionalTimestamp,
   pageFrom,
   positiveIntegerId,
   rejectUnknownKeys,
@@ -34,6 +40,7 @@ export type CommercialResource =
   | "produtos"
   | "aquisicoes"
   | "liberacoes"
+  | "atualizacoes"
   | "auditoria"
   | "alunos";
 
@@ -143,6 +150,22 @@ export async function getCommercialResource(resource: CommercialResource, reques
     return pageResult(result.data ?? [], result.count, page, limit);
   }
 
+  if (resource === "atualizacoes") {
+    let query = supabase
+      .from("historico_atualizacoes_leis")
+      .select("*,leis(id,slug,titulo),materiais_leis(id,titulo,tipo,versao_material)", { count: "exact" });
+    if (q) query = query.or(`titulo.ilike.%${q}%,descricao_resumida.ilike.%${q}%,referencia_normativa.ilike.%${q}%`);
+    const leiId = url.searchParams.get("lei_id");
+    const tipo = safeSearch(url.searchParams.get("tipo"), 60);
+    const importancia = safeSearch(url.searchParams.get("importancia"), 30);
+    if (leiId) query = query.eq("lei_id", positiveIntegerId(leiId, "Lei"));
+    if (tipo) query = query.eq("tipo", enumValue(tipo, EDITORIAL_UPDATE_TYPES, "Tipo"));
+    if (importancia) query = query.eq("importancia", enumValue(importancia, EDITORIAL_IMPORTANCE, "Importância"));
+    const result = await query.order("data_publicacao", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).range(from, to);
+    assertQuery(result);
+    return pageResult(result.data ?? [], result.count, page, limit);
+  }
+
   if (resource === "produtos") {
     let query = supabase.from("produtos").select("*", { count: "exact" });
     if (q) query = query.or(`nome.ilike.%${q}%,slug.ilike.%${q}%,hotmart_product_id.ilike.%${q}%`);
@@ -226,7 +249,11 @@ function allowedUpdate(data: unknown, allowed: readonly string[]): JsonObject {
 }
 
 function validateLawData(raw: unknown, update = false) {
-  const allowed = ["slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "ordem", "thumbnail_url"] as const;
+  const allowed = [
+    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "ordem", "thumbnail_url",
+    "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa",
+    "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao",
+  ] as const;
   const data = update ? allowedUpdate(raw, allowed) : asObject(raw);
   rejectUnknownKeys(data, allowed);
   const result: JsonObject = {};
@@ -240,11 +267,20 @@ function validateLawData(raw: unknown, update = false) {
   }
   if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
+  if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = optionalString(data.norma_originaria_referencia, "Norma originária", 500) ?? null;
+  if (!update || "norma_originaria_data" in data) result.norma_originaria_data = optionalIsoDate(data.norma_originaria_data, "Data da norma originária") ?? null;
+  if (!update || "houve_alteracao_legislativa" in data) result.houve_alteracao_legislativa = booleanValue(data.houve_alteracao_legislativa ?? false, "Alteração legislativa");
+  if (!update || "ultima_alteracao_referencia" in data) result.ultima_alteracao_referencia = optionalString(data.ultima_alteracao_referencia, "Última alteração", 500) ?? null;
+  if (!update || "ultima_alteracao_data" in data) result.ultima_alteracao_data = optionalIsoDate(data.ultima_alteracao_data, "Data da última alteração") ?? null;
+  if (!update || "situacao_atualizacao" in data) result.situacao_atualizacao = enumValue(data.situacao_atualizacao ?? "revisao_pendente", LAW_UPDATE_STATUSES, "Situação de atualização");
   return result;
 }
 
 function validateMaterialData(raw: unknown, update = false) {
-  const allowed = ["lei_id", "tipo", "titulo", "descricao", "provedor", "url_externa", "acao", "ordem", "ativo"] as const;
+  const allowed = [
+    "lei_id", "tipo", "titulo", "descricao", "provedor", "url_externa", "acao", "ordem", "ativo",
+    "quantidade_itens", "versao_material", "revisado_em", "publicado_em", "observacao_interna",
+  ] as const;
   const data = update ? allowedUpdate(raw, allowed.filter((key) => key !== "lei_id")) : asObject(raw);
   rejectUnknownKeys(data, update ? allowed.filter((key) => key !== "lei_id") : allowed);
   const result: JsonObject = {};
@@ -260,6 +296,40 @@ function validateMaterialData(raw: unknown, update = false) {
   if (!update || "acao" in data) result.acao = enumValue(data.acao, MATERIAL_ACTIONS, "Ação");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
   if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
+  if (!update || "quantidade_itens" in data) result.quantidade_itens = optionalNonNegativeInteger(data.quantidade_itens, "Quantidade de itens") ?? null;
+  if (!update || "versao_material" in data) result.versao_material = optionalString(data.versao_material, "Versão do material", 100) ?? null;
+  if (!update || "revisado_em" in data) result.revisado_em = optionalIsoDate(data.revisado_em, "Data de revisão") ?? null;
+  if (!update || "publicado_em" in data) result.publicado_em = optionalIsoDate(data.publicado_em, "Data de publicação") ?? null;
+  if (!update || "observacao_interna" in data) result.observacao_interna = optionalString(data.observacao_interna, "Observação interna", 4000) ?? null;
+  return result;
+}
+
+function validateEditorialUpdateData(raw: unknown, update = false) {
+  const allowed = [
+    "lei_id", "material_lei_id", "tipo", "importancia", "titulo", "descricao_resumida", "referencia_normativa",
+    "data_referencia_normativa", "versao_anterior", "versao_nova", "quantidade_flashcards_anterior",
+    "quantidade_flashcards_nova", "quantidade_questoes_adicionadas", "quantidade_questoes_corrigidas",
+    "quantidade_flashcards_revisados", "visivel_aluno", "visivel_catalogo", "observacao_interna", "data_publicacao",
+  ] as const;
+  const updateAllowed = allowed.filter((key) => key !== "lei_id");
+  const data = update ? allowedUpdate(raw, updateAllowed) : asObject(raw);
+  rejectUnknownKeys(data, update ? updateAllowed : allowed);
+  const result: JsonObject = {};
+  if (!update) result.lei_id = positiveIntegerId(data.lei_id, "Lei");
+  if (!update || "material_lei_id" in data) result.material_lei_id = data.material_lei_id == null || data.material_lei_id === "" ? null : positiveIntegerId(data.material_lei_id, "Material");
+  if (!update || "tipo" in data) result.tipo = enumValue(data.tipo, EDITORIAL_UPDATE_TYPES, "Tipo");
+  if (!update || "importancia" in data) result.importancia = enumValue(data.importancia, EDITORIAL_IMPORTANCE, "Importância");
+  if (!update || "titulo" in data) result.titulo = requiredString(data.titulo, "Título", 300);
+  for (const key of ["descricao_resumida", "referencia_normativa", "versao_anterior", "versao_nova", "observacao_interna"] as const) {
+    if (!update || key in data) result[key] = optionalString(data[key], key, key === "descricao_resumida" || key === "observacao_interna" ? 4000 : 500) ?? null;
+  }
+  if (!update || "data_referencia_normativa" in data) result.data_referencia_normativa = optionalIsoDate(data.data_referencia_normativa, "Data da referência normativa") ?? null;
+  for (const key of ["quantidade_flashcards_anterior", "quantidade_flashcards_nova", "quantidade_questoes_adicionadas", "quantidade_questoes_corrigidas", "quantidade_flashcards_revisados"] as const) {
+    if (!update || key in data) result[key] = optionalNonNegativeInteger(data[key], key) ?? null;
+  }
+  if (!update || "visivel_aluno" in data) result.visivel_aluno = booleanValue(data.visivel_aluno ?? true, "Visível ao aluno");
+  if (!update || "visivel_catalogo" in data) result.visivel_catalogo = booleanValue(data.visivel_catalogo ?? false, "Visível no catálogo");
+  if (!update || "data_publicacao" in data) result.data_publicacao = optionalTimestamp(data.data_publicacao, "Data de publicação") ?? null;
   return result;
 }
 
@@ -313,6 +383,49 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       return rpc("admin_criar_material_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
     if (action === "atualizar") return rpc("admin_atualizar_material_lei", { p_ator_user_id: actor, p_material_id: positiveIntegerId(body.id, "Material"), p_dados: validateMaterialData(body.data, true) });
+  }
+
+  if (resource === "atualizacoes") {
+    if (action === "criar") {
+      const data = validateEditorialUpdateData(body.data);
+      return rpc("admin_criar_atualizacao_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
+    }
+    if (action === "atualizar") return rpc("admin_atualizar_atualizacao_lei", { p_ator_user_id: actor, p_atualizacao_id: positiveIntegerId(body.id, "Atualização"), p_dados: validateEditorialUpdateData(body.data, true) });
+    if (action === "ocultar") return rpc("admin_ocultar_atualizacao_lei", { p_ator_user_id: actor, p_atualizacao_id: positiveIntegerId(body.id, "Atualização") });
+    if (action === "publicar_versao") {
+      const data = asObject(body.data);
+      const allowed = [
+        "material_lei_id", "nova_url_externa", "nova_versao", "nova_quantidade_itens", "revisado_em", "publicado_em",
+        "tipo_atualizacao", "importancia", "titulo", "descricao_resumida", "referencia_normativa", "data_referencia_normativa",
+        "quantidade_questoes_adicionadas", "quantidade_questoes_corrigidas", "quantidade_flashcards_revisados",
+        "visivel_aluno", "visivel_catalogo", "observacao_interna",
+      ] as const;
+      rejectUnknownKeys(data, allowed);
+      const revisadoEm = optionalIsoDate(data.revisado_em, "Data de revisão");
+      const publicadoEm = optionalIsoDate(data.publicado_em, "Data de publicação");
+      if (!revisadoEm || !publicadoEm) throw new CommercialValidationError("As datas de revisão e publicação são obrigatórias.");
+      return rpc("admin_publicar_nova_versao_material", {
+        p_ator_user_id: actor,
+        p_material_lei_id: positiveIntegerId(data.material_lei_id, "Material"),
+        p_nova_url_externa: requiredString(data.nova_url_externa, "Nova URL", 4000),
+        p_nova_versao: requiredString(data.nova_versao, "Nova versão", 100),
+        p_nova_quantidade_itens: nonNegativeInteger(data.nova_quantidade_itens, "Nova quantidade"),
+        p_revisado_em: revisadoEm,
+        p_publicado_em: publicadoEm,
+        p_tipo_atualizacao: enumValue(data.tipo_atualizacao, EDITORIAL_UPDATE_TYPES, "Tipo"),
+        p_importancia: enumValue(data.importancia, EDITORIAL_IMPORTANCE, "Importância"),
+        p_titulo: requiredString(data.titulo, "Título", 300),
+        p_descricao_resumida: optionalString(data.descricao_resumida, "Descrição resumida", 4000) ?? null,
+        p_referencia_normativa: optionalString(data.referencia_normativa, "Referência normativa", 500) ?? null,
+        p_data_referencia_normativa: optionalIsoDate(data.data_referencia_normativa, "Data da referência normativa") ?? null,
+        p_quantidade_questoes_adicionadas: optionalNonNegativeInteger(data.quantidade_questoes_adicionadas, "Questões adicionadas") ?? null,
+        p_quantidade_questoes_corrigidas: optionalNonNegativeInteger(data.quantidade_questoes_corrigidas, "Questões corrigidas") ?? null,
+        p_quantidade_flashcards_revisados: optionalNonNegativeInteger(data.quantidade_flashcards_revisados, "Flashcards revisados") ?? null,
+        p_visivel_aluno: booleanValue(data.visivel_aluno ?? true, "Visível ao aluno"),
+        p_visivel_catalogo: booleanValue(data.visivel_catalogo ?? false, "Visível no catálogo"),
+        p_observacao_interna: optionalString(data.observacao_interna, "Observação interna", 4000) ?? null,
+      });
+    }
   }
 
   if (resource === "produtos") {

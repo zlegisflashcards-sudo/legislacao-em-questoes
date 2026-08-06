@@ -4,13 +4,16 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
-type Tab = "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "auditoria";
+type Tab = "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "auditoria";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "leis", label: "Leis" }, { id: "materiais", label: "Materiais" },
   { id: "produtos", label: "Produtos" }, { id: "aquisicoes", label: "Aquisições" },
-  { id: "liberacoes", label: "Liberações" }, { id: "auditoria", label: "Auditoria" },
+  { id: "liberacoes", label: "Liberações" }, { id: "atualizacoes", label: "Atualizações" },
+  { id: "auditoria", label: "Auditoria" },
 ];
+const UPDATE_TYPES = ["alteracao_legislativa", "nova_versao_flashcards", "novas_questoes", "correcao_questoes", "correcao_flashcards", "melhoria_material", "outro"];
+const IMPORTANCE = ["informativa", "recomendada", "essencial"];
 const ORIGENS = ["hotmart", "cortesia", "amostra", "premiacao", "migracao", "administrativo"];
 const ORIGENS_MANUAIS = ORIGENS.filter((item) => item !== "hotmart");
 const text = (value: unknown) => value == null ? "" : String(value);
@@ -48,6 +51,7 @@ export default function CommercialAdmin() {
   const [tab, setTab] = useState<Tab>("leis");
   const [result, setResult] = useState<PageResult>({ items: [], page: 1, pages: 1, total: 0 });
   const [laws, setLaws] = useState<Row[]>([]);
+  const [materials, setMaterials] = useState<Row[]>([]);
   const [products, setProducts] = useState<Row[]>([]);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -71,11 +75,12 @@ export default function CommercialAdmin() {
 
   const loadReferences = useCallback(async () => {
     try {
-      const [lawData, productData] = await Promise.all([
+      const [lawData, productData, materialData] = await Promise.all([
         requestJson("/api/admin/comercial/leis?limit=50&ativo=true"),
         requestJson("/api/admin/comercial/produtos?limit=50"),
+        requestJson("/api/admin/comercial/materiais?limit=50"),
       ]);
-      setLaws(lawData.items ?? []); setProducts(productData.items ?? []);
+      setLaws(lawData.items ?? []); setProducts(productData.items ?? []); setMaterials(materialData.items ?? []);
     } catch { /* A consulta principal exibira falhas relevantes. */ }
   }, []);
 
@@ -104,6 +109,7 @@ export default function CommercialAdmin() {
     <form className="commercial-toolbar" onSubmit={submitSearch}>
       {tab !== "liberacoes" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
       {tab === "materiais" ? <label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : null}
+      {tab === "atualizacoes" ? <><label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label><label>Tipo<select value={filters.tipo ?? ""} onChange={(event) => setFilters({ ...filters, tipo: event.target.value })}><option value="">Todos</option>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label><label>Importância<select value={filters.importancia ?? ""} onChange={(event) => setFilters({ ...filters, importancia: event.target.value })}><option value="">Todas</option>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "leis" ? <label>Estado<select value={filters.ativo ?? ""} onChange={(event) => setFilters({ ...filters, ativo: event.target.value })}><option value="">Todas</option><option value="true">Ativas</option><option value="false">Inativas</option></select></label> : null}
       {tab === "aquisicoes" ? <><label>Status<select value={filters.status ?? ""} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="ativo">Ativo</option><option value="cancelado">Cancelado</option><option value="reembolsado">Reembolsado</option></select></label><label>Origem<select value={filters.origem ?? ""} onChange={(event) => setFilters({ ...filters, origem: event.target.value })}><option value="">Todas</option>{ORIGENS.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "auditoria" ? <><label>Ator (UUID)<input value={filters.ator_user_id ?? ""} onChange={(event) => setFilters({ ...filters, ator_user_id: event.target.value })} /></label><label>Ação<input value={filters.acao ?? ""} onChange={(event) => setFilters({ ...filters, acao: event.target.value })} /></label><label>Entidade<input value={filters.entidade ?? ""} onChange={(event) => setFilters({ ...filters, entidade: event.target.value })} /></label><label>De<input type="datetime-local" value={filters.de ?? ""} onChange={(event) => setFilters({ ...filters, de: event.target.value })} /></label><label>Até<input type="datetime-local" value={filters.ate ?? ""} onChange={(event) => setFilters({ ...filters, ate: event.target.value })} /></label></> : null}
@@ -115,6 +121,7 @@ export default function CommercialAdmin() {
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "aquisicoes" ? <AcquisitionPanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ ...filters, aluno_id: text(item.id) }); setPage(1); }} products={products} filters={filters} setFilters={setFilters} lawCount={selectedProductLawCount} busy={busy} mutate={mutate} /> : null}
     {tab === "liberacoes" ? <ReleasePanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ aluno_id: text(item.id) }); setPage(1); }} laws={laws} busy={busy} mutate={mutate} reload={load} /> : null}
+    {tab === "atualizacoes" ? <EditorialUpdatesPanel rows={result.items} laws={laws} materials={materials} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "auditoria" ? <AuditPanel rows={result.items} /> : null}
     {busy ? <p className="commercial-loading">Carregando…</p> : null}
     <footer className="commercial-pagination"><span>{result.total} registro(s)</span><button type="button" disabled={busy || page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><span>{page} / {result.pages}</span><button type="button" disabled={busy || page >= result.pages} onClick={() => setPage(page + 1)}>Próxima</button></footer>
@@ -124,26 +131,38 @@ export default function CommercialAdmin() {
 type PanelProps = { rows: Row[]; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: (resource: Tab, payload: Row, success: string) => Promise<void> };
 
 function LawPanel({ rows, editing, setEditing, busy, mutate }: PanelProps) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("leis", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ordem: Number(data.ordem), ativo: data.ativo === "true" } }, "Lei salva com sucesso."); if (!editing) event.currentTarget.reset(); }
+  const [hasChange, setHasChange] = useState(editing?.houve_alteracao_legislativa === true);
+  useEffect(() => setHasChange(editing?.houve_alteracao_legislativa === true), [editing]);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("leis", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ordem: Number(data.ordem), ativo: data.ativo === "true", houve_alteracao_legislativa: data.houve_alteracao_legislativa === "true" } }, "Lei salva com sucesso."); if (!editing) event.currentTarget.reset(); }
   return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar lei" : "Cadastrar lei"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
     <input name="slug" defaultValue={text(editing?.slug)} placeholder="slug-da-lei" required /><input name="titulo" defaultValue={text(editing?.titulo)} placeholder="Título" required />
     <input name="nome_curto" defaultValue={text(editing?.nome_curto)} placeholder="Nome curto" /><input name="codigo" defaultValue={text(editing?.codigo)} placeholder="Código" />
     <input name="categoria" defaultValue={text(editing?.categoria)} placeholder="Categoria" /><input name="thumbnail_url" defaultValue={text(editing?.thumbnail_url)} placeholder="URL da miniatura" />
     <textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" /><input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required />
     <select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativa</option><option value="false">Inativa</option></select>
-  </EditForm><DataTable headers={["Lei", "Categoria", "Ordem", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small>{text(row.slug)}</small></td><td>{text(row.categoria) || "—"}</td><td>{text(row.ordem)}</td><td>{row.ativo ? "Ativa" : "Inativa"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("leis", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado da lei atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
+    <label>Norma originária<input name="norma_originaria_referencia" defaultValue={text(editing?.norma_originaria_referencia)} placeholder="Ex.: Lei nº 10.230/2015" /></label>
+    <label>Data da norma originária<input name="norma_originaria_data" type="date" defaultValue={text(editing?.norma_originaria_data)} /></label>
+    <label>Houve alteração legislativa?<select name="houve_alteracao_legislativa" value={hasChange ? "true" : "false"} onChange={(event) => setHasChange(event.target.value === "true")}><option value="false">Não</option><option value="true">Sim</option></select></label>
+    {hasChange ? <><label>Última alteração incorporada<input name="ultima_alteracao_referencia" defaultValue={text(editing?.ultima_alteracao_referencia)} required /></label><label>Data da última alteração<input name="ultima_alteracao_data" type="date" defaultValue={text(editing?.ultima_alteracao_data)} required /></label></> : <><input type="hidden" name="ultima_alteracao_referencia" value="" /><input type="hidden" name="ultima_alteracao_data" value="" /></>}
+    <label>Situação de atualização<select name="situacao_atualizacao" defaultValue={text(editing?.situacao_atualizacao) || "revisao_pendente"}>{["atualizado","revisao_pendente","desatualizado","em_revisao"].map((item) => <option key={item}>{item}</option>)}</select></label>
+  </EditForm><DataTable headers={["Lei", "Referência normativa", "Situação", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small>{text(row.slug)}</small></td><td><strong>{row.houve_alteracao_legislativa ? "Última alteração incorporada" : "Norma originária"}</strong><small>{text(row.houve_alteracao_legislativa ? row.ultima_alteracao_referencia : row.norma_originaria_referencia) || "—"}</small></td><td>{text(row.situacao_atualizacao)}</td><td>{row.ativo ? "Ativa" : "Inativa"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("leis", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado da lei atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
 }
 
 function MaterialPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[] }) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("materiais", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ...(editing ? {} : { lei_id: Number(data.lei_id) }), ordem: Number(data.ordem), ativo: data.ativo === "true" } }, "Material salvo com sucesso."); }
+  const [kind, setKind] = useState(text(editing?.tipo) || "flashcards");
+  useEffect(() => setKind(text(editing?.tipo) || "flashcards"), [editing]);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("materiais", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ...(editing ? {} : { lei_id: Number(data.lei_id) }), ordem: Number(data.ordem), ativo: data.ativo === "true", quantidade_itens: data.quantidade_itens === "" ? null : Number(data.quantidade_itens) } }, "Material salvo com sucesso."); }
   return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar material" : "Cadastrar material"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
     {!editing ? <select name="lei_id" required defaultValue=""><option value="" disabled>Selecione a lei</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select> : null}
-    <select name="tipo" defaultValue={text(editing?.tipo) || "flashcards"}>{["flashcards","video","pdf","tutorial","audio","outro"].map((item) => <option key={item}>{item}</option>)}</select>
+    <select name="tipo" value={kind} onChange={(event) => setKind(event.target.value)}>{["flashcards","video","pdf","tutorial","audio","outro"].map((item) => <option key={item}>{item}</option>)}</select>
     <input name="titulo" defaultValue={text(editing?.titulo)} placeholder="Título" required /><textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" />
     <select name="provedor" defaultValue={text(editing?.provedor) || "google_drive"}>{["google_drive","youtube","externo","supabase_storage"].map((item) => <option key={item}>{item}</option>)}</select>
     <input name="url_externa" type="url" defaultValue={text(editing?.url_externa)} placeholder="URL externa" required /><select name="acao" defaultValue={text(editing?.acao) || "abrir"}>{["abrir","baixar","assistir"].map((item) => <option key={item}>{item}</option>)}</select>
+    <label>{kind === "flashcards" ? "Quantidade de flashcards" : "Quantidade de itens"}<input name="quantidade_itens" type="number" min="0" defaultValue={text(editing?.quantidade_itens)} /></label>
+    <label>Versão do material<input name="versao_material" defaultValue={text(editing?.versao_material)} /></label><label>Data de revisão<input name="revisado_em" type="date" defaultValue={text(editing?.revisado_em)} /></label><label>Data de publicação<input name="publicado_em" type="date" defaultValue={text(editing?.publicado_em)} /></label>
+    <textarea name="observacao_interna" defaultValue={text(editing?.observacao_interna)} placeholder="Observação interna — nunca exibida ao aluno ou catálogo" />
     <input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required /><select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
-  </EditForm><DataTable headers={["Material", "Lei", "Tipo", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small><a href={text(row.url_externa)} target="_blank" rel="noreferrer">Abrir URL administrativa</a></small></td><td>{text(relation(row,"leis").titulo)}</td><td>{text(row.tipo)}</td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("materiais", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do material atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
+  </EditForm><DataTable headers={["Material", "Lei", "Versão / quantidade", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small><a href={text(row.url_externa)} target="_blank" rel="noreferrer">Abrir URL administrativa</a></small></td><td>{text(relation(row,"leis").titulo)}</td><td>{text(row.versao_material) || "—"}<small>{row.quantidade_itens == null ? "Quantidade não informada" : `${text(row.quantidade_itens)} ${row.tipo === "flashcards" ? "flashcards" : "itens"}`}</small></td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("materiais", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do material atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
 }
 
 function ProductPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[] }) {
@@ -193,6 +212,73 @@ function ReleasePanel({ rows, student, setStudent, laws, busy, mutate, reload }:
   async function revoke(row:Row){if(!window.confirm("Revogar somente esta fonte de acesso? O histórico será preservado."))return;await mutate("liberacoes",{action:"revogar",id:row.id,data:{motivo:"Revogação administrativa"}},"Liberação revogada.");}
   return <><div className="commercial-card"><h2>Consultar e conceder</h2><StudentSearch onSelect={setStudent}/>{student?<><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome)} ({text(student.email)})</p><form className="commercial-form-grid" onSubmit={submit}><select name="lei_id" required defaultValue=""><option value="" disabled>Selecione a lei</option>{laws.map((law)=><option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select><select name="origem" defaultValue="administrativo">{ORIGENS_MANUAIS.map((item)=><option key={item}>{item}</option>)}</select><input name="motivo" placeholder="Motivo"/><button className="admin-button primary" disabled={busy}>Conceder lei</button></form></>:null}</div>
   <DataTable headers={["Lei","Fonte","Status","Concedida","Outras fontes","Ações"]}>{rows.map((row)=><tr key={text(row.id)}><td>{text(relation(row,"leis").titulo)}</td><td>{text(row.origem)}<small>{text(relation(row,"produtos").nome)}</small></td><td>{text(row.status)}</td><td>{date(row.concedida_em)}</td><td>{Number(row.outras_fontes_ativas||0)>0?`${text(row.outras_fontes_ativas)} ativa(s)`:"Nenhuma"}</td><td>{row.status==="ativo"?<button disabled={busy} onClick={()=>void revoke(row)}>Revogar esta fonte</button>:"—"}</td></tr>)}</DataTable></>;
+}
+
+const optionalNumber = (value: FormDataEntryValue | undefined) => value == null || value === "" ? null : Number(value);
+
+function EditorialUpdatesPanel({ rows, laws, materials, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[]; materials: Row[] }) {
+  const [lawId, setLawId] = useState(text(editing?.lei_id));
+  useEffect(() => setLawId(text(editing?.lei_id)), [editing]);
+  const lawMaterials = materials.filter((item) => !lawId || text(item.lei_id) === lawId);
+  const flashcardMaterials = materials.filter((item) => item.tipo === "flashcards");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const raw = Object.fromEntries(new FormData(event.currentTarget));
+    const data: Row = {
+      ...raw,
+      ...(editing ? {} : { lei_id: Number(raw.lei_id) }),
+      material_lei_id: raw.material_lei_id ? Number(raw.material_lei_id) : null,
+      visivel_aluno: raw.visivel_aluno === "true",
+      visivel_catalogo: raw.visivel_catalogo === "true",
+    };
+    for (const key of ["quantidade_flashcards_anterior","quantidade_flashcards_nova","quantidade_questoes_adicionadas","quantidade_questoes_corrigidas","quantidade_flashcards_revisados"]) data[key] = optionalNumber(raw[key]);
+    await mutate("atualizacoes", { action: editing ? "atualizar" : "criar", id: editing?.id, data }, "Atualização editorial salva.");
+  }
+  async function publish(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const raw = Object.fromEntries(new FormData(event.currentTarget));
+    if (!window.confirm("Publicar a nova versão completa? A URL e a versão vigentes serão substituídas atomicamente; não haverá pacote incremental.")) return;
+    await mutate("atualizacoes", { action: "publicar_versao", data: {
+      ...raw,
+      material_lei_id: Number(raw.material_lei_id),
+      nova_quantidade_itens: Number(raw.nova_quantidade_itens),
+      quantidade_questoes_adicionadas: optionalNumber(raw.quantidade_questoes_adicionadas),
+      quantidade_questoes_corrigidas: optionalNumber(raw.quantidade_questoes_corrigidas),
+      quantidade_flashcards_revisados: optionalNumber(raw.quantidade_flashcards_revisados),
+      visivel_aluno: raw.visivel_aluno === "true",
+      visivel_catalogo: raw.visivel_catalogo === "true",
+    } }, "Nova versão completa publicada e registrada no histórico.");
+  }
+  async function hide(row: Row) {
+    if (!window.confirm("Ocultar esta atualização do aluno e do catálogo? O registro e a auditoria serão preservados.")) return;
+    await mutate("atualizacoes", { action: "ocultar", id: row.id }, "Atualização ocultada sem exclusão do histórico.");
+  }
+  return <>
+    <EditForm key={text(editing?.id) || "new-update"} title={editing ? "Editar atualização editorial" : "Registrar atualização editorial"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
+      {!editing ? <label>Lei<select name="lei_id" required value={lawId} onChange={(event) => setLawId(event.target.value)}><option value="" disabled>Selecione a lei</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : <p><strong>Lei:</strong> {text(relation(editing,"leis").titulo)}</p>}
+      <label>Material relacionado<select name="material_lei_id" defaultValue={text(editing?.material_lei_id)}><option value="">Nenhum</option>{lawMaterials.map((item) => <option key={text(item.id)} value={text(item.id)}>{text(item.titulo)} ({text(item.tipo)})</option>)}</select></label>
+      <label>Tipo<select name="tipo" defaultValue={text(editing?.tipo) || "melhoria_material"}>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label>Importância<select name="importancia" defaultValue={text(editing?.importancia) || "informativa"}>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <input name="titulo" defaultValue={text(editing?.titulo)} placeholder="Título da atualização" required /><textarea name="descricao_resumida" defaultValue={text(editing?.descricao_resumida)} placeholder="Descrição resumida" />
+      <input name="referencia_normativa" defaultValue={text(editing?.referencia_normativa)} placeholder="Norma relacionada" /><label>Data da norma<input name="data_referencia_normativa" type="date" defaultValue={text(editing?.data_referencia_normativa)} /></label>
+      <input name="versao_anterior" defaultValue={text(editing?.versao_anterior)} placeholder="Versão anterior" /><input name="versao_nova" defaultValue={text(editing?.versao_nova)} placeholder="Nova versão" />
+      <input name="quantidade_flashcards_anterior" type="number" min="0" defaultValue={text(editing?.quantidade_flashcards_anterior)} placeholder="Flashcards anteriores" /><input name="quantidade_flashcards_nova" type="number" min="0" defaultValue={text(editing?.quantidade_flashcards_nova)} placeholder="Flashcards atuais" />
+      <input name="quantidade_questoes_adicionadas" type="number" min="0" defaultValue={text(editing?.quantidade_questoes_adicionadas)} placeholder="Questões adicionadas" /><input name="quantidade_questoes_corrigidas" type="number" min="0" defaultValue={text(editing?.quantidade_questoes_corrigidas)} placeholder="Questões corrigidas" /><input name="quantidade_flashcards_revisados" type="number" min="0" defaultValue={text(editing?.quantidade_flashcards_revisados)} placeholder="Flashcards revisados" />
+      <label>Visível ao aluno<select name="visivel_aluno" defaultValue={editing?.visivel_aluno === false ? "false" : "true"}><option value="true">Sim</option><option value="false">Não</option></select></label><label>Visível no catálogo<select name="visivel_catalogo" defaultValue={editing?.visivel_catalogo === true ? "true" : "false"}><option value="false">Não</option><option value="true">Sim</option></select></label>
+      <label>Data de publicação<input name="data_publicacao" type="datetime-local" defaultValue={text(editing?.data_publicacao).slice(0,16)} /></label><textarea name="observacao_interna" defaultValue={text(editing?.observacao_interna)} placeholder="Observação interna — nunca exposta ao aluno ou catálogo" />
+    </EditForm>
+    <form className="commercial-card commercial-form-grid" onSubmit={publish}>
+      <h2>Publicar nova versão completa de flashcards</h2><p>Substitui o arquivo oficial vigente e registra histórico e auditoria na mesma transação. Não cria pacote incremental, GUID ou merge de deck.</p>
+      <select name="material_lei_id" required defaultValue=""><option value="" disabled>Selecione o material de flashcards</option>{flashcardMaterials.map((item) => <option key={text(item.id)} value={text(item.id)}>{text(relation(item,"leis").titulo)} — {text(item.titulo)}</option>)}</select>
+      <input name="nova_url_externa" type="url" placeholder="Nova URL administrativa do arquivo completo" required /><input name="nova_versao" placeholder="Nova versão" required /><input name="nova_quantidade_itens" type="number" min="0" placeholder="Nova quantidade de flashcards" required />
+      <label>Revisado em<input name="revisado_em" type="date" required /></label><label>Publicado em<input name="publicado_em" type="date" required /></label><select name="tipo_atualizacao" defaultValue="nova_versao_flashcards">{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select><select name="importancia" defaultValue="recomendada">{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select>
+      <input name="titulo" placeholder="Título da atualização" required /><textarea name="descricao_resumida" placeholder="Descrição resumida" /><input name="referencia_normativa" placeholder="Norma relacionada" /><input name="data_referencia_normativa" type="date" />
+      <input name="quantidade_questoes_adicionadas" type="number" min="0" placeholder="Questões adicionadas" /><input name="quantidade_questoes_corrigidas" type="number" min="0" placeholder="Questões corrigidas" /><input name="quantidade_flashcards_revisados" type="number" min="0" placeholder="Flashcards revisados" />
+      <select name="visivel_aluno" defaultValue="true"><option value="true">Visível ao aluno</option><option value="false">Oculto do aluno</option></select><select name="visivel_catalogo" defaultValue="false"><option value="false">Oculto do catálogo</option><option value="true">Visível no catálogo</option></select><textarea name="observacao_interna" placeholder="Observação interna" />
+      <button className="admin-button primary" disabled={busy}>Publicar versão completa</button>
+    </form>
+    <DataTable headers={["Atualização", "Lei / material", "Importância", "Visibilidade", "Publicação", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small>{text(row.tipo)}</small></td><td>{text(relation(row,"leis").titulo)}<small>{text(relation(row,"materiais_leis").titulo)}</small></td><td>{text(row.importancia)}</td><td>Aluno: {row.visivel_aluno ? "sim" : "não"}<small>Catálogo: {row.visivel_catalogo ? "sim" : "não"}</small></td><td>{date(row.data_publicacao || row.created_at)}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy || (!row.visivel_aluno && !row.visivel_catalogo)} onClick={() => void hide(row)}>Ocultar</button></td></tr>)}</DataTable>
+  </>;
 }
 
 function AuditPanel({rows}:{rows:Row[]}){return <DataTable headers={["Data","Ator","Ação","Entidade","Detalhes"]}>{rows.map((row)=><tr key={text(row.id)}><td>{date(row.created_at)}</td><td>{text(row.ator_user_id)||"Sistema"}</td><td>{text(row.acao)}</td><td>{text(row.entidade)}<small>{text(row.entidade_id)}</small></td><td><details><summary>Ver alterações</summary><pre>{JSON.stringify({anterior:row.estado_anterior,posterior:row.estado_posterior,detalhes:row.detalhes},null,2)}</pre></details></td></tr>)}</DataTable>}

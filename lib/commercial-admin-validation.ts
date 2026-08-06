@@ -26,6 +26,12 @@ export const MATERIAL_TYPES = ["flashcards", "video", "pdf", "tutorial", "audio"
 export const MATERIAL_PROVIDERS = ["google_drive", "youtube", "externo", "supabase_storage"] as const;
 export const MATERIAL_ACTIONS = ["abrir", "baixar", "assistir"] as const;
 export const PRODUCT_TYPES = ["lei_avulsa", "combo", "edital", "assinatura", "outro"] as const;
+export const LAW_UPDATE_STATUSES = ["atualizado", "revisao_pendente", "desatualizado", "em_revisao"] as const;
+export const EDITORIAL_UPDATE_TYPES = [
+  "alteracao_legislativa", "nova_versao_flashcards", "novas_questoes", "correcao_questoes",
+  "correcao_flashcards", "melhoria_material", "outro",
+] as const;
+export const EDITORIAL_IMPORTANCE = ["informativa", "recomendada", "essencial"] as const;
 
 export type JsonObject = Record<string, unknown>;
 
@@ -70,6 +76,35 @@ export function nonNegativeInteger(value: unknown, label: string, fallback?: num
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new CommercialValidationError(`${label} deve ser um número inteiro maior ou igual a zero.`);
   }
+  return value;
+}
+
+export function optionalNonNegativeInteger(value: unknown, label: string): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  return nonNegativeInteger(value, label);
+}
+
+export function optionalIsoDate(value: unknown, label: string): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new CommercialValidationError(`${label} deve usar o formato AAAA-MM-DD.`);
+  }
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new CommercialValidationError(`${label} não é uma data válida.`);
+  }
+  return value;
+}
+
+export function optionalTimestamp(value: unknown, label: string): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(value)) {
+    throw new CommercialValidationError(`${label} possui data e hora inválidas.`);
+  }
+  if (Number.isNaN(Date.parse(value))) throw new CommercialValidationError(`${label} possui data e hora inválidas.`);
   return value;
 }
 
