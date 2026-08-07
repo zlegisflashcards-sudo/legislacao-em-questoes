@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { diagnosticoHottok, normalizarEventoHotmart, registrarEventoHotmart } from "./webhook";
 
@@ -10,6 +11,14 @@ const payload = {
 };
 
 describe("recepção de webhook Hotmart", () => {
+  it("alinha a tabela legada aos campos registrados pelo receptor", () => {
+    const migration = readFileSync("supabase/migrations/20260807190000_align_hotmart_eventos_webhook.sql", "utf8");
+    for (const field of ["identificador_evento", "codigo_transacao", "tipo_evento", "status_transacao", "email_comprador", "payload_bruto", "payload_normalizado", "recebido_em"]) {
+      expect(migration).toContain(`add column if not exists ${field}`);
+    }
+    expect(migration).toContain("hotmart_eventos_identificador_evento_unique_idx");
+  });
+
   it("expõe apenas presença e tamanhos no diagnóstico do Hottok", () => {
     expect(diagnosticoHottok("segredo-recebido", "segredo-configurado")).toEqual({
       hottokRecebido: true, hottokConfigurado: true, tamanhoRecebido: 16, tamanhoConfigurado: 19,
