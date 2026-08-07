@@ -65,7 +65,7 @@ export function AnkiStudyPageClient() {
       return;
     }
     setSetupStatus("configured");
-    setMessage("Anki configurado. Você pode rever os tutoriais quando quiser.");
+    setMessage("Aula concluída. Você pode rever os tutoriais quando quiser.");
   }
 
   function markPending() {
@@ -75,7 +75,7 @@ export function AnkiStudyPageClient() {
       return;
     }
     setSetupStatus("pending");
-    setMessage("O Anki voltou ao estado pendente neste navegador.");
+    setMessage("A aula voltou ao estado pendente.");
   }
 
   return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
@@ -93,14 +93,13 @@ export function AnkiStudyPageClient() {
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Baixando e configurando o Anki</h1>
             <p className="mt-4 max-w-4xl leading-relaxed text-slate-600">O Anki é o aplicativo de questões utilizado no nosso método de estudo. Nele, você responde às questões em formato de flashcards e informa o nível de dificuldade de cada resposta. Com base no seu desempenho, o próprio aplicativo organiza as revisões e reapresenta cada questão no momento adequado.</p>
             <p className="mt-3 font-bold text-slate-800">Configure o Anki antes de baixar e estudar seus materiais.</p>
-            <p className="mt-1 text-sm text-slate-500">A obrigatoriedade é pedagógica e não bloqueia outras áreas da sua conta.</p>
           </div>
         </div>
       </header>
 
       <section id="anki-platforms" aria-labelledby="anki-platforms-title" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <h2 id="anki-platforms-title" className="text-2xl font-black text-[#062a5f]">Escolha onde você usará o Anki</h2>
-        <p className="mt-2 text-slate-600">Selecione uma plataforma para consultar o tutorial correspondente.</p>
+        <p className="mt-2 text-slate-600">Você pode escolher apenas uma plataforma para fazer as questões ou usar todas sincronizadas.</p>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do Anki">
           {ANKI_PLATFORM_IDS.map((platformId) => {
             const selected = platformId === activePlatform;
@@ -110,6 +109,15 @@ export function AnkiStudyPageClient() {
 
         <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
           {embedUrl ? <iframe key={activePlatform} src={embedUrl} title={`Tutorial do Anki para ${tutorial.label}`} className="aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div key={activePlatform} role="status" aria-live="polite" className="flex aspect-video w-full flex-col items-center justify-center px-6 text-center text-slate-200"><p className="text-lg font-black">Tutorial em preparação</p><p className="mt-2 text-sm text-slate-400">O vídeo para {tutorial.label} será disponibilizado aqui.</p></div>}
+        </div>
+
+        <div className="mt-6 flex min-w-0 flex-col gap-4 rounded-2xl border border-blue-100 bg-blue-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h3 className="text-xl font-black text-[#062a5f]">{tutorial.label}</h3>
+            <p className="mt-1 text-slate-700">{tutorial.description}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-600">{tutorial.note}</p>
+          </div>
+          <a href={tutorial.officialUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{tutorial.buttonLabel}</a>
         </div>
       </section>
 
@@ -124,12 +132,12 @@ export function AnkiStudyPageClient() {
       </section>
 
       <section aria-labelledby="anki-status-title" className="rounded-3xl border border-blue-200 bg-[#eaf3ff] p-6 sm:p-8">
-        <p className="text-xs font-black uppercase tracking-wide text-blue-700">Estado neste navegador</p>
-        <h2 id="anki-status-title" className="mt-2 text-2xl font-black text-[#062a5f]">{setupStatus === "configured" ? "Anki configurado" : "Pendente"}</h2>
-        <p className="mt-3 max-w-2xl text-slate-700">Esta marcação organiza sua jornada de estudo. Ela não concede nem bloqueia acesso a leis, materiais ou outras áreas.</p>
+        <p className="text-xs font-black uppercase tracking-wide text-blue-700">Progresso da aula</p>
+        <h2 id="anki-status-title" className="mt-2 text-2xl font-black text-[#062a5f]">{setupStatus === "configured" ? "Aula concluída" : "Concluir esta aula"}</h2>
+        <p className="mt-3 max-w-2xl text-slate-700">{setupStatus === "configured" ? "Esta aula foi concluída. Você pode rever os tutoriais quando quiser." : "Quando terminar a configuração do Anki, marque esta aula como concluída."}</p>
         {message ? <p role="status" aria-live="polite" className="mt-4 rounded-xl bg-white px-4 py-3 font-bold text-slate-700">{message}</p> : null}
         <div className="mt-6 flex flex-wrap gap-3">
-          {setupStatus === "configured" ? <><a href="#anki-platforms" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Rever os tutoriais</a><button type="button" onClick={markPending} className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Marcar como não configurado</button></> : <button type="button" onClick={markConfigured} className="min-h-11 rounded-xl bg-emerald-600 px-5 py-3 font-black text-white transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">Marcar Anki como configurado</button>}
+          {setupStatus === "configured" ? <><a href="#anki-platforms" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Rever os tutoriais</a><button type="button" onClick={markPending} className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Marcar aula como não concluída</button></> : <button type="button" onClick={markConfigured} className="min-h-11 rounded-xl bg-emerald-600 px-5 py-3 font-black text-white transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">Marcar aula como concluída</button>}
         </div>
       </section>
     </div> : null}

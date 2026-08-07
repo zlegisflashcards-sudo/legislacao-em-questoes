@@ -33,6 +33,13 @@ describe("configuração dos tutoriais do Anki", () => {
     expect(Object.values(ANKI_PLATFORM_TUTORIALS).every((item) => item.videoUrl === null)).toBe(true);
   });
 
+  it("mantém os destinos oficiais e os textos de cada plataforma", () => {
+    expect(ANKI_PLATFORM_TUTORIALS.computador).toMatchObject({ description: "Windows, Mac e Linux", officialUrl: "https://apps.ankiweb.net/", buttonLabel: "Baixar o Anki", note: "Gratuito" });
+    expect(ANKI_PLATFORM_TUTORIALS.android).toMatchObject({ description: "AnkiDroid", officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki", buttonLabel: "Baixar na Google Play", note: "Gratuito e código aberto" });
+    expect(ANKI_PLATFORM_TUTORIALS.ios).toMatchObject({ description: "iPhone e iPad", officialUrl: "https://apps.apple.com/app/ankimobile-flashcards/id373493387", buttonLabel: "Baixar na App Store", note: "Aplicativo pago mantido pelo desenvolvedor principal" });
+    expect(ANKI_PLATFORM_TUTORIALS.navegador).toMatchObject({ description: "AnkiWeb", officialUrl: "https://ankiweb.net/", buttonLabel: "Acessar o AnkiWeb", note: "Gratuito — permite estudar e sincronizar baralhos direto da web" });
+  });
+
   it("aceita somente URLs HTTPS conhecidas do YouTube com ID válido", () => {
     expect(getAnkiYoutubeEmbedUrl("https://www.youtube.com/watch?v=abcdefghijk")).toBe("https://www.youtube-nocookie.com/embed/abcdefghijk");
     expect(getAnkiYoutubeEmbedUrl("https://youtu.be/abcdefghijk")).toBe("https://www.youtube-nocookie.com/embed/abcdefghijk");
@@ -101,12 +108,19 @@ describe("página autenticada do Anki", () => {
   });
 
   it("exibe cabeçalho, plataformas, vídeo ausente e instruções acessíveis", () => {
-    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Configure o Anki antes de baixar e estudar seus materiais.", "Tutorial em preparação", "Instalar ou acessar o Anki", "Criar e entrar na sua conta", "Ativar a sincronização", "Preparar o aplicativo para importar os materiais"]) expect(client).toContain(expected);
+    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Configure o Anki antes de baixar e estudar seus materiais.", "Você pode escolher apenas uma plataforma para fazer as questões ou usar todas sincronizadas.", "Tutorial em preparação", "Instalar ou acessar o Anki", "Criar e entrar na sua conta", "Ativar a sincronização", "Preparar o aplicativo para importar os materiais"]) expect(client).toContain(expected);
+    expect(client).not.toContain("A obrigatoriedade é pedagógica e não bloqueia outras áreas da sua conta.");
     expect(client).toContain("aria-pressed={selected}");
     expect(client).toContain("grid-cols-2");
     expect(client).toContain("sm:grid-cols-4");
     expect(client).toContain("aspect-video");
     expect(client).toContain("key={activePlatform}");
+    expect(client).toContain("href={tutorial.officialUrl}");
+    expect(client).toContain("{tutorial.description}");
+    expect(client).toContain("{tutorial.note}");
+    expect(client).toContain("{tutorial.buttonLabel}");
+    expect(client).toContain('target="_blank"');
+    expect(client).toContain('rel="noopener noreferrer"');
     expect(client).not.toContain("dangerouslySetInnerHTML");
     expect(client).not.toContain("autoplay");
   });
@@ -115,10 +129,13 @@ describe("página autenticada do Anki", () => {
     expect(client).toContain("markAnkiConfigured(window.localStorage, userId)");
     expect(client).toContain("clearAnkiConfigured(window.localStorage, userId)");
     expect(client).toContain(">Verificando</strong>");
-    expect(client).toContain("Marcar Anki como configurado");
-    expect(client).toContain("Anki configurado");
-    expect(client).toContain("Marcar como não configurado");
+    expect(client).toContain("Progresso da aula");
+    expect(client).toContain("Concluir esta aula");
+    expect(client).toContain("Marcar aula como concluída");
+    expect(client).toContain("Aula concluída");
+    expect(client).toContain("Marcar aula como não concluída");
     expect(client).toContain("Rever os tutoriais");
+    expect(client).not.toContain("onClick={() => markAnkiConfigured");
     for (const forbidden of ["fetch(", ".rpc(", "setProgress", "updateProgress", "window.location.href"] ) expect(client).not.toContain(forbidden);
   });
 

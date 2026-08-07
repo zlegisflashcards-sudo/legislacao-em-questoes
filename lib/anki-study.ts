@@ -2,14 +2,46 @@ export type AnkiPlatformId = "computador" | "android" | "ios" | "navegador";
 
 export type AnkiPlatformTutorial = {
   label: string;
+  description: string;
+  officialUrl: string;
+  buttonLabel: string;
+  note: string;
   videoUrl: string | null;
 };
 
 export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutorial> = {
-  computador: { label: "Computador", videoUrl: null },
-  android: { label: "Android", videoUrl: null },
-  ios: { label: "iOS", videoUrl: null },
-  navegador: { label: "Navegador", videoUrl: null },
+  computador: {
+    label: "Computador",
+    description: "Windows, Mac e Linux",
+    officialUrl: "https://apps.ankiweb.net/",
+    buttonLabel: "Baixar o Anki",
+    note: "Gratuito",
+    videoUrl: null,
+  },
+  android: {
+    label: "Android",
+    description: "AnkiDroid",
+    officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki",
+    buttonLabel: "Baixar na Google Play",
+    note: "Gratuito e código aberto",
+    videoUrl: null,
+  },
+  ios: {
+    label: "iOS",
+    description: "iPhone e iPad",
+    officialUrl: "https://apps.apple.com/app/ankimobile-flashcards/id373493387",
+    buttonLabel: "Baixar na App Store",
+    note: "Aplicativo pago mantido pelo desenvolvedor principal",
+    videoUrl: null,
+  },
+  navegador: {
+    label: "Navegador",
+    description: "AnkiWeb",
+    officialUrl: "https://ankiweb.net/",
+    buttonLabel: "Acessar o AnkiWeb",
+    note: "Gratuito — permite estudar e sincronizar baralhos direto da web",
+    videoUrl: null,
+  },
 };
 
 export const ANKI_PLATFORM_IDS = Object.keys(ANKI_PLATFORM_TUTORIALS) as AnkiPlatformId[];
