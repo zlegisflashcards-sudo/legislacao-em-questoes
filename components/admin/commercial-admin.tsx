@@ -142,10 +142,12 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
   const [busy, setBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportFilters, setExportFilters] = useState({ lei_id: "", produto_id: "" });
+  const [editing, setEditing] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   async function selectStudent(nextStudent: Row) {
-    setStudent(nextStudent); setAcquisitions([]); setReleases([]); setBusy(true); setError("");
+    setStudent(nextStudent); setAcquisitions([]); setReleases([]); setBusy(true); setError(""); setMessage(""); setEditing(false);
     const alunoId = encodeURIComponent(text(nextStudent.id));
     try {
       const [acquisitionData, releaseData] = await Promise.all([
@@ -193,6 +195,18 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
     } finally { setExportBusy(false); }
   }
 
+  async function saveStudent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!student) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const data = Object.fromEntries(new FormData(event.currentTarget));
+      const updated = await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "atualizar", id: student.id, data }) });
+      setStudent({ ...student, ...updated }); setEditing(false); setMessage("Dados do aluno atualizados.");
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar os dados do aluno."); }
+    finally { setBusy(false); }
+  }
+
   const productCount = new Set(acquisitions.map((row) => text(row.produto_id)).filter(Boolean)).size;
   const activeLawCount = new Set(releases.filter((row) => row.status === "ativo").map((row) => text(row.lei_id)).filter(Boolean)).size;
 
@@ -202,8 +216,10 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
     {!student ? <p>Pesquise um aluno por nome ou e-mail para consultar suas aquisições e leis liberadas.</p> : null}
     {busy ? <p className="commercial-loading">Carregando dados do aluno…</p> : null}
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
+    {message ? <div className="admin-alert success" role="status">{message}</div> : null}
     {student && !busy && !error ? <>
-      <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Telefone:</strong> {text(student.telefone) || "Não informado"}</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p><p><strong>UUID:</strong> <small>{text(student.id)}</small></p></div>
+      <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Telefone:</strong> {text(student.telefone) || "Não informado"}</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p><p><strong>UUID:</strong> <small>{text(student.id)}</small></p><button type="button" className="admin-button secondary" onClick={() => setEditing(!editing)}>{editing ? "Cancelar edição" : "Editar dados"}</button></div>
+      {editing ? <form className="commercial-card commercial-form-grid" onSubmit={saveStudent}><h3>Editar dados cadastrais</h3><input name="nome" defaultValue={text(student.nome)} placeholder="Nome" /><input name="email" type="email" defaultValue={text(student.email)} placeholder="E-mail" required /><input name="telefone" defaultValue={text(student.telefone)} placeholder="Telefone opcional" /><p><small>UUID e user_id são somente leitura e não são alterados.</small></p><button className="admin-button primary" disabled={busy}>Salvar dados</button></form> : null}
       <h3>Aquisições</h3>
       {acquisitions.length ? <DataTable headers={["Produto", "Origem", "Data", "Status", "Transação externa"]}>{acquisitions.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "produtos").nome) || "Produto não informado"}</td><td>{text(row.origem)}</td><td>{date(row.adquirida_em)}</td><td>{text(row.status_acesso)}</td><td>{text(row.identificador_externo || row.hotmart_transaction_id) || "—"}</td></tr>)}</DataTable> : <p>Nenhuma aquisição encontrada para este aluno.</p>}
       <h3>Leis liberadas</h3>

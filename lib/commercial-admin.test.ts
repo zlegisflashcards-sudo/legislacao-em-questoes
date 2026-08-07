@@ -66,7 +66,7 @@ describe("fronteira administrativa comercial", () => {
       expect(readFileSync(`app/api/admin/comercial/${resource}/route.ts`, "utf8")).toContain("handleCommercialGet");
     }
     expect(readFileSync("app/api/admin/comercial/auditoria/route.ts", "utf8")).not.toContain("handleCommercialMutation");
-    expect(readFileSync("app/api/admin/comercial/alunos/route.ts", "utf8")).not.toContain("handleCommercialMutation");
+    expect(readFileSync("app/api/admin/comercial/alunos/route.ts", "utf8")).toContain("handleCommercialMutation");
   });
 
   it("mantém histórico editorial separado da auditoria técnica", () => {

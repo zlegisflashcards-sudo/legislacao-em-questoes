@@ -375,6 +375,18 @@ function validateProductData(raw: unknown, update = false) {
   return result;
 }
 
+function validateStudentData(raw: unknown) {
+  const data = asObject(raw);
+  rejectUnknownKeys(data, ["nome", "email", "telefone"]);
+  const email = requiredString(data.email, "E-mail", 320).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CommercialValidationError("E-mail inválido.");
+  return {
+    nome: optionalString(data.nome, "Nome", 300) ?? null,
+    email,
+    telefone: optionalString(data.telefone, "Telefone", 80) ?? null,
+  };
+}
+
 type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; phone: string | null; purchasedAt: string; status: "ativo" | "cancelado" | "reembolsado" };
 
 function parseHistoricalTimestamp(value: string) {
@@ -482,6 +494,28 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const body = await readCommercialBody(request);
   const action = requiredString(body.action, "Ação", 40);
   rejectUnknownKeys(body, ["action", "id", "data", "lei_ids"]);
+
+  if (resource === "alunos" && action === "atualizar") {
+    const alunoId = uuid(body.id, "Aluno");
+    const data = validateStudentData(body.data);
+    const supabase = getSupabaseServerClient();
+    const current = await supabase.from("alunos").select("id,nome,email,telefone").eq("id", alunoId).single();
+    if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
+    const duplicate = await supabase.from("alunos").select("id").ilike("email", data.email).neq("id", alunoId).limit(1);
+    if (duplicate.error) throw new CommercialHttpError(500, "Não foi possível validar os dados do aluno.");
+    if (duplicate.data?.length) throw new CommercialHttpError(409, "Já existe outro aluno com este e-mail.");
+    const updated = await supabase.from("alunos").update(data).eq("id", alunoId).select("id,user_id,nome,email,telefone").single();
+    if (updated.error || !updated.data) {
+      if (updated.error?.code === "23505") throw new CommercialHttpError(409, "Já existe outro aluno com este e-mail.");
+      throw new CommercialHttpError(500, "Não foi possível atualizar os dados do aluno.");
+    }
+    const audit = await supabase.from("auditoria_administrativa").insert({
+      ator_user_id: actor, acao: "atualizar", entidade: "aluno", entidade_id: alunoId,
+      estado_anterior: current.data, estado_posterior: updated.data,
+    });
+    if (audit.error) throw new CommercialHttpError(500, "Não foi possível registrar a atualização do aluno.");
+    return updated.data;
+  }
 
   if (resource === "leis") {
     if (action === "criar") {
