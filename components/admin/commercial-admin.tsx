@@ -325,7 +325,7 @@ function HistoricalHotmartImport() {
     const field = (names: string[]) => headers.findIndex((header) => names.includes(header));
     const transaction = field(["codigo da transacao", "transacao"]);
     const product = field(["codigo do produto"]);
-    const email = field(["e-mail do(a) comprador(a)", "e-mail", "email"]);
+    const email = field(["e-mail do(a) comprador(a)", "email do(a) comprador(a)", "e-mail", "email"]);
     const name = field(["comprador(a)", "nome"]);
     const dateValue = field(["data da transacao", "data da venda"]);
     const status = field(["status da transacao", "status"]);
