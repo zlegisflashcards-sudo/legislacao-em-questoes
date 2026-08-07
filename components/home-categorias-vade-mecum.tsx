@@ -116,14 +116,14 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
           <h3 className="text-xl font-extrabold leading-snug text-[#0868ed] sm:text-2xl">
             {produto.nome}
           </h3>
-          <div className="grid gap-2 text-sm font-bold text-[#0868ed] sm:grid-cols-3">
+          <div className="space-y-3 text-sm font-bold text-[#062a5f]">
             {[
               ["✓", "Acesso vitalício"],
               ["✓", "Atualizado"],
               ["✓", "Ilimitado"],
             ].map(([indicador, beneficio]) => (
-              <span key={beneficio} className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#0868ed] text-xs text-white">{indicador}</span>
+              <span key={beneficio} className="flex items-center gap-2">
+                <span className="text-base font-black text-[#0868ed]">{indicador}</span>
                 {beneficio}
               </span>
             ))}
