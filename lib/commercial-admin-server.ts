@@ -122,7 +122,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
     const students = [...new Map(matches.flatMap((result) => result.data ?? []).map((row) => [String(row.id), row])).values()]
       .sort((left, right) => String(left.nome ?? left.email).localeCompare(String(right.nome ?? right.email), "pt-BR"))
       .slice(0, studentLimit);
-    const userIds = students.map((row) => String(row.user_id)).filter(Boolean);
+    const userIds = students.map((row) => row.user_id).filter((id): id is string => typeof id === "string" && id.length > 0);
     const profiles = userIds.length
       ? await supabase.from("perfis_publicos").select("id,nome_publico").in("id", userIds)
       : { data: [], error: null };
