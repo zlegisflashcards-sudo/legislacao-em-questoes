@@ -314,7 +314,9 @@ function HistoricalHotmartImport() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setSummary(null);
-    const file = new FormData(event.currentTarget).get("csv");
+    const formData = new FormData(event.currentTarget);
+    const dryRun = formData.get("mode") === "preview";
+    const file = formData.get("csv");
     if (!(file instanceof File) || !file.size) return setError("Selecione um arquivo CSV.");
     if (file.size > 4 * 1024 * 1024) return setError("O CSV deve ter no máximo 4 MB.");
     const rows = parseCsv(await file.text());
@@ -331,10 +333,10 @@ function HistoricalHotmartImport() {
     const sales = rows.map((row) => ({ transactionId: row[transaction], productCode: row[product], email: row[email], name: name < 0 ? null : row[name], purchasedAt: row[dateValue], status: row[status] }));
     setBusy(true);
     try {
-      const totals = { processed: 0, imported: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };
+      const totals = { preview: dryRun, processed: 0, imported: 0, ready: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };
       for (let index = 0; index < sales.length; index += 50) {
-        const data = await requestJson("/api/admin/comercial/aquisicoes", { method: "POST", body: JSON.stringify({ action: "importar_hotmart_historico", data: { vendas: sales.slice(index, index + 50) } }) });
-        totals.processed += Number(data.processed) || 0; totals.imported += Number(data.imported) || 0; totals.studentsCreated += Number(data.studentsCreated) || 0; totals.studentsExisting += Number(data.studentsExisting) || 0; totals.duplicates += Number(data.duplicates) || 0; totals.errors.push(...(Array.isArray(data.errors) ? data.errors : []));
+        const data = await requestJson("/api/admin/comercial/aquisicoes", { method: "POST", body: JSON.stringify({ action: "importar_hotmart_historico", data: { vendas: sales.slice(index, index + 50), dry_run: dryRun } }) });
+        totals.processed += Number(data.processed) || 0; totals.imported += Number(data.imported) || 0; totals.ready += Number(data.ready) || 0; totals.studentsCreated += Number(data.studentsCreated) || 0; totals.studentsExisting += Number(data.studentsExisting) || 0; totals.duplicates += Number(data.duplicates) || 0; totals.errors.push(...(Array.isArray(data.errors) ? data.errors : []));
       }
       setSummary(totals);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível importar o CSV."); }
@@ -345,9 +347,9 @@ function HistoricalHotmartImport() {
     <h2>Importar vendas históricas da Hotmart</h2>
     <p>Envie o Relatório de Vendas CSV da Hotmart. Cabeçalhos aceitos: <strong>Código da transação</strong> (ou Transação), <strong>Código do produto</strong>, <strong>E-mail do(a) Comprador(a)</strong> (ou E-mail), <strong>Data da transação</strong> (ou Data da venda), <strong>Status da transação</strong> (ou Status) e, opcionalmente, <strong>Comprador(a)</strong> (ou Nome).</p>
     <input name="csv" type="file" accept=".csv,text/csv" required />
-    <button className="admin-button primary" disabled={busy}>{busy ? "Importando…" : "Importar CSV"}</button>
+    <div className="commercial-form-actions"><button name="mode" value="preview" className="admin-button secondary" disabled={busy}>Pré-visualizar</button><button name="mode" value="import" className="admin-button primary" disabled={busy}>{busy ? "Processando…" : "Importar CSV"}</button></div>
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
-    {summary ? <div className="admin-alert success" role="status"><strong>Importação concluída.</strong><small>Processadas: {text(summary.processed)} · Importadas: {text(summary.imported)} · Alunos criados: {text(summary.studentsCreated)} · Alunos existentes: {text(summary.studentsExisting)} · Duplicidades: {text(summary.duplicates)}</small>{Array.isArray(summary.errors) && summary.errors.length ? <details><summary>{summary.errors.length} erro(s)</summary><ul>{summary.errors.map((item, index) => <li key={index}>{text(item)}</li>)}</ul></details> : null}</div> : null}
+    {summary ? <div className="admin-alert success" role="status"><strong>{summary.preview ? "Pré-visualização concluída. Nenhum dado foi gravado." : "Importação concluída."}</strong><small>Processadas: {text(summary.processed)} · {summary.preview ? "Prontas para importar" : "Importadas"}: {text(summary.preview ? summary.ready : summary.imported)} · Alunos {summary.preview ? "a criar" : "criados"}: {text(summary.studentsCreated)} · Alunos existentes: {text(summary.studentsExisting)} · Duplicidades: {text(summary.duplicates)}</small>{Array.isArray(summary.errors) && summary.errors.length ? <details><summary>{summary.errors.length} erro(s)</summary><ul>{summary.errors.map((item, index) => <li key={index}>{text(item)}</li>)}</ul></details> : null}</div> : null}
   </form>;
 }
 

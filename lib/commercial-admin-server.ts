@@ -400,10 +400,10 @@ function historicalSale(raw: unknown): HistoricalSale {
   };
 }
 
-async function importHistoricalHotmartSales(actor: string, rawRows: unknown) {
+async function importHistoricalHotmartSales(actor: string, rawRows: unknown, dryRun = false) {
   if (!Array.isArray(rawRows) || !rawRows.length || rawRows.length > 50) throw new CommercialValidationError("Informe de 1 a 50 vendas por lote.");
   const supabase = getSupabaseServerClient();
-  const summary = { processed: rawRows.length, imported: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };
+  const summary = { processed: rawRows.length, imported: 0, ready: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };
   for (let index = 0; index < rawRows.length; index += 1) {
     try {
       const sale = historicalSale(rawRows[index]);
@@ -419,14 +419,17 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown) {
       let studentId = existingStudent.data?.id as string | undefined;
       if (studentId) summary.studentsExisting += 1;
       else {
-        const createdStudent = await supabase.from("alunos").insert({ nome: sale.name, email: sale.email }).select("id").single();
-        if (createdStudent.error || !createdStudent.data) throw createdStudent.error ?? new Error("Não foi possível criar o aluno.");
-        studentId = createdStudent.data.id as string;
         summary.studentsCreated += 1;
+        if (!dryRun) {
+          const createdStudent = await supabase.from("alunos").insert({ nome: sale.name, email: sale.email }).select("id").single();
+          if (createdStudent.error || !createdStudent.data) throw createdStudent.error ?? new Error("Não foi possível criar o aluno.");
+          studentId = createdStudent.data.id as string;
+        }
       }
 
       if (sale.status === "ativo") {
         if (!product.data.ativo) throw new Error("Produto interno está inativo.");
+        if (dryRun) { summary.ready += 1; continue; }
         const created = await rpc("admin_registrar_aquisicao", {
           p_ator_user_id: actor, p_aluno_id: studentId, p_produto_id: product.data.id,
           p_origem: "hotmart", p_identificador_externo: sale.transactionId,
@@ -438,6 +441,7 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown) {
           if (updated.error) throw updated.error;
         }
       } else {
+        if (dryRun) { summary.ready += 1; continue; }
         const status = sale.status === "cancelado" ? "cancelada" : "reembolsada";
         const timestampField = sale.status === "cancelado" ? "cancelada_em" : "reembolsada_em";
         const inserted = await supabase.from("compras").insert({
@@ -534,8 +538,8 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "aquisicoes") {
     if (action === "importar_hotmart_historico") {
       const data = asObject(body.data);
-      rejectUnknownKeys(data, ["vendas"]);
-      return importHistoricalHotmartSales(actor, data.vendas);
+      rejectUnknownKeys(data, ["vendas", "dry_run"]);
+      return importHistoricalHotmartSales(actor, data.vendas, data.dry_run === true);
     }
     const purchaseId = action === "registrar" ? null : uuid(body.id, "Aquisição");
     if (action === "registrar") {
