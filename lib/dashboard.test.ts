@@ -24,28 +24,32 @@ describe("dashboard do estudante", () => {
     expect(parseDailyReviewRpc([])).toEqual({ dataRevisao: null, hojeConcluida: false, streakAtual: 0 });
   });
 
-  it("altera a orientação conforme o registro real", () => {
+  it("mantém a orientação disponível para os fluxos que ainda a utilizam", () => {
     expect(dailyGuidance(false)).toBe("Faça primeiro sua revisão diária antes de avançar para um novo conteúdo.");
     expect(dailyGuidance(true)).toBe("Revisão concluída. Agora você pode avançar no seu edital.");
   });
 
-  it("mantém somente os três blocos e não apresenta métricas externas", () => {
+  it("mostra a saudação e o acesso real às leis adquiridas", () => {
     const source = readFileSync("components/dashboard-client.tsx", "utf8");
-    expect(source.match(/<section /g)).toHaveLength(3);
-    expect(source).toContain("Edital em estudo");
-    expect(source).toContain("Sequência de estudos");
-    expect(source).toContain("Orientação do dia");
-    for (const forbidden of ["questões respondidas", "acertos", "erros", "tempo de estudo", "flashcards estudados"]) {
-      expect(source.toLowerCase()).not.toContain(forbidden);
-    }
+    expect(source).toContain("`Olá, ${nomePublico}`");
+    expect(source).toContain('href="/minhas-leis"');
+    expect(source).toContain("Acessar minhas leis adquiridas");
   });
 
-  it("oferece estado vazio e suporta edital ativo sem detalhar leis", () => {
+  it("apresenta somente um spoiler discreto dos recursos futuros", () => {
     const source = readFileSync("components/dashboard-client.tsx", "utf8");
-    expect(source).toContain("Você ainda não selecionou um edital");
-    expect(source).toContain("Abrir meu edital");
-    expect(source).toContain("editalAtivo.progresso === null");
-    expect(source).not.toContain("lista de leis");
+    const spoiler = source.slice(source.indexOf('<aside aria-labelledby="dashboard-coming-soon-title"'), source.indexOf("</aside>") + "</aside>".length);
+    expect(spoiler).toContain("Em breve");
+    expect(spoiler).toContain("Seu painel de estudos ficará ainda mais completo, com edital personalizado, progresso, sequência de revisões e acompanhamento da sua evolução.");
+    expect(spoiler).not.toContain("<button");
+    expect(spoiler).not.toContain("<Link");
+  });
+
+  it("não exibe métricas, progresso ou edital simulados no painel provisório", () => {
+    const source = readFileSync("components/dashboard-client.tsx", "utf8");
+    for (const forbidden of ["streakAtual", "hojeConcluida", "editalAtivo", "progressbar", "Marcar revisão", "Abrir meu edital", "Sequência de estudos"]) {
+      expect(source).not.toContain(forbidden);
+    }
   });
 
   it("protege a rota no cliente e preserva o retorno", () => {

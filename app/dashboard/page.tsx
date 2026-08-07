@@ -3,7 +3,7 @@ import { DashboardClient } from "@/components/dashboard-client";
 
 export const metadata: Metadata = {
   title: "Meu painel | Legislação para Concursos",
-  description: "Organize seu edital e registre manualmente sua revisão diária.",
+  description: "Acesse suas leis adquiridas e acompanhe as novidades da sua área de estudos.",
 };
 
 export default function DashboardPage() {
