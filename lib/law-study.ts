@@ -61,6 +61,16 @@ export function nextLawStudyProgress(current: LawStudyProgress, field: "inStudy"
   return { inStudy: checked, questionsFinished: checked ? current.questionsFinished : false };
 }
 
+export function lawStudyProgressMessage(progress: LawStudyProgress) {
+  if (progress.questionsFinished) {
+    return "Primeiro ciclo concluído! Agora mantenha em dia as revisões programadas que aparecerão no seu App de Questões.";
+  }
+  if (progress.inStudy) {
+    return "Continue avançando nas questões desta lei até concluir o primeiro ciclo de estudo.";
+  }
+  return null;
+}
+
 export function lawStudyShortName(title: string, shortName: string | null) {
   const normalized = shortName?.trim();
   if (!normalized || normalized.toLocaleLowerCase("pt-BR") === title.trim().toLocaleLowerCase("pt-BR")) return null;

@@ -4,6 +4,8 @@ export const siteConfig = {
       "https://docs.google.com/forms/d/e/1FAIpQLSdutq34E_ivYgMwMLKmqb7cbbx4uakxpZja0ke0FlwJIUJv2w/viewform?usp=preview",
     minhasLeis:
       "https://hotmart.com/pt-br/club/legislacao-em-flashcard",
+    youtubeMembros:
+      "https://www.youtube.com/channel/UCwmlH-EdEfVYxmhLe-TsFiA/join",
     vadeMecum: "/vade-mecum",
     constituicaoGratis: {
       legislacaoVideo: "",

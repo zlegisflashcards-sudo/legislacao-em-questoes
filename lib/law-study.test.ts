@@ -64,13 +64,14 @@ describe("autorização e exposição segura", () => {
 });
 
 describe("interface de estudo", () => {
-  it("cria a rota autenticada e ativa Abrir estudo nos cards", () => {
+  it("cria a rota autenticada e ativa Baixar questões nos cards", () => {
     expect(page).toContain("<LawStudyPageClient slug={slug} />");
     expect(client).toContain("supabase.auth.getSession()");
     expect(client).toContain("/conta?modo=login&retorno=");
-    expect(cards).toContain('href={`/estudar/lei/${encodeURIComponent(law.slug)}`}');
-    expect(cards).toContain(">Abrir estudo</Link>");
-    expect(cards).not.toContain("Abrir estudo — em breve");
+    expect(cards).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    expect(cards).toContain("href={lawHref}");
+    expect(cards).toContain(">Baixar questões</Link>");
+    expect(cards).not.toContain("Baixar questões — em breve");
   });
 
   it("reutiliza as abas e não adiciona botão Voltar", () => {

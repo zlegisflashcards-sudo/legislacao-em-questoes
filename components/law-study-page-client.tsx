@@ -9,6 +9,7 @@ import {
   lawHistoryDate,
   lawMaterialActionLabel,
   lawMaterialIcon,
+  lawStudyProgressMessage,
   nextLawStudyProgress,
   type LawStudyData,
   type LawStudyHistoryItem,
@@ -183,6 +184,7 @@ function StudyGuidance() {
 function LawProgress({ slug, progress, onSaved }: { slug: string; progress: LawStudyData["progress"]; onSaved: (progress: LawStudyData["progress"]) => void }) {
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const progressMessage = lawStudyProgressMessage(progress);
 
   async function save(next: LawStudyData["progress"]) {
     setSaving(true);
@@ -227,7 +229,7 @@ function LawProgress({ slug, progress, onSaved }: { slug: string; progress: LawS
         <span>Finalizei todas as questões da lei</span>
       </label>
     </div>
-    <p className="mt-3 text-sm text-slate-600">Marcar a conclusão também marca “Lei em estudo”. Ao desmarcar “Lei em estudo”, a conclusão será desmarcada para manter o progresso coerente.</p>
+    {progressMessage ? <p aria-live="polite" className="mt-3 text-sm font-semibold leading-6 text-blue-800">{progressMessage}</p> : null}
     {saving ? <p role="status" className="mt-3 text-sm font-bold text-blue-700">Salvando progresso…</p> : null}
     {errorMessage ? <p role="alert" className="mt-3 text-sm font-bold text-red-700">{errorMessage}</p> : null}
   </section>;

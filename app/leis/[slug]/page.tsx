@@ -4,6 +4,7 @@ import { LegisBotCommentsIndex } from "@/components/legisbot-comments-index";
 import { LegiscastPlaylistPlayer } from "@/components/legiscast-playlist-player";
 import { LegislacaoEmbed } from "@/components/legislacao-content-tabs";
 import { buscarComentariosPublicosPorSlug } from "@/lib/legisbot/comentarios-publicos";
+import { siteConfig } from "@/lib/site-config";
 import {
   encontrarLegislacaoPorSlug,
   filtrarLegislacoesAtivas,
@@ -100,6 +101,38 @@ export default async function CentralLegislacaoPage({
               </p>
             </div>
           ) : null}
+
+          <aside
+            aria-label="Acessos adicionais"
+            className="flex flex-col gap-4 rounded-xl border border-blue-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <p className="text-sm font-black text-[#062a5f]">
+                Amplie seus estudos
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Conheça os benefícios do clube de membros do LegisCast.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <a
+                href={siteConfig.links.youtubeMembros}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-700 px-4 text-center text-sm font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+              >
+                Seja membro do canal
+              </a>
+              <a
+                href={siteConfig.links.youtubeMembros}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-blue-200 px-4 text-center text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+              >
+                Acesso total aos LegisCasts
+              </a>
+            </div>
+          </aside>
         </header>
 
         {legiscastUrl ? (

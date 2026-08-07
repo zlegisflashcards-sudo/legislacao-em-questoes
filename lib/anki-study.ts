@@ -62,6 +62,10 @@ export function readAnkiConfigured(storage: AnkiLocalStorage, userId: string) {
   }
 }
 
+export function shouldPromptBeforeLawStudy(ankiConfigured: boolean) {
+  return !ankiConfigured;
+}
+
 export function markAnkiConfigured(storage: AnkiLocalStorage, userId: string) {
   try {
     storage.setItem(ankiSetupStorageKey(userId), "true");

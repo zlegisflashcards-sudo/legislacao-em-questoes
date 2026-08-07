@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { nextLawStudyProgress, type LawStudyProgress } from "./law-study";
+import { lawStudyProgressMessage, nextLawStudyProgress, type LawStudyProgress } from "./law-study";
 
 const migration = readFileSync("supabase/migrations/20260807002500_create_student_law_progress.sql", "utf8");
 const server = readFileSync("lib/law-study-server.ts", "utf8");
@@ -25,6 +25,24 @@ describe("consistência do progresso da lei", () => {
 
   it("desmarcar Lei em estudo também desmarca a conclusão", () => {
     expect(nextLawStudyProgress({ inStudy: true, questionsFinished: true }, "inStudy", false)).toEqual({ inStudy: false, questionsFinished: false });
+  });
+});
+
+describe("mensagem dinâmica do progresso", () => {
+  it("não mostra mensagem adicional antes de iniciar", () => {
+    expect(lawStudyProgressMessage({ inStudy: false, questionsFinished: false })).toBeNull();
+  });
+
+  it("orienta a continuar quando a lei está em estudo", () => {
+    expect(lawStudyProgressMessage({ inStudy: true, questionsFinished: false })).toBe(
+      "Continue avançando nas questões desta lei até concluir o primeiro ciclo de estudo.",
+    );
+  });
+
+  it("prioriza a conclusão quando ambas as marcações estão ativas", () => {
+    expect(lawStudyProgressMessage({ inStudy: true, questionsFinished: true })).toBe(
+      "Primeiro ciclo concluído! Agora mantenha em dia as revisões programadas que aparecerão no seu App de Questões.",
+    );
   });
 });
 

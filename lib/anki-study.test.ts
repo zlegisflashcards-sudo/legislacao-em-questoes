@@ -9,6 +9,7 @@ import {
   getAnkiYoutubeEmbedUrl,
   markAnkiConfigured,
   readAnkiConfigured,
+  shouldPromptBeforeLawStudy,
 } from "./anki-study";
 
 const page = readFileSync("app/estudar/anki/page.tsx", "utf8");
@@ -87,6 +88,11 @@ describe("estado local do Anki", () => {
     expect(readAnkiConfigured(failingStorage, userId)).toBe(false);
     expect(markAnkiConfigured(failingStorage, userId)).toBe(false);
     expect(clearAnkiConfigured(failingStorage, userId)).toBe(false);
+  });
+
+  it("solicita configuração antes da lei somente enquanto o Anki estiver pendente", () => {
+    expect(shouldPromptBeforeLawStudy(false)).toBe(true);
+    expect(shouldPromptBeforeLawStudy(true)).toBe(false);
   });
 });
 

@@ -7,7 +7,8 @@ const server = readFileSync("lib/student-laws-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/minhas-leis/route.ts", "utf8");
 const client = readFileSync("components/student-laws-client.tsx", "utf8");
 const ankiModule = client.slice(client.indexOf("function AnkiModule"), client.indexOf("function StudentLawCard"));
-const card = client.slice(client.indexOf("function StudentLawCard"), client.indexOf("function EmptyState"));
+const card = client.slice(client.indexOf("function StudentLawCard"), client.indexOf("function AnkiRequiredModal"));
+const ankiPrompt = client.slice(client.indexOf("function AnkiRequiredModal"), client.indexOf("function EmptyState"));
 const page = readFileSync("app/minhas-leis/page.tsx", "utf8");
 
 const laws: StudentLaw[] = [
@@ -122,8 +123,8 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("mantém o card obrigatório do Anki em primeiro lugar e com a estrutura dos cards de lei", () => {
-    expect(client.indexOf("<AnkiModule userId={userId} />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
-    const sharedCardClass = "flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center";
+    expect(client.indexOf("<AnkiModule status={ankiStatus} />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
+    const sharedCardClass = "grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex sm:flex-row sm:items-center sm:gap-5";
     expect(ankiModule).toContain(sharedCardClass);
     expect(card).toContain(sharedCardClass);
     expect(ankiModule).toContain("Passo obrigatório");
@@ -135,16 +136,31 @@ describe("interface das leis adquiridas", () => {
     expect(ankiModule).toContain('alt="Ícone do Anki"');
     expect(ankiModule).toContain("width={80}");
     expect(ankiModule).toContain("height={80}");
-    expect(ankiModule).toContain('sizes="80px"');
-    expect(ankiModule).toContain("flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50");
-    expect(card).toContain("flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-3xl");
+    expect(ankiModule).toContain('sizes="(max-width: 639px) 64px, 80px"');
+    expect(ankiModule).toContain("flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50 sm:h-20 sm:w-20");
+    expect(card).toContain("flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-2xl sm:h-20 sm:w-20 sm:text-3xl");
     expect(ankiModule.match(/\/icons\/anki\.png/g)).toHaveLength(1);
     expect(ankiModule).not.toContain("⚖️");
   });
 
+  it("organiza ícone e título lado a lado apenas no mobile", () => {
+    for (const section of [ankiModule, card]) {
+      expect(section).toContain("grid-cols-[4rem_minmax(0,1fr)]");
+      expect(section).toContain("items-start");
+      expect(section).toContain("contents sm:block sm:min-w-0 sm:flex-1");
+      expect(section).toContain("col-span-2");
+      expect(section).toContain("w-full");
+      expect(section).toContain("sm:w-auto");
+      expect(section).toContain("sm:flex sm:flex-row sm:items-center");
+    }
+    expect(card).toContain("break-words text-xl");
+    expect(card).toContain("h-16 w-16");
+    expect(card).toContain("sm:h-28 sm:w-40 sm:bg-cover");
+  });
+
   it("lê o estado existente sem permitir que o card marque o Anki como configurado", () => {
     expect(client).toContain('type AnkiSetupStatus = "loading" | "pending" | "configured"');
-    expect(ankiModule).toContain("readAnkiConfigured(window.localStorage, userId)");
+    expect(client).toContain("readAnkiConfigured(window.localStorage, userId)");
     expect(ankiModule).toContain("Pendente");
     expect(ankiModule).toContain("Anki configurado");
     expect(ankiModule).not.toContain("window.localStorage.setItem");
@@ -153,7 +169,7 @@ describe("interface das leis adquiridas", () => {
     expect(ankiModule).not.toContain("Marcar como configurado");
   });
 
-  it("abre o tutorial sem marcar configuração nem condicionar as leis", () => {
+  it("abre o tutorial sem marcar configuração nem alterar liberações", () => {
     expect(ankiModule).toContain('href="/estudar/anki"');
     expect(ankiModule).toContain("Configurar o App de Questões");
     expect(ankiModule).toContain("Reabrir tutorial");
@@ -170,8 +186,9 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "law.codigo", "studentLawShortNameForDisplay", "shortName", "law.totalFlashcards > 0", "Abrir estudo"]) expect(card).toContain(expected);
-    expect(card).toContain('href={`/estudar/lei/${encodeURIComponent(law.slug)}`}');
+    for (const expected of ["law.titulo", "law.codigo", "studentLawShortNameForDisplay", "shortName", "law.totalFlashcards > 0", "Baixar questões"]) expect(card).toContain(expected);
+    expect(card).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    expect(card).toContain("href={lawHref}");
     expect(card.indexOf("law.titulo")).toBeLessThan(card.indexOf("{shortName}"));
     for (const forbidden of ["law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado"]) {
       expect(card).not.toContain(forbidden);
@@ -183,6 +200,36 @@ describe("interface das leis adquiridas", () => {
     expect(card).not.toContain("historico_atualizacoes_leis");
   });
 
+  it("abre o aviso com Anki pendente e navega direto quando concluído", () => {
+    expect(card).toContain("shouldPromptBeforeLawStudy(ankiConfigured)");
+    expect(card).toContain("if (!shouldPromptBeforeLawStudy(ankiConfigured)) return");
+    expect(card).toContain("event.preventDefault()");
+    expect(card).toContain("onAnkiRequired(lawHref)");
+    expect(client).toContain('ankiConfigured={ankiStatus === "configured"}');
+    expect(client).toContain("pendingLawHref ? <AnkiRequiredModal");
+  });
+
+  it("preserva os destinos de configuração e da lei escolhida sem escrever no estado do Anki", () => {
+    expect(ankiPrompt).toContain('href="/estudar/anki"');
+    expect(ankiPrompt).toContain("Configurar o App de Questões");
+    expect(ankiPrompt).toContain("href={lawHref}");
+    expect(ankiPrompt).toContain("Continuar para esta lei");
+    expect(client).not.toContain("markAnkiConfigured");
+    expect(client).not.toContain("window.localStorage.setItem");
+  });
+
+  it("permite fechar sem navegar e mantém o foco preso no aviso", () => {
+    expect(ankiPrompt).toContain('role="dialog"');
+    expect(ankiPrompt).toContain('aria-modal="true"');
+    expect(ankiPrompt).toContain('aria-label="Fechar aviso"');
+    expect(ankiPrompt).toContain('event.key === "Escape"');
+    expect(ankiPrompt).toContain('event.key !== "Tab"');
+    expect(ankiPrompt).toContain("primaryActionRef.current?.focus()");
+    expect(ankiPrompt).toContain("previousFocus?.focus()");
+    expect(ankiPrompt).toContain("onMouseDown={onClose}");
+    expect(client).toContain("const closeAnkiPrompt = useCallback(() => setPendingLawHref(null), [])");
+  });
+
   it("oferece carregamento, erro, vazio, resultado e busca sem resultado", () => {
     for (const text of ["Carregando suas leis", "Não foi possível carregar suas leis", "Você ainda não possui leis liberadas", "Nenhuma lei encontrada", "lei liberada"]) {
       expect(client).toContain(text);
@@ -190,7 +237,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("ativa somente a rota segura de estudo e não simula edital, progresso ou métricas", () => {
-    expect(client).toContain('href={`/estudar/lei/${encodeURIComponent(law.slug)}`}');
+    expect(client).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
     expect(client).toContain("Montar meu edital — em breve");
     expect(client.match(/disabled/g)?.length).toBeGreaterThanOrEqual(1);
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
