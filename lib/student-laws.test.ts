@@ -127,7 +127,7 @@ describe("interface das leis adquiridas", () => {
     expect(ankiModule).toContain(sharedCardClass);
     expect(card).toContain(sharedCardClass);
     expect(ankiModule).toContain("Passo obrigatório");
-    expect(ankiModule).toContain("Baixando e configurando o Anki");
+    expect(ankiModule).toContain("Baixando e configurando o App de questões");
     expect(ankiModule).toContain("O Anki é o aplicativo de questões utilizado no nosso método de estudo. Nele, você responde às questões em formato de flashcards e informa o nível de dificuldade de cada resposta. Com base no seu desempenho, o próprio aplicativo organiza as revisões e reapresenta cada questão no momento adequado.");
     expect(ankiModule).toContain("<AnkiIcon />");
     expect(client).toContain('import Image from "next/image"');

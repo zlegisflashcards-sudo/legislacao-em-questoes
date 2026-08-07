@@ -23,7 +23,7 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
     description: "AnkiDroid",
     officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki",
     buttonLabel: "Baixar na Google Play",
-    note: "Gratuito e código aberto",
+    note: "Gratuito",
     videoUrl: null,
   },
   ios: {

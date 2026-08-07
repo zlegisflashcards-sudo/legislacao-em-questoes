@@ -65,7 +65,7 @@ export function AnkiStudyPageClient() {
       return;
     }
     setSetupStatus("configured");
-    setMessage("Aula concluída. Você pode rever os tutoriais quando quiser.");
+    setMessage("");
   }
 
   function markPending() {
@@ -75,7 +75,7 @@ export function AnkiStudyPageClient() {
       return;
     }
     setSetupStatus("pending");
-    setMessage("A aula voltou ao estado pendente.");
+    setMessage("");
   }
 
   return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
@@ -132,13 +132,11 @@ export function AnkiStudyPageClient() {
       </section>
 
       <section aria-labelledby="anki-status-title" className="rounded-3xl border border-blue-200 bg-[#eaf3ff] p-6 sm:p-8">
-        <p className="text-xs font-black uppercase tracking-wide text-blue-700">Progresso da aula</p>
-        <h2 id="anki-status-title" className="mt-2 text-2xl font-black text-[#062a5f]">{setupStatus === "configured" ? "Aula concluída" : "Concluir esta aula"}</h2>
-        <p className="mt-3 max-w-2xl text-slate-700">{setupStatus === "configured" ? "Esta aula foi concluída. Você pode rever os tutoriais quando quiser." : "Quando terminar a configuração do Anki, marque esta aula como concluída."}</p>
-        {message ? <p role="status" aria-live="polite" className="mt-4 rounded-xl bg-white px-4 py-3 font-bold text-slate-700">{message}</p> : null}
-        <div className="mt-6 flex flex-wrap gap-3">
-          {setupStatus === "configured" ? <><a href="#anki-platforms" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Rever os tutoriais</a><button type="button" onClick={markPending} className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Marcar aula como não concluída</button></> : <button type="button" onClick={markConfigured} className="min-h-11 rounded-xl bg-emerald-600 px-5 py-3 font-black text-white transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">Marcar aula como concluída</button>}
-        </div>
+        <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3">
+          <input type="checkbox" checked={setupStatus === "configured"} onChange={(event) => event.target.checked ? markConfigured() : markPending()} className="h-5 w-5 shrink-0 accent-blue-700" />
+          <span id="anki-status-title" className="font-black text-[#062a5f]">Marcar como concluído</span>
+        </label>
+        {message ? <p role="alert" className="mt-3 text-sm font-bold text-red-700">{message}</p> : null}
       </section>
     </div> : null}
   </div>;

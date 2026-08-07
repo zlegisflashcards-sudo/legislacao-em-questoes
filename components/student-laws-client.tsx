@@ -109,7 +109,7 @@ function AnkiModule({ userId }: { userId: string | null }) {
           {status === "loading" ? "Verificando" : configured ? "Anki configurado" : "Pendente"}
         </span>
       </div>
-      <h2 id="anki-module-title" className="mt-1 text-xl font-black text-[#062a5f]">Baixando e configurando o Anki</h2>
+      <h2 id="anki-module-title" className="mt-1 text-xl font-black text-[#062a5f]">Baixando e configurando o App de questões</h2>
       <p className="mt-3 text-sm leading-relaxed text-slate-600">O Anki é o aplicativo de questões utilizado no nosso método de estudo. Nele, você responde às questões em formato de flashcards e informa o nível de dificuldade de cada resposta. Com base no seu desempenho, o próprio aplicativo organiza as revisões e reapresenta cada questão no momento adequado.</p>
     </div>
     <Link href="/estudar/anki" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{configured ? "Reabrir tutorial" : "Configurar o App de Questões"}</Link>

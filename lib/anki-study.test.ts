@@ -35,7 +35,7 @@ describe("configuração dos tutoriais do Anki", () => {
 
   it("mantém os destinos oficiais e os textos de cada plataforma", () => {
     expect(ANKI_PLATFORM_TUTORIALS.computador).toMatchObject({ description: "Windows, Mac e Linux", officialUrl: "https://apps.ankiweb.net/", buttonLabel: "Baixar o Anki", note: "Gratuito" });
-    expect(ANKI_PLATFORM_TUTORIALS.android).toMatchObject({ description: "AnkiDroid", officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki", buttonLabel: "Baixar na Google Play", note: "Gratuito e código aberto" });
+    expect(ANKI_PLATFORM_TUTORIALS.android).toMatchObject({ description: "AnkiDroid", officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki", buttonLabel: "Baixar na Google Play", note: "Gratuito" });
     expect(ANKI_PLATFORM_TUTORIALS.ios).toMatchObject({ description: "iPhone e iPad", officialUrl: "https://apps.apple.com/app/ankimobile-flashcards/id373493387", buttonLabel: "Baixar na App Store", note: "Aplicativo pago mantido pelo desenvolvedor principal" });
     expect(ANKI_PLATFORM_TUTORIALS.navegador).toMatchObject({ description: "AnkiWeb", officialUrl: "https://ankiweb.net/", buttonLabel: "Acessar o AnkiWeb", note: "Gratuito — permite estudar e sincronizar baralhos direto da web" });
   });
@@ -125,17 +125,15 @@ describe("página autenticada do Anki", () => {
     expect(client).not.toContain("autoplay");
   });
 
-  it("marca e desfaz somente pela página, sem API, navegação ou progresso", () => {
+  it("marca e desmarca por uma única checkbox, sem API ou navegação", () => {
     expect(client).toContain("markAnkiConfigured(window.localStorage, userId)");
     expect(client).toContain("clearAnkiConfigured(window.localStorage, userId)");
     expect(client).toContain(">Verificando</strong>");
-    expect(client).toContain("Progresso da aula");
-    expect(client).toContain("Concluir esta aula");
-    expect(client).toContain("Marcar aula como concluída");
-    expect(client).toContain("Aula concluída");
-    expect(client).toContain("Marcar aula como não concluída");
-    expect(client).toContain("Rever os tutoriais");
-    expect(client).not.toContain("onClick={() => markAnkiConfigured");
+    expect(client).toContain('type="checkbox"');
+    expect(client).toContain("Marcar como concluído");
+    expect(client).toContain("event.target.checked ? markConfigured() : markPending()");
+    expect(client).not.toContain("Progresso da aula");
+    expect(client).not.toContain("Concluir esta aula");
     for (const forbidden of ["fetch(", ".rpc(", "setProgress", "updateProgress", "window.location.href"] ) expect(client).not.toContain(forbidden);
   });
 
