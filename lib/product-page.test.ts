@@ -27,4 +27,15 @@ describe("página comercial de produto", () => {
     expect(source).toContain("const isLeiAvulsa = produto.leis.length === 1");
     expect(source).not.toContain("Comprar agora");
   });
+
+  it("mantém a rota comercial disponível enquanto a coluna de vídeo não foi aplicada", () => {
+    expect(source).toContain("const produto = produtoComVideo.error");
+    expect(source).toContain('select("id,nome,descricao,hotmart_url")');
+  });
+
+  it("resolve produtos do banco antes do fallback de legislação", () => {
+    expect(source.indexOf("const produto = await carregarProdutoCatalogo(slug)")).toBeLessThan(
+      source.lastIndexOf("const legislacoes = await getLegislacoes()"),
+    );
+  });
 });

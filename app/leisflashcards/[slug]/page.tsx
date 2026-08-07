@@ -29,12 +29,20 @@ type ProdutoCatalogo = {
 async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | null> {
   try {
     const supabase = getSupabaseServerClient();
-    const produto = await supabase
+    const produtoComVideo = await supabase
       .from("produtos")
       .select("id,nome,descricao,hotmart_url,video_demo_url")
       .eq("slug", slug)
       .eq("ativo", true)
       .maybeSingle();
+    const produto = produtoComVideo.error
+      ? await supabase
+          .from("produtos")
+          .select("id,nome,descricao,hotmart_url")
+          .eq("slug", slug)
+          .eq("ativo", true)
+          .maybeSingle()
+      : produtoComVideo;
     if (produto.error || !produto.data) return null;
 
     const vinculos = await supabase
@@ -70,7 +78,11 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const totalFlashcards = leis.every((lei) => lei.flashcards !== null)
       ? leis.reduce((total, lei) => total + (lei.flashcards ?? 0), 0)
       : null;
-    return { nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, videoDemoUrl: produto.data.video_demo_url, leis, totalFlashcards };
+    const videoDemoUrl =
+      "video_demo_url" in produto.data && typeof produto.data.video_demo_url === "string"
+        ? produto.data.video_demo_url
+        : null;
+    return { nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, videoDemoUrl, leis, totalFlashcards };
   } catch {
     return null;
   }
@@ -141,13 +153,17 @@ export async function generateStaticParams() {
 
 export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   const { slug } = await params;
-  const legislacoes = await getLegislacoes();
-  const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
   const produto = await carregarProdutoCatalogo(slug);
 
   if (produto) {
-    return <PaginaProduto produto={produto} videoUrl={legislacao?.youtubeUrl ?? null} />;
+    const videoUrl = !produto.videoDemoUrl && produto.leis.length === 1
+      ? encontrarLegislacaoPorSlug(await getLegislacoes(), slug)?.youtubeUrl ?? null
+      : null;
+    return <PaginaProduto produto={produto} videoUrl={videoUrl} />;
   }
+
+  const legislacoes = await getLegislacoes();
+  const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) {
     notFound();
