@@ -118,8 +118,7 @@ describe("interface das leis adquiridas", () => {
   it("cria a rota oficial e as duas abas", () => {
     expect(page).toContain("<StudentLawsClient />");
     expect(client).toContain("Minhas leis adquiridas");
-    expect(client).toContain("Minhas leis");
-    expect(client).toContain("Meu edital");
+    expect(client).toContain("<StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} />");
   });
 
   it("mantém o card obrigatório do Anki em primeiro lugar e com a estrutura dos cards de lei", () => {
@@ -145,8 +144,7 @@ describe("interface das leis adquiridas", () => {
 
   it("lê o estado existente sem permitir que o card marque o Anki como configurado", () => {
     expect(client).toContain('type AnkiSetupStatus = "loading" | "pending" | "configured"');
-    expect(ankiModule).toContain("ANKI_SETUP_STORAGE_PREFIX");
-    expect(ankiModule).toContain("window.localStorage.getItem");
+    expect(ankiModule).toContain("readAnkiConfigured(window.localStorage, userId)");
     expect(ankiModule).toContain("Pendente");
     expect(ankiModule).toContain("Anki configurado");
     expect(ankiModule).not.toContain("window.localStorage.setItem");
@@ -155,12 +153,13 @@ describe("interface das leis adquiridas", () => {
     expect(ankiModule).not.toContain("Marcar como configurado");
   });
 
-  it("prepara a navegação futura sem criar rota falsa nem condicionar as leis", () => {
-    expect(client).toContain('const ANKI_TUTORIAL_PATH = "/estudar/anki"');
-    expect(ankiModule).toContain("data-future-href={ANKI_TUTORIAL_PATH}");
+  it("abre o tutorial sem marcar configuração nem condicionar as leis", () => {
+    expect(ankiModule).toContain('href="/estudar/anki"');
     expect(ankiModule).toContain("Configurar o App de Questões");
-    expect(ankiModule).toContain("Em breve");
-    expect(ankiModule).toContain("disabled");
+    expect(ankiModule).toContain("Reabrir tutorial");
+    expect(ankiModule).not.toContain("Em breve");
+    expect(ankiModule).not.toContain("disabled");
+    expect(ankiModule).not.toContain("data-future-href");
     expect(ankiModule).not.toContain("onClick");
     for (const forbidden of ["StudentLawCard", "filteredLaws", "window.location", "router.", "fetch(", ".rpc(", "setProgress", "updateProgress"]) {
       expect(ankiModule).not.toContain(forbidden);

@@ -3,15 +3,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { StudentAreaTabs, type StudentAreaTabId } from "@/components/student-area-tabs";
+import { readAnkiConfigured } from "@/lib/anki-study";
 import { filterStudentLaws, studentLawShortNameForDisplay, type StudentLaw } from "@/lib/student-laws";
 import { supabase } from "@/lib/supabase";
 
 type StudentLawsResponse = { leis?: StudentLaw[]; total?: number; message?: string };
-type ActiveTab = "leis" | "edital";
 type AnkiSetupStatus = "loading" | "pending" | "configured";
-
-const ANKI_SETUP_STORAGE_PREFIX = "legisflashcards:anki-configured:";
-const ANKI_TUTORIAL_PATH = "/estudar/anki";
 
 async function studentRequest() {
   const { data } = await supabase.auth.getSession();
@@ -28,7 +26,7 @@ async function studentRequest() {
 }
 
 export function StudentLawsClient() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("leis");
+  const [activeTab, setActiveTab] = useState<StudentAreaTabId>("leis");
   const [laws, setLaws] = useState<StudentLaw[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -67,10 +65,7 @@ export function StudentLawsClient() {
       <p className="mt-3 max-w-2xl text-slate-600">Acesse as leis liberadas para sua conta e prepare sua rotina de estudo.</p>
     </header>
 
-    <div role="tablist" aria-label="Minhas leis adquiridas" className="mb-6 flex gap-2 border-b border-slate-200">
-      <button type="button" role="tab" aria-selected={activeTab === "leis"} aria-controls="student-laws-panel" onClick={() => setActiveTab("leis")} className={`border-b-2 px-4 py-3 font-black transition ${activeTab === "leis" ? "border-blue-700 text-blue-700" : "border-transparent text-slate-600 hover:text-blue-700"}`}>Minhas leis</button>
-      <button type="button" role="tab" aria-selected={activeTab === "edital"} aria-controls="student-exam-panel" onClick={() => setActiveTab("edital")} className={`border-b-2 px-4 py-3 font-black transition ${activeTab === "edital" ? "border-blue-700 text-blue-700" : "border-transparent text-slate-600 hover:text-blue-700"}`}>Meu edital</button>
-    </div>
+    <StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
     {activeTab === "leis" ? <section id="student-laws-panel" role="tabpanel" aria-label="Minhas leis" className="grid gap-6">
       <AnkiModule userId={userId} />
@@ -100,11 +95,7 @@ function AnkiModule({ userId }: { userId: string | null }) {
 
   useEffect(() => {
     if (!userId) return;
-    try {
-      setStatus(window.localStorage.getItem(`${ANKI_SETUP_STORAGE_PREFIX}${userId}`) === "true" ? "configured" : "pending");
-    } catch {
-      setStatus("pending");
-    }
+    setStatus(readAnkiConfigured(window.localStorage, userId) ? "configured" : "pending");
   }, [userId]);
 
   const configured = status === "configured";
@@ -121,10 +112,7 @@ function AnkiModule({ userId }: { userId: string | null }) {
       <h2 id="anki-module-title" className="mt-1 text-xl font-black text-[#062a5f]">Baixando e configurando o Anki</h2>
       <p className="mt-3 text-sm leading-relaxed text-slate-600">O Anki é o aplicativo de questões utilizado no nosso método de estudo. Nele, você responde às questões em formato de flashcards e informa o nível de dificuldade de cada resposta. Com base no seu desempenho, o próprio aplicativo organiza as revisões e reapresenta cada questão no momento adequado.</p>
     </div>
-    <button type="button" disabled data-future-href={ANKI_TUTORIAL_PATH} title="Tutorial do Anki em preparação" className="min-h-11 shrink-0 rounded-xl bg-slate-200 px-5 py-3 text-center font-black text-slate-500">
-      <span className="block">Configurar o App de Questões</span>
-      <span className="mt-1 block text-xs font-bold uppercase tracking-wide">Em breve</span>
-    </button>
+    <Link href="/estudar/anki" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{configured ? "Reabrir tutorial" : "Configurar o App de Questões"}</Link>
   </aside>;
 }
 
