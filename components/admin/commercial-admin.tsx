@@ -120,7 +120,7 @@ export default function CommercialAdmin() {
       {tab !== "liberacoes" && tab !== "alunos" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
     </form>
 
-    {tab === "alunos" ? <StudentsPanel /> : null}
+    {tab === "alunos" ? <StudentsPanel laws={laws} products={products} /> : null}
     {tab === "leis" ? <LawPanel rows={result.items} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "materiais" ? <MaterialPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
@@ -135,11 +135,13 @@ export default function CommercialAdmin() {
 
 type PanelProps = { rows: Row[]; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: (resource: Tab, payload: Row, success: string) => Promise<void> };
 
-function StudentsPanel() {
+function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
   const [student, setStudent] = useState<Row | null>(null);
   const [acquisitions, setAcquisitions] = useState<Row[]>([]);
   const [releases, setReleases] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportFilters, setExportFilters] = useState({ lei_id: "", produto_id: "" });
   const [error, setError] = useState("");
 
   async function selectStudent(nextStudent: Row) {
@@ -157,9 +159,49 @@ function StudentsPanel() {
     } finally { setBusy(false); }
   }
 
+  async function exportStudents() {
+    setExportBusy(true); setError("");
+    try {
+      const params = new URLSearchParams({ status: "ativo", limit: "50" });
+      if (exportFilters.lei_id) params.set("lei_id", exportFilters.lei_id);
+      if (exportFilters.produto_id) params.set("produto_id", exportFilters.produto_id);
+      const rows: Row[] = [];
+      let currentPage = 1;
+      let pages = 1;
+      do {
+        params.set("page", String(currentPage));
+        const data = await requestJson(`/api/admin/comercial/liberacoes?${params}`);
+        rows.push(...(data.items ?? []));
+        pages = Number(data.pages) || 1;
+        currentPage += 1;
+      } while (currentPage <= pages);
+
+      const students = new Map<string, Row>();
+      for (const row of rows) {
+        const aluno = relation(row, "alunos");
+        const email = text(aluno.email).trim().toLowerCase();
+        if (email && !students.has(email)) students.set(email, aluno);
+      }
+      const csvCell = (value: unknown) => `"${text(value).replace(/"/g, '""')}"`;
+      const csv = `\uFEFFnome;e-mail\r\n${[...students.values()].map((aluno) => `${csvCell(aluno.nome)};${csvCell(aluno.email)}`).join("\r\n")}`;
+      const href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = href; link.download = "alunos-acesso-ativo.csv"; link.click();
+      URL.revokeObjectURL(href);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível exportar os alunos.");
+    } finally { setExportBusy(false); }
+  }
+
   return <section className="commercial-card">
     <h2>Consultar aluno</h2>
     <StudentSearch onSelect={selectStudent} />
+    <div className="commercial-form-grid">
+      <h3>Exportar alunos com acesso ativo</h3>
+      <label>Lei<select value={exportFilters.lei_id} onChange={(event) => setExportFilters({ ...exportFilters, lei_id: event.target.value })}><option value="">Todas as leis</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label>
+      <label>Produto<select value={exportFilters.produto_id} onChange={(event) => setExportFilters({ ...exportFilters, produto_id: event.target.value })}><option value="">Todos os produtos</option>{products.map((product) => <option key={text(product.id)} value={text(product.id)}>{text(product.nome)}</option>)}</select></label>
+      <button type="button" className="admin-button secondary" disabled={exportBusy} onClick={() => void exportStudents()}>{exportBusy ? "Exportando…" : "Exportar CSV"}</button>
+    </div>
     {!student ? <p>Pesquise um aluno por nome ou e-mail para consultar suas aquisições e leis liberadas.</p> : null}
     {busy ? <p className="commercial-loading">Carregando dados do aluno…</p> : null}
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}

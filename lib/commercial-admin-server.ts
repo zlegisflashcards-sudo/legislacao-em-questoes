@@ -203,8 +203,12 @@ export async function getCommercialResource(resource: CommercialResource, reques
   if (resource === "liberacoes") {
     let query = supabase.from("liberacoes_leis").select("*,alunos(id,nome,email),leis(id,slug,titulo),produtos(id,nome),compras(id,origem,identificador_externo)", { count: "exact" });
     const alunoId = url.searchParams.get("aluno_id");
+    const leiId = url.searchParams.get("lei_id");
+    const produtoId = url.searchParams.get("produto_id");
     const status = safeSearch(url.searchParams.get("status"), 30);
     if (alunoId) query = query.eq("aluno_id", uuid(alunoId, "Aluno"));
+    if (leiId) query = query.eq("lei_id", positiveIntegerId(leiId, "Lei"));
+    if (produtoId) query = query.eq("produto_id", uuid(produtoId, "Produto"));
     if (status) query = query.eq("status", status);
     const result = await query.order("concedida_em", { ascending: false }).range(from, to);
     assertQuery(result);
