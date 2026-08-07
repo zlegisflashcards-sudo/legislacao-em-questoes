@@ -15,4 +15,11 @@ describe("página comercial de produto", () => {
     expect(source).toContain("Link de aquisição indisponível");
     expect(source).toContain("if (produto)");
   });
+
+  it("prioriza video proprio e evita CTAs duplicados", () => {
+    expect(source).toContain("video_demo_url");
+    expect(source).toContain("const selectedVideoUrl = produto.videoDemoUrl ?? videoUrl");
+    expect(source).toContain("const isLeiAvulsa = produto.leis.length === 1");
+    expect(source).not.toContain("Comprar agora");
+  });
 });

@@ -21,7 +21,8 @@ type ProdutoCatalogo = {
   nome: string;
   descricao: string | null;
   hotmartUrl: string | null;
-  leis: Array<{ id: number; titulo: string; thumbnailUrl: string | null; flashcards: number | null }>;
+  videoDemoUrl: string | null;
+  leis: Array<{ id: number; titulo: string; flashcards: number | null }>;
   totalFlashcards: number | null;
 };
 
@@ -30,7 +31,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const supabase = getSupabaseServerClient();
     const produto = await supabase
       .from("produtos")
-      .select("id,nome,descricao,hotmart_url")
+      .select("id,nome,descricao,hotmart_url,video_demo_url")
       .eq("slug", slug)
       .eq("ativo", true)
       .maybeSingle();
@@ -38,7 +39,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
 
     const vinculos = await supabase
       .from("produto_leis")
-      .select("lei_id,ordem,leis(id,titulo,nome_curto,thumbnail_url)")
+      .select("lei_id,ordem,leis(id,titulo,nome_curto)")
       .eq("produto_id", produto.data.id)
       .order("ordem");
     if (vinculos.error) return null;
@@ -63,14 +64,13 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       return {
         id: leiId,
         titulo: lei?.nome_curto || lei?.titulo || "Lei não identificada",
-        thumbnailUrl: lei?.thumbnail_url ?? null,
         flashcards: comQuantidade.has(leiId) ? quantidades.get(leiId) ?? 0 : null,
       };
     });
     const totalFlashcards = leis.every((lei) => lei.flashcards !== null)
       ? leis.reduce((total, lei) => total + (lei.flashcards ?? 0), 0)
       : null;
-    return { nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, leis, totalFlashcards };
+    return { nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, videoDemoUrl: produto.data.video_demo_url, leis, totalFlashcards };
   } catch {
     return null;
   }
@@ -322,27 +322,27 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
 }
 
 function PaginaProduto({ produto, videoUrl }: { produto: ProdutoCatalogo; videoUrl: string | null }) {
-  const capa = produto.leis.find((lei) => lei.thumbnailUrl)?.thumbnailUrl ?? null;
-  const video = videoUrl ? getYoutubeEmbedUrl(videoUrl) : null;
+  const selectedVideoUrl = produto.videoDemoUrl ?? videoUrl;
+  const video = selectedVideoUrl ? getYoutubeEmbedUrl(selectedVideoUrl) : null;
+  const isLeiAvulsa = produto.leis.length === 1;
+  const resumoLeis = produto.leis.length > 1
+    ? `${produto.leis.length} leis${produto.totalFlashcards !== null ? ` · ${produto.totalFlashcards.toLocaleString("pt-BR")} flashcards` : ""}`
+    : null;
   return <div className="bg-[#171a21] text-white">
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-6 sm:py-14">
       <a href="/" className="text-sm font-semibold text-slate-300 hover:text-blue-300">← Voltar para a Home</a>
-      <section className="grid gap-7 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+      <section className="space-y-5">
         <div className="space-y-5">
           <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Legis Flashcards</p>
           <h1 className="text-4xl font-bold leading-tight sm:text-5xl">{produto.nome}</h1>
           {produto.descricao ? <p className="max-w-2xl text-lg leading-8 text-slate-200">{produto.descricao}</p> : null}
           {produto.hotmartUrl ? <a href={produto.hotmartUrl} className="inline-flex w-fit items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] sm:text-lg">Adquirir acesso</a> : <p className="text-sm font-semibold text-slate-300">Link de aquisição indisponível no momento.</p>}
         </div>
-        <div className="min-h-56 overflow-hidden rounded-lg border border-blue-200/30 bg-slate-800 shadow-[0_22px_55px_rgba(0,0,0,0.32)]" style={capa ? { backgroundImage: `linear-gradient(rgba(6,42,95,.3),rgba(6,42,95,.7)), url(${capa})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
-          <div className="flex min-h-56 items-end p-6"><p className="text-2xl font-black">{produto.leis.length} {produto.leis.length === 1 ? "lei incluída" : "leis incluídas"}</p></div>
-        </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-3">{["Acesso vitalício", "Acesso ilimitado", "Material atualizado"].map((beneficio) => <div key={beneficio} className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 font-bold shadow-[0_16px_40px_rgba(0,0,0,0.22)]">{beneficio}</div>)}</section>
-      <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{produto.totalFlashcards !== null ? <p className="rounded bg-white px-4 py-3 font-black text-[#062a5f]">{produto.totalFlashcards.toLocaleString("pt-BR")} flashcards</p> : null}</div>
+      <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{!isLeiAvulsa && resumoLeis ? <p className="font-black text-slate-200">{resumoLeis}</p> : null}</div>
         {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950"><h3 className="font-black">{lei.titulo}</h3>{lei.flashcards !== null ? <p className="shrink-0 text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</p> : null}</article>)}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
       {video ? <section className="space-y-3"><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Demonstração</p><div className="overflow-hidden rounded-lg border border-slate-700 bg-black"><iframe className="aspect-video w-full" src={video} title={`Demonstração: ${produto.nome}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div></section> : null}
-      {produto.hotmartUrl ? <section className="rounded-lg bg-[#062a5f] p-6 text-center"><a href={produto.hotmartUrl} className="inline-flex rounded-lg bg-white px-8 py-4 font-black text-[#062a5f]">Comprar agora</a><p className="mt-3 text-xs font-semibold text-blue-100">Pagamento seguro via Hotmart</p></section> : null}
     </div>
   </div>;
 }

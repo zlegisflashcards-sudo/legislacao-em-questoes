@@ -19,6 +19,7 @@ const editorialMigration = readFileSync("supabase/migrations/20260806112619_crea
 const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const client = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 const page = readFileSync("app/admin/comercial/page.tsx", "utf8");
+const productVideoMigration = readFileSync("supabase/migrations/20260807210000_add_product_demo_video.sql", "utf8");
 
 describe("validação da administração comercial", () => {
   it("aceita slug normalizado e rejeita valores perigosos", () => {
@@ -80,6 +81,11 @@ describe("fronteira administrativa comercial", () => {
     expect(server).toContain("if (q.length < 3)");
     expect(server).toContain("Math.min(limit, 10)");
     expect(server).toContain(".range(from, to)");
+    expect(productVideoMigration).toContain("add column if not exists video_demo_url text");
+    expect(productVideoMigration).toContain("p_video_demo_url text");
+    expect(productVideoMigration).toContain("p_dados?'video_demo_url'");
+    expect(server).toContain('"video_demo_url"');
+    expect(client).toContain('name="video_demo_url"');
   });
 });
 
