@@ -12,11 +12,15 @@ describe("cards comerciais do catálogo", () => {
     expect(loader).toContain('eq("tipo", "flashcards")');
   });
 
-  it("exibe contagens reais e mantém o CTA para o produto", () => {
-    expect(cards).toContain("produto.leisIncluidas");
+  it("usa a linguagem do card de estudo e mantém o CTA para o produto", () => {
     expect(cards).toContain("produto.totalFlashcards !== null");
+    expect(cards).toContain("Legislação em Questões");
+    expect(cards).toContain("4.0");
     expect(cards).toContain("Acesso vitalício");
-    expect(cards).toContain("Material atualizado");
+    expect(cards).toContain("Atualizado");
+    expect(cards).toContain("Ilimitado");
+    expect(cards).toContain("Saber mais");
+    expect(cards).not.toContain("Ver produto");
     expect(cards).toContain("/leisflashcards/${produto.slug}");
   });
 });
