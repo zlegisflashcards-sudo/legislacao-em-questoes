@@ -5,6 +5,7 @@ describe("cards comerciais do catálogo", () => {
   const loader = readFileSync("lib/catalog-products-server.ts", "utf8");
   const cards = readFileSync("components/home-categorias-vade-mecum.tsx", "utf8");
   const search = readFileSync("components/legislacao-search.tsx", "utf8");
+  const home = readFileSync("app/page.tsx", "utf8");
 
   it("busca produtos, leis vinculadas e materiais ativos", () => {
     expect(loader).toContain('from("produtos")');
@@ -31,5 +32,12 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("produtos={produtos}");
     expect(search).toContain("const produtoInterno = produtos.find(");
     expect(search).toContain("/leisflashcards/${produtoInterno.slug}");
+  });
+
+  it("não consulta Google Sheets para montar a home", () => {
+    expect(home).toContain("getCatalogProducts");
+    expect(home).not.toContain("getLegislacoes");
+    expect(search).toContain("sugestoesProdutos");
+    expect(search).toContain("/leisflashcards/${produto.slug}");
   });
 });

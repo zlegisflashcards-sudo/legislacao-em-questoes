@@ -8,7 +8,7 @@ import {
 } from "@/lib/legislacoes";
 
 type LegislacaoSearchProps = {
-  legislacoes: Legislacao[];
+  legislacoes?: Legislacao[];
   produtos?: Array<{ nome: string; slug: string }>;
   variant?: "light" | "dark";
 };
@@ -22,7 +22,7 @@ function normalizeSearch(value: string) {
 }
 
 export function LegislacaoSearch({
-  legislacoes,
+  legislacoes = [],
   produtos = [],
   variant = "light",
 }: LegislacaoSearchProps) {
@@ -48,8 +48,18 @@ export function LegislacaoSearch({
       .slice(0, 6);
   }, [legislacoes, normalizedQuery]);
 
+  const sugestoesProdutos = useMemo(() => {
+    if (normalizedQuery.length < 2) {
+      return [];
+    }
+
+    return produtos
+      .filter((produto) => normalizeSearch(produto.nome).includes(normalizedQuery))
+      .slice(0, 6);
+  }, [produtos, normalizedQuery]);
+
   const shouldShowEmptyState =
-    normalizedQuery.length >= 2 && sugestoes.length === 0;
+    normalizedQuery.length >= 2 && sugestoes.length === 0 && sugestoesProdutos.length === 0;
 
   return (
     <div
@@ -83,8 +93,27 @@ export function LegislacaoSearch({
           }
         />
 
-        {(sugestoes.length > 0 || shouldShowEmptyState) && (
+        {(sugestoesProdutos.length > 0 || sugestoes.length > 0 || shouldShowEmptyState) && (
           <div className="absolute left-0 right-0 top-16 z-10 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+            {sugestoesProdutos.length > 0 ? (
+              <ul>
+                {sugestoesProdutos.map((produto) => (
+                  <li key={produto.slug}>
+                    <a
+                      href={`/leisflashcards/${produto.slug}`}
+                      className="block px-4 py-3 transition hover:bg-blue-50"
+                    >
+                      <span className="block text-sm font-bold text-slate-950">
+                        {produto.nome}
+                      </span>
+                      <span className="mt-1 block text-xs text-slate-600">
+                        Produto LegisFlashcards
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {sugestoes.length > 0 ? (
               <ul>
                 {sugestoes.map((legislacao) => {
@@ -147,11 +176,11 @@ export function LegislacaoSearch({
                   );
                 })}
               </ul>
-            ) : (
+            ) : shouldShowEmptyState ? (
               <p className="px-4 py-3 text-sm text-slate-600">
                 Nenhuma legislação ativa encontrada.
               </p>
-            )}
+            ) : null}
           </div>
         )}
       </div>
