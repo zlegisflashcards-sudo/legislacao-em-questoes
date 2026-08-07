@@ -5,9 +5,16 @@ export type HotmartPayload = Record<string, unknown> & {
   id?: unknown;
   event?: unknown;
   creation_date?: unknown;
+  data?: HotmartDados;
   buyer?: { email?: unknown; name?: unknown };
   product?: { id?: unknown; name?: unknown };
   purchase?: { transaction?: unknown; status?: unknown };
+};
+
+type HotmartDados = {
+  buyer?: { email?: unknown; name?: unknown; checkout_phone?: unknown };
+  product?: { id?: unknown; name?: unknown };
+  purchase?: { transaction?: unknown; status?: unknown; approved_date?: unknown };
 };
 
 export type EventoHotmartNormalizado = {
@@ -48,14 +55,17 @@ export function normalizarEventoHotmart(payload: unknown): EventoHotmartNormaliz
   const identificadorEvento = texto(evento.id);
   if (!identificadorEvento) throw new Error("Evento Hotmart sem identificador.");
 
-  const produtoId = evento.product?.id;
+  const dados = evento.data && typeof evento.data === "object" && !Array.isArray(evento.data)
+    ? evento.data
+    : evento;
+  const produtoId = dados.product?.id;
   return {
     identificador_evento: identificadorEvento,
-    codigo_transacao: texto(evento.purchase?.transaction),
+    codigo_transacao: texto(dados.purchase?.transaction),
     hotmart_product_id: produtoId === undefined || produtoId === null ? null : String(produtoId).trim() || null,
-    tipo_evento: texto(evento.event),
-    status_transacao: texto(evento.purchase?.status),
-    email_comprador: texto(evento.buyer?.email)?.toLowerCase() ?? null,
+    tipo_evento: texto(evento.event) ?? "UNKNOWN",
+    status_transacao: texto(dados.purchase?.status),
+    email_comprador: texto(dados.buyer?.email)?.toLowerCase() ?? null,
   };
 }
 
@@ -63,6 +73,10 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
   const normalizado = normalizarEventoHotmart(payload);
   const { error } = await supabase.from("hotmart_eventos").insert({
     ...normalizado,
+    hotmart_event_id: normalizado.identificador_evento,
+    evento: normalizado.tipo_evento,
+    hotmart_transaction_id: normalizado.codigo_transacao,
+    payload,
     payload_bruto: payload,
     payload_normalizado: normalizado,
   });
