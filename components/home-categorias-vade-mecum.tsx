@@ -9,6 +9,14 @@ import {
 } from "@/lib/legislacoes";
 import { siteConfig } from "@/lib/site-config";
 
+type CatalogProduct = {
+  id: string;
+  nome: string;
+  slug: string;
+  leisIncluidas: number;
+  totalFlashcards: number | null;
+};
+
 function isConstituicaoFederal(legislacao: Legislacao) {
   return legislacao.categoria === "Constituição Federal";
 }
@@ -90,10 +98,51 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
   );
 }
 
+function HomeProductCard({ produto }: { produto: CatalogProduct }) {
+  const quantidadeLeis = `${produto.leisIncluidas} ${produto.leisIncluidas === 1 ? "lei incluída" : "leis incluídas"}`;
+
+  return (
+    <article className="relative flex min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_46px_rgba(0,104,237,0.25)]">
+      <div className="flex min-h-[64px] items-center gap-3 bg-gradient-to-r from-[#123c74] to-[#07172d] px-5 py-3 text-white">
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1683ff] bg-[#062a5f] text-base text-[#28b7ff] shadow-[0_0_14px_rgba(40,183,255,0.28)]">
+          ⚡
+        </span>
+        <span className="truncate text-sm font-bold">Produto LegisFlashcards</span>
+      </div>
+
+      <div className="flex flex-1 flex-col justify-between p-6">
+        <div className="space-y-4">
+          <h3 className="text-xl font-extrabold leading-snug text-[#0868ed] sm:text-2xl">
+            {produto.nome}
+          </h3>
+          <div className="flex flex-wrap gap-2 text-sm font-bold text-[#0868ed]">
+            <span className="rounded-full border border-[#0877ff] px-3 py-1">{quantidadeLeis}</span>
+            {produto.totalFlashcards !== null && (
+              <span className="rounded-full border border-[#0877ff] px-3 py-1">
+                {produto.totalFlashcards} flashcards
+              </span>
+            )}
+          </div>
+          <p className="text-sm leading-6 text-slate-700">Acesso vitalício • Material atualizado</p>
+        </div>
+
+        <a
+          href={`/leisflashcards/${produto.slug}`}
+          className="mt-7 inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
+        >
+          Ver produto
+        </a>
+      </div>
+    </article>
+  );
+}
+
 export function HomeCategoriasVadeMecum({
   legislacoes,
+  produtos,
 }: {
   legislacoes: Legislacao[];
+  produtos: CatalogProduct[];
 }) {
   const legislacoesEmDestaque = useMemo(
     () =>
@@ -155,7 +204,13 @@ export function HomeCategoriasVadeMecum({
           </p>
         </div>
 
-        {legislacoesEmDestaque.length > 0 ? (
+        {produtos.length > 0 ? (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {produtos.map((produto) => (
+              <HomeProductCard key={produto.id} produto={produto} />
+            ))}
+          </div>
+        ) : legislacoesEmDestaque.length > 0 ? (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {legislacoesEmDestaque.map((legislacao) => (
               <HomeLegislacaoCard
