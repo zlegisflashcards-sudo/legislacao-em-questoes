@@ -42,10 +42,10 @@ function StudentSearch({ onSelect }: { onSelect: (student: Row) => void }) {
     finally { setBusy(false); }
   }
   return <div className="commercial-student-search">
-    <label>Buscar aluno por nome, e-mail ou UUID<input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+    <label>Buscar aluno por nome, e-mail, telefone ou UUID<input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
     <button type="button" className="admin-button secondary" onClick={search} disabled={busy || query.trim().length < 3}>{busy ? "Buscando…" : "Buscar aluno"}</button>
     {items.length ? <div className="commercial-search-results">{items.map((item) => <button type="button" key={text(item.id)} onClick={() => { onSelect(item); setItems([]); }}>
-      <strong>{text(item.nome) || text(item.nome_publico) || "Sem nome"}</strong><span>{text(item.email)} · {text(item.id)}</span>
+      <strong>{text(item.nome) || text(item.nome_publico) || "Sem nome"}</strong><span>{text(item.email)} {text(item.telefone) ? `· ${text(item.telefone)}` : ""} · {text(item.id)}</span>
     </button>)}</div> : null}
     {error ? <p className="admin-alert error" role="alert">{error}</p> : null}
   </div>;
@@ -203,7 +203,7 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
     {busy ? <p className="commercial-loading">Carregando dados do aluno…</p> : null}
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
     {student && !busy && !error ? <>
-      <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p></div>
+      <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Telefone:</strong> {text(student.telefone) || "Não informado"}</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p><p><strong>UUID:</strong> <small>{text(student.id)}</small></p></div>
       <h3>Aquisições</h3>
       {acquisitions.length ? <DataTable headers={["Produto", "Origem", "Data", "Status", "Transação externa"]}>{acquisitions.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "produtos").nome) || "Produto não informado"}</td><td>{text(row.origem)}</td><td>{date(row.adquirida_em)}</td><td>{text(row.status_acesso)}</td><td>{text(row.identificador_externo || row.hotmart_transaction_id) || "—"}</td></tr>)}</DataTable> : <p>Nenhuma aquisição encontrada para este aluno.</p>}
       <h3>Leis liberadas</h3>
@@ -331,10 +331,11 @@ function HistoricalHotmartImport() {
     const product = field(["codigo do produto"]);
     const email = field(["e-mail do(a) comprador(a)", "email do(a) comprador(a)", "e-mail", "email"]);
     const name = field(["comprador(a)", "nome"]);
+    const phone = field(["telefone"]);
     const dateValue = field(["data da transacao", "data da venda"]);
     const status = field(["status da transacao", "status"]);
     if ([transaction, product, email, dateValue, status].some((index) => index < 0)) return setError("CSV incompatível. Confira os cabeçalhos informados abaixo.");
-    const sales = rows.map((row) => ({ transactionId: row[transaction], productCode: row[product], email: row[email], name: name < 0 ? null : row[name], purchasedAt: row[dateValue], status: row[status] }));
+    const sales = rows.map((row) => ({ transactionId: row[transaction], productCode: row[product], email: row[email], name: name < 0 ? null : row[name], phone: phone < 0 ? null : row[phone], purchasedAt: row[dateValue], status: row[status] }));
     setBusy(true);
     try {
       const totals = { preview: dryRun, processed: 0, imported: 0, ready: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };

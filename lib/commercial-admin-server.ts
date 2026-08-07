@@ -110,11 +110,12 @@ export async function getCommercialResource(resource: CommercialResource, reques
     if (q.length < 3) return pageResult([], 0, 1, Math.min(limit, 10));
     const studentLimit = Math.min(limit, 10);
     const matches = await Promise.all([
-      supabase.from("alunos").select("id,user_id,nome,email").ilike("email", `%${q}%`).limit(studentLimit),
-      supabase.from("alunos").select("id,user_id,nome,email").ilike("nome", `%${q}%`).limit(studentLimit),
+      supabase.from("alunos").select("id,user_id,nome,email,telefone").ilike("email", `%${q}%`).limit(studentLimit),
+      supabase.from("alunos").select("id,user_id,nome,email,telefone").ilike("nome", `%${q}%`).limit(studentLimit),
+      supabase.from("alunos").select("id,user_id,nome,email,telefone").ilike("telefone", `%${q}%`).limit(studentLimit),
       ...(/^[0-9a-f-]{36}$/i.test(q) ? [
-        supabase.from("alunos").select("id,user_id,nome,email").eq("id", q).limit(1),
-        supabase.from("alunos").select("id,user_id,nome,email").eq("user_id", q).limit(1),
+        supabase.from("alunos").select("id,user_id,nome,email,telefone").eq("id", q).limit(1),
+        supabase.from("alunos").select("id,user_id,nome,email,telefone").eq("user_id", q).limit(1),
       ] : []),
     ]);
     for (const result of matches) assertQuery(result);
@@ -132,6 +133,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
       user_id: row.user_id,
       nome: row.nome,
       email: row.email,
+      telefone: row.telefone,
       nome_publico: publicNames.get(String(row.user_id)) ?? null,
     }));
     return pageResult(items, items.length, 1, studentLimit);
@@ -373,7 +375,7 @@ function validateProductData(raw: unknown, update = false) {
   return result;
 }
 
-type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; purchasedAt: string; status: "ativo" | "cancelado" | "reembolsado" };
+type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; phone: string | null; purchasedAt: string; status: "ativo" | "cancelado" | "reembolsado" };
 
 function parseHistoricalTimestamp(value: string) {
   const brazilian = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
@@ -386,7 +388,7 @@ function parseHistoricalTimestamp(value: string) {
 
 function historicalSale(raw: unknown): HistoricalSale {
   const row = asObject(raw);
-  rejectUnknownKeys(row, ["transactionId", "productCode", "email", "name", "purchasedAt", "status"]);
+  rejectUnknownKeys(row, ["transactionId", "productCode", "email", "name", "phone", "purchasedAt", "status"]);
   const status = requiredString(row.status, "Status", 60).toLocaleLowerCase("pt-BR");
   const statusMap: Record<string, HistoricalSale["status"]> = {
     approved: "ativo", complete: "ativo", aprovada: "ativo", aprovado: "ativo", completa: "ativo",
@@ -402,6 +404,7 @@ function historicalSale(raw: unknown): HistoricalSale {
     productCode: requiredString(row.productCode, "Código do produto", 300),
     email: requiredString(row.email, "E-mail", 320).toLowerCase(),
     name: optionalString(row.name, "Nome", 300) ?? null,
+    phone: optionalString(row.phone, "Telefone", 80) ?? null,
     purchasedAt,
     status: mappedStatus,
   };
@@ -421,14 +424,20 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown, dry
       const product = await supabase.from("produtos").select("id,hotmart_product_id,ativo").eq("hotmart_product_id", sale.productCode).maybeSingle();
       if (product.error || !product.data) throw new Error("Produto interno não encontrado para o código Hotmart.");
 
-      const existingStudent = await supabase.from("alunos").select("id").ilike("email", sale.email).limit(1).maybeSingle();
+      const existingStudent = await supabase.from("alunos").select("id,telefone").ilike("email", sale.email).limit(1).maybeSingle();
       if (existingStudent.error) throw existingStudent.error;
       let studentId = existingStudent.data?.id as string | undefined;
-      if (studentId) summary.studentsExisting += 1;
+      if (studentId) {
+        summary.studentsExisting += 1;
+        if (!dryRun && sale.phone && !existingStudent.data?.telefone) {
+          const updatedStudent = await supabase.from("alunos").update({ telefone: sale.phone }).eq("id", studentId);
+          if (updatedStudent.error) throw updatedStudent.error;
+        }
+      }
       else {
         summary.studentsCreated += 1;
         if (!dryRun) {
-          const createdStudent = await supabase.from("alunos").insert({ nome: sale.name, email: sale.email }).select("id").single();
+          const createdStudent = await supabase.from("alunos").insert({ nome: sale.name, email: sale.email, telefone: sale.phone }).select("id").single();
           if (createdStudent.error || !createdStudent.data) throw createdStudent.error ?? new Error("Não foi possível criar o aluno.");
           studentId = createdStudent.data.id as string;
         }
