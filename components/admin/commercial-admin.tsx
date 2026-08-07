@@ -4,9 +4,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
-type Tab = "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "auditoria";
+type Tab = "alunos" | "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "auditoria";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "alunos", label: "Alunos" },
   { id: "leis", label: "Leis" }, { id: "materiais", label: "Materiais" },
   { id: "produtos", label: "Produtos" }, { id: "aquisicoes", label: "Aquisições" },
   { id: "liberacoes", label: "Liberações" }, { id: "atualizacoes", label: "Atualizações" },
@@ -32,10 +33,12 @@ function StudentSearch({ onSelect }: { onSelect: (student: Row) => void }) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   async function search() {
     if (query.trim().length < 3) return setItems([]);
-    setBusy(true);
+    setBusy(true); setError("");
     try { setItems((await requestJson(`/api/admin/comercial/alunos?q=${encodeURIComponent(query)}&limit=10`)).items ?? []); }
+    catch (caught) { setItems([]); setError(caught instanceof Error ? caught.message : "Não foi possível buscar alunos."); }
     finally { setBusy(false); }
   }
   return <div className="commercial-student-search">
@@ -44,6 +47,7 @@ function StudentSearch({ onSelect }: { onSelect: (student: Row) => void }) {
     {items.length ? <div className="commercial-search-results">{items.map((item) => <button type="button" key={text(item.id)} onClick={() => { onSelect(item); setItems([]); }}>
       <strong>{text(item.nome) || text(item.nome_publico) || "Sem nome"}</strong><span>{text(item.email)} · {text(item.id)}</span>
     </button>)}</div> : null}
+    {error ? <p className="admin-alert error" role="alert">{error}</p> : null}
   </div>;
 }
 
@@ -84,7 +88,7 @@ export default function CommercialAdmin() {
     } catch { /* A consulta principal exibira falhas relevantes. */ }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (tab !== "alunos") void load(); }, [load, tab]);
   useEffect(() => { void loadReferences(); }, [loadReferences]);
 
   async function mutate(resource: Tab, payload: Row, success: string) {
@@ -107,15 +111,16 @@ export default function CommercialAdmin() {
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
 
     <form className="commercial-toolbar" onSubmit={submitSearch}>
-      {tab !== "liberacoes" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
+      {tab !== "liberacoes" && tab !== "alunos" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
       {tab === "materiais" ? <label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : null}
       {tab === "atualizacoes" ? <><label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label><label>Tipo<select value={filters.tipo ?? ""} onChange={(event) => setFilters({ ...filters, tipo: event.target.value })}><option value="">Todos</option>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label><label>Importância<select value={filters.importancia ?? ""} onChange={(event) => setFilters({ ...filters, importancia: event.target.value })}><option value="">Todas</option>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "leis" ? <label>Estado<select value={filters.ativo ?? ""} onChange={(event) => setFilters({ ...filters, ativo: event.target.value })}><option value="">Todas</option><option value="true">Ativas</option><option value="false">Inativas</option></select></label> : null}
       {tab === "aquisicoes" ? <><label>Status<select value={filters.status ?? ""} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="ativo">Ativo</option><option value="cancelado">Cancelado</option><option value="reembolsado">Reembolsado</option></select></label><label>Origem<select value={filters.origem ?? ""} onChange={(event) => setFilters({ ...filters, origem: event.target.value })}><option value="">Todas</option>{ORIGENS.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "auditoria" ? <><label>Ator (UUID)<input value={filters.ator_user_id ?? ""} onChange={(event) => setFilters({ ...filters, ator_user_id: event.target.value })} /></label><label>Ação<input value={filters.acao ?? ""} onChange={(event) => setFilters({ ...filters, acao: event.target.value })} /></label><label>Entidade<input value={filters.entidade ?? ""} onChange={(event) => setFilters({ ...filters, entidade: event.target.value })} /></label><label>De<input type="datetime-local" value={filters.de ?? ""} onChange={(event) => setFilters({ ...filters, de: event.target.value })} /></label><label>Até<input type="datetime-local" value={filters.ate ?? ""} onChange={(event) => setFilters({ ...filters, ate: event.target.value })} /></label></> : null}
-      {tab !== "liberacoes" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
+      {tab !== "liberacoes" && tab !== "alunos" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
     </form>
 
+    {tab === "alunos" ? <StudentsPanel /> : null}
     {tab === "leis" ? <LawPanel rows={result.items} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "materiais" ? <MaterialPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
@@ -129,6 +134,44 @@ export default function CommercialAdmin() {
 }
 
 type PanelProps = { rows: Row[]; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: (resource: Tab, payload: Row, success: string) => Promise<void> };
+
+function StudentsPanel() {
+  const [student, setStudent] = useState<Row | null>(null);
+  const [acquisitions, setAcquisitions] = useState<Row[]>([]);
+  const [releases, setReleases] = useState<Row[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function selectStudent(nextStudent: Row) {
+    setStudent(nextStudent); setAcquisitions([]); setReleases([]); setBusy(true); setError("");
+    const alunoId = encodeURIComponent(text(nextStudent.id));
+    try {
+      const [acquisitionData, releaseData] = await Promise.all([
+        requestJson(`/api/admin/comercial/aquisicoes?aluno_id=${alunoId}&limit=50`),
+        requestJson(`/api/admin/comercial/liberacoes?aluno_id=${alunoId}&limit=50`),
+      ]);
+      setAcquisitions(acquisitionData.items ?? []);
+      setReleases(releaseData.items ?? []);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível carregar os dados do aluno.");
+    } finally { setBusy(false); }
+  }
+
+  return <section className="commercial-card">
+    <h2>Consultar aluno</h2>
+    <StudentSearch onSelect={selectStudent} />
+    {!student ? <p>Pesquise um aluno por nome ou e-mail para consultar suas aquisições e leis liberadas.</p> : null}
+    {busy ? <p className="commercial-loading">Carregando dados do aluno…</p> : null}
+    {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
+    {student && !busy && !error ? <>
+      <p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p>
+      <h3>Aquisições</h3>
+      {acquisitions.length ? <DataTable headers={["Produto", "Origem", "Data da aquisição", "Status"]}>{acquisitions.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "produtos").nome) || "Produto não informado"}</td><td>{text(row.origem)}</td><td>{date(row.adquirida_em)}</td><td>{text(row.status_acesso)}</td></tr>)}</DataTable> : <p>Nenhuma aquisição encontrada para este aluno.</p>}
+      <h3>Leis liberadas</h3>
+      {releases.length ? <DataTable headers={["Lei", "Origem", "Produto", "Status da liberação"]}>{releases.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "leis").titulo)}</td><td>{text(row.origem)}</td><td>{text(relation(row, "produtos").nome) || "—"}</td><td>{text(row.status)}</td></tr>)}</DataTable> : <p>Nenhuma lei liberada para este aluno.</p>}
+    </> : null}
+  </section>;
+}
 
 function LawPanel({ rows, editing, setEditing, busy, mutate }: PanelProps) {
   const [hasChange, setHasChange] = useState(editing?.houve_alteracao_legislativa === true);
