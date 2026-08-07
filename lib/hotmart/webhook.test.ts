@@ -20,6 +20,30 @@ const payloadV2 = {
   },
 };
 
+type Step = { data?: unknown; error?: unknown };
+
+function supabaseComRespostas(...steps: Step[]) {
+  const calls: Array<{ table: string; operation: "insert" | "update"; value: unknown }> = [];
+  const client = {
+    from(table: string) {
+      const response = steps.shift() ?? {};
+      const query = {
+        select: () => query,
+        eq: () => query,
+        ilike: () => query,
+        limit: () => query,
+        insert: (value: unknown) => { calls.push({ table, operation: "insert", value }); return query; },
+        update: (value: unknown) => { calls.push({ table, operation: "update", value }); return query; },
+        single: async () => response,
+        maybeSingle: async () => response,
+        then: <T>(resolve: (value: Step) => T) => Promise.resolve(response).then(resolve),
+      };
+      return query;
+    },
+  };
+  return { client, calls };
+}
+
 describe("recepção de webhook Hotmart", () => {
   it("alinha a tabela legada aos campos registrados pelo receptor", () => {
     const migration = readFileSync("supabase/migrations/20260807190000_align_hotmart_eventos_webhook.sql", "utf8");
@@ -42,6 +66,7 @@ describe("recepção de webhook Hotmart", () => {
     expect(normalizarEventoHotmart(payload)).toEqual({
       identificador_evento: "evt-123", codigo_transacao: "HP123", hotmart_product_id: "987",
       tipo_evento: "PURCHASE_APPROVED", status_transacao: "APPROVED", email_comprador: "aluno@exemplo.com",
+      nome_comprador: null, telefone_comprador: null, aprovada_em: null,
     });
   });
 
@@ -49,6 +74,7 @@ describe("recepção de webhook Hotmart", () => {
     expect(normalizarEventoHotmart(payloadV2)).toEqual({
       identificador_evento: "evt-v2-123", codigo_transacao: "HPV2-123", hotmart_product_id: "456",
       tipo_evento: "PURCHASE_APPROVED", status_transacao: "APPROVED", email_comprador: "aluno.v2@exemplo.com",
+      nome_comprador: "Aluno V2", telefone_comprador: "+5511999999999", aprovada_em: "2024-07-03T09:46:40.000Z",
     });
   });
 
@@ -58,22 +84,74 @@ describe("recepção de webhook Hotmart", () => {
     expect(() => normalizarEventoHotmart([])).toThrow("Payload inválido");
   });
 
-  it("registra um evento novo com payload bruto e normalizado", async () => {
+  it("registra um evento sem processamento comercial com payload bruto e normalizado", async () => {
     let registro: unknown;
     const supabase = { from: () => ({ insert: (value: unknown) => {
       registro = value;
       return { error: null };
     } }) };
-    await expect(registrarEventoHotmart(supabase as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    const payloadPendente = { ...payloadV2, event: "PURCHASE_PENDING", data: { ...payloadV2.data, purchase: { ...payloadV2.data.purchase, status: "PENDING" } } };
+    await expect(registrarEventoHotmart(supabase as never, payloadPendente)).resolves.toEqual({ duplicate: false });
     expect(registro).toMatchObject({
       identificador_evento: "evt-v2-123", hotmart_event_id: "evt-v2-123",
-      evento: "PURCHASE_APPROVED", codigo_transacao: "HPV2-123", hotmart_transaction_id: "HPV2-123",
-      payload: payloadV2, payload_bruto: payloadV2,
+      evento: "PURCHASE_PENDING", codigo_transacao: "HPV2-123", hotmart_transaction_id: "HPV2-123",
+      payload: payloadPendente, payload_bruto: payloadPendente,
     });
   });
 
   it("considera reenvio com o mesmo identificador como duplicado", async () => {
-    const supabase = { from: () => ({ insert: () => ({ error: { code: "23505" } }) }) };
-    await expect(registrarEventoHotmart(supabase as never, payload)).resolves.toEqual({ duplicate: true });
+    const { client } = supabaseComRespostas({ error: { code: "23505" } }, { data: { processado: true } });
+    await expect(registrarEventoHotmart(client as never, payload)).resolves.toEqual({ duplicate: true });
+  });
+
+  it("cria aluno, compra e liberações para uma venda aprovada", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, {}, { data: { id: "produto-1", hotmart_product_id: "456", ativo: true } }, {},
+      { data: { id: "aluno-1" } }, { data: { id: "compra-1" } }, { data: [{ lei_id: 1 }, { lei_id: 2 }] }, {}, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    expect(calls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: "alunos", operation: "insert" }),
+      expect.objectContaining({ table: "compras", operation: "insert" }),
+      expect.objectContaining({ table: "liberacoes_leis", operation: "insert" }),
+    ]));
+  });
+
+  it("reutiliza aluno existente e não cria liberações para transação já registrada", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, { data: { id: "compra-existente" } }, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
+    expect(calls.some((call) => call.table === "liberacoes_leis" && call.operation === "insert")).toBe(false);
+  });
+
+  it("reutiliza aluno existente ao registrar uma nova transação", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, {}, { data: { id: "produto-1", hotmart_product_id: "456", ativo: true } },
+      { data: { id: "aluno-existente", nome: "Aluno V2", telefone: "+5511999999999" } },
+      { data: { id: "compra-2" } }, { data: [] }, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
+    expect(calls).toContainEqual(expect.objectContaining({ table: "compras", operation: "insert" }));
+  });
+
+  it("registra erro quando o produto Hotmart é desconhecido", async () => {
+    const { client, calls } = supabaseComRespostas({}, {}, { data: null }, {});
+    await expect(registrarEventoHotmart(client as never, payloadV2)).rejects.toThrow("Produto interno não encontrado");
+    expect(calls).toContainEqual(expect.objectContaining({ table: "hotmart_eventos", operation: "update", value: expect.objectContaining({ processado: false }) }));
+  });
+
+  it("registra erro e não cria dados comerciais sem e-mail ou transação", async () => {
+    const semEmail = { ...payloadV2, data: { ...payloadV2.data, buyer: { ...payloadV2.data.buyer, email: undefined } } };
+    const { client, calls } = supabaseComRespostas({}, {});
+    await expect(registrarEventoHotmart(client as never, semEmail)).rejects.toThrow("sem e-mail");
+    expect(calls.some((call) => ["alunos", "compras", "liberacoes_leis"].includes(call.table))).toBe(false);
+
+    const semTransacao = { ...payloadV2, data: { ...payloadV2.data, purchase: { ...payloadV2.data.purchase, transaction: undefined } } };
+    const semTransacaoMock = supabaseComRespostas({}, {});
+    await expect(registrarEventoHotmart(semTransacaoMock.client as never, semTransacao)).rejects.toThrow("sem código da transação");
+    expect(semTransacaoMock.calls.some((call) => ["alunos", "compras", "liberacoes_leis"].includes(call.table))).toBe(false);
   });
 });
