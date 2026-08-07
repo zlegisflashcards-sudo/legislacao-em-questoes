@@ -116,10 +116,27 @@ function getStatusAtualizacaoVisual(status: StatusAtualizacao) {
 
 export async function generateStaticParams() {
   const legislacoes = await getLegislacoes();
+  let slugsProdutos: string[] = [];
 
-  return filtrarLegislacoesAtivas(legislacoes).map((legislacao) => ({
-    slug: legislacao.slug,
-  }));
+  try {
+    const { data } = await getSupabaseServerClient()
+      .from("produtos")
+      .select("slug")
+      .eq("ativo", true)
+      .not("slug", "is", null);
+    slugsProdutos = (data ?? [])
+      .map((produto) => produto.slug)
+      .filter((slug): slug is string => Boolean(slug));
+  } catch {
+    // A página continua disponível para as leis já conhecidas quando o catálogo não está acessível no build.
+  }
+
+  return Array.from(
+    new Set([
+      ...filtrarLegislacoesAtivas(legislacoes).map((legislacao) => legislacao.slug),
+      ...slugsProdutos,
+    ]),
+  ).map((slug) => ({ slug }));
 }
 
 export default async function LegislacaoPage({ params }: LegislacaoPageProps) {

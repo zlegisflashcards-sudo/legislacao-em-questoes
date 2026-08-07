@@ -10,6 +10,11 @@ describe("página comercial de produto", () => {
     expect(source).toContain('from("materiais_leis")');
   });
 
+  it("inclui slugs de produtos ativos na rota comercial", () => {
+    expect(source).toContain("let slugsProdutos: string[] = []");
+    expect(source).toContain("...slugsProdutos");
+  });
+
   it("usa apenas checkout cadastrado e preserva o fallback da página anterior", () => {
     expect(source).toContain("produto.hotmartUrl");
     expect(source).toContain("Link de aquisição indisponível");
