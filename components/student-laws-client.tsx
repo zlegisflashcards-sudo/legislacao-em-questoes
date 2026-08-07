@@ -7,15 +7,22 @@ import { supabase } from "@/lib/supabase";
 
 type StudentLawsResponse = { leis?: StudentLaw[]; total?: number; message?: string };
 type ActiveTab = "leis" | "edital";
+type AnkiSetupStatus = "loading" | "pending" | "configured";
+
+const ANKI_SETUP_STORAGE_PREFIX = "legisflashcards:anki-configured:";
 
 async function studentRequest() {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) return new Response(null, { status: 401 });
-  return fetch("/api/aluno/minhas-leis", {
-    cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const userId = data.session?.user.id ?? null;
+  if (!token || !userId) return { response: new Response(null, { status: 401 }), userId: null };
+  return {
+    response: await fetch("/api/aluno/minhas-leis", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    userId,
+  };
 }
 
 export function StudentLawsClient() {
@@ -24,16 +31,18 @@ export function StudentLawsClient() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     async function load() {
       try {
-        const response = await studentRequest();
+        const { response, userId: authenticatedUserId } = await studentRequest();
         if (response.status === 401) {
           window.location.replace("/conta?modo=login&retorno=%2Fminhas-leis");
           return;
         }
+        if (active) setUserId(authenticatedUserId);
         const result = await response.json() as StudentLawsResponse;
         if (!response.ok || !Array.isArray(result.leis)) throw new Error(result.message);
         if (active) setLaws(result.leis);
@@ -62,7 +71,7 @@ export function StudentLawsClient() {
     </div>
 
     {activeTab === "leis" ? <section id="student-laws-panel" role="tabpanel" aria-label="Minhas leis" className="grid gap-6">
-      <AnkiModule />
+      <AnkiModule userId={userId} />
 
       {!loading && !error && laws.length > 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label htmlFor="student-laws-search" className="text-sm font-black text-slate-800">Pesquisar nas minhas leis</label>
@@ -84,13 +93,74 @@ export function StudentLawsClient() {
   </div>;
 }
 
-function AnkiModule() {
-  return <aside aria-labelledby="anki-module-title" className="rounded-3xl border border-blue-200 bg-gradient-to-br from-[#062a5f] to-blue-700 p-6 text-white shadow-sm sm:p-8">
-    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-200">Ferramenta de revisão</p>
-    <h2 id="anki-module-title" className="mt-2 text-2xl font-black">Anki</h2>
-    <p className="mt-3 max-w-2xl text-blue-50">Existe um único deck oficial, completo e atualizado. Quando houver uma nova versão, exclua o deck antigo e importe o novo: isso evita duplicidades, mas reinicia o progresso no Anki. Não há atualização incremental.</p>
-    <a href="https://apps.ankiweb.net/" target="_blank" rel="noreferrer" className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-5 py-3 font-black text-blue-800 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Conhecer o Anki</a>
+function AnkiModule({ userId }: { userId: string | null }) {
+  const [status, setStatus] = useState<AnkiSetupStatus>("loading");
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      setStatus(window.localStorage.getItem(`${ANKI_SETUP_STORAGE_PREFIX}${userId}`) === "true" ? "configured" : "pending");
+    } catch {
+      setStatus("pending");
+    }
+  }, [userId]);
+
+  function markConfigured() {
+    if (userId) {
+      try {
+        window.localStorage.setItem(`${ANKI_SETUP_STORAGE_PREFIX}${userId}`, "true");
+      } catch {
+        // O estado visual continua funcionando mesmo quando o armazenamento local está indisponível.
+      }
+    }
+    setStatus("configured");
+    setTutorialOpen(false);
+  }
+
+  const configured = status === "configured";
+
+  return <aside aria-labelledby="anki-module-title" className="rounded-3xl border-2 border-blue-300 bg-gradient-to-br from-[#062a5f] to-blue-700 p-6 text-white shadow-md ring-4 ring-blue-50 sm:p-8">
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 gap-4">
+        <AnkiIcon />
+        <div className="min-w-0">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-blue-800">Passo 1</span>
+            <span className="rounded-full border border-blue-200 bg-blue-950/35 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-white">Obrigatório</span>
+            <span role="status" className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${configured ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+              {status === "loading" ? "Verificando" : configured ? "Anki configurado" : "Pendente"}
+            </span>
+          </div>
+          <h2 id="anki-module-title" className="mt-4 text-2xl font-black">Instale e configure o Anki</h2>
+          <p className="mt-3 max-w-2xl font-semibold text-blue-50">Comece por aqui. Configure o Anki antes de baixar e estudar seus materiais.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">Esta orientação organiza sua jornada, mas não bloqueia o acesso às leis, materiais ou demais recursos da sua conta.</p>
+        </div>
+      </div>
+      <button type="button" onClick={() => setTutorialOpen(true)} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-white px-5 py-3 font-black text-blue-800 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+        {configured ? "Reabrir tutorial" : "Configurar Anki"}
+      </button>
+    </div>
+
+    {tutorialOpen ? <div className="mt-6 rounded-2xl border border-white/30 bg-white/10 p-5" aria-label="Tutorial de configuração do Anki">
+      <h3 className="text-lg font-black">Configuração inicial</h3>
+      <ol className="mt-3 grid gap-2 text-sm leading-relaxed text-blue-50">
+        <li><strong>1.</strong> Instale o Anki no dispositivo em que você estudará.</li>
+        <li><strong>2.</strong> Abra o aplicativo e conclua a configuração inicial.</li>
+        <li><strong>3.</strong> Volte aqui e marque este passo como configurado.</li>
+      </ol>
+      <p className="mt-4 text-sm leading-relaxed text-blue-100">Existe um único deck oficial, completo e atualizado. Quando houver uma nova versão, exclua o deck antigo e importe o novo: isso evita duplicidades, mas reinicia o progresso no Anki. Não há atualização incremental.</p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <a href="https://apps.ankiweb.net/" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/50 px-4 py-2 font-black text-white transition hover:bg-white/10">Baixar o Anki</a>
+        <button type="button" onClick={markConfigured} className="min-h-11 rounded-xl bg-emerald-100 px-4 py-2 font-black text-emerald-900 transition hover:bg-emerald-50">Marcar como configurado</button>
+        <button type="button" onClick={() => setTutorialOpen(false)} className="min-h-11 rounded-xl px-4 py-2 font-bold text-blue-100 transition hover:bg-white/10">Fechar tutorial</button>
+      </div>
+    </div> : null}
   </aside>;
+}
+
+function AnkiIcon() {
+  return <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/40 bg-white text-3xl font-black text-blue-700 shadow-sm">✦</span>;
 }
 
 function StudentLawCard({ law }: { law: StudentLaw }) {

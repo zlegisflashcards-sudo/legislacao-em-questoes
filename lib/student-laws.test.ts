@@ -6,6 +6,7 @@ const migration = readFileSync("supabase/migrations/20260806103510_create_studen
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/minhas-leis/route.ts", "utf8");
 const client = readFileSync("components/student-laws-client.tsx", "utf8");
+const ankiModule = client.slice(client.indexOf("function AnkiModule"), client.indexOf("function StudentLawCard"));
 const card = client.slice(client.indexOf("function StudentLawCard"), client.indexOf("function EmptyState"));
 const page = readFileSync("app/minhas-leis/page.tsx", "utf8");
 
@@ -121,14 +122,37 @@ describe("interface das leis adquiridas", () => {
     expect(client).toContain("Meu edital");
   });
 
-  it("mantém o módulo Anki antes da busca", () => {
-    expect(client.indexOf("<AnkiModule />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
-    expect(client).toContain("Conhecer o Anki");
+  it("mantém o módulo obrigatório do Anki em primeiro lugar e antes da busca", () => {
+    expect(client.indexOf("<AnkiModule userId={userId} />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
+    expect(ankiModule).toContain("Passo 1");
+    expect(ankiModule).toContain("Obrigatório");
+    expect(ankiModule).toContain("Instale e configure o Anki");
+    expect(ankiModule).toContain("Comece por aqui. Configure o Anki antes de baixar e estudar seus materiais.");
+    expect(ankiModule).toContain("<AnkiIcon />");
+    expect(ankiModule).toContain("Configurar Anki");
+    expect(ankiModule).toContain("Baixar o Anki");
     expect(client).not.toContain("drive.google.com");
-    expect(client).toContain("um único deck oficial, completo e atualizado");
-    expect(client).toContain("exclua o deck antigo e importe o novo");
-    expect(client).toContain("reinicia o progresso no Anki");
-    expect(client).toContain("Não há atualização incremental");
+    expect(ankiModule).toContain("um único deck oficial, completo e atualizado");
+    expect(ankiModule).toContain("exclua o deck antigo e importe o novo");
+    expect(ankiModule).toContain("reinicia o progresso no Anki");
+    expect(ankiModule).toContain("Não há atualização incremental");
+  });
+
+  it("muda apenas a apresentação quando o Anki é marcado como configurado", () => {
+    expect(client).toContain('type AnkiSetupStatus = "loading" | "pending" | "configured"');
+    expect(ankiModule).toContain("ANKI_SETUP_STORAGE_PREFIX");
+    expect(ankiModule).toContain('setStatus("configured")');
+    expect(ankiModule).toContain("Anki configurado");
+    expect(ankiModule).toContain("Reabrir tutorial");
+    expect(ankiModule).toContain("Marcar como configurado");
+  });
+
+  it("não condiciona leis, materiais ou navegação ao estado do Anki", () => {
+    expect(ankiModule).toContain("não bloqueia o acesso às leis, materiais ou demais recursos da sua conta");
+    for (const forbidden of ["StudentLawCard", "filteredLaws", "window.location", "router.", "fetch(", ".rpc(", "disabled", "setProgress", "updateProgress"]) {
+      expect(ankiModule).not.toContain(forbidden);
+    }
+    expect(client).toContain("filteredLaws.map((law) => <StudentLawCard");
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
