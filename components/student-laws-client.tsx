@@ -133,7 +133,7 @@ function StudentLawCard({ law }: { law: StudentLaw }) {
       {law.descricao ? <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-600">{law.descricao}</p> : null}
       {law.totalFlashcards > 0 ? <p className="mt-4 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-600">{law.totalFlashcards} flashcards</p> : null}
     </div>
-    <button type="button" disabled title="Área de estudo em preparação" className="min-h-11 shrink-0 rounded-xl bg-slate-200 px-5 py-3 font-black text-slate-500">Abrir estudo — em breve</button>
+    <Link href={`/estudar/lei/${encodeURIComponent(law.slug)}`} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Abrir estudo</Link>
   </article>;
 }
 

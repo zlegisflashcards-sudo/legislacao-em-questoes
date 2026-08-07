@@ -170,7 +170,8 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "law.codigo", "studentLawShortNameForDisplay", "shortName", "law.totalFlashcards > 0", "Abrir estudo — em breve"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "law.codigo", "studentLawShortNameForDisplay", "shortName", "law.totalFlashcards > 0", "Abrir estudo"]) expect(card).toContain(expected);
+    expect(card).toContain('href={`/estudar/lei/${encodeURIComponent(law.slug)}`}');
     expect(card.indexOf("law.titulo")).toBeLessThan(card.indexOf("{shortName}"));
     for (const forbidden of ["law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado"]) {
       expect(card).not.toContain(forbidden);
@@ -188,10 +189,10 @@ describe("interface das leis adquiridas", () => {
     }
   });
 
-  it("não simula estudo, edital, progresso ou métricas inexistentes", () => {
-    expect(client).toContain("Abrir estudo — em breve");
+  it("ativa somente a rota segura de estudo e não simula edital, progresso ou métricas", () => {
+    expect(client).toContain('href={`/estudar/lei/${encodeURIComponent(law.slug)}`}');
     expect(client).toContain("Montar meu edital — em breve");
-    expect(client.match(/disabled/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(client.match(/disabled/g)?.length).toBeGreaterThanOrEqual(1);
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
       expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
