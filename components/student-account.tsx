@@ -30,6 +30,7 @@ export function StudentAccount() {
     async function load() {
       const { data } = await supabase.auth.getUser();
       if (data.user) {
+        await vincularAluno();
         setEmail(data.user.email ?? "");
         const result = await supabase.from("perfis_publicos").select("id,nome_publico").eq("id", data.user.id).maybeSingle();
         setProfile(result.data as PublicProfile | null);
@@ -40,6 +41,12 @@ export function StudentAccount() {
     void load();
   }, [initialMode]);
 
+  async function vincularAluno() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session?.access_token) return;
+    await fetch("/api/aluno/vincular", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` } });
+  }
+
   async function authenticate(formData: FormData) {
     setPending(true); setMessage("");
     const authEmail = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -48,6 +55,7 @@ export function StudentAccount() {
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
         if (error) { setMessage("E-mail ou senha inválidos."); return; }
+        await vincularAluno();
         window.location.assign(returnPath);
         return;
       }
@@ -68,6 +76,7 @@ export function StudentAccount() {
         return;
       }
       if (data.session && data.user) {
+        await vincularAluno();
         const profileResult = await supabase
           .from("perfis_publicos")
           .select("id,nome_publico")
