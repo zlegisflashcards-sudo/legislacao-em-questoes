@@ -3,8 +3,6 @@
 import { useMemo } from "react";
 import { LegislacaoSearch } from "@/components/legislacao-search";
 import {
-  getVadeMecumHotmartUrl,
-  isVadeMecum,
   type Legislacao,
 } from "@/lib/legislacoes";
 import { siteConfig } from "@/lib/site-config";
@@ -22,13 +20,9 @@ function isConstituicaoFederal(legislacao: Legislacao) {
 }
 
 function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
-  const isProdutoPorConcurso = isVadeMecum(legislacao);
-  const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
-  const saibaMaisUrl = isProdutoPorConcurso
-    ? hotmartUrl
-    : isConstituicaoFederal(legislacao)
-      ? "/constituicao-federal-gratis"
-      : `/leisflashcards/${legislacao.slug}`;
+  const saibaMaisUrl = isConstituicaoFederal(legislacao)
+    ? "/constituicao-federal-gratis"
+    : `/leisflashcards/${legislacao.slug}`;
 
   return (
     <article className="relative flex min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_46px_rgba(0,104,237,0.25)]">
@@ -73,24 +67,12 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
             <span className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed]">
               {legislacao.quantidadeFlashcards} {legislacao.unidade}
             </span>
-            {isProdutoPorConcurso && !hotmartUrl ? (
-              <button
-                type="button"
-                disabled
-                className="relative z-20 inline-flex min-h-12 cursor-not-allowed items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] opacity-50"
-              >
-                Indisponível
-              </button>
-            ) : (
-              <a
-                href={saibaMaisUrl!}
-                target={isProdutoPorConcurso ? "_blank" : undefined}
-                rel={isProdutoPorConcurso ? "noopener noreferrer" : undefined}
-                className="relative z-20 inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
-              >
-                Saiba mais
-              </a>
-            )}
+            <a
+              href={saibaMaisUrl}
+              className="relative z-20 inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
+            >
+              Saiba mais
+            </a>
           </div>
         )}
       </div>

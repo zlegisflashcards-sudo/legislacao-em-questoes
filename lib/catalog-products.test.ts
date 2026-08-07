@@ -22,5 +22,7 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("Saber mais");
     expect(cards).not.toContain("Ver produto");
     expect(cards).toContain("/leisflashcards/${produto.slug}");
+    expect(cards).toContain("/leisflashcards/${legislacao.slug}");
+    expect(cards).not.toContain("getVadeMecumHotmartUrl");
   });
 });
