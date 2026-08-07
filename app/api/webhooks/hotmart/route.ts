@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { registrarEventoHotmart, validarHottok } from "@/lib/hotmart/webhook";
+import { diagnosticoHottok, registrarEventoHotmart, validarHottok } from "@/lib/hotmart/webhook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  if (!validarHottok(request.headers.get("x-hotmart-hottok"), process.env.HOTMART_HOTTOK)) {
+  const hottokRecebido = request.headers.get("x-hotmart-hottok");
+  const hottokConfigurado = process.env.HOTMART_HOTTOK;
+  console.info("Diagnóstico Hottok Hotmart:", diagnosticoHottok(hottokRecebido, hottokConfigurado));
+
+  if (!validarHottok(hottokRecebido, hottokConfigurado)) {
     return NextResponse.json({ success: false }, { status: 401 });
   }
 

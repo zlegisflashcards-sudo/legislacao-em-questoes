@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizarEventoHotmart, registrarEventoHotmart } from "./webhook";
+import { diagnosticoHottok, normalizarEventoHotmart, registrarEventoHotmart } from "./webhook";
 
 const payload = {
   id: "evt-123",
@@ -10,6 +10,15 @@ const payload = {
 };
 
 describe("recepção de webhook Hotmart", () => {
+  it("expõe apenas presença e tamanhos no diagnóstico do Hottok", () => {
+    expect(diagnosticoHottok("segredo-recebido", "segredo-configurado")).toEqual({
+      hottokRecebido: true, hottokConfigurado: true, tamanhoRecebido: 16, tamanhoConfigurado: 19,
+    });
+    expect(diagnosticoHottok(null, undefined)).toEqual({
+      hottokRecebido: false, hottokConfigurado: false, tamanhoRecebido: 0, tamanhoConfigurado: 0,
+    });
+  });
+
   it("normaliza os campos de um evento novo", () => {
     expect(normalizarEventoHotmart(payload)).toEqual({
       identificador_evento: "evt-123", codigo_transacao: "HP123", hotmart_product_id: "987",

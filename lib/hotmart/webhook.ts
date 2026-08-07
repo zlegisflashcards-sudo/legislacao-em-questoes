@@ -30,6 +30,15 @@ export function validarHottok(recebido: string | null, esperado: string | undefi
   return recebidoBuffer.length === esperadoBuffer.length && timingSafeEqual(recebidoBuffer, esperadoBuffer);
 }
 
+export function diagnosticoHottok(recebido: string | null, configurado: string | undefined) {
+  return {
+    hottokRecebido: Boolean(recebido),
+    hottokConfigurado: Boolean(configurado),
+    tamanhoRecebido: recebido?.length ?? 0,
+    tamanhoConfigurado: configurado?.length ?? 0,
+  };
+}
+
 export function normalizarEventoHotmart(payload: unknown): EventoHotmartNormalizado {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Payload inválido.");
