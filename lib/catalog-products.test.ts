@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("cards comerciais do catálogo", () => {
   const loader = readFileSync("lib/catalog-products-server.ts", "utf8");
   const cards = readFileSync("components/home-categorias-vade-mecum.tsx", "utf8");
+  const search = readFileSync("components/legislacao-search.tsx", "utf8");
 
   it("busca produtos, leis vinculadas e materiais ativos", () => {
     expect(loader).toContain('from("produtos")');
@@ -24,5 +25,11 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("/leisflashcards/${produto.slug}");
     expect(cards).toContain("/leisflashcards/${legislacao.slug}");
     expect(cards).not.toContain("getVadeMecumHotmartUrl");
+  });
+
+  it("prioriza a rota interna para itens que possuem produto comercial", () => {
+    expect(cards).toContain("produtos={produtos}");
+    expect(search).toContain("const produtoInterno = produtos.find(");
+    expect(search).toContain("/leisflashcards/${produtoInterno.slug}");
   });
 });

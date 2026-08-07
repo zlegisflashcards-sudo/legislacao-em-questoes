@@ -9,6 +9,7 @@ import {
 
 type LegislacaoSearchProps = {
   legislacoes: Legislacao[];
+  produtos?: Array<{ nome: string; slug: string }>;
   variant?: "light" | "dark";
 };
 
@@ -22,6 +23,7 @@ function normalizeSearch(value: string) {
 
 export function LegislacaoSearch({
   legislacoes,
+  produtos = [],
   variant = "light",
 }: LegislacaoSearchProps) {
   const [query, setQuery] = useState("");
@@ -88,6 +90,16 @@ export function LegislacaoSearch({
                 {sugestoes.map((legislacao) => {
                   const isProdutoPorConcurso = isVadeMecum(legislacao);
                   const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
+                  const produtoInterno = produtos.find(
+                    (produto) =>
+                      normalizeSearch(produto.nome) ===
+                      normalizeSearch(legislacao.nome),
+                  );
+                  const href = produtoInterno
+                    ? `/leisflashcards/${produtoInterno.slug}`
+                    : isProdutoPorConcurso
+                      ? hotmartUrl!
+                      : `/leisflashcards/${legislacao.slug}`;
                   const content = (
                     <>
                       <span className="block text-sm font-bold text-slate-950">
@@ -103,7 +115,7 @@ export function LegislacaoSearch({
 
                   return (
                     <li key={legislacao.slug}>
-                      {isProdutoPorConcurso && !hotmartUrl ? (
+                      {isProdutoPorConcurso && !hotmartUrl && !produtoInterno ? (
                         <div
                           aria-disabled="true"
                           className="flex cursor-not-allowed items-center justify-between gap-4 px-4 py-3 opacity-60"
@@ -115,16 +127,14 @@ export function LegislacaoSearch({
                         </div>
                       ) : (
                         <a
-                          href={
-                            isProdutoPorConcurso
-                              ? hotmartUrl!
-                              : `/leisflashcards/${legislacao.slug}`
-                          }
+                          href={href}
                           target={
-                            isProdutoPorConcurso ? "_blank" : undefined
+                            isProdutoPorConcurso && !produtoInterno
+                              ? "_blank"
+                              : undefined
                           }
                           rel={
-                            isProdutoPorConcurso
+                            isProdutoPorConcurso && !produtoInterno
                               ? "noopener noreferrer"
                               : undefined
                           }
