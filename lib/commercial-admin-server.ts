@@ -382,8 +382,8 @@ function historicalSale(raw: unknown): HistoricalSale {
   rejectUnknownKeys(row, ["transactionId", "productCode", "email", "name", "purchasedAt", "status"]);
   const status = requiredString(row.status, "Status", 60).toLocaleLowerCase("pt-BR");
   const statusMap: Record<string, HistoricalSale["status"]> = {
-    approved: "ativo", complete: "ativo", aprovada: "ativo", completa: "ativo",
-    cancelled: "cancelado", canceled: "cancelado", cancelada: "cancelado",
+    approved: "ativo", complete: "ativo", aprovada: "ativo", aprovado: "ativo", completa: "ativo",
+    cancelled: "cancelado", canceled: "cancelado", cancelada: "cancelado", cancelado: "cancelado",
     refunded: "reembolsado", reembolsada: "reembolsado", chargeback: "reembolsado",
   };
   const mappedStatus = statusMap[status];
