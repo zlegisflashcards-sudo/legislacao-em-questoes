@@ -288,7 +288,67 @@ function AcquisitionPanel({ rows, student, setStudent, products, filters, setFil
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!student) return; const data=Object.fromEntries(new FormData(event.currentTarget)); const product=products.find((item)=>text(item.id)===text(data.produto_id)); if (!window.confirm(`Confirmar aquisição?\nAluno: ${text(student.nome)} (${text(student.email)})\nProduto: ${text(product?.nome)}\nOrigem: ${text(data.origem)}\nLeis liberadas: ${lawCount}`)) return; await mutate("aquisicoes", { action:"registrar", data:{ ...data, aluno_id:student.id } }, "Aquisição registrada e liberações criadas."); }
   async function lifecycle(row: Row, action: string) { if (!window.confirm(`Confirmar ${action} desta aquisição? O histórico será preservado.`)) return; await mutate("aquisicoes", { action, id:row.id }, `Aquisição ${action === "reativar" ? "reativada" : action === "cancelar" ? "cancelada" : "reembolsada"}.`); }
   return <><div className="commercial-card"><h2>Registrar aquisição</h2><StudentSearch onSelect={setStudent} />{student ? <p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome)} ({text(student.email)})</p> : null}<form className="commercial-form-grid" onSubmit={submit}><select name="produto_id" required value={filters.produto_id ?? ""} onChange={(event)=>setFilters({...filters,produto_id:event.target.value})}><option value="" disabled>Selecione o produto</option>{products.filter((item)=>item.ativo).map((item)=><option key={text(item.id)} value={text(item.id)}>{text(item.nome)}</option>)}</select><select name="origem" defaultValue="administrativo">{ORIGENS.map((item)=><option key={item}>{item}</option>)}</select><input name="identificador_externo" placeholder="Identificador externo opcional" /><textarea name="observacao_administrativa" placeholder="Observação administrativa" /><p>Composição atual: <strong>{lawCount} lei(s)</strong>.</p><button className="admin-button primary" disabled={busy || !student || !filters.produto_id}>Registrar aquisição</button></form></div>
+  <HistoricalHotmartImport />
   <DataTable headers={["Aluno", "Produto", "Origem", "Status", "Data", "Ações"]}>{rows.map((row)=><tr key={text(row.id)}><td>{text(relation(row,"alunos").nome)}<small>{text(relation(row,"alunos").email)}</small></td><td>{text(relation(row,"produtos").nome)}</td><td>{text(row.origem)}</td><td>{text(row.status_acesso)}</td><td>{date(row.adquirida_em)}</td><td>{row.status_acesso === "ativo" ? <><button disabled={busy} onClick={()=>void lifecycle(row,"cancelar")}>Cancelar</button><button disabled={busy} onClick={()=>void lifecycle(row,"reembolsar")}>Reembolsar</button></> : <button disabled={busy} onClick={()=>void lifecycle(row,"reativar")}>Reativar histórico</button>}</td></tr>)}</DataTable></>;
+}
+
+function parseCsv(textContent: string) {
+  const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
+  const firstLine = textContent.slice(0, textContent.search(/\r?\n/));
+  const delimiter = firstLine.split(";").length >= firstLine.split(",").length ? ";" : ",";
+  for (let index = 0; index < textContent.length; index += 1) {
+    const char = textContent[index];
+    if (char === '"') { if (quoted && textContent[index + 1] === '"') { cell += char; index += 1; } else quoted = !quoted; }
+    else if (!quoted && char === delimiter) { row.push(cell.trim()); cell = ""; }
+    else if (!quoted && (char === "\n" || char === "\r")) { if (char === "\r" && textContent[index + 1] === "\n") index += 1; row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); row = []; cell = ""; }
+    else cell += char;
+  }
+  row.push(cell.trim()); if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
+function HistoricalHotmartImport() {
+  const [busy, setBusy] = useState(false);
+  const [summary, setSummary] = useState<Row | null>(null);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setSummary(null);
+    const file = new FormData(event.currentTarget).get("csv");
+    if (!(file instanceof File) || !file.size) return setError("Selecione um arquivo CSV.");
+    if (file.size > 4 * 1024 * 1024) return setError("O CSV deve ter no máximo 4 MB.");
+    const rows = parseCsv(await file.text());
+    const normalize = (value: string) => value.replace(/^\uFEFF/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const headers = rows.shift()?.map(normalize) ?? [];
+    const field = (names: string[]) => headers.findIndex((header) => names.includes(header));
+    const transaction = field(["codigo da transacao", "transacao"]);
+    const product = field(["codigo do produto"]);
+    const email = field(["e-mail do(a) comprador(a)", "e-mail", "email"]);
+    const name = field(["comprador(a)", "nome"]);
+    const dateValue = field(["data da transacao", "data da venda"]);
+    const status = field(["status da transacao", "status"]);
+    if ([transaction, product, email, dateValue, status].some((index) => index < 0)) return setError("CSV incompatível. Confira os cabeçalhos informados abaixo.");
+    const sales = rows.map((row) => ({ transactionId: row[transaction], productCode: row[product], email: row[email], name: name < 0 ? null : row[name], purchasedAt: row[dateValue], status: row[status] }));
+    setBusy(true);
+    try {
+      const totals = { processed: 0, imported: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };
+      for (let index = 0; index < sales.length; index += 50) {
+        const data = await requestJson("/api/admin/comercial/aquisicoes", { method: "POST", body: JSON.stringify({ action: "importar_hotmart_historico", data: { vendas: sales.slice(index, index + 50) } }) });
+        totals.processed += Number(data.processed) || 0; totals.imported += Number(data.imported) || 0; totals.studentsCreated += Number(data.studentsCreated) || 0; totals.studentsExisting += Number(data.studentsExisting) || 0; totals.duplicates += Number(data.duplicates) || 0; totals.errors.push(...(Array.isArray(data.errors) ? data.errors : []));
+      }
+      setSummary(totals);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível importar o CSV."); }
+    finally { setBusy(false); }
+  }
+
+  return <form className="commercial-card commercial-form-grid" onSubmit={submit}>
+    <h2>Importar vendas históricas da Hotmart</h2>
+    <p>Envie o Relatório de Vendas CSV da Hotmart. Cabeçalhos aceitos: <strong>Código da transação</strong> (ou Transação), <strong>Código do produto</strong>, <strong>E-mail do(a) Comprador(a)</strong> (ou E-mail), <strong>Data da transação</strong> (ou Data da venda), <strong>Status da transação</strong> (ou Status) e, opcionalmente, <strong>Comprador(a)</strong> (ou Nome).</p>
+    <input name="csv" type="file" accept=".csv,text/csv" required />
+    <button className="admin-button primary" disabled={busy}>{busy ? "Importando…" : "Importar CSV"}</button>
+    {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
+    {summary ? <div className="admin-alert success" role="status"><strong>Importação concluída.</strong><small>Processadas: {text(summary.processed)} · Importadas: {text(summary.imported)} · Alunos criados: {text(summary.studentsCreated)} · Alunos existentes: {text(summary.studentsExisting)} · Duplicidades: {text(summary.duplicates)}</small>{Array.isArray(summary.errors) && summary.errors.length ? <details><summary>{summary.errors.length} erro(s)</summary><ul>{summary.errors.map((item, index) => <li key={index}>{text(item)}</li>)}</ul></details> : null}</div> : null}
+  </form>;
 }
 
 function ReleasePanel({ rows, student, setStudent, laws, busy, mutate, reload }: { rows: Row[]; student: Row|null; setStudent:(row:Row)=>void; laws:Row[]; busy:boolean; mutate:PanelProps["mutate"]; reload:()=>Promise<void> }) {

@@ -366,6 +366,96 @@ function validateProductData(raw: unknown, update = false) {
   return result;
 }
 
+type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; purchasedAt: string; status: "ativo" | "cancelado" | "reembolsado" };
+
+function parseHistoricalTimestamp(value: string) {
+  const brazilian = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  const normalized = brazilian
+    ? `${brazilian[3]}-${brazilian[2]}-${brazilian[1]}T${brazilian[4] ?? "00"}:${brazilian[5] ?? "00"}:${brazilian[6] ?? "00"}-03:00`
+    : value;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function historicalSale(raw: unknown): HistoricalSale {
+  const row = asObject(raw);
+  rejectUnknownKeys(row, ["transactionId", "productCode", "email", "name", "purchasedAt", "status"]);
+  const status = requiredString(row.status, "Status", 60).toLocaleLowerCase("pt-BR");
+  const statusMap: Record<string, HistoricalSale["status"]> = {
+    approved: "ativo", complete: "ativo", aprovada: "ativo", completa: "ativo",
+    cancelled: "cancelado", canceled: "cancelado", cancelada: "cancelado",
+    refunded: "reembolsado", reembolsada: "reembolsado", chargeback: "reembolsado",
+  };
+  const mappedStatus = statusMap[status];
+  if (!mappedStatus) throw new CommercialValidationError("Status Hotmart não suportado.");
+  const purchasedAt = parseHistoricalTimestamp(requiredString(row.purchasedAt, "Data da transação", 100));
+  if (!purchasedAt) throw new CommercialValidationError("Data da transação inválida.");
+  return {
+    transactionId: requiredString(row.transactionId, "Código da transação", 300),
+    productCode: requiredString(row.productCode, "Código do produto", 300),
+    email: requiredString(row.email, "E-mail", 320).toLowerCase(),
+    name: optionalString(row.name, "Nome", 300) ?? null,
+    purchasedAt,
+    status: mappedStatus,
+  };
+}
+
+async function importHistoricalHotmartSales(actor: string, rawRows: unknown) {
+  if (!Array.isArray(rawRows) || !rawRows.length || rawRows.length > 50) throw new CommercialValidationError("Informe de 1 a 50 vendas por lote.");
+  const supabase = getSupabaseServerClient();
+  const summary = { processed: rawRows.length, imported: 0, studentsCreated: 0, studentsExisting: 0, duplicates: 0, errors: [] as string[] };
+  for (let index = 0; index < rawRows.length; index += 1) {
+    try {
+      const sale = historicalSale(rawRows[index]);
+      const duplicate = await supabase.from("compras").select("id").eq("origem", "hotmart").eq("identificador_externo", sale.transactionId).maybeSingle();
+      if (duplicate.error) throw duplicate.error;
+      if (duplicate.data) { summary.duplicates += 1; continue; }
+
+      const product = await supabase.from("produtos").select("id,hotmart_product_id,ativo").eq("hotmart_product_id", sale.productCode).maybeSingle();
+      if (product.error || !product.data) throw new Error("Produto interno não encontrado para o código Hotmart.");
+
+      const existingStudent = await supabase.from("alunos").select("id").ilike("email", sale.email).limit(1).maybeSingle();
+      if (existingStudent.error) throw existingStudent.error;
+      let studentId = existingStudent.data?.id as string | undefined;
+      if (studentId) summary.studentsExisting += 1;
+      else {
+        const createdStudent = await supabase.from("alunos").insert({ nome: sale.name, email: sale.email }).select("id").single();
+        if (createdStudent.error || !createdStudent.data) throw createdStudent.error ?? new Error("Não foi possível criar o aluno.");
+        studentId = createdStudent.data.id as string;
+        summary.studentsCreated += 1;
+      }
+
+      if (sale.status === "ativo") {
+        if (!product.data.ativo) throw new Error("Produto interno está inativo.");
+        const created = await rpc("admin_registrar_aquisicao", {
+          p_ator_user_id: actor, p_aluno_id: studentId, p_produto_id: product.data.id,
+          p_origem: "hotmart", p_identificador_externo: sale.transactionId,
+          p_observacao_administrativa: "Importação histórica Hotmart",
+        }) as { compra?: { id?: string } | null } | null;
+        const purchaseId = created?.compra?.id;
+        if (purchaseId) {
+          const updated = await supabase.from("compras").update({ adquirida_em: sale.purchasedAt, comprada_em: sale.purchasedAt }).eq("id", purchaseId);
+          if (updated.error) throw updated.error;
+        }
+      } else {
+        const status = sale.status === "cancelado" ? "cancelada" : "reembolsada";
+        const timestampField = sale.status === "cancelado" ? "cancelada_em" : "reembolsada_em";
+        const inserted = await supabase.from("compras").insert({
+          aluno_id: studentId, produto_id: product.data.id, hotmart_product_id: product.data.hotmart_product_id,
+          hotmart_transaction_id: sale.transactionId, status, origem: "hotmart", identificador_externo: sale.transactionId,
+          observacao_administrativa: "Importação histórica Hotmart", administrador_user_id: actor,
+          status_acesso: sale.status, adquirida_em: sale.purchasedAt, comprada_em: sale.purchasedAt, [timestampField]: sale.purchasedAt,
+        });
+        if (inserted.error) throw inserted.error;
+      }
+      summary.imported += 1;
+    } catch (error) {
+      summary.errors.push(`Linha ${index + 1}: ${error instanceof Error ? error.message : "erro desconhecido"}`);
+    }
+  }
+  return summary;
+}
+
 export async function mutateCommercialResource(resource: CommercialResource, request: Request) {
   const admin = await requireAdmin();
   const actor = uuid(admin.id, "Administrador");
@@ -442,6 +532,11 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   }
 
   if (resource === "aquisicoes") {
+    if (action === "importar_hotmart_historico") {
+      const data = asObject(body.data);
+      rejectUnknownKeys(data, ["vendas"]);
+      return importHistoricalHotmartSales(actor, data.vendas);
+    }
     const purchaseId = action === "registrar" ? null : uuid(body.id, "Aquisição");
     if (action === "registrar") {
       const data = asObject(body.data);
