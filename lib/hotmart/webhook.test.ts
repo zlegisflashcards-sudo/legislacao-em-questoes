@@ -20,6 +20,15 @@ const payloadV2 = {
   },
 };
 
+function payloadPerda(event: "PURCHASE_CANCELED" | "PURCHASE_REFUNDED" | "PURCHASE_CHARGEBACK") {
+  return {
+    ...payloadV2,
+    id: `evt-${event.toLowerCase()}`,
+    event,
+    data: { ...payloadV2.data, purchase: { ...payloadV2.data.purchase, status: event.replace("PURCHASE_", "") } },
+  };
+}
+
 type Step = { data?: unknown; error?: unknown };
 
 function supabaseComRespostas(...steps: Step[]) {
@@ -153,5 +162,50 @@ describe("recepção de webhook Hotmart", () => {
     const semTransacaoMock = supabaseComRespostas({}, {});
     await expect(registrarEventoHotmart(semTransacaoMock.client as never, semTransacao)).rejects.toThrow("sem código da transação");
     expect(semTransacaoMock.calls.some((call) => ["alunos", "compras", "liberacoes_leis"].includes(call.table))).toBe(false);
+  });
+
+  it.each([
+    ["PURCHASE_CANCELED", "cancelada", "cancelado"],
+    ["PURCHASE_REFUNDED", "reembolsada", "reembolsado"],
+    ["PURCHASE_CHARGEBACK", "chargeback", "reembolsado"],
+  ] as const)("revoga a compra ativa para %s", async (event, statusCompra, statusLiberacao) => {
+    const { client, calls } = supabaseComRespostas(
+      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "aprovada" } }, {}, {}, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadPerda(event))).resolves.toEqual({ duplicate: false });
+    expect(calls).toContainEqual(expect.objectContaining({ table: "compras", operation: "update", value: expect.objectContaining({ status: statusCompra }) }));
+    expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "update", value: expect.objectContaining({ status: statusLiberacao }) }));
+  });
+
+  it("registra erro se a compra de perda de acesso não existe", async () => {
+    const { client, calls } = supabaseComRespostas({}, { data: { id: "produto-1" } }, { data: null }, {});
+    await expect(registrarEventoHotmart(client as never, payloadPerda("PURCHASE_CANCELED"))).rejects.toThrow("Compra Hotmart não encontrada");
+    expect(calls).toContainEqual(expect.objectContaining({ table: "hotmart_eventos", operation: "update", value: expect.objectContaining({ processado: false }) }));
+    expect(calls.some((call) => call.operation === "insert" && ["alunos", "compras", "liberacoes_leis"].includes(call.table))).toBe(false);
+  });
+
+  it("mantém evento de produto não mapeado sem alterar acessos", async () => {
+    const { client, calls } = supabaseComRespostas({}, { data: null }, {});
+    await expect(registrarEventoHotmart(client as never, payloadPerda("PURCHASE_CANCELED"))).resolves.toEqual({ duplicate: false });
+    expect(calls.some((call) => ["compras", "liberacoes_leis"].includes(call.table))).toBe(false);
+    expect(calls).toContainEqual(expect.objectContaining({ table: "hotmart_eventos", operation: "update", value: expect.objectContaining({ processado: true }) }));
+  });
+
+  it("não altera a compra novamente quando ela já está revogada", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "cancelada" } }, {}, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadPerda("PURCHASE_CANCELED"))).resolves.toEqual({ duplicate: false });
+    expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(false);
+    expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "update" }));
+  });
+
+  it("revoga somente liberações vinculadas à compra, preservando outras origens", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "aprovada" } }, {}, {}, {},
+    );
+    await registrarEventoHotmart(client as never, payloadPerda("PURCHASE_REFUNDED"));
+    expect(calls.filter((call) => call.table === "liberacoes_leis" && call.operation === "update")).toHaveLength(1);
+    expect(calls.some((call) => call.operation === "insert" && call.table === "liberacoes_leis")).toBe(false);
   });
 });

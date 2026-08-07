@@ -29,6 +29,12 @@ export type EventoHotmartNormalizado = {
   aprovada_em: string | null;
 };
 
+const EVENTOS_PERDA_ACESSO = {
+  PURCHASE_CANCELED: { status: "cancelada", statusAcesso: "cancelado", statusLiberacao: "cancelado", data: "cancelada_em" },
+  PURCHASE_REFUNDED: { status: "reembolsada", statusAcesso: "reembolsado", statusLiberacao: "reembolsado", data: "reembolsada_em" },
+  PURCHASE_CHARGEBACK: { status: "chargeback", statusAcesso: "reembolsado", statusLiberacao: "reembolsado", data: "reembolsada_em" },
+} as const;
+
 function texto(valor: unknown) {
   return typeof valor === "string" && valor.trim() ? valor.trim() : null;
 }
@@ -113,12 +119,15 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
   }
   if (error && error.code !== "23505") throw error;
 
-  if (normalizado.tipo_evento !== "PURCHASE_APPROVED" || normalizado.status_transacao !== "APPROVED") {
+  const perdaAcesso = EVENTOS_PERDA_ACESSO[normalizado.tipo_evento as keyof typeof EVENTOS_PERDA_ACESSO];
+  const vendaAprovada = normalizado.tipo_evento === "PURCHASE_APPROVED" && normalizado.status_transacao === "APPROVED";
+  if (!vendaAprovada && !perdaAcesso) {
     return { duplicate };
   }
 
   try {
-    await processarVendaAprovadaHotmart(supabase, normalizado);
+    if (vendaAprovada) await processarVendaAprovadaHotmart(supabase, normalizado);
+    else await processarPerdaAcessoHotmart(supabase, normalizado, perdaAcesso);
     const atualizado = await supabase
       .from("hotmart_eventos")
       .update({ processado: true, erro_processamento: null })
@@ -134,6 +143,50 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
     if (atualizado.error) console.error("Não foi possível registrar o erro do evento Hotmart:", atualizado.error);
     throw processingError;
   }
+}
+
+export async function processarPerdaAcessoHotmart(
+  supabase: SupabaseClient,
+  evento: EventoHotmartNormalizado,
+  perda: (typeof EVENTOS_PERDA_ACESSO)[keyof typeof EVENTOS_PERDA_ACESSO],
+) {
+  if (!evento.codigo_transacao) throw new Error("Evento Hotmart sem código da transação.");
+
+  if (evento.hotmart_product_id) {
+    const produto = await supabase
+      .from("produtos")
+      .select("id")
+      .eq("hotmart_product_id", evento.hotmart_product_id)
+      .maybeSingle();
+    if (produto.error) throw produto.error;
+    if (!produto.data) return { ignored: true };
+  }
+
+  const compra = await supabase
+    .from("compras")
+    .select("id,status")
+    .eq("origem", "hotmart")
+    .eq("identificador_externo", evento.codigo_transacao)
+    .maybeSingle();
+  if (compra.error) throw compra.error;
+  if (!compra.data) throw new Error("Compra Hotmart não encontrada para a transação.");
+
+  const agora = new Date().toISOString();
+  if (compra.data.status !== perda.status) {
+    const compraAtualizada = await supabase
+      .from("compras")
+      .update({ status: perda.status, status_acesso: perda.statusAcesso, [perda.data]: agora })
+      .eq("id", compra.data.id);
+    if (compraAtualizada.error) throw compraAtualizada.error;
+  }
+
+  const liberacoes = await supabase
+    .from("liberacoes_leis")
+    .update({ status: perda.statusLiberacao, revogada_em: agora })
+    .eq("compra_id", compra.data.id)
+    .eq("status", "ativo");
+  if (liberacoes.error) throw liberacoes.error;
+  return { ignored: false };
 }
 
 export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, evento: EventoHotmartNormalizado) {
