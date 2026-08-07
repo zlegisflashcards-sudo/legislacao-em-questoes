@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import {
-  processarEventoHotmart,
-  validarHottok,
-  type HotmartPayload,
-} from "@/lib/hotmart/webhook";
+import { registrarEventoHotmart, validarHottok } from "@/lib/hotmart/webhook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,18 +10,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false }, { status: 401 });
   }
 
-  let payload: HotmartPayload;
+  let payload: unknown;
   try {
-    payload = (await request.json()) as HotmartPayload;
+    payload = await request.json();
   } catch {
     return NextResponse.json({ success: false, error: "Payload inválido." }, { status: 400 });
   }
 
   try {
-    const result = await processarEventoHotmart(getSupabaseServerClient(), payload);
+    const result = await registrarEventoHotmart(getSupabaseServerClient(), payload);
     return NextResponse.json({ success: true, duplicate: result.duplicate });
   } catch (error) {
-    console.error("Erro ao processar webhook da Hotmart:", error);
+    if (error instanceof Error && /payload inválido|sem identificador/i.test(error.message)) {
+      return NextResponse.json({ success: false, error: "Payload inválido." }, { status: 400 });
+    }
+    console.error("Erro ao registrar webhook da Hotmart:", error);
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }
