@@ -122,37 +122,52 @@ describe("interface das leis adquiridas", () => {
     expect(client).toContain("Meu edital");
   });
 
-  it("mantém o módulo obrigatório do Anki em primeiro lugar e antes da busca", () => {
+  it("mantém o card obrigatório do Anki em primeiro lugar e com a estrutura dos cards de lei", () => {
     expect(client.indexOf("<AnkiModule userId={userId} />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
-    expect(ankiModule).toContain("Passo 1");
-    expect(ankiModule).toContain("Obrigatório");
-    expect(ankiModule).toContain("Instale e configure o Anki");
-    expect(ankiModule).toContain("Comece por aqui. Configure o Anki antes de baixar e estudar seus materiais.");
+    const sharedCardClass = "flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center";
+    expect(ankiModule).toContain(sharedCardClass);
+    expect(card).toContain(sharedCardClass);
+    expect(ankiModule).toContain("Passo obrigatório");
+    expect(ankiModule).toContain("Baixando e configurando o Anki");
+    expect(ankiModule).toContain("O Anki é o aplicativo de questões utilizado no nosso método de estudo. Nele, você responde às questões em formato de flashcards e informa o nível de dificuldade de cada resposta. Com base no seu desempenho, o próprio aplicativo organiza as revisões e reapresenta cada questão no momento adequado.");
     expect(ankiModule).toContain("<AnkiIcon />");
-    expect(ankiModule).toContain("Configurar Anki");
-    expect(ankiModule).toContain("Baixar o Anki");
-    expect(client).not.toContain("drive.google.com");
-    expect(ankiModule).toContain("um único deck oficial, completo e atualizado");
-    expect(ankiModule).toContain("exclua o deck antigo e importe o novo");
-    expect(ankiModule).toContain("reinicia o progresso no Anki");
-    expect(ankiModule).toContain("Não há atualização incremental");
+    expect(client).toContain('import Image from "next/image"');
+    expect(ankiModule).toContain('src="/icons/anki.png"');
+    expect(ankiModule).toContain('alt="Ícone do Anki"');
+    expect(ankiModule).toContain("width={80}");
+    expect(ankiModule).toContain("height={80}");
+    expect(ankiModule).toContain('sizes="80px"');
+    expect(ankiModule).toContain("flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50");
+    expect(card).toContain("flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-3xl");
+    expect(ankiModule.match(/\/icons\/anki\.png/g)).toHaveLength(1);
+    expect(ankiModule).not.toContain("⚖️");
   });
 
-  it("muda apenas a apresentação quando o Anki é marcado como configurado", () => {
+  it("lê o estado existente sem permitir que o card marque o Anki como configurado", () => {
     expect(client).toContain('type AnkiSetupStatus = "loading" | "pending" | "configured"');
     expect(ankiModule).toContain("ANKI_SETUP_STORAGE_PREFIX");
-    expect(ankiModule).toContain('setStatus("configured")');
+    expect(ankiModule).toContain("window.localStorage.getItem");
+    expect(ankiModule).toContain("Pendente");
     expect(ankiModule).toContain("Anki configurado");
-    expect(ankiModule).toContain("Reabrir tutorial");
-    expect(ankiModule).toContain("Marcar como configurado");
+    expect(ankiModule).not.toContain("window.localStorage.setItem");
+    expect(ankiModule).not.toContain("markConfigured");
+    expect(ankiModule).not.toContain("tutorialOpen");
+    expect(ankiModule).not.toContain("Marcar como configurado");
   });
 
-  it("não condiciona leis, materiais ou navegação ao estado do Anki", () => {
-    expect(ankiModule).toContain("não bloqueia o acesso às leis, materiais ou demais recursos da sua conta");
-    for (const forbidden of ["StudentLawCard", "filteredLaws", "window.location", "router.", "fetch(", ".rpc(", "disabled", "setProgress", "updateProgress"]) {
+  it("prepara a navegação futura sem criar rota falsa nem condicionar as leis", () => {
+    expect(client).toContain('const ANKI_TUTORIAL_PATH = "/estudar/anki"');
+    expect(ankiModule).toContain("data-future-href={ANKI_TUTORIAL_PATH}");
+    expect(ankiModule).toContain("Configurar o App de Questões");
+    expect(ankiModule).toContain("Em breve");
+    expect(ankiModule).toContain("disabled");
+    expect(ankiModule).not.toContain("onClick");
+    for (const forbidden of ["StudentLawCard", "filteredLaws", "window.location", "router.", "fetch(", ".rpc(", "setProgress", "updateProgress"]) {
       expect(ankiModule).not.toContain(forbidden);
     }
     expect(client).toContain("filteredLaws.map((law) => <StudentLawCard");
+    expect(client).toContain("{laws.length} {laws.length === 1");
+    expect(client).not.toContain("laws.length + 1");
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
