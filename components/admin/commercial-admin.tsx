@@ -193,26 +193,30 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
     } finally { setExportBusy(false); }
   }
 
-  return <section className="commercial-card">
+  const productCount = new Set(acquisitions.map((row) => text(row.produto_id)).filter(Boolean)).size;
+  const activeLawCount = new Set(releases.filter((row) => row.status === "ativo").map((row) => text(row.lei_id)).filter(Boolean)).size;
+
+  return <><section className="commercial-card">
     <h2>Consultar aluno</h2>
     <StudentSearch onSelect={selectStudent} />
-    <div className="commercial-form-grid">
-      <h3>Exportar alunos com acesso ativo</h3>
-      <label>Lei<select value={exportFilters.lei_id} onChange={(event) => setExportFilters({ ...exportFilters, lei_id: event.target.value })}><option value="">Todas as leis</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label>
-      <label>Produto<select value={exportFilters.produto_id} onChange={(event) => setExportFilters({ ...exportFilters, produto_id: event.target.value })}><option value="">Todos os produtos</option>{products.map((product) => <option key={text(product.id)} value={text(product.id)}>{text(product.nome)}</option>)}</select></label>
-      <button type="button" className="admin-button secondary" disabled={exportBusy} onClick={() => void exportStudents()}>{exportBusy ? "Exportando…" : "Exportar CSV"}</button>
-    </div>
     {!student ? <p>Pesquise um aluno por nome ou e-mail para consultar suas aquisições e leis liberadas.</p> : null}
     {busy ? <p className="commercial-loading">Carregando dados do aluno…</p> : null}
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
     {student && !busy && !error ? <>
-      <p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p>
+      <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p></div>
       <h3>Aquisições</h3>
-      {acquisitions.length ? <DataTable headers={["Produto", "Origem", "Data da aquisição", "Status"]}>{acquisitions.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "produtos").nome) || "Produto não informado"}</td><td>{text(row.origem)}</td><td>{date(row.adquirida_em)}</td><td>{text(row.status_acesso)}</td></tr>)}</DataTable> : <p>Nenhuma aquisição encontrada para este aluno.</p>}
+      {acquisitions.length ? <DataTable headers={["Produto", "Origem", "Data", "Status", "Transação externa"]}>{acquisitions.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "produtos").nome) || "Produto não informado"}</td><td>{text(row.origem)}</td><td>{date(row.adquirida_em)}</td><td>{text(row.status_acesso)}</td><td>{text(row.identificador_externo || row.hotmart_transaction_id) || "—"}</td></tr>)}</DataTable> : <p>Nenhuma aquisição encontrada para este aluno.</p>}
       <h3>Leis liberadas</h3>
-      {releases.length ? <DataTable headers={["Lei", "Origem", "Produto", "Status da liberação"]}>{releases.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "leis").titulo)}</td><td>{text(row.origem)}</td><td>{text(relation(row, "produtos").nome) || "—"}</td><td>{text(row.status)}</td></tr>)}</DataTable> : <p>Nenhuma lei liberada para este aluno.</p>}
+      {releases.length ? <DataTable headers={["Lei", "Status", "Produto / compra", "Origem"]}>{releases.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "leis").titulo)}</td><td>{text(row.status)}</td><td>{text(relation(row, "produtos").nome) || text(relation(row, "compras").identificador_externo) || "Liberação manual"}</td><td>{text(row.origem)}</td></tr>)}</DataTable> : <p>Nenhuma lei liberada para este aluno.</p>}
     </> : null}
-  </section>;
+  </section><section className="commercial-card">
+    <div className="commercial-form-grid">
+      <h2>Exportar alunos com acesso ativo</h2>
+      <label>Lei<select value={exportFilters.lei_id} onChange={(event) => setExportFilters({ ...exportFilters, lei_id: event.target.value })}><option value="">Todas as leis</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label>
+      <label>Produto<select value={exportFilters.produto_id} onChange={(event) => setExportFilters({ ...exportFilters, produto_id: event.target.value })}><option value="">Todos os produtos</option>{products.map((product) => <option key={text(product.id)} value={text(product.id)}>{text(product.nome)}</option>)}</select></label>
+      <button type="button" className="admin-button secondary" disabled={exportBusy} onClick={() => void exportStudents()}>{exportBusy ? "Exportando…" : "Exportar CSV"}</button>
+    </div>
+  </section></>;
 }
 
 function LawPanel({ rows, editing, setEditing, busy, mutate }: PanelProps) {

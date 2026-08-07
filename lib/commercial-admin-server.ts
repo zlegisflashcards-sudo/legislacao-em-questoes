@@ -109,25 +109,32 @@ export async function getCommercialResource(resource: CommercialResource, reques
   if (resource === "alunos") {
     if (q.length < 3) return pageResult([], 0, 1, Math.min(limit, 10));
     const studentLimit = Math.min(limit, 10);
-    let query = supabase.from("alunos").select("id,user_id,nome,email", { count: "exact" });
-    if (/^[0-9a-f-]{36}$/i.test(q)) query = query.or(`id.eq.${q},user_id.eq.${q},email.ilike.%${q}%,nome.ilike.%${q}%`);
-    else query = query.or(`email.ilike.%${q}%,nome.ilike.%${q}%`);
-    const students = await query.order("nome", { ascending: true }).limit(studentLimit);
-    assertQuery(students);
-    const userIds = (students.data ?? []).map((row) => String(row.user_id)).filter(Boolean);
+    const matches = await Promise.all([
+      supabase.from("alunos").select("id,user_id,nome,email").ilike("email", `%${q}%`).limit(studentLimit),
+      supabase.from("alunos").select("id,user_id,nome,email").ilike("nome", `%${q}%`).limit(studentLimit),
+      ...(/^[0-9a-f-]{36}$/i.test(q) ? [
+        supabase.from("alunos").select("id,user_id,nome,email").eq("id", q).limit(1),
+        supabase.from("alunos").select("id,user_id,nome,email").eq("user_id", q).limit(1),
+      ] : []),
+    ]);
+    for (const result of matches) assertQuery(result);
+    const students = [...new Map(matches.flatMap((result) => result.data ?? []).map((row) => [String(row.id), row])).values()]
+      .sort((left, right) => String(left.nome ?? left.email).localeCompare(String(right.nome ?? right.email), "pt-BR"))
+      .slice(0, studentLimit);
+    const userIds = students.map((row) => String(row.user_id)).filter(Boolean);
     const profiles = userIds.length
       ? await supabase.from("perfis_publicos").select("id,nome_publico").in("id", userIds)
       : { data: [], error: null };
     assertQuery(profiles);
     const publicNames = new Map((profiles.data ?? []).map((row) => [String(row.id), String(row.nome_publico)]));
-    const items = (students.data ?? []).map((row) => ({
+    const items = students.map((row) => ({
       id: row.id,
       user_id: row.user_id,
       nome: row.nome,
       email: row.email,
       nome_publico: publicNames.get(String(row.user_id)) ?? null,
     }));
-    return pageResult(items, Math.min(students.count ?? items.length, studentLimit), 1, studentLimit);
+    return pageResult(items, items.length, 1, studentLimit);
   }
 
   if (resource === "leis") {
