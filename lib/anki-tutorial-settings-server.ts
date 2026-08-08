@@ -1,9 +1,11 @@
 import "server-only";
 
+import { unstable_noStore as noStore } from "next/cache";
 import type { AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export async function getAnkiTutorialSettings(): Promise<AnkiTutorialSettings | null> {
+  noStore();
   try {
     const { data, error } = await getSupabaseServerClient()
       .from("configuracao_anki_tutoriais")

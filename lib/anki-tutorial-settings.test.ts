@@ -6,6 +6,7 @@ const migration = readFileSync("supabase/migrations/20260808120000_create_anki_t
 const lawStudyMigration = readFileSync("supabase/migrations/20260808130000_add_law_study_platform_tutorial_urls.sql", "utf8");
 const admin = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
+const supabaseServer = readFileSync("lib/supabase-server.ts", "utf8");
 const ankiPage = readFileSync("app/estudar/anki/page.tsx", "utf8");
 const lawPage = readFileSync("app/estudar/lei/[slug]/page.tsx", "utf8");
 
@@ -64,6 +65,7 @@ describe("configuração administrativa do Anki", () => {
     for (const title of ["Aplicativos Anki", "Tutoriais do Anki", "Tutorial da página de estudo", "Computador — vídeo de orientação"]) expect(admin).toContain(title);
     expect(server).toContain('from("configuracao_anki_tutoriais")');
     expect(server).toContain('admin_atualizar_configuracao_anki_tutoriais');
+    expect(supabaseServer).toContain('cache: "no-store"');
     expect(ankiPage).toContain("getAnkiTutorialSettings");
     expect(lawPage).toContain("getAnkiTutorialSettings");
   });
