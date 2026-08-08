@@ -11,6 +11,7 @@ describe("cards comerciais do catálogo", () => {
     expect(loader).toContain('from("produtos")');
     expect(loader).toContain('from("produto_leis")');
     expect(loader).toContain('from("materiais_leis")');
+    expect(loader).toContain('eq("destaque", true)');
     expect(loader).toContain('eq("tipo", "flashcards")');
   });
 

@@ -10,9 +10,9 @@ describe("página comercial de produto", () => {
     expect(source).toContain('from("materiais_leis")');
   });
 
-  it("inclui slugs de produtos ativos na rota comercial", () => {
+  it("inclui slugs de produtos ativos na rota comercial sem depender do Sheets", () => {
     expect(source).toContain("let slugsProdutos: string[] = []");
-    expect(source).toContain("...slugsProdutos");
+    expect(source).toContain("return slugsProdutos.map");
   });
 
   it("usa apenas checkout cadastrado e preserva o fallback da página anterior", () => {

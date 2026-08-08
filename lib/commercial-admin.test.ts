@@ -20,6 +20,7 @@ const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const client = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 const page = readFileSync("app/admin/comercial/page.tsx", "utf8");
 const productVideoMigration = readFileSync("supabase/migrations/20260807210000_add_product_demo_video.sql", "utf8");
+const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
 
 describe("validação da administração comercial", () => {
   it("aceita slug normalizado e rejeita valores perigosos", () => {
@@ -86,6 +87,11 @@ describe("fronteira administrativa comercial", () => {
     expect(productVideoMigration).toContain("p_dados?'video_demo_url'");
     expect(server).toContain('"video_demo_url"');
     expect(client).toContain('name="video_demo_url"');
+    expect(productHighlightMigration).toContain("add column if not exists destaque boolean not null default false");
+    expect(productHighlightMigration).toContain("p_destaque boolean");
+    expect(productHighlightMigration).toContain("p_dados?'destaque'");
+    expect(server).toContain('"destaque"');
+    expect(client).toContain('name="destaque"');
   });
 });
 

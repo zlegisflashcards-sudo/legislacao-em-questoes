@@ -13,13 +13,23 @@ export type CatalogProduct = {
 export async function getCatalogProducts(): Promise<CatalogProduct[]> {
   try {
     const supabase = getSupabaseServerClient();
-    const { data: products, error: productsError } = await supabase
+    const highlightedProducts = await supabase
       .from("produtos")
       .select("id,nome,slug,ordem")
       .eq("ativo", true)
+      .eq("destaque", true)
       .not("slug", "is", null)
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true });
+    const { data: products, error: productsError } = highlightedProducts.error
+      ? await supabase
+          .from("produtos")
+          .select("id,nome,slug,ordem")
+          .eq("ativo", true)
+          .not("slug", "is", null)
+          .order("ordem", { ascending: true })
+          .order("nome", { ascending: true })
+      : highlightedProducts;
 
     if (productsError || !products?.length) return [];
 

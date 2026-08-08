@@ -347,7 +347,7 @@ function validateEditorialUpdateData(raw: unknown, update = false) {
 }
 
 function validateProductData(raw: unknown, update = false) {
-  const allowed = ["nome", "slug", "descricao", "tipo_produto", "hotmart_url", "hotmart_product_id", "video_demo_url", "ordem", "ativo", "observacao_administrativa"] as const;
+  const allowed = ["nome", "slug", "descricao", "tipo_produto", "hotmart_url", "hotmart_product_id", "video_demo_url", "destaque", "ordem", "ativo", "observacao_administrativa"] as const;
   const data = update ? allowedUpdate(raw, allowed) : asObject(raw);
   rejectUnknownKeys(data, allowed);
   const result: JsonObject = {};
@@ -370,6 +370,7 @@ function validateProductData(raw: unknown, update = false) {
     const value = optionalString(data.video_demo_url, "URL do vídeo de demonstração", 2000);
     result.video_demo_url = update ? value : value ?? null;
   }
+  if (!update || "destaque" in data) result.destaque = booleanValue(data.destaque ?? false, "Destaque na página inicial");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
   if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
   if (!update || "observacao_administrativa" in data) {

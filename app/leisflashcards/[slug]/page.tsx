@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import {
   encontrarLegislacaoPorSlug,
-  filtrarLegislacoesAtivas,
   getVadeMecumHotmartUrl,
   getLegislacoes,
   getYoutubeEmbedUrl,
@@ -127,7 +126,6 @@ function getStatusAtualizacaoVisual(status: StatusAtualizacao) {
 }
 
 export async function generateStaticParams() {
-  const legislacoes = await getLegislacoes();
   let slugsProdutos: string[] = [];
 
   try {
@@ -143,12 +141,7 @@ export async function generateStaticParams() {
     // A página continua disponível para as leis já conhecidas quando o catálogo não está acessível no build.
   }
 
-  return Array.from(
-    new Set([
-      ...filtrarLegislacoesAtivas(legislacoes).map((legislacao) => legislacao.slug),
-      ...slugsProdutos,
-    ]),
-  ).map((slug) => ({ slug }));
+  return slugsProdutos.map((slug) => ({ slug }));
 }
 
 export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
