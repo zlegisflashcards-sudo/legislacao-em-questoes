@@ -65,6 +65,38 @@ export function optionalString(value: unknown, label: string, max = 2000): strin
   return normalized || null;
 }
 
+export function optionalProductDemoVideoUrl(value: unknown, label: string): string | null | undefined {
+  const raw = optionalString(value, label, 2000);
+  if (!raw) return raw;
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new CommercialValidationError(`${label} deve ser uma URL HTTP ou HTTPS válida.`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new CommercialValidationError(`${label} deve ser uma URL HTTP ou HTTPS válida.`);
+  }
+
+  const hostname = url.hostname.replace(/^www\./, "").toLowerCase();
+  const isYoutube = hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+  const isYoutubeShortUrl = hostname === "youtu.be";
+  if (!isYoutube && !isYoutubeShortUrl) return url.toString();
+
+  const videoId = isYoutubeShortUrl
+    ? url.pathname.split("/").filter(Boolean)[0]
+    : url.pathname === "/watch"
+      ? url.searchParams.get("v")
+      : url.pathname.startsWith("/embed/")
+        ? url.pathname.split("/").filter(Boolean)[1]
+        : null;
+  if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+    throw new CommercialValidationError(`${label} do YouTube deve conter um vídeo suportado.`);
+  }
+  return `https://www.youtube.com/embed/${videoId}`;
+}
+
 export function booleanValue(value: unknown, label: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new CommercialValidationError(`${label} deve ser verdadeiro ou falso.`);

@@ -9,6 +9,7 @@ import {
   limitFrom,
   optionalIsoDate,
   optionalNonNegativeInteger,
+  optionalProductDemoVideoUrl,
   safeSearch,
   slug,
   uuid,
@@ -47,6 +48,16 @@ describe("validação da administração comercial", () => {
     expect(LAW_UPDATE_STATUSES).toContain("revisao_pendente");
     expect(EDITORIAL_UPDATE_TYPES).toContain("alteracao_legislativa");
     expect(EDITORIAL_IMPORTANCE).toEqual(["informativa", "recomendada", "essencial"]);
+  });
+
+  it("aceita URLs normais do YouTube e as normaliza para o player", () => {
+    for (const url of [
+      "https://www.youtube.com/watch?v=LDa1zANCIQY",
+      "https://youtu.be/LDa1zANCIQY",
+      "https://www.youtube.com/embed/LDa1zANCIQY",
+    ]) expect(optionalProductDemoVideoUrl(url, "Vídeo")).toBe("https://www.youtube.com/embed/LDa1zANCIQY");
+    expect(() => optionalProductDemoVideoUrl("ftp://youtube.com/watch?v=LDa1zANCIQY", "Vídeo")).toThrow(CommercialValidationError);
+    expect(() => optionalProductDemoVideoUrl("https://www.youtube.com/watch?v=invalido", "Vídeo")).toThrow(CommercialValidationError);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   nonNegativeInteger,
   optionalIsoDate,
   optionalNonNegativeInteger,
+  optionalProductDemoVideoUrl,
   optionalString,
   optionalTimestamp,
   pageFrom,
@@ -378,7 +379,7 @@ function validateProductData(raw: unknown, update = false) {
     result.hotmart_product_id = update ? value : value ?? null;
   }
   if (!update || "video_demo_url" in data) {
-    const value = optionalString(data.video_demo_url, "URL do vídeo de demonstração", 2000);
+    const value = optionalProductDemoVideoUrl(data.video_demo_url, "URL do vídeo de demonstração");
     result.video_demo_url = update ? value : value ?? null;
   }
   if (!update || "destaque" in data) result.destaque = booleanValue(data.destaque ?? false, "Destaque na página inicial");
