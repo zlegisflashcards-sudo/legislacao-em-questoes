@@ -8,6 +8,8 @@ describe("página comercial de produto", () => {
     expect(source).toContain('from("produtos")');
     expect(source).toContain('from("produto_leis")');
     expect(source).toContain('from("materiais_leis")');
+    expect(source).toContain('eq("tipo", "flashcards")');
+    expect(source).toContain('export const dynamic = "force-dynamic"');
   });
 
   it("inclui slugs de produtos ativos na rota comercial sem depender do Sheets", () => {

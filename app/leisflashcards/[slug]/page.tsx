@@ -10,6 +10,10 @@ import {
 import { siteConfig } from "@/lib/site-config";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
+// As quantidades comerciais dos materiais podem ser atualizadas pelo painel.
+// A página deve consultar o estado atual, em vez do snapshot do build.
+export const dynamic = "force-dynamic";
+
 type LegislacaoPageProps = {
   params: Promise<{
     slug: string;
