@@ -114,8 +114,8 @@ describe("página autenticada do Anki", () => {
     expect(client).not.toContain("Voltar");
   });
 
-  it("exibe cabeçalho, plataformas, vídeo ausente e instruções acessíveis", () => {
-    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Configure o Anki antes de baixar e estudar seus materiais.", "Você pode escolher apenas uma plataforma para fazer as questões ou usar todas sincronizadas.", "Tutorial em preparação", "Instalar ou acessar o Anki", "Criar e entrar na sua conta", "Ativar a sincronização", "Preparar o aplicativo para importar os materiais"]) expect(client).toContain(expected);
+  it("exibe cabeçalho, plataformas e instruções acessíveis", () => {
+    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Configure o Anki antes de baixar e estudar seus materiais.", "Você pode escolher apenas uma plataforma para fazer as questões ou usar todas sincronizadas.", "Instalar ou acessar o Anki", "Criar e entrar na sua conta", "Ativar a sincronização", "Preparar o aplicativo para importar os materiais"]) expect(client).toContain(expected);
     expect(client).not.toContain("A obrigatoriedade é pedagógica e não bloqueia outras áreas da sua conta.");
     expect(client).toContain("aria-pressed={selected}");
     expect(client).toContain("grid-cols-2");
@@ -123,8 +123,8 @@ describe("página autenticada do Anki", () => {
     expect(client).toContain("aspect-video");
     expect(client).toContain("key={activePlatform}");
     expect(client).toContain("{tutorial.officialUrl ? <a href={tutorial.officialUrl}");
-    expect(client).toContain("generalTutorialEmbedUrl");
-    expect(client).toContain("Tutorial geral de questões");
+    expect(client).not.toContain("generalTutorialEmbedUrl");
+    expect(client).not.toContain("Tutorial geral de questões");
     expect(client).toContain("{tutorial.description}");
     expect(client).toContain("{tutorial.note}");
     expect(client).toContain("{tutorial.buttonLabel}");

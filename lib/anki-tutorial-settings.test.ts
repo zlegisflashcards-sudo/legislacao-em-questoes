@@ -37,6 +37,7 @@ describe("configuração administrativa do Anki", () => {
   it("expõe a seção protegida e repassa a configuração às páginas de tutorial", () => {
     expect(admin).toContain('id: "anki_tutoriais", label: "Anki e tutoriais"');
     expect(admin).toContain('name="tutorial_questoes_url"');
+    for (const title of ["Aplicativos Anki", "Tutoriais do Anki", "Tutorial da página de estudo", "Vídeo de orientação para a página da lei"]) expect(admin).toContain(title);
     expect(server).toContain('from("configuracao_anki_tutoriais")');
     expect(server).toContain('admin_atualizar_configuracao_anki_tutoriais');
     expect(ankiPage).toContain("getAnkiTutorialSettings");

@@ -293,16 +293,22 @@ function AnkiTutorialsPanel({ rows, busy, mutate }: { rows: Row[]; busy: boolean
     await mutate("anki_tutoriais", { action: "atualizar", data: Object.fromEntries(new FormData(event.currentTarget)) }, "Configuração do Anki e tutoriais salva com sucesso.");
   }
   return <EditForm title="Anki e tutoriais" onSubmit={submit} onCancel={() => undefined} busy={busy}>
-    <p>Campos vazios mantêm os links e vídeos atualmente usados pelo site.</p>
-    <label>Computador — URL do aplicativo<input name="computador_app_url" type="url" defaultValue={text(settings.computador_app_url)} /></label>
-    <label>Computador — URL do tutorial<input name="computador_tutorial_url" type="url" defaultValue={text(settings.computador_tutorial_url)} /></label>
-    <label>Android — URL do aplicativo<input name="android_app_url" type="url" defaultValue={text(settings.android_app_url)} /></label>
-    <label>Android — URL do tutorial<input name="android_tutorial_url" type="url" defaultValue={text(settings.android_tutorial_url)} /></label>
-    <label>iOS — URL do aplicativo<input name="ios_app_url" type="url" defaultValue={text(settings.ios_app_url)} /></label>
-    <label>iOS — URL do tutorial<input name="ios_tutorial_url" type="url" defaultValue={text(settings.ios_tutorial_url)} /></label>
-    <label>Navegador — URL do aplicativo<input name="navegador_app_url" type="url" defaultValue={text(settings.navegador_app_url)} /></label>
-    <label>Navegador — URL do tutorial<input name="navegador_tutorial_url" type="url" defaultValue={text(settings.navegador_tutorial_url)} /></label>
-    <label>URL geral do tutorial de questões<input name="tutorial_questoes_url" type="url" defaultValue={text(settings.tutorial_questoes_url)} /></label>
+    <p>Campos vazios não exibem link ou vídeo.</p>
+    <section className="commercial-settings-group"><h3>Aplicativos Anki</h3><p>Links oficiais para acessar ou instalar o Anki em cada plataforma.</p><div>
+      <label>Computador — URL do aplicativo<input name="computador_app_url" type="url" defaultValue={text(settings.computador_app_url)} /></label>
+      <label>Android — URL do aplicativo<input name="android_app_url" type="url" defaultValue={text(settings.android_app_url)} /></label>
+      <label>iOS — URL do aplicativo<input name="ios_app_url" type="url" defaultValue={text(settings.ios_app_url)} /></label>
+      <label>Navegador — URL do aplicativo<input name="navegador_app_url" type="url" defaultValue={text(settings.navegador_app_url)} /></label>
+    </div></section>
+    <section className="commercial-settings-group"><h3>Tutoriais do Anki</h3><p>Vídeos ensinando instalação, configuração e uso do Anki em cada plataforma.</p><div>
+      <label>Computador — URL do tutorial<input name="computador_tutorial_url" type="url" defaultValue={text(settings.computador_tutorial_url)} /></label>
+      <label>Android — URL do tutorial<input name="android_tutorial_url" type="url" defaultValue={text(settings.android_tutorial_url)} /></label>
+      <label>iOS — URL do tutorial<input name="ios_tutorial_url" type="url" defaultValue={text(settings.ios_tutorial_url)} /></label>
+      <label>Navegador — URL do tutorial<input name="navegador_tutorial_url" type="url" defaultValue={text(settings.navegador_tutorial_url)} /></label>
+    </div></section>
+    <section className="commercial-settings-group"><h3>Tutorial da página de estudo</h3><p>Vídeo geral exibido na página de estudo da lei para orientar o aluno sobre como usar o material e as questões. Não é o tutorial de instalação do Anki.</p><div>
+      <label>Vídeo de orientação para a página da lei<input name="tutorial_questoes_url" type="url" defaultValue={text(settings.tutorial_questoes_url)} /></label>
+    </div></section>
   </EditForm>;
 }
 
