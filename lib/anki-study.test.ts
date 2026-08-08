@@ -27,19 +27,18 @@ function memoryStorage(initial?: Record<string, string>) {
 }
 
 describe("configuração dos tutoriais do Anki", () => {
-  it("mantém quatro plataformas tipadas, Computador como padrão e nenhum vídeo fictício", () => {
+  it("mantém quatro plataformas tipadas, Computador como padrão e sem URLs padrão", () => {
     expect(ANKI_PLATFORM_IDS).toEqual(["computador", "android", "ios", "navegador"]);
     expect(DEFAULT_ANKI_PLATFORM).toBe("computador");
     expect(Object.values(ANKI_PLATFORM_TUTORIALS).map((item) => item.label)).toEqual(["Computador", "Android", "iOS", "Navegador"]);
-    expect(ANKI_PLATFORM_TUTORIALS.computador.videoUrl).toBe("https://youtu.be/0ewdtUTY9VI");
-    expect([ANKI_PLATFORM_TUTORIALS.android, ANKI_PLATFORM_TUTORIALS.ios, ANKI_PLATFORM_TUTORIALS.navegador].every((item) => item.videoUrl === null)).toBe(true);
+    expect(Object.values(ANKI_PLATFORM_TUTORIALS).every((item) => item.videoUrl === null && item.officialUrl === null)).toBe(true);
   });
 
-  it("mantém os destinos oficiais e os textos de cada plataforma", () => {
-    expect(ANKI_PLATFORM_TUTORIALS.computador).toMatchObject({ description: "Windows, Mac e Linux", officialUrl: "https://apps.ankiweb.net/", buttonLabel: "Baixar o Anki", note: "Gratuito" });
-    expect(ANKI_PLATFORM_TUTORIALS.android).toMatchObject({ description: "AnkiDroid", officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki", buttonLabel: "Baixar na Google Play", note: "Gratuito" });
-    expect(ANKI_PLATFORM_TUTORIALS.ios).toMatchObject({ description: "iPhone e iPad", officialUrl: "https://apps.apple.com/app/ankimobile-flashcards/id373493387", buttonLabel: "Baixar na App Store", note: "Aplicativo pago mantido pelo desenvolvedor principal" });
-    expect(ANKI_PLATFORM_TUTORIALS.navegador).toMatchObject({ description: "AnkiWeb", officialUrl: "https://ankiweb.net/", buttonLabel: "Acessar o AnkiWeb", note: "Gratuito — permite estudar e sincronizar baralhos direto da web" });
+  it("mantém apenas os textos de cada plataforma", () => {
+    expect(ANKI_PLATFORM_TUTORIALS.computador).toMatchObject({ description: "Windows, Mac e Linux", buttonLabel: "Baixar o Anki", note: "Gratuito" });
+    expect(ANKI_PLATFORM_TUTORIALS.android).toMatchObject({ description: "AnkiDroid", buttonLabel: "Baixar na Google Play", note: "Gratuito" });
+    expect(ANKI_PLATFORM_TUTORIALS.ios).toMatchObject({ description: "iPhone e iPad", buttonLabel: "Baixar na App Store", note: "Aplicativo pago mantido pelo desenvolvedor principal" });
+    expect(ANKI_PLATFORM_TUTORIALS.navegador).toMatchObject({ description: "AnkiWeb", buttonLabel: "Acessar o AnkiWeb", note: "Gratuito — permite estudar e sincronizar baralhos direto da web" });
   });
 
   it("aceita somente URLs HTTPS conhecidas do YouTube com ID válido", () => {
@@ -123,7 +122,9 @@ describe("página autenticada do Anki", () => {
     expect(client).toContain("sm:grid-cols-4");
     expect(client).toContain("aspect-video");
     expect(client).toContain("key={activePlatform}");
-    expect(client).toContain("href={tutorial.officialUrl}");
+    expect(client).toContain("{tutorial.officialUrl ? <a href={tutorial.officialUrl}");
+    expect(client).toContain("generalTutorialEmbedUrl");
+    expect(client).toContain("Tutorial geral de questões");
     expect(client).toContain("{tutorial.description}");
     expect(client).toContain("{tutorial.note}");
     expect(client).toContain("{tutorial.buttonLabel}");

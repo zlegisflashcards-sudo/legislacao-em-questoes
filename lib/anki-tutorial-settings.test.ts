@@ -16,7 +16,7 @@ describe("configuração administrativa do Anki", () => {
     expect(migration).toContain("admin_atualizar_configuracao_anki_tutoriais");
   });
 
-  it("prioriza a configuração preenchida e preserva os fallbacks", () => {
+  it("usa somente a configuração individual de cada plataforma", () => {
     const tutorials = resolveAnkiPlatformTutorials({
       computadorAppUrl: "https://example.com/app",
       computadorTutorialUrl: null,
@@ -29,9 +29,9 @@ describe("configuração administrativa do Anki", () => {
       tutorialQuestoesUrl: "https://youtu.be/12345678901",
     });
     expect(tutorials.computador.officialUrl).toBe("https://example.com/app");
-    expect(tutorials.computador.videoUrl).toBe("https://youtu.be/12345678901");
+    expect(tutorials.computador.videoUrl).toBeNull();
     expect(tutorials.android.videoUrl).toBe("https://youtu.be/abcdefghijk");
-    expect(tutorials.ios.officialUrl).toBe("https://apps.apple.com/app/ankimobile-flashcards/id373493387");
+    expect(tutorials.ios.officialUrl).toBeNull();
   });
 
   it("expõe a seção protegida e repassa a configuração às páginas de tutorial", () => {

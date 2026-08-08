@@ -29,12 +29,11 @@ function configuredUrl(value: string | null | undefined) {
 }
 
 export function resolveAnkiPlatformTutorials(settings: AnkiTutorialSettings | null | undefined): Record<AnkiPlatformId, AnkiPlatformTutorial> {
-  const tutorialQuestoesUrl = configuredUrl(settings?.tutorialQuestoesUrl);
   return Object.fromEntries(ANKI_PLATFORM_IDS.map((platform) => {
     const fallback = ANKI_PLATFORM_TUTORIALS[platform];
     const fields = PLATFORM_FIELDS[platform];
-    const appUrl = configuredUrl(settings?.[fields.app]) ?? fallback.officialUrl;
-    const tutorialUrl = configuredUrl(settings?.[fields.tutorial]) ?? tutorialQuestoesUrl ?? fallback.videoUrl;
+    const appUrl = configuredUrl(settings?.[fields.app]);
+    const tutorialUrl = configuredUrl(settings?.[fields.tutorial]);
     return [platform, { ...fallback, officialUrl: appUrl, videoUrl: tutorialUrl }];
   })) as Record<AnkiPlatformId, AnkiPlatformTutorial>;
 }

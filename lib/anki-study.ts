@@ -3,7 +3,7 @@ export type AnkiPlatformId = "computador" | "android" | "ios" | "navegador";
 export type AnkiPlatformTutorial = {
   label: string;
   description: string;
-  officialUrl: string;
+  officialUrl: string | null;
   buttonLabel: string;
   note: string;
   videoUrl: string | null;
@@ -13,15 +13,15 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
   computador: {
     label: "Computador",
     description: "Windows, Mac e Linux",
-    officialUrl: "https://apps.ankiweb.net/",
+    officialUrl: null,
     buttonLabel: "Baixar o Anki",
     note: "Gratuito",
-    videoUrl: "https://youtu.be/0ewdtUTY9VI",
+    videoUrl: null,
   },
   android: {
     label: "Android",
     description: "AnkiDroid",
-    officialUrl: "https://play.google.com/store/apps/details?id=com.ichi2.anki",
+    officialUrl: null,
     buttonLabel: "Baixar na Google Play",
     note: "Gratuito",
     videoUrl: null,
@@ -29,7 +29,7 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
   ios: {
     label: "iOS",
     description: "iPhone e iPad",
-    officialUrl: "https://apps.apple.com/app/ankimobile-flashcards/id373493387",
+    officialUrl: null,
     buttonLabel: "Baixar na App Store",
     note: "Aplicativo pago mantido pelo desenvolvedor principal",
     videoUrl: null,
@@ -37,7 +37,7 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
   navegador: {
     label: "Navegador",
     description: "AnkiWeb",
-    officialUrl: "https://ankiweb.net/",
+    officialUrl: null,
     buttonLabel: "Acessar o AnkiWeb",
     note: "Gratuito — permite estudar e sincronizar baralhos direto da web",
     videoUrl: null,

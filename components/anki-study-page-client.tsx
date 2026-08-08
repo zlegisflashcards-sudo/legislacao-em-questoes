@@ -57,6 +57,7 @@ export function AnkiStudyPageClient({ settings }: { settings: AnkiTutorialSettin
   const tutorials = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
   const tutorial = tutorials[activePlatform];
   const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorial.videoUrl), [tutorial.videoUrl]);
+  const generalTutorialEmbedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(settings?.tutorialQuestoesUrl ?? null), [settings?.tutorialQuestoesUrl]);
 
   function markConfigured() {
     if (!userId) return;
@@ -118,9 +119,14 @@ export function AnkiStudyPageClient({ settings }: { settings: AnkiTutorialSettin
             <p className="mt-1 text-slate-700">{tutorial.description}</p>
             <p className="mt-2 text-sm font-semibold text-slate-600">{tutorial.note}</p>
           </div>
-          <a href={tutorial.officialUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{tutorial.buttonLabel}</a>
+          {tutorial.officialUrl ? <a href={tutorial.officialUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">{tutorial.buttonLabel}</a> : null}
         </div>
       </section>
+
+      {generalTutorialEmbedUrl ? <section aria-labelledby="anki-general-tutorial-title" className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        <h2 id="anki-general-tutorial-title" className="text-2xl font-black text-[#062a5f]">Tutorial geral de questões</h2>
+        <iframe src={generalTutorialEmbedUrl} title="Tutorial geral de questões" className="mt-5 aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+      </section> : null}
 
       <section aria-labelledby="anki-instructions-title" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 id="anki-instructions-title" className="text-2xl font-black text-[#062a5f]">Neste tutorial, você aprenderá a:</h2>
