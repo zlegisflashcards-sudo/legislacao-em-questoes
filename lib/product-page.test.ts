@@ -23,9 +23,13 @@ describe("página comercial de produto", () => {
     expect(source).toContain("if (produto)");
   });
 
-  it("prioriza video proprio e evita CTAs duplicados", () => {
+  it("usa somente o vídeo próprio como vitrine e evita CTAs duplicados", () => {
     expect(source).toContain("video_demo_url");
-    expect(source).toContain("const selectedVideoUrl = produto.videoDemoUrl ?? videoUrl");
+    expect(source).toContain("const video = produto.videoDemoUrl ? getYoutubeEmbedUrl(produto.videoDemoUrl) : null");
+    expect(source).not.toContain("const selectedVideoUrl");
+    expect(source).not.toContain("videoUrl={videoUrl}");
+    expect(source).toContain("inline-flex w-full items-center justify-center");
+    expect(source).toContain("Vídeo do produto:");
     expect(source).toContain("const isLeiAvulsa = produto.leis.length === 1");
     expect(source).not.toContain("Comprar agora");
   });
