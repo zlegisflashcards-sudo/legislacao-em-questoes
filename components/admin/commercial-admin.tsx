@@ -300,13 +300,13 @@ function AnkiTutorialsPanel({ rows, busy, mutate }: { rows: Row[]; busy: boolean
       <label>iOS — URL do aplicativo<input name="ios_app_url" type="url" defaultValue={text(settings.ios_app_url)} /></label>
       <label>Navegador — URL do aplicativo<input name="navegador_app_url" type="url" defaultValue={text(settings.navegador_app_url)} /></label>
     </div></section>
-    <section className="commercial-settings-group"><h3>Tutoriais do Anki</h3><p>Vídeos ensinando instalação, configuração e uso do Anki em cada plataforma.</p><div>
+    <section className="commercial-settings-group"><h3>Instalar e configurar o Anki</h3><p>Vídeos para instalar ou acessar o Anki, criar ou configurar a conta e fazer a preparação inicial em cada plataforma.</p><div>
       <label>Computador — URL do tutorial<input name="computador_tutorial_url" type="url" defaultValue={text(settings.computador_tutorial_url)} /></label>
       <label>Android — URL do tutorial<input name="android_tutorial_url" type="url" defaultValue={text(settings.android_tutorial_url)} /></label>
       <label>iOS — URL do tutorial<input name="ios_tutorial_url" type="url" defaultValue={text(settings.ios_tutorial_url)} /></label>
       <label>Navegador — URL do tutorial<input name="navegador_tutorial_url" type="url" defaultValue={text(settings.navegador_tutorial_url)} /></label>
     </div></section>
-    <section className="commercial-settings-group"><h3>Tutorial da página de estudo</h3><p>Vídeos de orientação sobre o material e as questões da página da lei, separados por plataforma. Não são tutoriais de instalação do Anki.</p><div>
+    <section className="commercial-settings-group"><h3>Baixar e fazer as questões</h3><p>Vídeos para baixar o material, importar os flashcards, configurar questões, responder e sincronizar em cada plataforma.</p><div>
       <label>Computador — vídeo de orientação<input name="computador_estudo_url" type="url" defaultValue={text(settings.computador_estudo_url)} /></label>
       <label>Android — vídeo de orientação<input name="android_estudo_url" type="url" defaultValue={text(settings.android_estudo_url)} /></label>
       <label>iOS — vídeo de orientação<input name="ios_estudo_url" type="url" defaultValue={text(settings.ios_estudo_url)} /></label>

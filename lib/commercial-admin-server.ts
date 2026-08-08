@@ -144,7 +144,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
   if (resource === "anki_tutoriais") {
     const result = await supabase
       .from("configuracao_anki_tutoriais")
-        .select("id,computador_app_url,computador_tutorial_url,android_app_url,android_tutorial_url,ios_app_url,ios_tutorial_url,navegador_app_url,navegador_tutorial_url,tutorial_questoes_url,computador_estudo_url,android_estudo_url,ios_estudo_url,navegador_estudo_url,updated_at")
+        .select("id,computador_app_url,computador_tutorial_url,android_app_url,android_tutorial_url,ios_app_url,ios_tutorial_url,navegador_app_url,navegador_tutorial_url,computador_estudo_url,android_estudo_url,ios_estudo_url,navegador_estudo_url,updated_at")
       .eq("id", 1)
       .maybeSingle();
     assertQuery(result);
@@ -410,7 +410,6 @@ function validateAnkiTutorialSettings(raw: unknown) {
     "android_app_url", "android_tutorial_url",
     "ios_app_url", "ios_tutorial_url",
     "navegador_app_url", "navegador_tutorial_url",
-    "tutorial_questoes_url",
     "computador_estudo_url", "android_estudo_url", "ios_estudo_url", "navegador_estudo_url",
   ] as const;
   const data = asObject(raw);

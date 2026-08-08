@@ -5,6 +5,7 @@ import { StudentAreaTabs } from "@/components/student-area-tabs";
 import {
   DEFAULT_LAW_STUDY_PLATFORM,
   LAW_STUDY_PLATFORM_IDS,
+  LAW_STUDY_PLATFORMS,
   lawHistoryDate,
   lawMaterialActionLabel,
   lawMaterialIcon,
@@ -15,7 +16,7 @@ import {
   type LawStudyPlatformId,
 } from "@/lib/law-study";
 import { getAnkiYoutubeEmbedUrl } from "@/lib/anki-study";
-import { resolveAnkiPlatformTutorials, resolveLawStudyPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
+import { resolveLawStudyPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
 import { supabase } from "@/lib/supabase";
 
 type LoadStatus = "loading" | "ready" | "error";
@@ -25,7 +26,6 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings }: { slug: strin
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [study, setStudy] = useState<LawStudyData | null>(null);
   const [message, setMessage] = useState("");
-  const [activeAnkiPlatform, setActiveAnkiPlatform] = useState<LawStudyPlatformId>(DEFAULT_LAW_STUDY_PLATFORM);
   const [activeStudyPlatform, setActiveStudyPlatform] = useState<LawStudyPlatformId>(DEFAULT_LAW_STUDY_PLATFORM);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
@@ -69,7 +69,6 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings }: { slug: strin
   return <PageFrame>
     <div className="grid min-w-0 gap-6">
       <LawHeader study={study} />
-      <AnkiTutorial activePlatform={activeAnkiPlatform} onPlatformChange={setActiveAnkiPlatform} lawTitle={study.law.title} settings={ankiTutorialSettings} />
       <LawStudyTutorial activePlatform={activeStudyPlatform} onPlatformChange={setActiveStudyPlatform} settings={ankiTutorialSettings} />
       <MaterialsSection study={study} />
       <StudyGuidance />
@@ -100,41 +99,21 @@ function LawHeader({ study }: { study: LawStudyData }) {
   </header>;
 }
 
-function AnkiTutorial({ activePlatform, onPlatformChange, lawTitle, settings }: { activePlatform: LawStudyPlatformId; onPlatformChange: (platform: LawStudyPlatformId) => void; lawTitle: string; settings: AnkiTutorialSettings | null }) {
-  const tutorials = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
-  const tutorial = tutorials[activePlatform];
-  const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorial.videoUrl), [tutorial.videoUrl]);
-  return <section aria-labelledby="anki-tutorial-title" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-    <h2 id="anki-tutorial-title" className="text-2xl font-black text-[#062a5f]">Como usar o Anki</h2>
-    <p className="mt-2 text-slate-600">Escolha a plataforma em que você usará os flashcards de {lawTitle}.</p>
-    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do tutorial do Anki">
-      {LAW_STUDY_PLATFORM_IDS.map((platformId) => {
-        const selected = platformId === activePlatform;
-        return <button key={platformId} type="button" aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{tutorials[platformId].label}</button>;
-      })}
-    </div>
-    {embedUrl ? <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950"><iframe key={activePlatform} src={embedUrl} title={`Tutorial do Anki para ${tutorial.label}`} className="aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div> : null}
-    <p className="mt-4 text-sm font-semibold text-slate-600">{tutorial.description}</p>
-  </section>;
-}
-
 function LawStudyTutorial({ activePlatform, onPlatformChange, settings }: { activePlatform: LawStudyPlatformId; onPlatformChange: (platform: LawStudyPlatformId) => void; settings: AnkiTutorialSettings | null }) {
   const tutorials = useMemo(() => resolveLawStudyPlatformTutorials(settings), [settings]);
-  const ankiPlatforms = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
-  const availablePlatforms = LAW_STUDY_PLATFORM_IDS.filter((platform) => getAnkiYoutubeEmbedUrl(tutorials[platform]));
-  const selectedPlatform = availablePlatforms.includes(activePlatform) ? activePlatform : availablePlatforms[0];
-  const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(selectedPlatform ? tutorials[selectedPlatform] : null), [selectedPlatform, tutorials]);
-  if (!selectedPlatform || !embedUrl) return null;
+  const hasTutorial = LAW_STUDY_PLATFORM_IDS.some((platform) => getAnkiYoutubeEmbedUrl(tutorials[platform]));
+  const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorials[activePlatform]), [activePlatform, tutorials]);
+  if (!hasTutorial) return null;
   return <section aria-labelledby="law-study-guidance-title" className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
     <h2 id="law-study-guidance-title" className="text-2xl font-black text-[#062a5f]">Como estudar esta lei</h2>
     <p className="mt-2 text-slate-600">Escolha sua plataforma para ver a orientação sobre o material e as questões desta página.</p>
     <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do tutorial da página de estudo">
-      {availablePlatforms.map((platformId) => {
-        const selected = platformId === selectedPlatform;
-        return <button key={platformId} type="button" aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{ankiPlatforms[platformId].label}</button>;
+      {LAW_STUDY_PLATFORM_IDS.map((platformId) => {
+        const selected = platformId === activePlatform;
+        return <button key={platformId} type="button" aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{LAW_STUDY_PLATFORMS[platformId].label}</button>;
       })}
     </div>
-    <iframe key={selectedPlatform} src={embedUrl} title={`Orientação da página de estudo para ${ankiPlatforms[selectedPlatform].label}`} className="mt-5 aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+    {embedUrl ? <iframe key={activePlatform} src={embedUrl} title={`Como estudar esta lei no ${LAW_STUDY_PLATFORMS[activePlatform].label}`} className="mt-5 aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : null}
   </section>;
 }
 

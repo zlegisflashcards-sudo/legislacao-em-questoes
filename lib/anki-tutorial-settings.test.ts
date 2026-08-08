@@ -9,6 +9,8 @@ const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const supabaseServer = readFileSync("lib/supabase-server.ts", "utf8");
 const ankiPage = readFileSync("app/estudar/anki/page.tsx", "utf8");
 const lawPage = readFileSync("app/estudar/lei/[slug]/page.tsx", "utf8");
+const ankiClient = readFileSync("components/anki-study-page-client.tsx", "utf8");
+const lawClient = readFileSync("components/law-study-page-client.tsx", "utf8");
 
 describe("configuração administrativa do Anki", () => {
   it("mantém uma configuração única com as URLs de todas as plataformas", () => {
@@ -29,7 +31,6 @@ describe("configuração administrativa do Anki", () => {
       iosTutorialUrl: null,
       navegadorAppUrl: null,
       navegadorTutorialUrl: null,
-      tutorialQuestoesUrl: "https://youtu.be/12345678901",
       computadorEstudoUrl: "https://youtu.be/abcdefghijk",
       androidEstudoUrl: null,
       iosEstudoUrl: "https://youtu.be/zyxwvutsrqp",
@@ -48,7 +49,6 @@ describe("configuração administrativa do Anki", () => {
       iosTutorialUrl: null,
       navegadorAppUrl: null,
       navegadorTutorialUrl: null,
-      tutorialQuestoesUrl: "https://youtu.be/12345678901",
       computadorEstudoUrl: "https://youtu.be/abcdefghijk",
       androidEstudoUrl: null,
       iosEstudoUrl: "https://youtu.be/zyxwvutsrqp",
@@ -62,11 +62,16 @@ describe("configuração administrativa do Anki", () => {
   it("expõe a seção protegida e repassa a configuração às páginas de tutorial", () => {
     expect(admin).toContain('id: "anki_tutoriais", label: "Anki e tutoriais"');
     for (const field of ["computador_estudo_url", "android_estudo_url", "ios_estudo_url", "navegador_estudo_url"]) expect(admin).toContain(`name="${field}"`);
-    for (const title of ["Aplicativos Anki", "Tutoriais do Anki", "Tutorial da página de estudo", "Computador — vídeo de orientação"]) expect(admin).toContain(title);
+    for (const title of ["Aplicativos Anki", "Instalar e configurar o Anki", "Baixar e fazer as questões", "Computador — vídeo de orientação"]) expect(admin).toContain(title);
     expect(server).toContain('from("configuracao_anki_tutoriais")');
     expect(server).toContain('admin_atualizar_configuracao_anki_tutoriais');
     expect(supabaseServer).toContain('cache: "no-store"');
     expect(ankiPage).toContain("getAnkiTutorialSettings");
     expect(lawPage).toContain("getAnkiTutorialSettings");
+    expect(ankiClient).toContain("resolveAnkiPlatformTutorials");
+    expect(ankiClient).not.toContain("resolveLawStudyPlatformTutorials");
+    expect(lawClient).toContain("resolveLawStudyPlatformTutorials");
+    expect(lawClient).not.toContain("resolveAnkiPlatformTutorials");
+    for (const source of [admin, server, lawClient, ankiClient]) expect(source).not.toContain("tutorial_questoes_url");
   });
 });

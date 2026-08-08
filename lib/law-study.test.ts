@@ -17,11 +17,10 @@ const cards = readFileSync("components/student-laws-client.tsx", "utf8");
 const contract = readFileSync("lib/law-study.ts", "utf8");
 
 describe("contrato da página de estudo da lei", () => {
-  it("mantém plataformas tipadas com Computador como padrão e publica somente seu vídeo", () => {
+  it("mantém plataformas tipadas com Computador como padrão, sem URLs de vídeo legadas", () => {
     expect(DEFAULT_LAW_STUDY_PLATFORM).toBe("computador");
     expect(LAW_STUDY_PLATFORM_IDS).toEqual(["computador", "android", "ios", "navegador"]);
-    expect(LAW_STUDY_PLATFORMS.computador.videoUrl).toBe("https://youtu.be/8tf5WfdiI_Y");
-    for (const platform of ["android", "ios", "navegador"] as const) expect(LAW_STUDY_PLATFORMS[platform].videoUrl).toBeNull();
+    for (const platform of LAW_STUDY_PLATFORM_IDS) expect(LAW_STUDY_PLATFORMS[platform]).not.toHaveProperty("videoUrl");
   });
 
   it("valida o slug e mantém o nome oficial como título", () => {
@@ -81,8 +80,9 @@ describe("interface de estudo", () => {
     expect(client).not.toContain(">Voltar<");
   });
 
-  it("separa o tutorial do Anki da orientação geral da página de estudo", () => {
-    for (const expected of ["study.law.title", "study.law.shortName", "study.law.totalFlashcards > 0", "aspect-video w-full", "Como usar o Anki", "Como estudar esta lei", "resolveLawStudyPlatformTutorials", "Plataformas do tutorial da página de estudo", "Mantenha suas revisões em dia antes de avançar para novos cartões."]) expect(client).toContain(expected);
+  it("mostra somente o tutorial de estudo por plataforma na página da lei", () => {
+    for (const expected of ["study.law.title", "study.law.shortName", "study.law.totalFlashcards > 0", "aspect-video w-full", "Como estudar esta lei", "resolveLawStudyPlatformTutorials", "Plataformas do tutorial da página de estudo", "Mantenha suas revisões em dia antes de avançar para novos cartões."]) expect(client).toContain(expected);
+    expect(client).not.toContain("Como usar o Anki");
     expect(client).not.toContain("Tutorial em preparação");
     for (const platform of ["Computador", "Android", "iOS", "Navegador"]) expect(contract).toContain(`label: "${platform}"`);
   });

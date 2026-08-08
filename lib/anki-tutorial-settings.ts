@@ -14,7 +14,6 @@ export type AnkiTutorialSettings = {
   iosTutorialUrl: string | null;
   navegadorAppUrl: string | null;
   navegadorTutorialUrl: string | null;
-  tutorialQuestoesUrl: string | null;
   computadorEstudoUrl: string | null;
   androidEstudoUrl: string | null;
   iosEstudoUrl: string | null;
