@@ -65,7 +65,8 @@ describe("autorização e exposição segura", () => {
 
 describe("interface de estudo", () => {
   it("cria a rota autenticada e ativa Baixar questões nos cards", () => {
-    expect(page).toContain("<LawStudyPageClient slug={slug} />");
+    expect(page).toContain("getAnkiTutorialSettings");
+    expect(page).toContain("<LawStudyPageClient slug={slug} ankiTutorialSettings={settings} />");
     expect(client).toContain("supabase.auth.getSession()");
     expect(client).toContain("/conta?modo=login&retorno=");
     expect(cards).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');

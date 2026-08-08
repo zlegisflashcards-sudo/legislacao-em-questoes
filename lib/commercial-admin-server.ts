@@ -41,6 +41,7 @@ export type CommercialResource =
   | "aquisicoes"
   | "liberacoes"
   | "atualizacoes"
+  | "anki_tutoriais"
   | "auditoria"
   | "alunos";
 
@@ -137,6 +138,16 @@ export async function getCommercialResource(resource: CommercialResource, reques
       nome_publico: publicNames.get(String(row.user_id)) ?? null,
     }));
     return pageResult(items, items.length, 1, studentLimit);
+  }
+
+  if (resource === "anki_tutoriais") {
+    const result = await supabase
+      .from("configuracao_anki_tutoriais")
+      .select("id,computador_app_url,computador_tutorial_url,android_app_url,android_tutorial_url,ios_app_url,ios_tutorial_url,navegador_app_url,navegador_tutorial_url,tutorial_questoes_url,updated_at")
+      .eq("id", 1)
+      .maybeSingle();
+    assertQuery(result);
+    return pageResult(result.data ? [result.data] : [], result.data ? 1 : 0, 1, 1);
   }
 
   if (resource === "leis") {
@@ -392,6 +403,21 @@ function validateStudentData(raw: unknown) {
   };
 }
 
+function validateAnkiTutorialSettings(raw: unknown) {
+  const fields = [
+    "computador_app_url", "computador_tutorial_url",
+    "android_app_url", "android_tutorial_url",
+    "ios_app_url", "ios_tutorial_url",
+    "navegador_app_url", "navegador_tutorial_url",
+    "tutorial_questoes_url",
+  ] as const;
+  const data = asObject(raw);
+  rejectUnknownKeys(data, fields);
+  const result: JsonObject = {};
+  for (const field of fields) result[field] = optionalString(data[field], "URL", 2000) ?? null;
+  return result;
+}
+
 type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; phone: string | null; purchasedAt: string; status: "ativo" | "cancelado" | "reembolsado" };
 
 function parseHistoricalTimestamp(value: string) {
@@ -520,6 +546,13 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     });
     if (audit.error) throw new CommercialHttpError(500, "Não foi possível registrar a atualização do aluno.");
     return updated.data;
+  }
+
+  if (resource === "anki_tutoriais" && action === "atualizar") {
+    return rpc("admin_atualizar_configuracao_anki_tutoriais", {
+      p_ator_user_id: actor,
+      p_dados: validateAnkiTutorialSettings(body.data),
+    });
   }
 
   if (resource === "leis") {

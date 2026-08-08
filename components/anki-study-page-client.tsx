@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import {
   ANKI_PLATFORM_IDS,
-  ANKI_PLATFORM_TUTORIALS,
   DEFAULT_ANKI_PLATFORM,
   clearAnkiConfigured,
   getAnkiYoutubeEmbedUrl,
@@ -13,6 +12,7 @@ import {
   readAnkiConfigured,
   type AnkiPlatformId,
 } from "@/lib/anki-study";
+import { resolveAnkiPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
 import { supabase } from "@/lib/supabase";
 
 type SessionStatus = "loading" | "ready" | "error";
@@ -20,7 +20,7 @@ type AnkiSetupStatus = "loading" | "pending" | "configured";
 
 const LOGIN_URL = "/conta?modo=login&retorno=%2Festudar%2Fanki";
 
-export function AnkiStudyPageClient() {
+export function AnkiStudyPageClient({ settings }: { settings: AnkiTutorialSettings | null }) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("loading");
   const [userId, setUserId] = useState<string | null>(null);
   const [setupStatus, setSetupStatus] = useState<AnkiSetupStatus>("loading");
@@ -54,7 +54,8 @@ export function AnkiStudyPageClient() {
     return () => { active = false; };
   }, []);
 
-  const tutorial = ANKI_PLATFORM_TUTORIALS[activePlatform];
+  const tutorials = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
+  const tutorial = tutorials[activePlatform];
   const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorial.videoUrl), [tutorial.videoUrl]);
 
   function markConfigured() {
@@ -103,7 +104,7 @@ export function AnkiStudyPageClient() {
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do Anki">
           {ANKI_PLATFORM_IDS.map((platformId) => {
             const selected = platformId === activePlatform;
-            return <button key={platformId} type="button" aria-pressed={selected} onClick={() => setActivePlatform(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{ANKI_PLATFORM_TUTORIALS[platformId].label}</button>;
+            return <button key={platformId} type="button" aria-pressed={selected} onClick={() => setActivePlatform(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{tutorials[platformId].label}</button>;
           })}
         </div>
 

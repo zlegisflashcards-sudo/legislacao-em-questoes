@@ -5,7 +5,6 @@ import { StudentAreaTabs } from "@/components/student-area-tabs";
 import {
   DEFAULT_LAW_STUDY_PLATFORM,
   LAW_STUDY_PLATFORM_IDS,
-  LAW_STUDY_PLATFORMS,
   lawHistoryDate,
   lawMaterialActionLabel,
   lawMaterialIcon,
@@ -16,12 +15,13 @@ import {
   type LawStudyPlatformId,
 } from "@/lib/law-study";
 import { getAnkiYoutubeEmbedUrl } from "@/lib/anki-study";
+import { resolveAnkiPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
 import { supabase } from "@/lib/supabase";
 
 type LoadStatus = "loading" | "ready" | "error";
 type LawStudyResponse = { success?: boolean; study?: LawStudyData; message?: string };
 
-export function LawStudyPageClient({ slug }: { slug: string }) {
+export function LawStudyPageClient({ slug, ankiTutorialSettings }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null }) {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [study, setStudy] = useState<LawStudyData | null>(null);
   const [message, setMessage] = useState("");
@@ -68,7 +68,7 @@ export function LawStudyPageClient({ slug }: { slug: string }) {
   return <PageFrame>
     <div className="grid min-w-0 gap-6">
       <LawHeader study={study} />
-      <LawTutorial activePlatform={activePlatform} onPlatformChange={setActivePlatform} lawTitle={study.law.title} />
+      <LawTutorial activePlatform={activePlatform} onPlatformChange={setActivePlatform} lawTitle={study.law.title} settings={ankiTutorialSettings} />
       <MaterialsSection study={study} />
       <StudyGuidance />
       <LawProgress slug={study.law.slug} progress={study.progress} onSaved={(progress) => setStudy((current) => current ? { ...current, progress } : current)} />
@@ -98,8 +98,9 @@ function LawHeader({ study }: { study: LawStudyData }) {
   </header>;
 }
 
-function LawTutorial({ activePlatform, onPlatformChange, lawTitle }: { activePlatform: LawStudyPlatformId; onPlatformChange: (platform: LawStudyPlatformId) => void; lawTitle: string }) {
-  const tutorial = LAW_STUDY_PLATFORMS[activePlatform];
+function LawTutorial({ activePlatform, onPlatformChange, lawTitle, settings }: { activePlatform: LawStudyPlatformId; onPlatformChange: (platform: LawStudyPlatformId) => void; lawTitle: string; settings: AnkiTutorialSettings | null }) {
+  const tutorials = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
+  const tutorial = tutorials[activePlatform];
   const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorial.videoUrl), [tutorial.videoUrl]);
   return <section aria-labelledby="law-tutorial-title" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
     <h2 id="law-tutorial-title" className="text-2xl font-black text-[#062a5f]">Como estudar esta lei</h2>
@@ -107,7 +108,7 @@ function LawTutorial({ activePlatform, onPlatformChange, lawTitle }: { activePla
     <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do tutorial da lei">
       {LAW_STUDY_PLATFORM_IDS.map((platformId) => {
         const selected = platformId === activePlatform;
-        return <button key={platformId} type="button" aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{LAW_STUDY_PLATFORMS[platformId].label}</button>;
+        return <button key={platformId} type="button" aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{tutorials[platformId].label}</button>;
       })}
     </div>
     <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">

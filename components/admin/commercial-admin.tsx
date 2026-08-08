@@ -4,13 +4,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
-type Tab = "alunos" | "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "auditoria";
+type Tab = "alunos" | "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "anki_tutoriais" | "auditoria";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "alunos", label: "Alunos" },
   { id: "leis", label: "Leis" }, { id: "materiais", label: "Materiais" },
   { id: "produtos", label: "Produtos" }, { id: "aquisicoes", label: "Aquisições" },
   { id: "liberacoes", label: "Liberações" }, { id: "atualizacoes", label: "Atualizações" },
+  { id: "anki_tutoriais", label: "Anki e tutoriais" },
   { id: "auditoria", label: "Auditoria" },
 ];
 const UPDATE_TYPES = ["alteracao_legislativa", "nova_versao_flashcards", "novas_questoes", "correcao_questoes", "correcao_flashcards", "melhoria_material", "outro"];
@@ -111,13 +112,13 @@ export default function CommercialAdmin() {
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
 
     <form className="commercial-toolbar" onSubmit={submitSearch}>
-      {tab !== "liberacoes" && tab !== "alunos" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
+      {tab !== "liberacoes" && tab !== "alunos" && tab !== "anki_tutoriais" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
       {tab === "materiais" ? <label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : null}
       {tab === "atualizacoes" ? <><label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label><label>Tipo<select value={filters.tipo ?? ""} onChange={(event) => setFilters({ ...filters, tipo: event.target.value })}><option value="">Todos</option>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label><label>Importância<select value={filters.importancia ?? ""} onChange={(event) => setFilters({ ...filters, importancia: event.target.value })}><option value="">Todas</option>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "leis" ? <label>Estado<select value={filters.ativo ?? ""} onChange={(event) => setFilters({ ...filters, ativo: event.target.value })}><option value="">Todas</option><option value="true">Ativas</option><option value="false">Inativas</option></select></label> : null}
       {tab === "aquisicoes" ? <><label>Status<select value={filters.status ?? ""} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="ativo">Ativo</option><option value="cancelado">Cancelado</option><option value="reembolsado">Reembolsado</option></select></label><label>Origem<select value={filters.origem ?? ""} onChange={(event) => setFilters({ ...filters, origem: event.target.value })}><option value="">Todas</option>{ORIGENS.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "auditoria" ? <><label>Ator (UUID)<input value={filters.ator_user_id ?? ""} onChange={(event) => setFilters({ ...filters, ator_user_id: event.target.value })} /></label><label>Ação<input value={filters.acao ?? ""} onChange={(event) => setFilters({ ...filters, acao: event.target.value })} /></label><label>Entidade<input value={filters.entidade ?? ""} onChange={(event) => setFilters({ ...filters, entidade: event.target.value })} /></label><label>De<input type="datetime-local" value={filters.de ?? ""} onChange={(event) => setFilters({ ...filters, de: event.target.value })} /></label><label>Até<input type="datetime-local" value={filters.ate ?? ""} onChange={(event) => setFilters({ ...filters, ate: event.target.value })} /></label></> : null}
-      {tab !== "liberacoes" && tab !== "alunos" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
+      {tab !== "liberacoes" && tab !== "alunos" && tab !== "anki_tutoriais" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
     </form>
 
     {tab === "alunos" ? <StudentsPanel laws={laws} products={products} /> : null}
@@ -127,9 +128,10 @@ export default function CommercialAdmin() {
     {tab === "aquisicoes" ? <AcquisitionPanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ ...filters, aluno_id: text(item.id) }); setPage(1); }} products={products} filters={filters} setFilters={setFilters} lawCount={selectedProductLawCount} busy={busy} mutate={mutate} /> : null}
     {tab === "liberacoes" ? <ReleasePanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ aluno_id: text(item.id) }); setPage(1); }} laws={laws} busy={busy} mutate={mutate} reload={load} /> : null}
     {tab === "atualizacoes" ? <EditorialUpdatesPanel rows={result.items} laws={laws} materials={materials} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
+    {tab === "anki_tutoriais" ? <AnkiTutorialsPanel rows={result.items} busy={busy} mutate={mutate} /> : null}
     {tab === "auditoria" ? <AuditPanel rows={result.items} /> : null}
     {busy ? <p className="commercial-loading">Carregando…</p> : null}
-    <footer className="commercial-pagination"><span>{result.total} registro(s)</span><button type="button" disabled={busy || page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><span>{page} / {result.pages}</span><button type="button" disabled={busy || page >= result.pages} onClick={() => setPage(page + 1)}>Próxima</button></footer>
+    {tab !== "anki_tutoriais" ? <footer className="commercial-pagination"><span>{result.total} registro(s)</span><button type="button" disabled={busy || page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><span>{page} / {result.pages}</span><button type="button" disabled={busy || page >= result.pages} onClick={() => setPage(page + 1)}>Próxima</button></footer> : null}
   </section>;
 }
 
@@ -281,6 +283,26 @@ function ProductPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelPr
     <select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
   </EditForm>{editing ? <CompositionEditor key={text(editing.id)} product={editing} laws={laws} busy={busy} mutate={mutate} /> : null}
   <DataTable headers={["Produto", "Tipo", "Leis", "Destaque", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.nome)}</strong><small>{text(row.slug)}</small></td><td>{text(row.tipo_produto)}</td><td>{Array.isArray(row.leis) ? row.leis.length : 0}</td><td>{row.destaque ? "Sim" : "Não"}</td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td><button onClick={() => setEditing(row)}>Editar / composição</button><button disabled={busy} onClick={() => void mutate("produtos", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do produto atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
+}
+
+function AnkiTutorialsPanel({ rows, busy, mutate }: { rows: Row[]; busy: boolean; mutate: PanelProps["mutate"] }) {
+  const settings = rows[0] ?? {};
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await mutate("anki_tutoriais", { action: "atualizar", data: Object.fromEntries(new FormData(event.currentTarget)) }, "Configuração do Anki e tutoriais salva com sucesso.");
+  }
+  return <EditForm title="Anki e tutoriais" onSubmit={submit} onCancel={() => undefined} busy={busy}>
+    <p>Campos vazios mantêm os links e vídeos atualmente usados pelo site.</p>
+    <label>Computador — URL do aplicativo<input name="computador_app_url" type="url" defaultValue={text(settings.computador_app_url)} /></label>
+    <label>Computador — URL do tutorial<input name="computador_tutorial_url" type="url" defaultValue={text(settings.computador_tutorial_url)} /></label>
+    <label>Android — URL do aplicativo<input name="android_app_url" type="url" defaultValue={text(settings.android_app_url)} /></label>
+    <label>Android — URL do tutorial<input name="android_tutorial_url" type="url" defaultValue={text(settings.android_tutorial_url)} /></label>
+    <label>iOS — URL do aplicativo<input name="ios_app_url" type="url" defaultValue={text(settings.ios_app_url)} /></label>
+    <label>iOS — URL do tutorial<input name="ios_tutorial_url" type="url" defaultValue={text(settings.ios_tutorial_url)} /></label>
+    <label>Navegador — URL do aplicativo<input name="navegador_app_url" type="url" defaultValue={text(settings.navegador_app_url)} /></label>
+    <label>Navegador — URL do tutorial<input name="navegador_tutorial_url" type="url" defaultValue={text(settings.navegador_tutorial_url)} /></label>
+    <label>URL geral do tutorial de questões<input name="tutorial_questoes_url" type="url" defaultValue={text(settings.tutorial_questoes_url)} /></label>
+  </EditForm>;
 }
 
 function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws: Row[]; busy: boolean; mutate: PanelProps["mutate"] }) {

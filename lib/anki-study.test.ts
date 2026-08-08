@@ -98,7 +98,8 @@ describe("estado local do Anki", () => {
 
 describe("página autenticada do Anki", () => {
   it("cria a rota cliente protegida com retorno seguro e sem exigir lei liberada", () => {
-    expect(page).toContain("<AnkiStudyPageClient />");
+    expect(page).toContain("getAnkiTutorialSettings");
+    expect(page).toContain("<AnkiStudyPageClient settings={settings} />");
     expect(client).toContain("supabase.auth.getSession()");
     expect(client).toContain('/conta?modo=login&retorno=%2Festudar%2Fanki');
     expect(client).toContain("window.location.replace(LOGIN_URL)");
