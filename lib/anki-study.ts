@@ -16,7 +16,7 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
     officialUrl: "https://apps.ankiweb.net/",
     buttonLabel: "Baixar o Anki",
     note: "Gratuito",
-    videoUrl: null,
+    videoUrl: "https://youtu.be/0ewdtUTY9VI",
   },
   android: {
     label: "Android",

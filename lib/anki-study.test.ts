@@ -31,7 +31,8 @@ describe("configuração dos tutoriais do Anki", () => {
     expect(ANKI_PLATFORM_IDS).toEqual(["computador", "android", "ios", "navegador"]);
     expect(DEFAULT_ANKI_PLATFORM).toBe("computador");
     expect(Object.values(ANKI_PLATFORM_TUTORIALS).map((item) => item.label)).toEqual(["Computador", "Android", "iOS", "Navegador"]);
-    expect(Object.values(ANKI_PLATFORM_TUTORIALS).every((item) => item.videoUrl === null)).toBe(true);
+    expect(ANKI_PLATFORM_TUTORIALS.computador.videoUrl).toBe("https://youtu.be/0ewdtUTY9VI");
+    expect([ANKI_PLATFORM_TUTORIALS.android, ANKI_PLATFORM_TUTORIALS.ios, ANKI_PLATFORM_TUTORIALS.navegador].every((item) => item.videoUrl === null)).toBe(true);
   });
 
   it("mantém os destinos oficiais e os textos de cada plataforma", () => {

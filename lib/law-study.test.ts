@@ -17,10 +17,11 @@ const cards = readFileSync("components/student-laws-client.tsx", "utf8");
 const contract = readFileSync("lib/law-study.ts", "utf8");
 
 describe("contrato da página de estudo da lei", () => {
-  it("mantém plataformas tipadas com Computador como padrão e vídeos ainda não publicados", () => {
+  it("mantém plataformas tipadas com Computador como padrão e publica somente seu vídeo", () => {
     expect(DEFAULT_LAW_STUDY_PLATFORM).toBe("computador");
     expect(LAW_STUDY_PLATFORM_IDS).toEqual(["computador", "android", "ios", "navegador"]);
-    for (const platform of LAW_STUDY_PLATFORM_IDS) expect(LAW_STUDY_PLATFORMS[platform].videoUrl).toBeNull();
+    expect(LAW_STUDY_PLATFORMS.computador.videoUrl).toBe("https://youtu.be/8tf5WfdiI_Y");
+    for (const platform of ["android", "ios", "navegador"] as const) expect(LAW_STUDY_PLATFORMS[platform].videoUrl).toBeNull();
   });
 
   it("valida o slug e mantém o nome oficial como título", () => {

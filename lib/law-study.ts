@@ -7,7 +7,7 @@ export type LawStudyPlatform = {
 };
 
 export const LAW_STUDY_PLATFORMS: Record<LawStudyPlatformId, LawStudyPlatform> = {
-  computador: { label: "Computador", description: "Tutorial de estudo desta lei no computador.", videoUrl: null },
+  computador: { label: "Computador", description: "Tutorial de estudo desta lei no computador.", videoUrl: "https://youtu.be/8tf5WfdiI_Y" },
   android: { label: "Android", description: "Tutorial de estudo desta lei no Android.", videoUrl: null },
   ios: { label: "iOS", description: "Tutorial de estudo desta lei no iPhone e iPad.", videoUrl: null },
   navegador: { label: "Navegador", description: "Tutorial de estudo desta lei pelo navegador.", videoUrl: null },
@@ -82,7 +82,7 @@ export function isValidLawSlug(value: string) {
 }
 
 export function lawMaterialIcon(type: LawStudyMaterial["type"]) {
-  return ({ flashcards: "🗂️", video: "▶️", pdf: "📄", tutorial: "📘", audio: "🎧", outro: "📎" })[type];
+  return ({ flashcards: "🎮", video: "▶️", pdf: "📄", tutorial: "📘", audio: "🎧", outro: "📎" })[type];
 }
 
 export function lawMaterialActionLabel(material: Pick<LawStudyMaterial, "type" | "action">) {
