@@ -15,6 +15,10 @@ export type AnkiTutorialSettings = {
   navegadorAppUrl: string | null;
   navegadorTutorialUrl: string | null;
   tutorialQuestoesUrl: string | null;
+  computadorEstudoUrl: string | null;
+  androidEstudoUrl: string | null;
+  iosEstudoUrl: string | null;
+  navegadorEstudoUrl: string | null;
 };
 
 const PLATFORM_FIELDS: Record<AnkiPlatformId, { app: keyof AnkiTutorialSettings; tutorial: keyof AnkiTutorialSettings }> = {
@@ -22,6 +26,13 @@ const PLATFORM_FIELDS: Record<AnkiPlatformId, { app: keyof AnkiTutorialSettings;
   android: { app: "androidAppUrl", tutorial: "androidTutorialUrl" },
   ios: { app: "iosAppUrl", tutorial: "iosTutorialUrl" },
   navegador: { app: "navegadorAppUrl", tutorial: "navegadorTutorialUrl" },
+};
+
+const LAW_STUDY_FIELDS: Record<AnkiPlatformId, keyof AnkiTutorialSettings> = {
+  computador: "computadorEstudoUrl",
+  android: "androidEstudoUrl",
+  ios: "iosEstudoUrl",
+  navegador: "navegadorEstudoUrl",
 };
 
 function configuredUrl(value: string | null | undefined) {
@@ -36,4 +47,8 @@ export function resolveAnkiPlatformTutorials(settings: AnkiTutorialSettings | nu
     const tutorialUrl = configuredUrl(settings?.[fields.tutorial]);
     return [platform, { ...fallback, officialUrl: appUrl, videoUrl: tutorialUrl }];
   })) as Record<AnkiPlatformId, AnkiPlatformTutorial>;
+}
+
+export function resolveLawStudyPlatformTutorials(settings: AnkiTutorialSettings | null | undefined): Record<AnkiPlatformId, string | null> {
+  return Object.fromEntries(ANKI_PLATFORM_IDS.map((platform) => [platform, configuredUrl(settings?.[LAW_STUDY_FIELDS[platform]])])) as Record<AnkiPlatformId, string | null>;
 }

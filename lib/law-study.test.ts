@@ -82,7 +82,7 @@ describe("interface de estudo", () => {
   });
 
   it("separa o tutorial do Anki da orientação geral da página de estudo", () => {
-    for (const expected of ["study.law.title", "study.law.shortName", "study.law.totalFlashcards > 0", "aspect-video w-full", "Como usar o Anki", "Como estudar esta lei", "studyGuidanceEmbedUrl", "Mantenha suas revisões em dia antes de avançar para novos cartões."]) expect(client).toContain(expected);
+    for (const expected of ["study.law.title", "study.law.shortName", "study.law.totalFlashcards > 0", "aspect-video w-full", "Como usar o Anki", "Como estudar esta lei", "resolveLawStudyPlatformTutorials", "Plataformas do tutorial da página de estudo", "Mantenha suas revisões em dia antes de avançar para novos cartões."]) expect(client).toContain(expected);
     expect(client).not.toContain("Tutorial em preparação");
     for (const platform of ["Computador", "Android", "iOS", "Navegador"]) expect(contract).toContain(`label: "${platform}"`);
   });

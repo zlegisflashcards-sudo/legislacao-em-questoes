@@ -306,8 +306,11 @@ function AnkiTutorialsPanel({ rows, busy, mutate }: { rows: Row[]; busy: boolean
       <label>iOS — URL do tutorial<input name="ios_tutorial_url" type="url" defaultValue={text(settings.ios_tutorial_url)} /></label>
       <label>Navegador — URL do tutorial<input name="navegador_tutorial_url" type="url" defaultValue={text(settings.navegador_tutorial_url)} /></label>
     </div></section>
-    <section className="commercial-settings-group"><h3>Tutorial da página de estudo</h3><p>Vídeo geral exibido na página de estudo da lei para orientar o aluno sobre como usar o material e as questões. Não é o tutorial de instalação do Anki.</p><div>
-      <label>Vídeo de orientação para a página da lei<input name="tutorial_questoes_url" type="url" defaultValue={text(settings.tutorial_questoes_url)} /></label>
+    <section className="commercial-settings-group"><h3>Tutorial da página de estudo</h3><p>Vídeos de orientação sobre o material e as questões da página da lei, separados por plataforma. Não são tutoriais de instalação do Anki.</p><div>
+      <label>Computador — vídeo de orientação<input name="computador_estudo_url" type="url" defaultValue={text(settings.computador_estudo_url)} /></label>
+      <label>Android — vídeo de orientação<input name="android_estudo_url" type="url" defaultValue={text(settings.android_estudo_url)} /></label>
+      <label>iOS — vídeo de orientação<input name="ios_estudo_url" type="url" defaultValue={text(settings.ios_estudo_url)} /></label>
+      <label>Navegador — vídeo de orientação<input name="navegador_estudo_url" type="url" defaultValue={text(settings.navegador_estudo_url)} /></label>
     </div></section>
   </EditForm>;
 }
