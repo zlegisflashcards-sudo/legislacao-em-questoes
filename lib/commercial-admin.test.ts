@@ -80,6 +80,8 @@ describe("fronteira administrativa comercial", () => {
     }
     expect(readFileSync("app/api/admin/comercial/auditoria/route.ts", "utf8")).not.toContain("handleCommercialMutation");
     expect(readFileSync("app/api/admin/comercial/alunos/route.ts", "utf8")).toContain("handleCommercialMutation");
+    expect(readFileSync("app/api/admin/comercial/anki-tutoriais/route.ts", "utf8")).toContain("handleCommercialMutation");
+    expect(client).toContain('resource === "anki_tutoriais" ? "anki-tutoriais" : resource');
   });
 
   it("mantém histórico editorial separado da auditoria técnica", () => {

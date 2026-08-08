@@ -22,6 +22,7 @@ const text = (value: unknown) => value == null ? "" : String(value);
 const object = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 const relation = (row: Row, key: string) => object(row[key]);
 const date = (value: unknown) => value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(String(value))) : "—";
+const resourcePath = (resource: Tab) => resource === "anki_tutoriais" ? "anki-tutoriais" : resource;
 
 async function requestJson(url: string, init?: RequestInit) {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
@@ -73,7 +74,7 @@ export default function CommercialAdmin() {
       const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (query.trim()) params.set("q", query.trim());
       for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
-      setResult(await requestJson(`/api/admin/comercial/${tab}?${params}`));
+      setResult(await requestJson(`/api/admin/comercial/${resourcePath(tab)}?${params}`));
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Falha na consulta."); }
     finally { setBusy(false); }
   }, [filters, page, query, tab]);
@@ -95,7 +96,7 @@ export default function CommercialAdmin() {
   async function mutate(resource: Tab, payload: Row, success: string) {
     setBusy(true); setError(""); setMessage("");
     try {
-      await requestJson(`/api/admin/comercial/${resource}`, { method: "POST", body: JSON.stringify(payload) });
+      await requestJson(`/api/admin/comercial/${resourcePath(resource)}`, { method: "POST", body: JSON.stringify(payload) });
       setMessage(success); setEditing(null); await Promise.all([load(), loadReferences()]);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Falha na operação."); }
     finally { setBusy(false); }
