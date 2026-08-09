@@ -468,7 +468,7 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown, dry
       const product = await supabase.from("produtos").select("id,hotmart_product_id,ativo").eq("hotmart_product_id", sale.productCode).maybeSingle();
       if (product.error || !product.data) throw new Error("Produto interno não encontrado para o código Hotmart.");
 
-      const existingStudent = await supabase.from("alunos").select("id,telefone").ilike("email", sale.email).limit(1).maybeSingle();
+      const existingStudent = await supabase.from("alunos").select("id,telefone").eq("email", sale.email.trim().toLowerCase()).limit(1).maybeSingle();
       if (existingStudent.error) throw existingStudent.error;
       let studentId = existingStudent.data?.id as string | undefined;
       if (studentId) {
@@ -481,9 +481,11 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown, dry
       else {
         summary.studentsCreated += 1;
         if (!dryRun) {
-          const createdStudent = await supabase.from("alunos").insert({ nome: sale.name, email: sale.email, telefone: sale.phone }).select("id").single();
+          const createdStudent = await supabase.rpc("obter_ou_criar_aluno_por_email", {
+            p_email: sale.email, p_nome: sale.name, p_telefone: sale.phone,
+          });
           if (createdStudent.error || !createdStudent.data) throw createdStudent.error ?? new Error("Não foi possível criar o aluno.");
-          studentId = createdStudent.data.id as string;
+          studentId = createdStudent.data as string;
         }
       }
 

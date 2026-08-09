@@ -91,7 +91,7 @@ export function StudentAccount() {
         setMessage("Conta criada com sucesso. Você já está conectado.");
         return;
       }
-      setMessage("Conta criada. Confira seu e-mail para confirmar o cadastro.");
+      setMessage("Confira seu e-mail para confirmar o cadastro. Se este e-mail já tiver uma conta, entre ou recupere a senha.");
     } finally { setPending(false); }
   }
 

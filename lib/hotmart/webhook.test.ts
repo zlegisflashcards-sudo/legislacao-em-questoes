@@ -34,6 +34,7 @@ type Step = { data?: unknown; error?: unknown };
 function supabaseComRespostas(...steps: Step[]) {
   const calls: Array<{ table: string; operation: "insert" | "update"; value: unknown }> = [];
   const client = {
+    rpc: async () => steps.shift() ?? {},
     from(table: string) {
       const response = steps.shift() ?? {};
       const query = {
@@ -120,7 +121,6 @@ describe("recepção de webhook Hotmart", () => {
     );
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
     expect(calls).toEqual(expect.arrayContaining([
-      expect.objectContaining({ table: "alunos", operation: "insert" }),
       expect.objectContaining({ table: "compras", operation: "insert" }),
       expect.objectContaining({ table: "liberacoes_leis", operation: "insert" }),
     ]));

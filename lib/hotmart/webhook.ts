@@ -240,13 +240,11 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
       if (atualizado.error) throw atualizado.error;
     }
   } else {
-    const criado = await supabase
-      .from("alunos")
-      .insert({ nome: evento.nome_comprador, email: evento.email_comprador, telefone: evento.telefone_comprador })
-      .select("id")
-      .single();
+    const criado = await supabase.rpc("obter_ou_criar_aluno_por_email", {
+      p_email: evento.email_comprador, p_nome: evento.nome_comprador, p_telefone: evento.telefone_comprador,
+    });
     if (criado.error || !criado.data) throw criado.error ?? new Error("Não foi possível criar o aluno.");
-    alunoId = criado.data.id as string;
+    alunoId = criado.data as string;
   }
 
   const agora = evento.aprovada_em ?? new Date().toISOString();
