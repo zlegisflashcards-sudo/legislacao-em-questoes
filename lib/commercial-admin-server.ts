@@ -529,11 +529,21 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const action = requiredString(body.action, "Ação", 40);
   rejectUnknownKeys(body, ["action", "id", "data", "lei_ids"]);
 
+  if (resource === "alunos" && action === "criar") {
+    const data = validateStudentData(body.data);
+    return rpc("admin_criar_aluno", { p_ator_user_id: actor, p_nome: data.nome, p_email: data.email });
+  }
+  if (resource === "alunos" && action === "mesclar") {
+    const data = asObject(body.data);
+    return rpc("admin_mesclar_alunos", { p_ator_user_id: actor, p_principal: uuid(data.principal, "Principal"), p_secundario: uuid(data.secundario, "Secundario"), p_nome_final: optionalString(data.nome_final, "Nome final", 300) ?? null });
+  }
+  if (resource === "alunos" && action === "excluir") return rpc("admin_excluir_aluno_vazio", { p_ator_user_id: actor, p_aluno_id: uuid(body.id, "Aluno") });
   if (resource === "alunos" && action === "atualizar") {
     const alunoId = uuid(body.id, "Aluno");
     const data = validateStudentData(body.data);
     const supabase = getSupabaseServerClient();
-    const current = await supabase.from("alunos").select("id,nome,email,telefone").eq("id", alunoId).single();
+    const current = await supabase.from("alunos").select("id,user_id,nome,email,telefone").eq("id", alunoId).single();
+    if (current.data && "user_id" in current.data && current.data.user_id && String(current.data.email).trim().toLowerCase() !== data.email) throw new CommercialHttpError(409, "O e-mail de aluno com Auth nao pode ser alterado sem sincronizacao segura da conta Auth.");
     if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
     const duplicate = await supabase.from("alunos").select("id").ilike("email", data.email).neq("id", alunoId).limit(1);
     if (duplicate.error) throw new CommercialHttpError(500, "Não foi possível validar os dados do aluno.");
