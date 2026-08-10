@@ -86,6 +86,9 @@ export async function authorizeLawStudy(request: Request, slug: string) {
   const student = record(studentData);
   const studentId = text(student?.id);
   if (!studentId) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
+  const { data: passwordStatus, error: passwordStatusError } = await supabase.from("alunos").select("deve_trocar_senha").eq("id", studentId).single();
+  if (passwordStatusError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
+  if (passwordStatus?.deve_trocar_senha === true) throw new LawStudyApiError(403, "Crie sua nova senha antes de acessar suas leis.");
 
   const { data: lawData, error: lawError } = await supabase.from("leis").select("id,slug,titulo,nome_curto,codigo").eq("slug", slug).eq("ativo", true).maybeSingle();
   if (lawError) throw new LawStudyApiError(503, "Não foi possível carregar esta lei agora.");

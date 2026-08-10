@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { safeReturnPath } from "@/lib/safe-return-path";
 
 type PublicProfile = { id: string; nome_publico: string };
-type Mode = "login" | "signup" | "forgot" | "profile" | "recover";
+type Mode = "login" | "signup" | "forgot" | "profile" | "recover" | "firstAccess";
 
 export function validatePublicName(value: string) {
   return /^[\p{L}\p{N}][\p{L}\p{N} ._-]{1,48}[\p{L}\p{N}]$/u.test(value.trim());
@@ -15,7 +15,9 @@ export function validatePublicName(value: string) {
 export function StudentAccount() {
   const params = useSearchParams();
   const returnPath = safeReturnPath(params.get("retorno"));
-  const initialMode: Mode = params.get("recuperar") === "1"
+  const initialMode: Mode = params.get("primeiro-acesso") === "1"
+    ? "firstAccess"
+    : params.get("recuperar") === "1"
     ? "recover"
     : params.get("modo") === "cadastro" ? "signup" : "login";
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -32,9 +34,16 @@ export function StudentAccount() {
       if (data.user) {
         await vincularAluno();
         setEmail(data.user.email ?? "");
+        if (await needsProvisionalPasswordChange()) {
+          setMode("firstAccess");
+          setLoading(false);
+          return;
+        }
         const result = await supabase.from("perfis_publicos").select("id,nome_publico").eq("id", data.user.id).maybeSingle();
         setProfile(result.data as PublicProfile | null);
         if (initialMode !== "recover") setMode("profile");
+      } else if (initialMode === "firstAccess") {
+        setMode("login");
       }
       setLoading(false);
     }
@@ -47,6 +56,15 @@ export function StudentAccount() {
     await fetch("/api/aluno/vincular", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` } });
   }
 
+  async function needsProvisionalPasswordChange() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session?.access_token) return false;
+    const response = await fetch("/api/aluno/acesso-provisorio", { headers: { Authorization: `Bearer ${data.session.access_token}` } });
+    if (!response.ok) return false;
+    const result = await response.json() as { deve_trocar_senha?: boolean };
+    return result.deve_trocar_senha === true;
+  }
+
   async function authenticate(formData: FormData) {
     setPending(true); setMessage("");
     const authEmail = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -56,6 +74,10 @@ export function StudentAccount() {
         const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
         if (error) { setMessage("E-mail ou senha inválidos."); return; }
         await vincularAluno();
+        if (await needsProvisionalPasswordChange()) {
+          window.location.assign("/conta?primeiro-acesso=1");
+          return;
+        }
         window.location.assign(returnPath);
         return;
       }
@@ -134,6 +156,28 @@ export function StudentAccount() {
     setPending(false);
   }
 
+  async function updateProvisionalPassword(formData: FormData) {
+    setPending(true); setMessage("");
+    const password = String(formData.get("password") ?? "");
+    const confirmation = String(formData.get("confirmation") ?? "");
+    if (password.length < 8 || password !== confirmation) {
+      setMessage("As senhas devem coincidir e ter pelo menos 8 caracteres."); setPending(false); return;
+    }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setMessage("Não foi possível alterar a senha com a sessão atual."); setPending(false); return;
+    }
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch("/api/aluno/acesso-provisorio", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+    });
+    if (!response.ok) {
+      setMessage("A senha foi alterada, mas não foi possível concluir o primeiro acesso. Tente novamente."); setPending(false); return;
+    }
+    window.location.assign("/minhas-leis");
+  }
+
   async function signOut() {
     setPending(true); setMessage("");
     const { error } = await supabase.auth.signOut();
@@ -159,6 +203,8 @@ export function StudentAccount() {
   if (loading) return <p className="text-slate-600">Carregando sua conta…</p>;
 
   if (mode === "recover") return <AccountCard title="Definir nova senha" description="Escolha uma nova senha para sua conta."><form action={updatePassword} className="space-y-4"><Field label="Nova senha" name="password" type="password" minLength={8} /><Field label="Confirmar senha" name="confirmation" type="password" minLength={8} /><PrimaryButton pending={pending}>Salvar nova senha</PrimaryButton>{message ? <Status>{message}</Status> : null}</form></AccountCard>;
+
+  if (mode === "firstAccess") return <AccountCard title="Crie sua nova senha" description="Para proteger sua conta, defina uma senha pessoal antes de continuar."><form action={updateProvisionalPassword} className="space-y-4"><Field label="Nova senha" name="password" type="password" minLength={8} autoComplete="new-password" /><Field label="Confirmar nova senha" name="confirmation" type="password" minLength={8} autoComplete="new-password" /><PrimaryButton pending={pending}>Salvar nova senha</PrimaryButton>{message ? <Status>{message}</Status> : null}</form></AccountCard>;
 
   if (mode === "profile" && profile) return <div className="space-y-6">
     <AccountCard title="Seu perfil na comunidade" description="Somente o nome público aparece nos comentários. Seu e-mail nunca é exibido publicamente.">

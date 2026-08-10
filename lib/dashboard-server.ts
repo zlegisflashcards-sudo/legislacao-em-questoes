@@ -22,6 +22,9 @@ export async function requireDashboardUser(request: Request): Promise<{ user: Us
   if (!token) throw new DashboardApiError(401, "Entre na sua conta para acessar o painel.");
   const { data, error } = await getSupabaseServerClient().auth.getUser(token);
   if (error || !data.user) throw new DashboardApiError(401, "Sua sessão expirou. Entre novamente.");
+  const { data: student, error: studentError } = await getSupabaseServerClient().from("alunos").select("deve_trocar_senha").eq("user_id", data.user.id).maybeSingle();
+  if (studentError) throw new DashboardApiError(503, "Não foi possível verificar seu acesso agora.");
+  if (student?.deve_trocar_senha === true) throw new DashboardApiError(403, "Crie sua nova senha antes de acessar o painel.");
   return { user: data.user, token };
 }
 

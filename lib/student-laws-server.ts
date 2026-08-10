@@ -29,6 +29,10 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
     throw new StudentLawsApiError(401, "Sua sessão expirou. Entre novamente.");
   }
 
+  const { data: student, error: studentError } = await getSupabaseServerClient().from("alunos").select("deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle();
+  if (studentError) throw new StudentLawsApiError(503, "Não foi possível verificar seu acesso agora.");
+  if (student?.deve_trocar_senha === true) throw new StudentLawsApiError(403, "Crie sua nova senha antes de acessar suas leis.");
+
   const { data, error } = await createSupabaseUserClient(token).rpc("obter_minhas_leis");
   if (error) throw new StudentLawsApiError(503, "Não foi possível carregar suas leis agora.");
   return parseStudentLawRows(data);
