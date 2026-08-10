@@ -64,6 +64,16 @@ function assertQuery(result: { error: { message?: string } | null }) {
 }
 
 async function rpc(name: string, params: JsonObject) {
+  if (name === "admin_mesclar_alunos") {
+    console.info("Chamada RPC de mesclagem administrativa", {
+      rpc: name,
+      argumentNames: Object.keys(params).sort(),
+      principal: params.p_principal,
+      secundario: params.p_secundario,
+      adminIdSent: typeof params.p_ator_user_id === "string",
+      nomeFinalType: params.p_nome_final === null ? "null" : typeof params.p_nome_final,
+    });
+  }
   const result = await getSupabaseServerClient().rpc(name, params);
   if (result.error) {
     const code = String(result.error.code ?? "");
@@ -71,6 +81,7 @@ async function rpc(name: string, params: JsonObject) {
     if (name === "admin_mesclar_alunos") {
       console.error("Falha na mesclagem administrativa de alunos", {
         principal: params.p_principal, secundario: params.p_secundario, code, message: technical,
+        details: result.error.details ?? null, hint: result.error.hint ?? null,
       });
       if (["22023", "P0002", "23503", "23505", "23514"].includes(code)) {
         throw new CommercialHttpError(422, `Não foi possível mesclar: ${technical}`);

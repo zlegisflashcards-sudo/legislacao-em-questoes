@@ -33,6 +33,10 @@ describe("gerência administrativa de alunos", () => {
     expect(server).toContain("Falha na mesclagem administrativa de alunos");
     expect(server).toContain("Não foi possível mesclar:");
   });
+  it("envia os nomes de argumentos idênticos à assinatura PostgREST", () => {
+    for (const argument of ["p_ator_user_id", "p_principal", "p_secundario", "p_nome_final"]) expect(server).toContain(argument);
+    expect(server).toContain("argumentNames: Object.keys(params).sort()");
+  });
   it("mantém ações exclusivamente no endpoint administrativo", () => {
     expect(server).toContain('resource === "alunos" && action === "mesclar"');
     expect(ui).toContain("Mesclar cadastros");
