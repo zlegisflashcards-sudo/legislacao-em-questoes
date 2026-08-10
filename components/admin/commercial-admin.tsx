@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
@@ -67,16 +67,20 @@ export default function CommercialAdmin() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
   const [student, setStudent] = useState<Row | null>(null);
+  const loadVersion = useRef(0);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setBusy(true); setError("");
+    setResult({ items: [], page: 1, pages: 1, total: 0 });
     try {
       const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (query.trim()) params.set("q", query.trim());
       for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
-      setResult(await requestJson(`/api/admin/comercial/${resourcePath(tab)}?${params}`));
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Falha na consulta."); }
-    finally { setBusy(false); }
+      const next = await requestJson(`/api/admin/comercial/${resourcePath(tab)}?${params}`);
+      if (version === loadVersion.current) setResult(next);
+    } catch (caught) { if (version === loadVersion.current) setError(caught instanceof Error ? caught.message : "Falha na consulta."); }
+    finally { if (version === loadVersion.current) setBusy(false); }
   }, [filters, page, query, tab]);
 
   const loadReferences = useCallback(async () => {
