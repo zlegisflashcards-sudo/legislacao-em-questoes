@@ -43,6 +43,14 @@ describe("exclusão administrativa definitiva de aluno", () => {
     expect(ui).toContain("Cancelar");
   });
 
+  it("registra a falha técnica com segurança e devolve uma causa administrativa", () => {
+    expect(server).toContain("Falha na exclusão administrativa de aluno");
+    expect(server).toContain("etapa: name === \"admin_resumo_exclusao_aluno\" ? \"preflight\" : \"transacao_banco\"");
+    expect(server).toContain("Não foi possível excluir: a rotina de banco necessária ainda não está disponível.");
+    expect(server).toContain("existe vínculo pendente ou referência não suportada");
+    expect(server).not.toMatch(/console\.(?:info|error)\([^\n]*(?:senha|password|service_role)/i);
+  });
+
   it("audita o UUID e o resumo da remoção, sem segredos", () => {
     expect(migration).toContain("'excluir_definitivamente','aluno',a.id::text");
     expect(migration).toContain("compras_desvinculadas_e_preservadas");

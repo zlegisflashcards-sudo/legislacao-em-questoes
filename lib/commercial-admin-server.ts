@@ -81,6 +81,29 @@ async function rpc(name: string, params: JsonObject) {
   if (result.error) {
     const code = String(result.error.code ?? "");
     const technical = String(result.error.message ?? "Erro de banco sem mensagem.").replace(/[\r\n]+/g, " ").slice(0, 500);
+    const isStudentDeletion = name === "admin_excluir_aluno_definitivamente" || name === "admin_resumo_exclusao_aluno";
+    if (isStudentDeletion) {
+      console.error("Falha na exclusão administrativa de aluno", {
+        rpc: name,
+        alunoId: params.p_aluno_id ?? null,
+        etapa: name === "admin_resumo_exclusao_aluno" ? "preflight" : "transacao_banco",
+        code,
+        message: technical,
+        details: result.error.details ?? null,
+        hint: result.error.hint ?? null,
+      });
+      if (code === "42883" || code === "PGRST202") {
+        throw new CommercialHttpError(503, "Não foi possível excluir: a rotina de banco necessária ainda não está disponível.");
+      }
+      if (code === "23503") {
+        throw new CommercialHttpError(422, `Não foi possível excluir: existe vínculo pendente ou referência não suportada. ${technical}`);
+      }
+      if (["22023", "P0002", "23514"].includes(code)) {
+        throw new CommercialHttpError(422, `Não foi possível excluir: ${technical}`);
+      }
+      if (code === "42501") throw new CommercialHttpError(403, "Não foi possível excluir: operação administrativa não autorizada.");
+      throw new CommercialHttpError(500, "Não foi possível excluir: a transação no banco falhou. Consulte o log administrativo pelo UUID do aluno.");
+    }
     if (name === "admin_mesclar_alunos") {
       console.error("Falha na mesclagem administrativa de alunos", {
         principal: params.p_principal, secundario: params.p_secundario, code, message: technical,
