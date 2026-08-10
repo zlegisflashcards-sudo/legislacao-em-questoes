@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createStudentActivationLink } from "@/lib/student-activation-server";
 
 export type FirstAccessOrigin = "hotmart" | "administrativo" | "cortesia" | "amostra" | "premiacao" | "migracao";
 type AccessInput = { studentId: string; origin: FirstAccessOrigin; idempotencyKey: string; accessLabel: string; kind?: "acquisition" | "release" };
@@ -37,10 +38,10 @@ function resendDiagnosticBody(body: string) {
   }
 }
 
-function accessNotificationText(name: string | null, label: string, hasAuth: boolean) {
+function accessNotificationText(name: string | null, label: string, hasAuth: boolean, activationUrl?: string) {
   const greeting = `Ola, ${name?.trim() || "aluno(a)"}.\n\nUm novo acesso foi liberado: ${label}.\n\n`;
   if (!hasAuth) {
-    return `${greeting}Para comecar a estudar, ative sua conta:\nhttps://www.legisflashcards.com.br/conta\n\nAtivar minha conta`;
+    return `${greeting}Para comecar a estudar, ative sua conta:\n${activationUrl}\n\nAtivar minha conta`;
   }
   return `${greeting}Acesse sua area de estudos:\nhttps://www.legisflashcards.com.br/conta\n\nAcessar minha conta`;
 }
@@ -56,7 +57,8 @@ async function sendNewAccessNotification(
   if (reserve.error) throw new Error("Nao foi possivel reservar a notificacao de novo acesso.");
   try {
     diagnostic("access_notification_requested", { studentId: student.id, origin: input.origin, idempotencyKey: input.idempotencyKey, hasAuth: Boolean(student.user_id) });
-    await sendEmail(student.email, "Novo acesso liberado na Legislacao em Questoes", accessNotificationText(student.nome, input.accessLabel, Boolean(student.user_id)), input.idempotencyKey);
+    const activationUrl = student.user_id ? undefined : await createStudentActivationLink(supabase, student.id);
+    await sendEmail(student.email, "Novo acesso liberado na Legislacao em Questoes", accessNotificationText(student.nome, input.accessLabel, Boolean(student.user_id), activationUrl), input.idempotencyKey);
     const sent = await supabase.from("alunos_notificacoes_acesso").update({ status: "enviado", enviado_em: new Date().toISOString(), erro: null }).eq("idempotency_key", input.idempotencyKey);
     if (sent.error) throw new Error("Nao foi possivel registrar a notificacao enviada.");
     await audit(supabase, "notificacao_novo_acesso_enviada", student.id, { origem: input.origin, tipo: type, descricao: input.accessLabel, possui_auth: Boolean(student.user_id) });
@@ -101,7 +103,7 @@ export async function sendManualStudentAccessEmail(supabase: SupabaseClient, stu
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ from, to: [email], subject: "Acesso disponivel na Legislacao em Questoes", text: accessNotificationText(student.nome, "seus acessos", hasAuth) }),
+      body: JSON.stringify({ from, to: [email], subject: "Acesso disponivel na Legislacao em Questoes", text: accessNotificationText(student.nome, "seus acessos", hasAuth, hasAuth ? undefined : await createStudentActivationLink(supabase, student.id)) }),
     });
     const responseBody = await response.text();
     const diagnostic = resendDiagnosticBody(responseBody);
