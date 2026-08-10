@@ -25,7 +25,7 @@ describe("senha provisória de primeiro acesso", () => {
   });
 
   it("não registra a senha provisória em auditoria ou logs", () => {
-    const action = server.slice(server.indexOf('action === "gerar_senha_provisoria"'), server.indexOf('action === "mesclar"'));
+    const action = server.slice(server.indexOf('action === "gerar_senha_provisoria"'), server.indexOf('action === "enviar_email_acesso"'));
     expect(action).not.toContain("console.");
     expect(action).toContain("detalhes: { user_id");
     expect(server).toContain("randomBytes(18)");

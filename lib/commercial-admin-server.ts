@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { notifyStudentAccess, type FirstAccessOrigin } from "@/lib/student-first-access-server";
+import { notifyStudentAccess, sendManualStudentAccessEmail, type FirstAccessOrigin } from "@/lib/student-first-access-server";
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import {
   COMMERCIAL_ORIGINS,
@@ -577,6 +577,21 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const audit = await supabase.from("auditoria_administrativa").insert({ ator_user_id: actor, acao: "gerar_senha_provisoria", entidade: "aluno", entidade_id: alunoId, detalhes: { user_id: userId } });
     if (audit.error) throw new CommercialHttpError(500, "Não foi possível auditar a senha provisória.");
     return { senha_provisoria: password, user_id: userId };
+  }
+  if (resource === "alunos" && action === "enviar_email_acesso") {
+    const alunoId = uuid(body.id, "Aluno");
+    try {
+      return await sendManualStudentAccessEmail(getSupabaseServerClient(), alunoId, actor);
+    } catch (error) {
+      console.error("Falha no envio administrativo de e-mail de acesso", {
+        aluno_id: alunoId,
+        code: typeof error === "object" && error && "code" in error ? (error as { code?: unknown }).code : null,
+        message: error instanceof Error ? error.message : "Falha desconhecida",
+        details: typeof error === "object" && error && "details" in error ? (error as { details?: unknown }).details : null,
+        hint: typeof error === "object" && error && "hint" in error ? (error as { hint?: unknown }).hint : null,
+      });
+      throw new CommercialHttpError(502, "Falha ao enviar e-mail. Consulte o log do servidor.");
+    }
   }
   if (resource === "alunos" && action === "mesclar") {
     const data = asObject(body.data);
