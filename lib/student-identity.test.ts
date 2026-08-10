@@ -30,8 +30,8 @@ describe("identidade de aluno por e-mail normalizado", () => {
     expect(account).toContain("updateUser({ password })");
   });
 
-  it("faz importacao e webhook reutilizarem a RPC atomica e preserva idempotencia de compra", () => {
-    expect(imports).toContain('rpc("obter_ou_criar_aluno_por_email"');
+  it("faz importacao e webhook reutilizarem identidade atomica e preserva idempotencia de compra", () => {
+    expect(imports).toContain('rpc("admin_importar_aquisicao_hotmart_historica"');
     expect(webhook).toContain('rpc("obter_ou_criar_aluno_por_email"');
     expect(imports).toContain('eq("identificador_externo", sale.transactionId)');
     expect(webhook).toContain('eq("identificador_externo", evento.codigo_transacao)');

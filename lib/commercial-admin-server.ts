@@ -509,59 +509,21 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown, dry
       const duplicate = await supabase.from("compras").select("id").eq("origem", "hotmart").eq("identificador_externo", sale.transactionId).maybeSingle();
       if (duplicate.error) throw duplicate.error;
       if (duplicate.data) { summary.duplicates += 1; continue; }
-
       const product = await supabase.from("produtos").select("id,hotmart_product_id,ativo").eq("hotmart_product_id", sale.productCode).maybeSingle();
       if (product.error || !product.data) throw new Error("Produto interno não encontrado para o código Hotmart.");
-
-      const existingStudent = await supabase.from("alunos").select("id,telefone").eq("email", sale.email.trim().toLowerCase()).limit(1).maybeSingle();
-      if (existingStudent.error) throw existingStudent.error;
-      let studentId = existingStudent.data?.id as string | undefined;
-      if (studentId) {
-        summary.studentsExisting += 1;
-        if (!dryRun && sale.phone && !existingStudent.data?.telefone) {
-          const updatedStudent = await supabase.from("alunos").update({ telefone: sale.phone }).eq("id", studentId);
-          if (updatedStudent.error) throw updatedStudent.error;
-        }
-      }
-      else {
-        summary.studentsCreated += 1;
-        if (!dryRun) {
-          const createdStudent = await supabase.rpc("obter_ou_criar_aluno_por_email", {
-            p_email: sale.email, p_nome: sale.name, p_telefone: sale.phone,
-          });
-          if (createdStudent.error || !createdStudent.data) throw createdStudent.error ?? new Error("Não foi possível criar o aluno.");
-          studentId = createdStudent.data as string;
-        }
-      }
-
-      if (sale.status === "ativo") {
-        if (!product.data.ativo) throw new Error("Produto interno está inativo.");
-        if (dryRun) { summary.ready += 1; continue; }
-        const created = await rpc("admin_registrar_aquisicao", {
-          p_ator_user_id: actor, p_aluno_id: studentId, p_produto_id: product.data.id,
-          p_origem: "hotmart", p_identificador_externo: sale.transactionId,
-          p_observacao_administrativa: "Importação histórica Hotmart",
-        }) as { compra?: { id?: string } | null } | null;
-        const purchaseId = created?.compra?.id;
-        if (purchaseId) {
-          const updated = await supabase.from("compras").update({ adquirida_em: sale.purchasedAt, comprada_em: sale.purchasedAt }).eq("id", purchaseId);
-          if (updated.error) throw updated.error;
-        }
-      } else {
-        if (dryRun) { summary.ready += 1; continue; }
-        const status = sale.status === "cancelado" ? "cancelada" : "reembolsada";
-        const timestampField = sale.status === "cancelado" ? "cancelada_em" : "reembolsada_em";
-        const inserted = await supabase.from("compras").insert({
-          aluno_id: studentId, produto_id: product.data.id, hotmart_product_id: product.data.hotmart_product_id,
-          hotmart_transaction_id: sale.transactionId, status, origem: "hotmart", identificador_externo: sale.transactionId,
-          observacao_administrativa: "Importação histórica Hotmart", administrador_user_id: actor,
-          status_acesso: sale.status, adquirida_em: sale.purchasedAt, comprada_em: sale.purchasedAt, [timestampField]: sale.purchasedAt,
-        });
-        if (inserted.error) throw inserted.error;
-      }
+      if (dryRun) { summary.ready += 1; continue; }
+      const imported = await rpc("admin_importar_aquisicao_hotmart_historica", {
+        p_ator_user_id: actor, p_email: sale.email, p_nome: sale.name, p_telefone: sale.phone,
+        p_hotmart_product_id: sale.productCode, p_transaction_id: sale.transactionId,
+        p_adquirida_em: sale.purchasedAt, p_status_acesso: sale.status,
+      }) as { duplicada?: boolean; aluno_criado?: boolean } | null;
+      if (imported?.duplicada) { summary.duplicates += 1; continue; }
       summary.imported += 1;
+      if (imported?.aluno_criado) summary.studentsCreated += 1;
+      else summary.studentsExisting += 1;
     } catch (error) {
-      summary.errors.push(`Linha ${index + 1}: ${error instanceof Error ? error.message : "erro desconhecido"}`);
+      const raw = error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" ? error.message : "Falha não identificada pelo Supabase.";
+      summary.errors.push(`Linha ${index + 1}: ${raw.replace(/[\r\n]+/g, " ").slice(0, 500)}`);
     }
   }
   return summary;
