@@ -23,6 +23,7 @@ export function StudentAccount() {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
@@ -34,6 +35,9 @@ export function StudentAccount() {
       if (data.user) {
         await vincularAluno();
         setEmail(data.user.email ?? "");
+        const session = await supabase.auth.getSession();
+        const studentProfile = await fetch("/api/aluno/perfil", { headers: { Authorization: `Bearer ${session.data.session?.access_token ?? ""}` } });
+        if (studentProfile.ok) { const details = await studentProfile.json() as { telefone?: string | null }; setPhone(details.telefone ?? ""); }
         if (await needsProvisionalPasswordChange()) {
           setMode("firstAccess");
           setLoading(false);
@@ -194,9 +198,14 @@ export function StudentAccount() {
     const publicName = String(formData.get("public_name") ?? "").trim();
     if (!validatePublicName(publicName)) { setMessage("Revise o nome público."); return; }
     setPending(true);
+    const phoneValue = String(formData.get("telefone") ?? "").trim();
+    if (phoneValue.length > 80) { setMessage("Telefone excede o limite permitido."); return; }
+    const { data: session } = await supabase.auth.getSession();
+    const phoneResult = await fetch("/api/aluno/perfil", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.session?.access_token ?? ""}` }, body: JSON.stringify({ telefone: phoneValue || null }) });
     const { error } = await supabase.from("perfis_publicos").update({ nome_publico: publicName }).eq("id", profile.id);
     if (!error) setProfile({ ...profile, nome_publico: publicName });
-    setMessage(error ? "Não foi possível salvar. Esse nome pode já estar em uso." : "Perfil atualizado.");
+    if (phoneResult.ok) setPhone(phoneValue);
+    setMessage(error || !phoneResult.ok ? "Não foi possível salvar seu perfil." : "Perfil atualizado.");
     setPending(false);
   }
 
@@ -210,7 +219,8 @@ export function StudentAccount() {
     <AccountCard title="Seu perfil na comunidade" description="Somente o nome público aparece nos comentários. Seu e-mail nunca é exibido publicamente.">
       <form action={saveProfile} className="space-y-4">
         <Field label="Nome público" name="public_name" defaultValue={profile.nome_publico} />
-        <p className="text-sm text-slate-500">E-mail da conta: {email}</p>
+        <Field label="Telefone" name="telefone" defaultValue={phone} placeholder="(00) 00000-0000" />
+        <p className="text-sm text-slate-500">E-mail de acesso: {email}<br />Precisa alterar seu e-mail? Entre em contato com nossa equipe.</p>
         <PrimaryButton pending={pending}>Salvar perfil</PrimaryButton>
       </form>
     </AccountCard>
