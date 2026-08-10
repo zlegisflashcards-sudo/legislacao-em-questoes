@@ -30,11 +30,11 @@ describe("contrato da página de estudo da lei", () => {
     expect(lawStudyShortName("Constituição Federal", " CONSTITUIÇÃO FEDERAL ")).toBeNull();
   });
 
-  it("mantém as ações de material desabilitadas enquanto falta download seguro", () => {
+  it("habilita ações de material com URL válida e mantém indisponível sem URL", () => {
     expect(lawMaterialActionLabel({ type: "flashcards", action: "baixar" })).toBe("Baixar flashcards");
     expect(lawMaterialActionLabel({ type: "pdf", action: "baixar" })).toBe("Baixar PDF");
-    expect(client).toContain("material.downloadAvailable");
-    expect(client).not.toMatch(/href=\{material\./);
+    expect(client).toContain("material.accessAvailable");
+    expect(client).toContain('window.open(material.accessUrl, "_blank", "noopener,noreferrer")');
   });
 });
 

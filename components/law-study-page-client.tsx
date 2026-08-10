@@ -121,7 +121,11 @@ function MaterialsSection({ study }: { study: LawStudyData }) {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [downloadErrors, setDownloadErrors] = useState<Record<number, string>>({});
 
-  async function downloadMaterial(material: LawStudyData["materials"][number]) {
+  async function accessMaterial(material: LawStudyData["materials"][number]) {
+    if (material.accessUrl) {
+      window.open(material.accessUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     setDownloadingId(material.id);
     setDownloadErrors((current) => ({ ...current, [material.id]: "" }));
     try {
@@ -169,7 +173,7 @@ function MaterialsSection({ study }: { study: LawStudyData }) {
         <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-2xl">{lawMaterialIcon(material.type)}</span>
         <div className="min-w-0 flex-1"><h3 className="break-words text-lg font-black text-[#062a5f]">{material.title}</h3>{material.description ? <p className="mt-1 text-sm leading-relaxed text-slate-600">{material.description}</p> : null}<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-500">{material.itemCount !== null ? <span>{material.itemCount} itens</span> : null}{material.version ? <span>Versão {material.version}</span> : null}</div></div>
         <div className="shrink-0 sm:max-w-64">
-          {material.downloadAvailable ? <button type="button" disabled={downloadingId !== null} onClick={() => void downloadMaterial(material)} className="min-h-11 w-full rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 disabled:cursor-wait disabled:opacity-60">{downloadingId === material.id ? "Preparando download…" : lawMaterialActionLabel(material)}</button> : <button type="button" disabled title="Referência de arquivo ausente ou inválida" className="min-h-11 w-full rounded-xl bg-slate-200 px-5 py-3 text-center font-black text-slate-500">Material temporariamente indisponível</button>}
+          {material.accessAvailable ? <button type="button" disabled={downloadingId !== null} onClick={() => void accessMaterial(material)} className="min-h-11 w-full rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 disabled:cursor-wait disabled:opacity-60">{downloadingId === material.id ? "Preparando download…" : lawMaterialActionLabel(material)}</button> : <button type="button" disabled title="Referência de arquivo ausente ou inválida" className="min-h-11 w-full rounded-xl bg-slate-200 px-5 py-3 text-center font-black text-slate-500">Material temporariamente indisponível</button>}
           {downloadErrors[material.id] ? <p role="alert" className="mt-2 text-sm font-semibold text-red-700">{downloadErrors[material.id]}</p> : null}
         </div>
       </article>)}

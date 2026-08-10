@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isValidLawSlug, lawStudyShortName, type LawStudyData, type LawStudyHistoryItem, type LawStudyMaterial } from "@/lib/law-study";
-import { isDownloadableMaterialReference } from "@/lib/law-material-download";
+import { materialAccessReference } from "@/lib/law-material-download";
 
 export class LawStudyApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -39,7 +39,9 @@ export function parseLawStudyMaterials(value: unknown): LawStudyMaterial[] {
     const type = text(row?.tipo) as LawStudyMaterial["type"] | null;
     const title = text(row?.titulo);
     const action = text(row?.acao) as LawStudyMaterial["action"] | null;
+    const source = text(row?.url_externa);
     if (id === null || !type || !allowedTypes.has(type) || !title || !action || !allowedActions.has(action)) return [];
+    const access = materialAccessReference(text(row?.provedor), action, source);
     return [{
       id,
       type,
@@ -48,7 +50,8 @@ export function parseLawStudyMaterials(value: unknown): LawStudyMaterial[] {
       action,
       itemCount: positiveInteger(row?.quantidade_itens),
       version: text(row?.versao_material),
-      downloadAvailable: isDownloadableMaterialReference(text(row?.provedor), action, text(row?.url_externa)),
+      accessAvailable: access.available,
+      accessUrl: access.directUrl,
     }];
   });
 }

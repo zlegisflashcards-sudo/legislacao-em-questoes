@@ -23,7 +23,8 @@ export type LawStudyMaterial = {
   action: "abrir" | "baixar" | "assistir";
   itemCount: number | null;
   version: string | null;
-  downloadAvailable: boolean;
+  accessAvailable: boolean;
+  accessUrl: string | null;
 };
 
 export type LawStudyHistoryItem = {

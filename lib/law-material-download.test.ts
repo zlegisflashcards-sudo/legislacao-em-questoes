@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { googleDriveDownloadUrl, googleDriveFileId, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, parseMaterialId, safeDownloadFileName } from "./law-material-download";
+import { googleDriveDownloadUrl, googleDriveFileId, isAccessibleMaterialReference, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, materialAccessReference, parseMaterialId, safeDownloadFileName } from "./law-material-download";
 
 const server = readFileSync("lib/law-material-download-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/estudar/lei/[slug]/materiais/[materialId]/download/route.ts", "utf8");
@@ -22,6 +22,10 @@ describe("referências seguras de material", () => {
     expect(googleDriveFileId(`http://drive.google.com/file/d/${id}/view`)).toBeNull();
     expect(isDownloadableMaterialReference("google_drive", "baixar", `https://drive.google.com/file/d/${id}/view`)).toBe(true);
     expect(isDownloadableMaterialReference("google_drive", "abrir", `https://drive.google.com/file/d/${id}/view`)).toBe(false);
+    expect(isAccessibleMaterialReference("google_drive", `https://drive.google.com/file/d/${id}/view`)).toBe(true);
+    expect(materialAccessReference("google_drive", "abrir", `https://drive.google.com/file/d/${id}/view`)).toEqual({ available: true, directUrl: `https://drive.google.com/file/d/${id}/view` });
+    expect(materialAccessReference("google_drive", "baixar", `https://drive.google.com/file/d/${id}/view`)).toEqual({ available: true, directUrl: null });
+    expect(materialAccessReference("google_drive", "abrir", null)).toEqual({ available: false, directUrl: null });
   });
 
   it("constrói o destino oficial sem aceitar redirecionamento para host arbitrário", () => {
@@ -73,14 +77,14 @@ describe("fronteira autenticada de download", () => {
 });
 
 describe("interface de download", () => {
-  it("não inclui URL permanente na API da página", () => {
-    expect(pageServer).toContain("downloadAvailable:");
-    expect(pageServer).not.toMatch(/return \[\{[\s\S]*?url_externa:/);
-    expect(client).not.toContain("url_externa");
+  it("inclui somente URL validada para abertura direta", () => {
+    expect(pageServer).toContain("accessAvailable:");
+    expect(pageServer).toContain("accessUrl: access.directUrl");
+    expect(client).toContain('window.open(material.accessUrl, "_blank", "noopener,noreferrer")');
   });
 
   it("habilita somente materiais disponíveis e trata carregamento e falha", () => {
-    expect(client).toContain("material.downloadAvailable");
+    expect(client).toContain("material.accessAvailable");
     expect(client).toContain("lawMaterialActionLabel(material)");
     expect(client).toContain("Material temporariamente indisponível");
     expect(client).toContain("Preparando download…");

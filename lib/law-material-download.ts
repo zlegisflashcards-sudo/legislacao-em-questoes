@@ -19,7 +19,23 @@ export function googleDriveFileId(value: string) {
 }
 
 export function isDownloadableMaterialReference(provider: string | null, action: string | null, value: string | null) {
-  return provider === "google_drive" && action === "baixar" && value !== null && googleDriveFileId(value) !== null;
+  return provider === "google_drive" && action === "baixar" && isAccessibleMaterialReference(provider, value);
+}
+
+export function isAccessibleMaterialReference(provider: string | null, value: string | null) {
+  if (!value) return false;
+  if (provider === "google_drive") return googleDriveFileId(value) !== null;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function materialAccessReference(provider: string | null, action: string | null, value: string | null) {
+  if (action === "baixar") return { available: isDownloadableMaterialReference(provider, action, value), directUrl: null };
+  const directUrl = isAccessibleMaterialReference(provider, value) ? value : null;
+  return { available: directUrl !== null, directUrl };
 }
 
 export function googleDriveDownloadUrl(value: string) {
