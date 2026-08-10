@@ -25,7 +25,14 @@ export async function POST(request: Request) {
   try {
     const supabase = getSupabaseServerClient();
     const result = await registrarEventoHotmart(supabase, payload, async (input) => {
-      try { await provisionStudentFirstAccess(supabase, input); } catch { /* A compra permanece válida; a falha é auditada sem expor credenciais. */ }
+      console.info("[hotmart-first-access] acquisition_ready", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey });
+      try {
+        const outcome = await provisionStudentFirstAccess(supabase, input);
+        console.info("[hotmart-first-access] completed", { studentId: input.studentId, outcome: outcome.reason });
+      } catch (error) {
+        const message = error instanceof Error ? error.message.replace(/senha[^.]*/gi, "credencial ocultada").slice(0, 500) : "Falha desconhecida";
+        console.error("[hotmart-first-access] failed", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey, message });
+      }
     });
     return NextResponse.json({ success: true, duplicate: result.duplicate });
   } catch (error) {

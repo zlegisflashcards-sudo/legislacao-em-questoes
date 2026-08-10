@@ -18,7 +18,8 @@ describe("automação de primeiro acesso por aquisição", () => {
   });
 
   it("cria Auth somente para o aluno sem Auth e exige a troca", () => {
-    expect(automation).toContain('if (student.user_id) return { created: false, reason: "already_linked"');
+    expect(automation).toContain('if (student.user_id) {');
+    expect(automation).toContain('reason: "already_linked"');
     expect(automation).toContain("auth.admin.createUser");
     expect(automation).toContain("deve_trocar_senha: true");
     expect(automation).toContain("existing_auth_linked");
@@ -39,6 +40,12 @@ describe("automação de primeiro acesso por aquisição", () => {
     expect(webhook).toContain("await liberarLeisDaCompra");
     expect(webhook.indexOf("await liberarLeisDaCompra")).toBeLessThan(webhook.indexOf("onValidAcquisition({"));
     expect(webhookRoute).toContain("provisionStudentFirstAccess");
+    expect(webhook).toContain("if (compraExistente.data)");
+    expect(webhook).toContain('idempotencyKey: `hotmart:${evento.codigo_transacao}`');
+    expect(webhookRoute).toContain("[hotmart-first-access] failed");
+    expect(automation).toContain("first_access_reserved");
+    expect(automation).toContain("resend_requested");
+    expect(automation).toContain("resend_sent");
   });
 
   it("também dispara na aquisição manual, mas não na importação histórica", () => {

@@ -210,6 +210,11 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
       compraExistente.data.aluno_id as string,
       compraExistente.data.produto_id as string,
     );
+    if (onValidAcquisition) await onValidAcquisition({
+      studentId: compraExistente.data.aluno_id as string,
+      origin: "hotmart",
+      idempotencyKey: `hotmart:${evento.codigo_transacao}`,
+    });
     return { duplicate: true };
   }
 
@@ -267,7 +272,7 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
   }
 
   await liberarLeisDaCompra(supabase, compraCriada.id as string, alunoId, produtoInterno.id as string);
-  if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.identificador_evento}` });
+  if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.codigo_transacao}` });
   return { duplicate: false };
 }
 
