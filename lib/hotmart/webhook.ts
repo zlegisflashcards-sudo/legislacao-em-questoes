@@ -29,7 +29,7 @@ export type EventoHotmartNormalizado = {
   aprovada_em: string | null;
 };
 
-type ValidAcquisitionHandler = (input: { studentId: string; origin: "hotmart"; idempotencyKey: string }) => Promise<void>;
+type ValidAcquisitionHandler = (input: { studentId: string; origin: "hotmart"; idempotencyKey: string; accessLabel: string }) => Promise<void>;
 
 const EVENTOS_PERDA_ACESSO = {
   PURCHASE_CANCELED: { status: "cancelada", statusAcesso: "cancelado", statusLiberacao: "cancelado", data: "cancelada_em" },
@@ -210,17 +210,12 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
       compraExistente.data.aluno_id as string,
       compraExistente.data.produto_id as string,
     );
-    if (onValidAcquisition) await onValidAcquisition({
-      studentId: compraExistente.data.aluno_id as string,
-      origin: "hotmart",
-      idempotencyKey: `hotmart:${evento.codigo_transacao}`,
-    });
     return { duplicate: true };
   }
 
   const produto = await supabase
     .from("produtos")
-    .select("id,hotmart_product_id,ativo")
+    .select("id,nome,hotmart_product_id,ativo")
     .eq("hotmart_product_id", evento.hotmart_product_id)
     .maybeSingle();
   if (produto.error) throw produto.error;
@@ -272,7 +267,7 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
   }
 
   await liberarLeisDaCompra(supabase, compraCriada.id as string, alunoId, produtoInterno.id as string);
-  if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.codigo_transacao}` });
+  if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.codigo_transacao}`, accessLabel: produtoInterno.nome as string });
   return { duplicate: false };
 }
 

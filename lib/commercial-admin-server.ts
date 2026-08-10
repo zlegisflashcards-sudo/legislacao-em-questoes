@@ -727,9 +727,11 @@ export async function mutateCommercialResource(resource: CommercialResource, req
         p_observacao_administrativa: optionalString(data.observacao_administrativa, "Observação", 4000) ?? null,
       });
       try {
+        const product = await getSupabaseServerClient().from("produtos").select("nome").eq("id", uuid(data.produto_id, "Produto")).maybeSingle();
         await provisionStudentFirstAccess(getSupabaseServerClient(), {
           studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, COMMERCIAL_ORIGINS, "Origem") as FirstAccessOrigin,
           idempotencyKey: `administrativo:${String((registered as { compra?: { id?: string } } | null)?.compra?.id ?? data.aluno_id)}`,
+          accessLabel: product.data?.nome ?? "um novo produto",
         });
       } catch { /* A aquisição já foi registrada; a falha de primeiro acesso é auditada sem credenciais. */ }
       return registered;
@@ -743,13 +745,23 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     if (action === "conceder") {
       const data = asObject(body.data);
       rejectUnknownKeys(data, ["aluno_id", "lei_id", "origem", "motivo"]);
-      return rpc("admin_conceder_lei_manual", {
+      const granted = await rpc("admin_conceder_lei_manual", {
         p_ator_user_id: actor,
         p_aluno_id: uuid(data.aluno_id, "Aluno"),
         p_lei_id: positiveIntegerId(data.lei_id, "Lei"),
         p_origem: enumValue(data.origem, MANUAL_ORIGINS, "Origem"),
         p_motivo: optionalString(data.motivo, "Motivo", 2000) ?? null,
       });
+      try {
+        const law = await getSupabaseServerClient().from("leis").select("titulo").eq("id", positiveIntegerId(data.lei_id, "Lei")).maybeSingle();
+        await provisionStudentFirstAccess(getSupabaseServerClient(), {
+          studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, MANUAL_ORIGINS, "Origem") as FirstAccessOrigin,
+          idempotencyKey: `liberacao:${String((granted as { id?: string | number } | null)?.id ?? `${data.aluno_id}:${data.lei_id}`)}`,
+          accessLabel: law.data?.titulo ?? "uma nova legislação",
+          kind: "release",
+        });
+      } catch { /* A liberação permanece válida; a falha de e-mail fica auditada. */ }
+      return granted;
     }
     if (action === "revogar") {
       const data = asObject(body.data ?? {});
