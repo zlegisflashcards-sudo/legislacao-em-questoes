@@ -19,14 +19,14 @@ export function googleDriveFileId(value: string) {
 }
 
 export function isDownloadableMaterialReference(provider: string | null, action: string | null, value: string | null) {
-  return provider === "google_drive" && action === "baixar" && isAccessibleMaterialReference(provider, value);
+  return provider === "google_drive" && action === "baixar" && value !== null && googleDriveFileId(value) !== null;
 }
 
-export function isAccessibleMaterialReference(provider: string | null, value: string | null) {
+export function isAccessibleMaterialReference(_provider: string | null, value: string | null) {
   if (!value) return false;
-  if (provider === "google_drive") return googleDriveFileId(value) !== null;
   try {
-    return new URL(value).protocol === "https:";
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
   } catch {
     return false;
   }
