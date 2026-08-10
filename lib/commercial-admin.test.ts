@@ -91,9 +91,9 @@ describe("fronteira administrativa comercial", () => {
     expect(server).toContain('.from("historico_atualizacoes_leis")');
   });
 
-  it("limita busca explícita de alunos e pagina as listagens", () => {
-    expect(server).toContain("if (q.length < 3)");
-    expect(server).toContain("Math.min(limit, 10)");
+  it("pagina a lista administrativa de alunos e aplica filtros no backend", () => {
+    expect(server).toContain('rpc("admin_listar_alunos"');
+    expect(server).toContain('"duplicados"');
     expect(server).toContain(".range(from, to)");
     expect(productVideoMigration).toContain("add column if not exists video_demo_url text");
     expect(productVideoMigration).toContain("p_video_demo_url text");

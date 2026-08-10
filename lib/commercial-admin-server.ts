@@ -134,36 +134,13 @@ export async function getCommercialResource(resource: CommercialResource, reques
   const { page, limit, from, to } = paging(url);
 
   if (resource === "alunos") {
-    if (q.length < 3) return pageResult([], 0, 1, Math.min(limit, 10));
-    const studentLimit = Math.min(limit, 10);
-    const matches = await Promise.all([
-      supabase.from("alunos").select("id,user_id,nome,email,telefone").ilike("email", `%${q}%`).limit(studentLimit),
-      supabase.from("alunos").select("id,user_id,nome,email,telefone").ilike("nome", `%${q}%`).limit(studentLimit),
-      supabase.from("alunos").select("id,user_id,nome,email,telefone").ilike("telefone", `%${q}%`).limit(studentLimit),
-      ...(/^[0-9a-f-]{36}$/i.test(q) ? [
-        supabase.from("alunos").select("id,user_id,nome,email,telefone").eq("id", q).limit(1),
-        supabase.from("alunos").select("id,user_id,nome,email,telefone").eq("user_id", q).limit(1),
-      ] : []),
-    ]);
-    for (const result of matches) assertQuery(result);
-    const students = [...new Map(matches.flatMap((result) => result.data ?? []).map((row) => [String(row.id), row])).values()]
-      .sort((left, right) => String(left.nome ?? left.email).localeCompare(String(right.nome ?? right.email), "pt-BR"))
-      .slice(0, studentLimit);
-    const userIds = students.map((row) => row.user_id).filter((id): id is string => typeof id === "string" && id.length > 0);
-    const profiles = userIds.length
-      ? await supabase.from("perfis_publicos").select("id,nome_publico").in("id", userIds)
-      : { data: [], error: null };
-    assertQuery(profiles);
-    const publicNames = new Map((profiles.data ?? []).map((row) => [String(row.id), String(row.nome_publico)]));
-    const items = students.map((row) => ({
-      id: row.id,
-      user_id: row.user_id,
-      nome: row.nome,
-      email: row.email,
-      telefone: row.telefone,
-      nome_publico: publicNames.get(String(row.user_id)) ?? null,
-    }));
-    return pageResult(items, items.length, 1, studentLimit);
+    const filter = url.searchParams.get("filtro") ?? "todos";
+    if (!["todos", "com_auth", "sem_auth", "duplicados"].includes(filter)) throw new CommercialValidationError("Filtro de alunos inválido.");
+    const result = await supabase.rpc("admin_listar_alunos", { p_q: q, p_filtro: filter, p_limit: limit, p_offset: from });
+    assertQuery(result);
+    const items = result.data ?? [];
+    const total = Number(items[0]?.total_count ?? 0);
+    return pageResult(items, total, page, limit);
   }
 
   if (resource === "anki_tutoriais") {

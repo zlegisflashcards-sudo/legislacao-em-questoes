@@ -90,7 +90,7 @@ export default function CommercialAdmin() {
     } catch { /* A consulta principal exibira falhas relevantes. */ }
   }, []);
 
-  useEffect(() => { if (tab !== "alunos") void load(); }, [load, tab]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadReferences(); }, [loadReferences]);
 
   async function mutate(resource: Tab, payload: Row, success: string) {
@@ -122,7 +122,7 @@ export default function CommercialAdmin() {
       {tab !== "liberacoes" && tab !== "alunos" && tab !== "anki_tutoriais" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
     </form>
 
-    {tab === "alunos" ? <StudentsPanel laws={laws} products={products} /> : null}
+    {tab === "alunos" ? <StudentsPanel laws={laws} products={products} rows={result.items} filter={filters.filtro ?? "todos"} setFilter={(value) => { setFilters({ filtro: value }); setPage(1); }} /> : null}
     {tab === "leis" ? <LawPanel rows={result.items} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "materiais" ? <MaterialPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
@@ -138,8 +138,9 @@ export default function CommercialAdmin() {
 
 type PanelProps = { rows: Row[]; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: (resource: Tab, payload: Row, success: string) => Promise<void> };
 
-function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
+function StudentsPanel({ laws, products, rows, filter, setFilter }: { laws: Row[]; products: Row[]; rows: Row[]; filter: string; setFilter: (value: string) => void }) {
   const [student, setStudent] = useState<Row | null>(null);
+  const [duplicateRows, setDuplicateRows] = useState<Row[] | null>(null);
   const [provisionalPassword, setProvisionalPassword] = useState("");
   async function generateStudentProvisionalPassword() {
     if (!student || !window.confirm(`${text(student.user_id) ? "Gerar senha provisória" : "Criar acesso"} para este aluno? A senha será exibida uma única vez.`)) return;
@@ -179,6 +180,13 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível carregar os dados do aluno.");
     } finally { setBusy(false); }
+  }
+  async function viewDuplicates(nextStudent: Row) {
+    setBusy(true); setError("");
+    try {
+      const data = await requestJson(`/api/admin/comercial/alunos?q=${encodeURIComponent(text(nextStudent.email))}&filtro=duplicados&limit=50`);
+      setDuplicateRows(data.items ?? []); await selectStudent(nextStudent);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar os duplicados."); setBusy(false); }
   }
 
   async function exportStudents() {
@@ -233,7 +241,9 @@ function StudentsPanel({ laws, products }: { laws: Row[]; products: Row[] }) {
   return <><section className="commercial-card">
     <h2>Consultar aluno</h2>
     <form className="commercial-form-grid" onSubmit={createStudent}><h3>Novo aluno</h3><input name="nome" placeholder="Nome" /><input name="email" type="email" placeholder="E-mail" required /><button className="admin-button secondary" disabled={busy}>Criar aluno</button></form>
+    <div className="commercial-form-actions">{[["todos","Todos"],["com_auth","Com Auth"],["sem_auth","Sem Auth"],["duplicados","Duplicados"]].map(([value,label]) => <button key={value} type="button" className={`admin-button ${filter===value ? "primary" : "secondary"}`} onClick={() => { setDuplicateRows(null); setFilter(value); }}>{label}</button>)}</div>
     <StudentSearch onSelect={selectStudent} />
+    {duplicateRows ? <p>Mostrando {duplicateRows.length} cadastro(s) com o mesmo e-mail normalizado.</p> : null}<DataTable headers={["Aluno", "Telefone", "UUID", "Auth", "Produtos ativos", "Criado", ""]}>{(duplicateRows ?? rows).map((row) => <tr key={text(row.id)}><td><strong>{text(row.nome) || "Sem nome"}</strong><small>{text(row.email)}</small>{Number(row.duplicados) > 1 ? <p className="admin-alert error">⚠ {text(row.duplicados)} cadastros com este e-mail <button type="button" onClick={() => void viewDuplicates(row)}>Ver duplicados</button></p> : null}</td><td>{text(row.telefone) || "—"}</td><td><small>{text(row.id)}</small></td><td>{text(row.user_id) ? "Sim" : "Não"}</td><td>{text(row.produtos_ativos)}</td><td>{date(row.criado_em)}</td><td><button type="button" onClick={() => void selectStudent(row)}>Abrir</button></td></tr>)}</DataTable>
     {!student ? <p>Pesquise um aluno por nome ou e-mail para consultar suas aquisições e leis liberadas.</p> : null}
     {busy ? <p className="commercial-loading">Carregando dados do aluno…</p> : null}
     {error ? <div className="admin-alert error" role="alert">{error}</div> : null}
