@@ -214,17 +214,28 @@ export async function getCommercialResource(resource: CommercialResource, reques
     if (q) query = query.or(`nome.ilike.%${q}%,slug.ilike.%${q}%,hotmart_product_id.ilike.%${q}%`);
     const result = await query.order("ordem").order("nome").range(from, to);
     assertQuery(result);
-    const ids = (result.data ?? []).map((row) => String(row.id));
+    const uniqueProducts = new Map<string, (typeof result.data extends (infer Row)[] | null ? Row : never)>();
+    for (const product of result.data ?? []) {
+      const id = String(product.id);
+      if (uniqueProducts.has(id)) console.warn("Produto duplicado descartado na agregação administrativa", { id });
+      else uniqueProducts.set(id, product);
+    }
+    const productRows = [...uniqueProducts.values()];
+    const ids = productRows.map((row) => String(row.id));
     const links = ids.length
       ? await supabase.from("produto_leis").select("produto_id,lei_id,ordem,leis(id,slug,titulo)").in("produto_id", ids).order("ordem")
       : { data: [], error: null };
     assertQuery(links);
     const byProduct = new Map<string, unknown[]>();
+    const lawsByProduct = new Map<string, Set<string>>();
     for (const link of links.data ?? []) {
       const key = String(link.produto_id);
-      byProduct.set(key, [...(byProduct.get(key) ?? []), link]);
+      const lawId = String(link.lei_id);
+      const lawIds = lawsByProduct.get(key) ?? new Set<string>();
+      if (!lawIds.has(lawId)) byProduct.set(key, [...(byProduct.get(key) ?? []), link]);
+      lawIds.add(lawId); lawsByProduct.set(key, lawIds);
     }
-    return pageResult((result.data ?? []).map((row) => ({ ...row, leis: byProduct.get(String(row.id)) ?? [] })), result.count, page, limit);
+    return pageResult(productRows.map((row) => ({ ...row, leis: byProduct.get(String(row.id)) ?? [] })), productRows.length, page, limit);
   }
 
   if (resource === "aquisicoes") {
