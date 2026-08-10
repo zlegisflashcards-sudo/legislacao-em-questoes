@@ -42,4 +42,16 @@ describe("identidade de aluno por e-mail normalizado", () => {
     expect(migration).not.toContain("create unique index alunos_email_normalizado_unique_idx");
     expect(consolidation).toContain("create unique index alunos_email_normalizado_unique_idx");
   });
+
+  it("faz a trigger Auth reutilizar o aluno da aquisição pelo e-mail normalizado", () => {
+    const authTriggerFix = readFileSync("supabase/migrations/20260810190000_fix_auth_trigger_reuse_student_identity.sql", "utf8");
+    expect(authTriggerFix).toContain("create or replace function public.criar_aluno_para_usuario()");
+    expect(authTriggerFix).toContain("perform public.vincular_aluno_para_usuario");
+    expect(authTriggerFix).toContain("pg_advisory_xact_lock");
+    expect(authTriggerFix).toContain("where public.normalizar_email_aluno(email) = v_email and user_id is null");
+    expect(authTriggerFix).toContain("update public.alunos");
+    expect(authTriggerFix).toContain("set user_id = p_user_id");
+    expect(authTriggerFix).toContain("insert into public.alunos (user_id, nome, email)");
+    expect(authTriggerFix.indexOf("where public.normalizar_email_aluno(email) = v_email and user_id is null")).toBeLessThan(authTriggerFix.indexOf("insert into public.alunos (user_id, nome, email)"));
+  });
 });
