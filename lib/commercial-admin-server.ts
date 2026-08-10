@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { provisionStudentFirstAccess, type FirstAccessOrigin } from "@/lib/student-first-access-server";
+import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import {
   COMMERCIAL_ORIGINS,
   EDITORIAL_IMPORTANCE,
@@ -470,7 +471,7 @@ function validateAnkiTutorialSettings(raw: unknown) {
   return result;
 }
 
-type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; phone: string | null; purchasedAt: string; status: "ativo" | "cancelado" | "reembolsado" };
+type HistoricalSale = { transactionId: string; productCode: string; email: string; name: string | null; phone: string | null; purchasedAt: string; status: HistoricalSaleStatus };
 
 function parseHistoricalTimestamp(value: string) {
   const brazilian = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
@@ -484,14 +485,7 @@ function parseHistoricalTimestamp(value: string) {
 function historicalSale(raw: unknown): HistoricalSale {
   const row = asObject(raw);
   rejectUnknownKeys(row, ["transactionId", "productCode", "email", "name", "phone", "purchasedAt", "status"]);
-  const status = requiredString(row.status, "Status", 60).toLocaleLowerCase("pt-BR");
-  const statusMap: Record<string, HistoricalSale["status"]> = {
-    approved: "ativo", complete: "ativo", aprovada: "ativo", aprovado: "ativo", completa: "ativo",
-    cancelled: "cancelado", canceled: "cancelado", cancelada: "cancelado", cancelado: "cancelado",
-    refunded: "reembolsado", reembolsada: "reembolsado", chargeback: "reembolsado",
-  };
-  const mappedStatus = statusMap[status];
-  if (!mappedStatus) throw new CommercialValidationError("Status Hotmart não suportado.");
+  const mappedStatus = normalizeHistoricalHotmartStatus(row.status);
   const purchasedAt = parseHistoricalTimestamp(requiredString(row.purchasedAt, "Data da transação", 100));
   if (!purchasedAt) throw new CommercialValidationError("Data da transação inválida.");
   return {
