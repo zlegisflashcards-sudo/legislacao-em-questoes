@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { provisionStudentFirstAccess, type FirstAccessOrigin } from "@/lib/student-first-access-server";
+import { notifyStudentAccess, type FirstAccessOrigin } from "@/lib/student-first-access-server";
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import {
   COMMERCIAL_ORIGINS,
@@ -728,7 +728,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       });
       try {
         const product = await getSupabaseServerClient().from("produtos").select("nome").eq("id", uuid(data.produto_id, "Produto")).maybeSingle();
-        await provisionStudentFirstAccess(getSupabaseServerClient(), {
+        await notifyStudentAccess(getSupabaseServerClient(), {
           studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, COMMERCIAL_ORIGINS, "Origem") as FirstAccessOrigin,
           idempotencyKey: `administrativo:${String((registered as { compra?: { id?: string } } | null)?.compra?.id ?? data.aluno_id)}`,
           accessLabel: product.data?.nome ?? "um novo produto",
@@ -754,7 +754,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       });
       try {
         const law = await getSupabaseServerClient().from("leis").select("titulo").eq("id", positiveIntegerId(data.lei_id, "Lei")).maybeSingle();
-        await provisionStudentFirstAccess(getSupabaseServerClient(), {
+        await notifyStudentAccess(getSupabaseServerClient(), {
           studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, MANUAL_ORIGINS, "Origem") as FirstAccessOrigin,
           idempotencyKey: `liberacao:${String((granted as { id?: string | number } | null)?.id ?? `${data.aluno_id}:${data.lei_id}`)}`,
           accessLabel: law.data?.titulo ?? "uma nova legislação",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { diagnosticoHottok, registrarEventoHotmart, validarHottok } from "@/lib/hotmart/webhook";
-import { provisionStudentFirstAccess } from "@/lib/student-first-access-server";
+import { notifyStudentAccess } from "@/lib/student-first-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,13 +25,13 @@ export async function POST(request: Request) {
   try {
     const supabase = getSupabaseServerClient();
     const result = await registrarEventoHotmart(supabase, payload, async (input) => {
-      console.info("[hotmart-first-access] acquisition_ready", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey });
+      console.info("[hotmart-access-notification] acquisition_ready", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey });
       try {
-        const outcome = await provisionStudentFirstAccess(supabase, input);
-        console.info("[hotmart-first-access] completed", { studentId: input.studentId, outcome: outcome.reason });
+        const outcome = await notifyStudentAccess(supabase, input);
+        console.info("[hotmart-access-notification] completed", { studentId: input.studentId, outcome: outcome.reason });
       } catch (error) {
         const message = error instanceof Error ? error.message.replace(/senha[^.]*/gi, "credencial ocultada").slice(0, 500) : "Falha desconhecida";
-        console.error("[hotmart-first-access] failed", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey, message });
+        console.error("[hotmart-access-notification] failed", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey, message });
       }
     });
     return NextResponse.json({ success: true, duplicate: result.duplicate });

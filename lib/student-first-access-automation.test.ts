@@ -1,47 +1,46 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const automation = readFileSync("lib/student-first-access-server.ts", "utf8");
-const webhook = readFileSync("lib/hotmart/webhook.ts", "utf8");
+const notifications = readFileSync("lib/student-first-access-server.ts", "utf8");
+const webhook = readFileSync("app/api/webhooks/hotmart/route.ts", "utf8");
 const admin = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const delivery = readFileSync("supabase/migrations/20260810140000_add_student_first_access_delivery.sql", "utf8");
-const notifications = readFileSync("supabase/migrations/20260810200000_add_student_access_notifications.sql", "utf8");
+const notificationMigration = readFileSync("supabase/migrations/20260810200000_add_student_access_notifications.sql", "utf8");
 
-describe("notificações de acesso", () => {
-  it("define primeiro acesso pelo status de entrega, e não por user_id", () => {
-    expect(automation).toContain('first.data?.status === "enviado"');
-    expect(automation).toContain('first.data?.status ?? null');
-    expect(automation).toContain('status === "falhou"');
-    expect(delivery).toContain("status in ('reservado','enviado','falhou')");
+describe("notificacoes de acesso independentes de Auth", () => {
+  it("nao cria Auth, nao altera user_id e nao gera senha durante aquisicao ou liberacao", () => {
+    expect(notifications).not.toContain("auth.admin.createUser");
+    expect(notifications).not.toContain("auth.admin.updateUserById");
+    expect(notifications).not.toContain("deve_trocar_senha");
+    expect(notifications).not.toContain("alunos_primeiro_acesso_envios");
+    expect(notifications).not.toContain("provisionalPassword");
   });
 
-  it("cria ou atualiza Auth e gera nova credencial quando o primeiro acesso falhou", () => {
-    expect(automation).toContain("auth.admin.createUser");
-    expect(automation).toContain("auth.admin.updateUserById");
-    expect(automation).toContain("deve_trocar_senha: true");
-    expect(automation).toContain("Não foi possível reservar novamente o primeiro acesso.");
-    expect(automation).toContain("Senha provisória: ${password}");
+  it("envia o CTA de ativacao para aluno sem Auth e de acesso para aluno com Auth", () => {
+    expect(notifications).toContain('if (!hasAuth)');
+    expect(notifications).toContain("Ativar minha conta");
+    expect(notifications).toContain("Acessar minha conta");
+    expect(notifications).toContain("Boolean(student.user_id)");
   });
 
-  it("envia aviso simples para acessos posteriores com idempotência por evento", () => {
-    expect(notifications).toContain("alunos_notificacoes_acesso");
-    expect(notifications).toContain("idempotency_key text not null unique");
-    expect(automation).toContain("sendNewAccessNotification");
-    expect(automation).toContain("Novo acesso liberado na Legislação em Questões");
-    expect(automation).toContain("notification_already_reserved");
-    expect(automation).not.toMatch(/notificacao_novo_acesso_[\s\S]{0,160}password/i);
+  it("mantem uma notificacao idempotente por nova aquisicao ou liberacao", () => {
+    expect(notificationMigration).toContain("alunos_notificacoes_acesso");
+    expect(notificationMigration).toContain("idempotency_key text not null unique");
+    expect(notifications).toContain("notification_already_reserved");
+    expect(notifications).toContain("tipo: type");
   });
 
-  it("dispara para aquisição manual, liberação manual e webhook novo, não para reprocessamento Hotmart", () => {
-    const acquisition = admin.slice(admin.lastIndexOf('if (resource === "aquisicoes")'), admin.indexOf('if (resource === "liberacoes")', admin.lastIndexOf('if (resource === "aquisicoes")')));
-    expect(acquisition).toContain("accessLabel");
+  it("notifica aquisicao manual, liberacao manual e webhook novo sem reprovisionar Auth", () => {
+    expect(admin).toContain("notifyStudentAccess");
     expect(admin).toContain('kind: "release"');
-    expect(webhook).toContain("accessLabel: produtoInterno.nome");
+    expect(webhook).toContain("notifyStudentAccess");
     expect(webhook).not.toContain("studentId: compraExistente.data.aluno_id");
   });
 
-  it("mantém importação histórica sem envio em massa", () => {
+  it("mantem a importacao historica sem notificacao, Auth ou senha provisoria", () => {
     const historical = admin.slice(admin.indexOf("async function importHistoricalHotmartSales"), admin.indexOf("export async function mutateCommercialResource"));
-    expect(historical).not.toContain("provisionStudentFirstAccess");
+    expect(historical).not.toContain("notifyStudentAccess");
+    expect(historical).not.toContain("createUser");
+    expect(delivery).toContain("status in ('reservado','enviado','falhou')");
   });
 });

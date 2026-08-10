@@ -22,10 +22,13 @@ export async function POST(request: Request) {
     if (!emailPattern.test(email)) return NextResponse.json({ error: "E-mail inválido." }, { status: 400 });
 
     const supabase = getSupabaseServerClient();
-    const students = await supabase.from("alunos").select("email").ilike("email", `%${email}%`);
+    const students = await supabase.from("alunos").select("id,email,user_id").ilike("email", `%${email}%`);
     if (students.error) throw new Error("Não foi possível verificar o aluno existente.");
-    const exists = hasNormalizedEmail(students.data ?? [], email) || await authEmailExists(email);
-    return NextResponse.json({ exists });
+    const student = (students.data ?? []).find((item) => normalizeStudentEmail(item.email ?? "") === email);
+    const authExists = await authEmailExists(email);
+    // A student without Auth must be able to activate the existing student record.
+    const exists = authExists || Boolean(student?.user_id);
+    return NextResponse.json({ exists, activation: Boolean(student && !exists) });
   } catch {
     return NextResponse.json({ error: "Não foi possível verificar este e-mail agora." }, { status: 503 });
   }
