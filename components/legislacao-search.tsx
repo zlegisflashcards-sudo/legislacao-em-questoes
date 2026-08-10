@@ -6,6 +6,7 @@ import {
   isVadeMecum,
   type Legislacao,
 } from "@/lib/legislacoes";
+import { matchesLegislationSearch, normalizeLegislationSearch } from "@/lib/legislation-search";
 
 type LegislacaoSearchProps = {
   legislacoes?: Legislacao[];
@@ -13,21 +14,13 @@ type LegislacaoSearchProps = {
   variant?: "light" | "dark";
 };
 
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
 export function LegislacaoSearch({
   legislacoes = [],
   produtos = [],
   variant = "light",
 }: LegislacaoSearchProps) {
   const [query, setQuery] = useState("");
-  const normalizedQuery = normalizeSearch(query);
+  const normalizedQuery = normalizeLegislationSearch(query);
   const isDark = variant === "dark";
 
   const sugestoes = useMemo(() => {
@@ -36,15 +29,7 @@ export function LegislacaoSearch({
     }
 
     return legislacoes
-      .filter((legislacao) => {
-        const nome = normalizeSearch(legislacao.nome);
-        const categoria = normalizeSearch(legislacao.categoria);
-
-        return (
-          nome.includes(normalizedQuery) ||
-          categoria.includes(normalizedQuery)
-        );
-      })
+      .filter((legislacao) => matchesLegislationSearch(legislacao, query))
       .slice(0, 6);
   }, [legislacoes, normalizedQuery]);
 
@@ -54,7 +39,7 @@ export function LegislacaoSearch({
     }
 
     return produtos
-      .filter((produto) => normalizeSearch(produto.nome).includes(normalizedQuery))
+      .filter((produto) => normalizeLegislationSearch(produto.nome).includes(normalizedQuery))
       .slice(0, 6);
   }, [produtos, normalizedQuery]);
 
@@ -121,8 +106,8 @@ export function LegislacaoSearch({
                   const hotmartUrl = getVadeMecumHotmartUrl(legislacao);
                   const produtoInterno = produtos.find(
                     (produto) =>
-                      normalizeSearch(produto.nome) ===
-                      normalizeSearch(legislacao.nome),
+                      normalizeLegislationSearch(produto.nome) ===
+                      normalizeLegislationSearch(legislacao.nome),
                   );
                   const href = produtoInterno
                     ? `/leisflashcards/${produtoInterno.slug}`

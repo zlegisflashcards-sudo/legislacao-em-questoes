@@ -34,16 +34,18 @@ describe("cards comerciais do catálogo", () => {
   });
 
   it("prioriza a rota interna para itens que possuem produto comercial", () => {
+    expect(cards).toContain("legislacoes={legislacoes}");
     expect(cards).toContain("produtos={produtos}");
     expect(cards).toContain("produtosEmDestaque.map");
     expect(search).toContain("const produtoInterno = produtos.find(");
     expect(search).toContain("/leisflashcards/${produtoInterno.slug}");
   });
 
-  it("não consulta Google Sheets para montar a home", () => {
+  it("consulta leis ativas para a busca pública", () => {
     expect(home).toContain("getCatalogProducts");
     expect(home).toContain("getHighlightedCatalogProducts");
-    expect(home).not.toContain("getLegislacoes");
+    expect(home).toContain("getLegislacoes");
+    expect(home).toContain("filtrarLegislacoesAtivas(legislacoes)");
     expect(search).toContain("sugestoesProdutos");
     expect(search).toContain("/leisflashcards/${produto.slug}");
   });

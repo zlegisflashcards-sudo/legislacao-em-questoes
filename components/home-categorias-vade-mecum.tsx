@@ -173,7 +173,7 @@ export function HomeCategoriasVadeMecum({
           </p>
         </div>
 
-        <LegislacaoSearch produtos={produtos} variant="dark" />
+        <LegislacaoSearch legislacoes={legislacoes} produtos={produtos} variant="dark" />
 
         <div className="flex flex-col gap-3 rounded-lg border border-blue-300/20 bg-slate-900/70 px-4 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div className="space-y-1">
