@@ -10,26 +10,18 @@ export type CatalogProduct = {
   totalFlashcards: number | null;
 };
 
-export async function getCatalogProducts(): Promise<CatalogProduct[]> {
+async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> {
   try {
     const supabase = getSupabaseServerClient();
-    const highlightedProducts = await supabase
+    let productsQuery = supabase
       .from("produtos")
       .select("id,nome,slug,ordem")
       .eq("ativo", true)
-      .eq("destaque", true)
       .not("slug", "is", null)
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true });
-    const { data: products, error: productsError } = highlightedProducts.error
-      ? await supabase
-          .from("produtos")
-          .select("id,nome,slug,ordem")
-          .eq("ativo", true)
-          .not("slug", "is", null)
-          .order("ordem", { ascending: true })
-          .order("nome", { ascending: true })
-      : highlightedProducts;
+    if (destaque) productsQuery = productsQuery.eq("destaque", true);
+    const { data: products, error: productsError } = await productsQuery;
 
     if (productsError || !products?.length) return [];
 
@@ -85,4 +77,12 @@ export async function getCatalogProducts(): Promise<CatalogProduct[]> {
   } catch {
     return [];
   }
+}
+
+export function getCatalogProducts(): Promise<CatalogProduct[]> {
+  return loadCatalogProducts();
+}
+
+export function getHighlightedCatalogProducts(): Promise<CatalogProduct[]> {
+  return loadCatalogProducts(true);
 }

@@ -137,9 +137,11 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
 export function HomeCategoriasVadeMecum({
   legislacoes = [],
   produtos,
+  produtosEmDestaque,
 }: {
   legislacoes?: Legislacao[];
   produtos: CatalogProduct[];
+  produtosEmDestaque: CatalogProduct[];
 }) {
   const legislacoesEmDestaque = useMemo(
     () =>
@@ -201,9 +203,9 @@ export function HomeCategoriasVadeMecum({
           </p>
         </div>
 
-        {produtos.length > 0 ? (
+        {produtosEmDestaque.length > 0 ? (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {produtos.map((produto) => (
+            {produtosEmDestaque.map((produto) => (
               <HomeProductCard key={produto.id} produto={produto} />
             ))}
           </div>

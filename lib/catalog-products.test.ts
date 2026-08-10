@@ -7,11 +7,15 @@ describe("cards comerciais do catálogo", () => {
   const search = readFileSync("components/legislacao-search.tsx", "utf8");
   const home = readFileSync("app/page.tsx", "utf8");
 
-  it("busca produtos, leis vinculadas e materiais ativos", () => {
+  it("busca produtos ativos para pesquisa e limita destaque à vitrine", () => {
     expect(loader).toContain('from("produtos")');
     expect(loader).toContain('from("produto_leis")');
     expect(loader).toContain('from("materiais_leis")');
-    expect(loader).toContain('eq("destaque", true)');
+    expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
+    expect(loader).toContain('if (destaque) productsQuery = productsQuery.eq("destaque", true)');
+    expect(loader).toContain('return loadCatalogProducts();');
+    expect(loader).toContain('return loadCatalogProducts(true);');
+    expect(loader).toContain('eq("ativo", true)');
     expect(loader).toContain('eq("tipo", "flashcards")');
   });
 
@@ -31,12 +35,14 @@ describe("cards comerciais do catálogo", () => {
 
   it("prioriza a rota interna para itens que possuem produto comercial", () => {
     expect(cards).toContain("produtos={produtos}");
+    expect(cards).toContain("produtosEmDestaque.map");
     expect(search).toContain("const produtoInterno = produtos.find(");
     expect(search).toContain("/leisflashcards/${produtoInterno.slug}");
   });
 
   it("não consulta Google Sheets para montar a home", () => {
     expect(home).toContain("getCatalogProducts");
+    expect(home).toContain("getHighlightedCatalogProducts");
     expect(home).not.toContain("getLegislacoes");
     expect(search).toContain("sugestoesProdutos");
     expect(search).toContain("/leisflashcards/${produto.slug}");
