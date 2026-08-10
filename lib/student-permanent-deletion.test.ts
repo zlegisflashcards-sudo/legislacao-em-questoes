@@ -22,6 +22,14 @@ describe("exclusão administrativa definitiva de aluno", () => {
     expect(migration).toContain("Referencia pendente nao suportada");
   });
 
+  it("reconhece aluno_produtos pelo OID da FK e preserva o bloqueio para relações desconhecidas", () => {
+    const preflightFix = readFileSync("supabase/migrations/20260810180000_fix_student_deletion_supported_fk_preflight.sql", "utf8");
+    expect(preflightFix).toContain("'public.aluno_produtos'::regclass");
+    expect(preflightFix).toContain("and conrelid not in");
+    expect(preflightFix).toContain("delete from public.aluno_produtos where aluno_id=a.id");
+    expect(preflightFix).toContain("Referencia pendente nao suportada");
+  });
+
   it("preserva compras e rastreabilidade Hotmart sem FK órfã", () => {
     expect(migration).toContain("alter column aluno_id drop not null");
     expect(migration).toContain("on delete set null");
