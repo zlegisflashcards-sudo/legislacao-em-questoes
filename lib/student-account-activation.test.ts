@@ -24,7 +24,7 @@ describe("ativacao de conta de aluno sem Auth", () => {
     expect(activation).toContain("/conta/ativar?token=");
     expect(notifier).toContain("Ativar minha conta");
     expect(notifier).toContain("Acessar minha conta");
-    expect(notifier).toContain("student.user_id ? undefined");
+    expect(notifier).toContain("const activationUrl = hasAuth ? undefined");
   });
 
   it("valida token antes de revelar e-mail ou permitir a senha", () => {

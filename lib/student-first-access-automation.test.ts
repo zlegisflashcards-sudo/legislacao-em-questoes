@@ -21,6 +21,8 @@ describe("notificacoes de acesso independentes de Auth", () => {
     expect(notifications).toContain("Ativar minha conta");
     expect(notifications).toContain("Acessar minha conta");
     expect(notifications).toContain("Boolean(student.user_id)");
+    expect(notifications).toContain('const type = hasAuth ? "acessar_conta" : "ativar_conta"');
+    expect(notifications).toContain("const activationUrl = hasAuth ? undefined");
   });
 
   it("mantem uma notificacao idempotente por nova aquisicao ou liberacao", () => {
@@ -35,6 +37,10 @@ describe("notificacoes de acesso independentes de Auth", () => {
     expect(admin).toContain('kind: "release"');
     expect(webhook).toContain("notifyStudentAccess");
     expect(webhook).not.toContain("studentId: compraExistente.data.aluno_id");
+    expect(admin).toContain('notificationOrigin: "aquisicao_manual"');
+    expect(admin).toContain('notificationOrigin: "liberacao_manual"');
+    expect(webhook).toContain('notificationOrigin: "hotmart"');
+    expect(notifications).toContain("deliverStudentAccessEmail");
   });
 
   it("mantem a importacao historica sem notificacao, Auth ou senha provisoria", () => {
@@ -42,5 +48,12 @@ describe("notificacoes de acesso independentes de Auth", () => {
     expect(historical).not.toContain("notifyStudentAccess");
     expect(historical).not.toContain("createUser");
     expect(delivery).toContain("status in ('reservado','enviado','falhou')");
+  });
+
+  it("mantem falha do Resend auditavel sem desfazer a aquisicao ou liberar Auth", () => {
+    expect(notifications).toContain('stage: "resend_failed"');
+    expect(notifications).toContain("notificacao_novo_acesso_falhou");
+    expect(notifications).toContain("notification_already_reserved");
+    expect(notifications).not.toContain("auth.admin.createUser");
   });
 });

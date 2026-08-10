@@ -21,13 +21,12 @@ describe("envio manual administrativo de e-mail de acesso", () => {
   });
 
   it("registra diagnostico seguro do Resend em sucesso e falha", () => {
-    const manual = notifier.slice(notifier.indexOf("export async function sendManualStudentAccessEmail"));
-    expect(manual).toContain('stage: "resend_started"');
-    expect(manual).toContain('stage: "resend_finished"');
-    expect(manual).toContain('stage: "resend_failed"');
-    expect(manual).toContain("status_http: response.status");
-    expect(manual).not.toContain("RESEND_API_KEY:");
-    expect(manual).not.toContain("password");
+    expect(notifier).toContain('stage: "resend_started"');
+    expect(notifier).toContain('stage: response.ok ? "resend_sent" : "resend_failed"');
+    expect(notifier).toContain('stage: "resend_failed"');
+    expect(notifier).toContain("status_http: response.status");
+    expect(notifier).not.toContain("RESEND_API_KEY:");
+    expect(notifier).not.toContain("password");
   });
 
   it("permite reenvio manual e evita clique duplo enquanto a requisicao esta pendente", () => {

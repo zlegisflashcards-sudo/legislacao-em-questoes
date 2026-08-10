@@ -747,6 +747,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
           studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, COMMERCIAL_ORIGINS, "Origem") as FirstAccessOrigin,
           idempotencyKey: `administrativo:${String((registered as { compra?: { id?: string } } | null)?.compra?.id ?? data.aluno_id)}`,
           accessLabel: product.data?.nome ?? "um novo produto",
+          notificationOrigin: "aquisicao_manual",
         });
       } catch { /* A aquisição já foi registrada; a falha de primeiro acesso é auditada sem credenciais. */ }
       return registered;
@@ -774,6 +775,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
           idempotencyKey: `liberacao:${String((granted as { id?: string | number } | null)?.id ?? `${data.aluno_id}:${data.lei_id}`)}`,
           accessLabel: law.data?.titulo ?? "uma nova legislação",
           kind: "release",
+          notificationOrigin: "liberacao_manual",
         });
       } catch { /* A liberação permanece válida; a falha de e-mail fica auditada. */ }
       return granted;

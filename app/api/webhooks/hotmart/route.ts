@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const result = await registrarEventoHotmart(supabase, payload, async (input) => {
       console.info("[hotmart-access-notification] acquisition_ready", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey });
       try {
-        const outcome = await notifyStudentAccess(supabase, input);
+        const outcome = await notifyStudentAccess(supabase, { ...input, notificationOrigin: "hotmart" });
         console.info("[hotmart-access-notification] completed", { studentId: input.studentId, outcome: outcome.reason });
       } catch (error) {
         const message = error instanceof Error ? error.message.replace(/senha[^.]*/gi, "credencial ocultada").slice(0, 500) : "Falha desconhecida";
