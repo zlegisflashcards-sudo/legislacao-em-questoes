@@ -37,6 +37,13 @@ describe("gerência administrativa de alunos", () => {
     for (const argument of ["p_ator_user_id", "p_principal", "p_secundario", "p_nome_final"]) expect(server).toContain(argument);
     expect(server).toContain("argumentNames: Object.keys(params).sort()");
   });
+  it("transfere Auth do secundário somente após desvinculá-lo, e bloqueia Auths diferentes", () => {
+    const migration = readFileSync("supabase/migrations/20260810120000_fix_student_merge_auth_transfer_order.sql", "utf8");
+    expect(migration).toContain("update public.alunos set user_id=null where id=p_secundario;");
+    expect(migration).toContain("update public.alunos set user_id=v_user_id where id=p_principal;");
+    expect(migration.indexOf("set user_id=null where id=p_secundario")).toBeLessThan(migration.indexOf("set user_id=v_user_id where id=p_principal"));
+    expect(migration).toContain("a.user_id<>b.user_id");
+  });
   it("mantém ações exclusivamente no endpoint administrativo", () => {
     expect(server).toContain('resource === "alunos" && action === "mesclar"');
     expect(ui).toContain("Mesclar cadastros");
