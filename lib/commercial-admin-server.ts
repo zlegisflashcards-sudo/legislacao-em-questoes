@@ -67,6 +67,17 @@ async function rpc(name: string, params: JsonObject) {
   const result = await getSupabaseServerClient().rpc(name, params);
   if (result.error) {
     const code = String(result.error.code ?? "");
+    const technical = String(result.error.message ?? "Erro de banco sem mensagem.").replace(/[\r\n]+/g, " ").slice(0, 500);
+    if (name === "admin_mesclar_alunos") {
+      console.error("Falha na mesclagem administrativa de alunos", {
+        principal: params.p_principal, secundario: params.p_secundario, code, message: technical,
+      });
+      if (["22023", "P0002", "23503", "23505", "23514"].includes(code)) {
+        throw new CommercialHttpError(422, `Não foi possível mesclar: ${technical}`);
+      }
+      if (code === "42883" || code === "PGRST202") throw new CommercialHttpError(503, "Não foi possível mesclar: a função de banco necessária não está disponível.");
+      throw new CommercialHttpError(500, "Não foi possível mesclar. Consulte o log administrativo com os UUIDs informados.");
+    }
     if (code === "23505") throw new CommercialHttpError(409, "Já existe um registro com esses dados.");
     if (["22023", "23503", "23514", "P0002"].includes(code)) {
       throw new CommercialHttpError(422, "Os dados informados não são válidos para esta operação.");

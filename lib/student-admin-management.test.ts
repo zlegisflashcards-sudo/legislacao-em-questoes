@@ -26,6 +26,13 @@ describe("gerência administrativa de alunos", () => {
     expect(migration).toContain("admin_excluir_aluno_vazio");
     expect(migration).toContain("Exclusao bloqueada");
   });
+  it("pré-valida FKs e não mascara o erro técnico de mesclagem", () => {
+    const hardening = readFileSync("supabase/migrations/20260810090000_harden_student_merge_diagnostics.sql", "utf8");
+    expect(hardening).toContain("Referencia pendente nao suportada");
+    expect(hardening).toContain("Falha merge alunos principal");
+    expect(server).toContain("Falha na mesclagem administrativa de alunos");
+    expect(server).toContain("Não foi possível mesclar:");
+  });
   it("mantém ações exclusivamente no endpoint administrativo", () => {
     expect(server).toContain('resource === "alunos" && action === "mesclar"');
     expect(ui).toContain("Mesclar cadastros");
