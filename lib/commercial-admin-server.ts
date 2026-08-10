@@ -559,6 +559,33 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const data = asObject(body.data);
     return rpc("admin_mesclar_alunos", { p_ator_user_id: actor, p_principal: uuid(data.principal, "Principal"), p_secundario: uuid(data.secundario, "Secundario"), p_nome_final: optionalString(data.nome_final, "Nome final", 300) ?? null });
   }
+  if (resource === "alunos" && action === "resumo_exclusao") {
+    return rpc("admin_resumo_exclusao_aluno", { p_ator_user_id: actor, p_aluno_id: uuid(body.id, "Aluno") });
+  }
+  if (resource === "alunos" && action === "excluir_definitivamente") {
+    const alunoId = uuid(body.id, "Aluno");
+    const data = asObject(body.data);
+    const confirmation = requiredString(data.confirmacao, "Confirmação", 20);
+    if (confirmation !== "EXCLUIR") throw new CommercialHttpError(422, "Digite EXCLUIR para confirmar a exclusão definitiva.");
+    const deleteAuth = booleanValue(data.excluir_auth, "Excluir conta Auth") ?? false;
+    const supabase = getSupabaseServerClient();
+    const current = await supabase.from("alunos").select("id,user_id").eq("id", alunoId).single();
+    if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
+    if (current.data.user_id === actor) throw new CommercialHttpError(422, "Não é permitido excluir a própria conta administrativa.");
+    if (current.data.user_id && !deleteAuth) {
+      throw new CommercialHttpError(422, "O aluno possui conta Auth. Marque a exclusão da conta Auth para continuar.");
+    }
+    if (current.data.user_id) {
+      const removed = await supabase.auth.admin.deleteUser(current.data.user_id);
+      if (removed.error) throw new CommercialHttpError(502, "A conta Auth não pôde ser removida; nenhum dado do aluno foi alterado.");
+    }
+    return rpc("admin_excluir_aluno_definitivamente", {
+      p_ator_user_id: actor,
+      p_aluno_id: alunoId,
+      p_confirmacao: confirmation,
+      p_excluir_auth: deleteAuth,
+    });
+  }
   if (resource === "alunos" && action === "excluir") return rpc("admin_excluir_aluno_vazio", { p_ator_user_id: actor, p_aluno_id: uuid(body.id, "Aluno") });
   if (resource === "alunos" && action === "atualizar") {
     const alunoId = uuid(body.id, "Aluno");
