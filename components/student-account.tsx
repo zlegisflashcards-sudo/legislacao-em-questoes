@@ -89,6 +89,18 @@ export function StudentAccount() {
       if (!validatePublicName(publicName)) {
         setMessage("Use um nome público de 3 a 50 caracteres, sem símbolos especiais."); return;
       }
+      const preflight = await fetch("/api/aluno/verificar-cadastro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail }),
+      });
+      const preflightResult = await preflight.json().catch(() => ({})) as { exists?: boolean };
+      if (!preflight.ok) {
+        setMessage("Não foi possível verificar este e-mail agora. Tente novamente."); return;
+      }
+      if (preflightResult.exists) {
+        setMessage("Já existe uma conta com este e-mail. Entre com sua senha ou use 'Esqueci minha senha'."); return;
+      }
       const { data, error } = await supabase.auth.signUp({
         email: authEmail,
         password,
