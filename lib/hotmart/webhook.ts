@@ -29,6 +29,8 @@ export type EventoHotmartNormalizado = {
   aprovada_em: string | null;
 };
 
+type ValidAcquisitionHandler = (input: { studentId: string; origin: "hotmart"; idempotencyKey: string }) => Promise<void>;
+
 const EVENTOS_PERDA_ACESSO = {
   PURCHASE_CANCELED: { status: "cancelada", statusAcesso: "cancelado", statusLiberacao: "cancelado", data: "cancelada_em" },
   PURCHASE_REFUNDED: { status: "reembolsada", statusAcesso: "reembolsado", statusLiberacao: "reembolsado", data: "reembolsada_em" },
@@ -89,7 +91,7 @@ export function normalizarEventoHotmart(payload: unknown): EventoHotmartNormaliz
   };
 }
 
-export async function registrarEventoHotmart(supabase: SupabaseClient, payload: unknown) {
+export async function registrarEventoHotmart(supabase: SupabaseClient, payload: unknown, onValidAcquisition?: ValidAcquisitionHandler) {
   const normalizado = normalizarEventoHotmart(payload);
   const { error } = await supabase.from("hotmart_eventos").insert({
     identificador_evento: normalizado.identificador_evento,
@@ -126,7 +128,7 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
   }
 
   try {
-    if (vendaAprovada) await processarVendaAprovadaHotmart(supabase, normalizado);
+    if (vendaAprovada) await processarVendaAprovadaHotmart(supabase, normalizado, onValidAcquisition);
     else await processarPerdaAcessoHotmart(supabase, normalizado, perdaAcesso);
     const atualizado = await supabase
       .from("hotmart_eventos")
@@ -189,7 +191,7 @@ export async function processarPerdaAcessoHotmart(
   return { ignored: false };
 }
 
-export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, evento: EventoHotmartNormalizado) {
+export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, evento: EventoHotmartNormalizado, onValidAcquisition?: ValidAcquisitionHandler) {
   if (!evento.email_comprador) throw new Error("Evento Hotmart sem e-mail do comprador.");
   if (!evento.codigo_transacao) throw new Error("Evento Hotmart sem código da transação.");
   if (!evento.hotmart_product_id) throw new Error("Evento Hotmart sem código do produto.");
@@ -265,6 +267,7 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
   }
 
   await liberarLeisDaCompra(supabase, compraCriada.id as string, alunoId, produtoInterno.id as string);
+  if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.identificador_evento}` });
   return { duplicate: false };
 }
 

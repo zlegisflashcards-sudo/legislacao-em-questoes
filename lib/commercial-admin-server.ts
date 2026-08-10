@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { provisionStudentFirstAccess, type FirstAccessOrigin } from "@/lib/student-first-access-server";
 import {
   COMMERCIAL_ORIGINS,
   EDITORIAL_IMPORTANCE,
@@ -734,7 +735,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     if (action === "registrar") {
       const data = asObject(body.data);
       rejectUnknownKeys(data, ["aluno_id", "produto_id", "origem", "identificador_externo", "observacao_administrativa"]);
-      return rpc("admin_registrar_aquisicao", {
+      const registered = await rpc("admin_registrar_aquisicao", {
         p_ator_user_id: actor,
         p_aluno_id: uuid(data.aluno_id, "Aluno"),
         p_produto_id: uuid(data.produto_id, "Produto"),
@@ -742,6 +743,13 @@ export async function mutateCommercialResource(resource: CommercialResource, req
         p_identificador_externo: optionalString(data.identificador_externo, "Identificador externo", 500) ?? null,
         p_observacao_administrativa: optionalString(data.observacao_administrativa, "Observação", 4000) ?? null,
       });
+      try {
+        await provisionStudentFirstAccess(getSupabaseServerClient(), {
+          studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, COMMERCIAL_ORIGINS, "Origem") as FirstAccessOrigin,
+          idempotencyKey: `administrativo:${String((registered as { compra?: { id?: string } } | null)?.compra?.id ?? data.aluno_id)}`,
+        });
+      } catch { /* A aquisição já foi registrada; a falha de primeiro acesso é auditada sem credenciais. */ }
+      return registered;
     }
     if (action === "cancelar") return rpc("admin_cancelar_aquisicao", { p_ator_user_id: actor, p_compra_id: purchaseId });
     if (action === "reembolsar") return rpc("admin_reembolsar_aquisicao", { p_ator_user_id: actor, p_compra_id: purchaseId });

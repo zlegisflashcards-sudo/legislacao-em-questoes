@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { diagnosticoHottok, registrarEventoHotmart, validarHottok } from "@/lib/hotmart/webhook";
+import { provisionStudentFirstAccess } from "@/lib/student-first-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await registrarEventoHotmart(getSupabaseServerClient(), payload);
+    const supabase = getSupabaseServerClient();
+    const result = await registrarEventoHotmart(supabase, payload, async (input) => {
+      try { await provisionStudentFirstAccess(supabase, input); } catch { /* A compra permanece válida; a falha é auditada sem expor credenciais. */ }
+    });
     return NextResponse.json({ success: true, duplicate: result.duplicate });
   } catch (error) {
     if (error instanceof Error && /payload inválido|sem identificador/i.test(error.message)) {
