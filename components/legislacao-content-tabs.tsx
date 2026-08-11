@@ -27,23 +27,49 @@ type LegislacaoEmbedProps = {
   src?: string;
   title: string;
   variant?: "document" | "video";
+  restrictDocumentActions?: boolean;
 };
+
+function hideNativePdfControls(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.pathname.toLowerCase().endsWith(".pdf")) return url;
+    parsedUrl.hash = "toolbar=0&navpanes=0";
+    return parsedUrl.toString();
+  } catch {
+    return url;
+  }
+}
 
 export function LegislacaoEmbed({
   src,
   title,
   variant = "document",
+  restrictDocumentActions = false,
 }: LegislacaoEmbedProps) {
-  const embedUrl =
+  const normalizedUrl =
     variant === "document" ? getLegislacaoEmbedUrl(src) : src?.trim() ?? "";
+  const embedUrl =
+    variant === "document" && restrictDocumentActions
+      ? hideNativePdfControls(normalizedUrl)
+      : normalizedUrl;
   const exibirTelaCheia =
-    variant === "document" && isLegislacaoUrlValida(embedUrl);
+    variant === "document" &&
+    !restrictDocumentActions &&
+    isLegislacaoUrlValida(embedUrl);
 
   if (!embedUrl) return null;
 
   return (
     <div className="w-full min-w-0 space-y-3">
-      <div className="w-full min-w-0 overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
+      <div
+        className={`w-full min-w-0 overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)] ${
+          restrictDocumentActions ? "select-none" : ""
+        }`}
+        onContextMenu={
+          restrictDocumentActions ? (event) => event.preventDefault() : undefined
+        }
+      >
         <iframe
           className={
             variant === "document"

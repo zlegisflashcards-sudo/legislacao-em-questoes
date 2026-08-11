@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { getYoutubeEmbedUrl } from "@/lib/legislacoes";
+import type { YoutubePlaylistItem } from "@/lib/youtube-playlist-metadata";
 
 type LegiscastPlaylistPlayerProps = {
   playlistUrl: string;
@@ -27,6 +28,7 @@ type YoutubePlayer = {
   loadPlaylist: (options: PlaylistOptions) => void;
   nextVideo: () => void;
   playVideo: () => void;
+  playVideoAt: (index: number) => void;
   previousVideo: () => void;
 };
 
@@ -229,6 +231,7 @@ export function LegiscastPlaylistPlayer({
   const currentIndexRef = useRef(0);
   const currentTimeRef = useRef(0);
   const completedVideosRef = useRef<number[]>([]);
+  const activePlaylistItemRef = useRef<HTMLButtonElement>(null);
   const isPlayingRef = useRef(false);
   const suppressPersistenceRef = useRef(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -236,6 +239,11 @@ export function LegiscastPlaylistPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [totalVideos, setTotalVideos] = useState(0);
+  const [videoIds, setVideoIds] = useState<string[]>([]);
+  const [playlistItems, setPlaylistItems] = useState<YoutubePlaylistItem[]>([]);
+  const [playlistItemsStatus, setPlaylistItemsStatus] = useState<
+    "idle" | "loading" | "ready"
+  >("idle");
   const [savedProgress, setSavedProgress] = useState<StoredProgress | null>(null);
   const headingId = useId();
 
@@ -254,6 +262,9 @@ export function LegiscastPlaylistPlayer({
     setCurrentTime(0);
     setDuration(0);
     setTotalVideos(0);
+    setVideoIds([]);
+    setPlaylistItems([]);
+    setPlaylistItemsStatus("idle");
 
     const syncPlayerState = () => {
       const player = playerRef.current;
@@ -263,13 +274,20 @@ export function LegiscastPlaylistPlayer({
         const nextIndex = Math.max(0, player.getPlaylistIndex() || 0);
         const nextTime = Math.max(0, player.getCurrentTime() || 0);
         const nextDuration = Math.max(0, player.getDuration() || 0);
-        const nextTotal = player.getPlaylist()?.length ?? 0;
+        const nextPlaylist = player.getPlaylist() ?? [];
+        const nextTotal = nextPlaylist.length;
         currentIndexRef.current = nextIndex;
         currentTimeRef.current = nextTime;
         setCurrentIndex(nextIndex);
         setCurrentTime(nextTime);
         setDuration(nextDuration);
         setTotalVideos(nextTotal);
+        setVideoIds((current) =>
+          current.length === nextPlaylist.length &&
+          current.every((id, index) => id === nextPlaylist[index])
+            ? current
+            : [...nextPlaylist],
+        );
       } catch {
         // The player can be temporarily unavailable between playlist videos.
       }
@@ -389,6 +407,47 @@ export function LegiscastPlaylistPlayer({
     };
   }, [playlistId, storageKey]);
 
+  useEffect(() => {
+    if (!videoIds.length) return;
+
+    const controller = new AbortController();
+    setPlaylistItemsStatus("loading");
+    fetch(`/api/youtube/playlist-items?ids=${encodeURIComponent(videoIds.join(","))}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Playlist metadata unavailable");
+        return (await response.json()) as { items?: YoutubePlaylistItem[] };
+      })
+      .then(({ items }) => {
+        if (controller.signal.aborted) return;
+        const titlesById = new Map((items ?? []).map((item) => [item.id, item.title]));
+        setPlaylistItems(
+          videoIds.map((id) => ({
+            id,
+            title: titlesById.get(id) || "Vídeo do LegisCast",
+          })),
+        );
+        setPlaylistItemsStatus("ready");
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setPlaylistItems(
+          videoIds.map((id) => ({ id, title: "Vídeo do LegisCast" })),
+        );
+        setPlaylistItemsStatus("ready");
+      });
+
+    return () => controller.abort();
+  }, [videoIds]);
+
+  useEffect(() => {
+    activePlaylistItemRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [currentIndex]);
+
   const safeTotalVideos = Math.max(totalVideos, 0);
   const isFirstVideo = currentIndex <= 0;
   const isLastVideo =
@@ -438,24 +497,84 @@ export function LegiscastPlaylistPlayer({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-        <div className="relative aspect-video w-full overflow-hidden bg-slate-950">
-          {status === "error" ? (
-            <ConventionalYoutubeEmbed src={playlistUrl} title={accessibleTitle} />
-          ) : (
-            <>
-              <div ref={playerElementRef} className="absolute inset-0 h-full w-full" />
-              {status === "loading" ? (
-                <div
-                  className="absolute inset-0 flex animate-pulse items-center justify-center bg-slate-900"
-                  role="status"
-                >
-                  <span className="rounded-full bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300">
-                    Carregando LegisCast…
-                  </span>
-                </div>
-              ) : null}
-            </>
-          )}
+        <div className="relative grid min-w-0 lg:grid-cols-[minmax(0,2fr)_minmax(17rem,1fr)]">
+          <div className="relative aspect-video min-w-0 overflow-hidden bg-slate-950">
+            {status === "error" ? (
+              <ConventionalYoutubeEmbed src={playlistUrl} title={accessibleTitle} />
+            ) : (
+              <>
+                <div ref={playerElementRef} className="absolute inset-0 h-full w-full" />
+                {status === "loading" ? (
+                  <div
+                    className="absolute inset-0 flex animate-pulse items-center justify-center bg-slate-900"
+                    role="status"
+                  >
+                    <span className="rounded-full bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300">
+                      Carregando LegisCast…
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {status !== "error" ? (
+            <aside
+              className="min-w-0 border-t border-blue-100 bg-slate-50 lg:absolute lg:inset-y-0 lg:right-0 lg:flex lg:min-h-0 lg:w-1/3 lg:flex-col lg:border-l lg:border-t-0"
+              aria-labelledby={`${headingId}-playlist`}
+            >
+              <h3
+                id={`${headingId}-playlist`}
+                className="shrink-0 border-b border-blue-100 bg-white px-4 py-3 text-base font-black text-[#062a5f]"
+              >
+                Aulas desta playlist
+              </h3>
+              <div className="max-h-80 overflow-y-auto overscroll-contain p-2 lg:min-h-0 lg:flex-1 lg:max-h-none">
+                {playlistItemsStatus !== "ready" ? (
+                  <p className="px-3 py-4 text-sm text-slate-500" role="status">
+                    Carregando aulas…
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {playlistItems.map((item, index) => {
+                      const isCurrent = index === currentIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            ref={isCurrent ? activePlaylistItemRef : undefined}
+                            type="button"
+                            aria-current={isCurrent ? "true" : undefined}
+                            onClick={() => {
+                              if (!playerRef.current || index === currentIndex) return;
+                              suppressPersistenceRef.current = false;
+                              persistProgressRef.current();
+                              currentIndexRef.current = index;
+                              currentTimeRef.current = 0;
+                              setCurrentIndex(index);
+                              setCurrentTime(0);
+                              playerRef.current.playVideoAt(index);
+                            }}
+                            className={`flex min-h-12 w-full min-w-0 items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm leading-5 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+                              isCurrent
+                                ? "border-blue-200 bg-blue-50 font-bold text-[#062a5f]"
+                                : "border-transparent text-slate-700 hover:border-blue-100 hover:bg-white"
+                            }`}
+                          >
+                            <span className="min-w-0 break-words">{item.title}</span>
+                            {isCurrent ? (
+                              <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[0.65rem] font-black uppercase tracking-wide text-blue-700">
+                                Reproduzindo
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </aside>
+          ) : null}
         </div>
 
         <div className="space-y-5 p-5 sm:p-6">

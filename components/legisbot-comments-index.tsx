@@ -32,14 +32,16 @@ export function LegisBotCommentsIndex({
             id="legisbot-comments-title"
             className="text-2xl font-black leading-tight text-[#062a5f] sm:text-3xl"
           >
-            Legislação comentada pelo LegisBot
+            Legislação comentada
           </h2>
         </div>
         <AdminPublicShortcut variant="manage" slug={adminSlug} />
       </div>
 
       <p className="mt-5 max-w-3xl leading-7 text-slate-600">
-        Acesse a explicação de cada artigo já comentado pelo LegisBot.
+        Acesse pela Central de Estudos da Legislação os comentários e explicações do
+        LegisBot, organizados artigo por artigo, e participe da comunidade,
+        compartilhando dúvidas, observações e interpretações com outros estudantes.
       </p>
 
       <LegisBotCommentsList comentarios={comentarios} />
