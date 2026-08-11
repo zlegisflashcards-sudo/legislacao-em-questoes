@@ -10,7 +10,7 @@ const PAGE_SIZE = 25;
 type Query = Record<string, string | string[] | undefined>;
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
 const fmt = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-const typeLabel = (type: string) => ({ novo_comentario: "Comentário", erro_resend: "E-mail", erro_hotmart: "Hotmart", aluno_duplicado: "Aluno duplicado" }[type] ?? type);
+const typeLabel = (type: string) => ({ novo_comentario: "Comentário", resposta_comentario: "Resposta", denuncia_comentario: "⚠ Denúncia", erro_resend: "E-mail", erro_hotmart: "Hotmart", aluno_duplicado: "Aluno duplicado", nova_aquisicao: "Aquisição", nova_liberacao: "Liberação", conta_ativada: "Conta ativada" }[type] ?? type);
 function href(page: number, unread: boolean) { const params = new URLSearchParams({ page: String(page) }); if (unread) params.set("filtro", "nao_lidas"); return `/admin/notificacoes?${params}`; }
 
 export default async function AdminNotificationsPage({ searchParams }: { searchParams: Promise<Query> }) {

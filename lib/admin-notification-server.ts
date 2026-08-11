@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type AdminNotificationInput = { tipo: "erro_resend" | "erro_hotmart"; titulo: string; mensagem: string; link?: string; entidadeTipo: string; entidadeId: string };
+type AdminNotificationInput = {
+  tipo: "erro_resend" | "erro_hotmart" | "nova_aquisicao" | "nova_liberacao" | "conta_ativada";
+  titulo: string;
+  mensagem: string;
+  link?: string;
+  entidadeTipo: string;
+  entidadeId: string;
+};
 
 /** Best-effort operational alert. A duplicate event never interrupts its source flow. */
 export async function createOperationalAdminNotification(supabase: SupabaseClient, input: AdminNotificationInput) {

@@ -40,6 +40,13 @@ export async function POST(request: Request) {
     const supabase = getSupabaseServerClient();
     const result = await registrarEventoHotmart(supabase, payload, async (input) => {
       console.info("[hotmart-access-notification] acquisition_ready", { studentId: input.studentId, origin: input.origin, idempotencyKey: input.idempotencyKey });
+      const student = await supabase.from("alunos").select("nome,email").eq("id", input.studentId).maybeSingle();
+      await createOperationalAdminNotification(supabase, {
+        tipo: "nova_aquisicao", titulo: "Nova aquisição",
+        mensagem: `${student.data?.nome || student.data?.email || "Aluno"} adquiriu ${input.accessLabel}. Origem: Hotmart.`,
+        link: `/admin/comercial?tab=aquisicoes&q=${encodeURIComponent(input.idempotencyKey)}`,
+        entidadeTipo: "aquisicao_hotmart", entidadeId: input.idempotencyKey,
+      });
       try {
         const outcome = await notifyStudentAccess(supabase, { ...input, notificationOrigin: "hotmart" });
         console.info("[hotmart-access-notification] completed", { studentId: input.studentId, outcome: outcome.reason });

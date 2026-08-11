@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 
 const ACTIVATION_TTL_MS = 1000 * 60 * 60 * 24 * 3;
 const PLATFORM_URL = "https://www.legisflashcards.com.br";
@@ -110,6 +111,12 @@ export async function activateStudentAccount(supabase: SupabaseClient, token: st
     const used = await supabase.from("alunos_ativacoes_pendentes").update({ used_at: new Date().toISOString() }).eq("id", activation.id).eq("reserved_at", reservedAt).is("used_at", null).is("invalidated_at", null);
     if (used.error) throw new Error("Nao foi possivel concluir a ativacao da conta.");
     await audit(supabase, "conta_ativada", student.id, { origem: "link_ativacao" });
+    await createOperationalAdminNotification(supabase, {
+      tipo: "conta_ativada", titulo: "Conta ativada",
+      mensagem: `${student.nome || email} ativou a conta de acesso.`,
+      link: `/admin/comercial?tab=alunos&q=${encodeURIComponent(email)}`,
+      entidadeTipo: "ativacao_conta", entidadeId: activation.id,
+    });
     return { state: "activated_now" as const };
   } catch (error) {
     await supabase.from("alunos_ativacoes_pendentes").update({ reserved_at: null }).eq("id", activation.id).eq("reserved_at", reservedAt).is("used_at", null);

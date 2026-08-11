@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { notifyStudentAccess, sendManualStudentAccessEmail, type FirstAccessOrigin } from "@/lib/student-first-access-server";
+import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import {
   COMMERCIAL_ORIGINS,
@@ -742,8 +743,19 @@ export async function mutateCommercialResource(resource: CommercialResource, req
         p_observacao_administrativa: optionalString(data.observacao_administrativa, "Observação", 4000) ?? null,
       });
       try {
-        const product = await getSupabaseServerClient().from("produtos").select("nome").eq("id", uuid(data.produto_id, "Produto")).maybeSingle();
-        await notifyStudentAccess(getSupabaseServerClient(), {
+        const supabase = getSupabaseServerClient();
+        const [product, student] = await Promise.all([
+          supabase.from("produtos").select("nome").eq("id", uuid(data.produto_id, "Produto")).maybeSingle(),
+          supabase.from("alunos").select("nome,email").eq("id", uuid(data.aluno_id, "Aluno")).maybeSingle(),
+        ]);
+        const purchaseId = String((registered as { compra?: { id?: string } } | null)?.compra?.id ?? "");
+        if (purchaseId) await createOperationalAdminNotification(supabase, {
+          tipo: "nova_aquisicao", titulo: "Nova aquisição",
+          mensagem: `${student.data?.nome || student.data?.email || "Aluno"} adquiriu ${product.data?.nome || "um produto"}. Origem: ${enumValue(data.origem, COMMERCIAL_ORIGINS, "Origem")}.`,
+          link: `/admin/comercial?tab=aquisicoes&q=${encodeURIComponent(purchaseId)}`,
+          entidadeTipo: "aquisicao", entidadeId: purchaseId,
+        });
+        await notifyStudentAccess(supabase, {
           studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, COMMERCIAL_ORIGINS, "Origem") as FirstAccessOrigin,
           idempotencyKey: `administrativo:${String((registered as { compra?: { id?: string } } | null)?.compra?.id ?? data.aluno_id)}`,
           accessLabel: product.data?.nome ?? "um novo produto",
@@ -769,8 +781,19 @@ export async function mutateCommercialResource(resource: CommercialResource, req
         p_motivo: optionalString(data.motivo, "Motivo", 2000) ?? null,
       });
       try {
-        const law = await getSupabaseServerClient().from("leis").select("titulo").eq("id", positiveIntegerId(data.lei_id, "Lei")).maybeSingle();
-        await notifyStudentAccess(getSupabaseServerClient(), {
+        const supabase = getSupabaseServerClient();
+        const [law, student] = await Promise.all([
+          supabase.from("leis").select("titulo").eq("id", positiveIntegerId(data.lei_id, "Lei")).maybeSingle(),
+          supabase.from("alunos").select("nome,email").eq("id", uuid(data.aluno_id, "Aluno")).maybeSingle(),
+        ]);
+        const releaseId = String((granted as { id?: string | number } | null)?.id ?? "");
+        if (releaseId) await createOperationalAdminNotification(supabase, {
+          tipo: "nova_liberacao", titulo: "Novo acesso liberado",
+          mensagem: `${law.data?.titulo || "Uma legislação"} foi liberada para ${student.data?.nome || student.data?.email || "o aluno"}.`,
+          link: `/admin/comercial?tab=alunos&q=${encodeURIComponent(uuid(data.aluno_id, "Aluno"))}`,
+          entidadeTipo: "liberacao", entidadeId: releaseId,
+        });
+        await notifyStudentAccess(supabase, {
           studentId: uuid(data.aluno_id, "Aluno"), origin: enumValue(data.origem, MANUAL_ORIGINS, "Origem") as FirstAccessOrigin,
           idempotencyKey: `liberacao:${String((granted as { id?: string | number } | null)?.id ?? `${data.aluno_id}:${data.lei_id}`)}`,
           accessLabel: law.data?.titulo ?? "uma nova legislação",
