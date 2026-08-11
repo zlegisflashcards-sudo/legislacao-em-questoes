@@ -60,6 +60,12 @@ export function StudentAccount() {
     await fetch("/api/aluno/vincular", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` } });
   }
 
+  async function registrarAcesso() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session?.access_token) return;
+    await fetch("/api/aluno/acesso", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` } });
+  }
+
   async function needsProvisionalPasswordChange() {
     const { data } = await supabase.auth.getSession();
     if (!data.session?.access_token) return false;
@@ -78,6 +84,7 @@ export function StudentAccount() {
         const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
         if (error) { setMessage("E-mail ou senha inválidos."); return; }
         await vincularAluno();
+        await registrarAcesso();
         if (await needsProvisionalPasswordChange()) {
           window.location.assign("/conta?primeiro-acesso=1");
           return;
@@ -115,6 +122,7 @@ export function StudentAccount() {
       }
       if (data.session && data.user) {
         await vincularAluno();
+        await registrarAcesso();
         const profileResult = await supabase
           .from("perfis_publicos")
           .select("id,nome_publico")

@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useSearchParams } from "next/navigation";
 
 type Row = Record<string, unknown>;
-type PageResult = { items: Row[]; page: number; pages: number; total: number };
+type PageResult = { items: Row[]; page: number; pages: number; total: number; resumo_acessos?: Row };
 type Tab = "alunos" | "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "anki_tutoriais" | "auditoria";
 
 const TABS: { id: Tab; label: string }[] = [
@@ -23,6 +23,17 @@ const text = (value: unknown) => value == null ? "" : String(value);
 const object = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 const relation = (row: Row, key: string) => object(row[key]);
 const date = (value: unknown) => value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(String(value))) : "—";
+function lastAccess(value: unknown) {
+  if (!value) return "Nunca entrou";
+  const access = new Date(String(value));
+  const now = new Date();
+  const day = (dateValue: Date) => Date.UTC(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
+  const difference = Math.round((day(now) - day(access)) / 86_400_000);
+  const time = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(access);
+  if (difference === 0) return `Hoje, ${time}`;
+  if (difference === 1) return `Ontem, ${time}`;
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(access);
+}
 const resourcePath = (resource: Tab) => resource === "anki_tutoriais" ? "anki-tutoriais" : resource;
 
 async function requestJson(url: string, init?: RequestInit) {
@@ -129,7 +140,7 @@ export default function CommercialAdmin() {
       {tab !== "liberacoes" && tab !== "alunos" && tab !== "anki_tutoriais" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
     </form>
 
-    {tab === "alunos" ? <StudentsPanel laws={laws} products={products} rows={result.items} filter={filters.filtro ?? "todos"} setFilter={(value) => { setFilters({ filtro: value }); setPage(1); }} /> : null}
+    {tab === "alunos" ? <StudentsPanel laws={laws} products={products} rows={result.items} summary={result.resumo_acessos ?? {}} filter={filters.filtro ?? "todos"} setFilter={(value) => { setFilters({ filtro: value }); setPage(1); }} /> : null}
     {tab === "leis" ? <LawPanel rows={result.items} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "materiais" ? <MaterialPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
@@ -145,7 +156,12 @@ export default function CommercialAdmin() {
 
 type PanelProps = { rows: Row[]; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: (resource: Tab, payload: Row, success: string) => Promise<void> };
 
-function StudentsPanel({ laws, products, rows, filter, setFilter }: { laws: Row[]; products: Row[]; rows: Row[]; filter: string; setFilter: (value: string) => void }) {
+function StudentsPanel({ laws, products, rows, summary, filter, setFilter }: { laws: Row[]; products: Row[]; rows: Row[]; summary: Row; filter: string; setFilter: (value: string) => void }) {
+  const filters = [["todos", "Todos"], ["com_auth", "Com Auth"], ["sem_auth", "Sem Auth"], ["duplicados", "Duplicados"], ["entrou_hoje", "Entrou hoje"], ["ultimos_7_dias", "Últimos 7 dias"], ["ultimos_30_dias", "Últimos 30 dias"], ["nunca_entrou", "Nunca entrou"]] as const;
+  return <><section className="commercial-card"><h2>Acompanhamento de acesso</h2><div className="commercial-form-actions"><p><strong>Total:</strong> {text(summary.total_alunos)}</p><p><strong>Com Auth:</strong> {text(summary.com_auth)}</p><p><strong>Entraram hoje:</strong> {text(summary.entraram_hoje)}</p><p><strong>Últimos 7 dias:</strong> {text(summary.ultimos_7_dias)}</p><p><strong>Nunca entraram:</strong> {text(summary.nunca_entraram)}</p></div><div className="commercial-form-actions">{filters.map(([value, label]) => <button key={value} type="button" className={`admin-button ${filter === value ? "primary" : "secondary"}`} onClick={() => setFilter(value)}>{label}</button>)}</div><DataTable headers={["Aluno", "Primeiro acesso", "Último acesso", "Logins"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.nome) || "Sem nome"}</strong><small>{text(row.email)}</small></td><td>{date(row.primeiro_acesso_em) === "—" ? "Nunca entrou" : date(row.primeiro_acesso_em)}</td><td>{lastAccess(row.ultimo_acesso_em)}</td><td>{text(row.total_logins) || "0"}</td></tr>)}</DataTable></section><StudentsPanelCore laws={laws} products={products} rows={rows} filter={filter} setFilter={setFilter} /></>;
+}
+
+function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: Row[]; products: Row[]; rows: Row[]; filter: string; setFilter: (value: string) => void }) {
   const [student, setStudent] = useState<Row | null>(null);
   const [duplicateRows, setDuplicateRows] = useState<Row[] | null>(null);
   const [provisionalPassword, setProvisionalPassword] = useState("");

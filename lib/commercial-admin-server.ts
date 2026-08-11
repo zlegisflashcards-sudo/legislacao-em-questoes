@@ -159,12 +159,16 @@ export async function getCommercialResource(resource: CommercialResource, reques
 
   if (resource === "alunos") {
     const filter = url.searchParams.get("filtro") ?? "todos";
-    if (!["todos", "com_auth", "sem_auth", "duplicados"].includes(filter)) throw new CommercialValidationError("Filtro de alunos inválido.");
-    const result = await supabase.rpc("admin_listar_alunos", { p_q: q, p_filtro: filter, p_limit: limit, p_offset: from });
+    if (!["todos", "com_auth", "sem_auth", "duplicados", "entrou_hoje", "ultimos_7_dias", "ultimos_30_dias", "nunca_entrou"].includes(filter)) throw new CommercialValidationError("Filtro de alunos inválido.");
+    const [result, summary] = await Promise.all([
+      supabase.rpc("admin_listar_alunos", { p_q: q, p_filtro: filter, p_limit: limit, p_offset: from }),
+      supabase.rpc("admin_resumo_acessos_alunos"),
+    ]);
     assertQuery(result);
+    assertQuery(summary);
     const items = result.data ?? [];
     const total = Number(items[0]?.total_count ?? 0);
-    return pageResult(items, total, page, limit);
+    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 } };
   }
 
   if (resource === "anki_tutoriais") {
