@@ -20,10 +20,16 @@ describe("acompanhamento de acesso dos alunos", () => {
 
   it("registra somente após sessão autenticada e não durante carregamento ou vínculo", () => {
     expect(account).toContain('fetch("/api/aluno/acesso", { method: "POST"');
-    expect(account.indexOf("await registrarAcesso();")).toBeGreaterThan(account.indexOf("signInWithPassword"));
-    expect(account.indexOf("await registrarAcesso();")).toBeGreaterThan(account.indexOf("await vincularAluno();"));
+    expect(account.indexOf("registrarAcesso(data.session?.access_token)")).toBeGreaterThan(account.indexOf("signInWithPassword"));
+    expect(account.indexOf("registrarAcesso(data.session?.access_token)")).toBeGreaterThan(account.indexOf("await vincularAluno();"));
+    expect(account).toContain("registrarAcesso(data.session?.access_token)");
+    expect(account).toContain("const token = accessToken ??");
     expect(endpoint).toContain("supabase.auth.getUser(token)");
     expect(endpoint).toContain('rpc("registrar_acesso_aluno"');
+    expect(endpoint).toContain("[student-access] authenticated");
+    expect(endpoint).toContain("[student-access] updated");
+    expect(endpoint).toContain("[student-access] update_failed");
+    expect(endpoint).toContain("[student-access] student_not_updated");
     expect(account.slice(account.indexOf("useEffect"), account.indexOf("async function vincularAluno"))).not.toContain('fetch("/api/aluno/acesso"');
   });
 

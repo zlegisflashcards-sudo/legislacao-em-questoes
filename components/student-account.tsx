@@ -60,10 +60,11 @@ export function StudentAccount() {
     await fetch("/api/aluno/vincular", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` } });
   }
 
-  async function registrarAcesso() {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session?.access_token) return;
-    await fetch("/api/aluno/acesso", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` } });
+  async function registrarAcesso(accessToken?: string) {
+    const token = accessToken ?? (await supabase.auth.getSession()).data.session?.access_token;
+    if (!token) return false;
+    const response = await fetch("/api/aluno/acesso", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    return response.ok;
   }
 
   async function needsProvisionalPasswordChange() {
@@ -81,10 +82,10 @@ export function StudentAccount() {
     const password = String(formData.get("password") ?? "");
     try {
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
         if (error) { setMessage("E-mail ou senha inválidos."); return; }
         await vincularAluno();
-        await registrarAcesso();
+        await registrarAcesso(data.session?.access_token);
         if (await needsProvisionalPasswordChange()) {
           window.location.assign("/conta?primeiro-acesso=1");
           return;
@@ -122,7 +123,7 @@ export function StudentAccount() {
       }
       if (data.session && data.user) {
         await vincularAluno();
-        await registrarAcesso();
+        await registrarAcesso(data.session.access_token);
         const profileResult = await supabase
           .from("perfis_publicos")
           .select("id,nome_publico")
