@@ -32,7 +32,8 @@ language sql security definer set search_path = pg_catalog as $$
   from public.alunos
 $$;
 
-create or replace function public.admin_listar_alunos(p_q text default '', p_filtro text default 'todos', p_limit integer default 25, p_offset integer default 0)
+drop function if exists public.admin_listar_alunos(text,text,integer,integer);
+create function public.admin_listar_alunos(p_q text default '', p_filtro text default 'todos', p_limit integer default 25, p_offset integer default 0)
 returns table(id uuid,user_id uuid,nome text,email text,telefone text,criado_em timestamptz,duplicados bigint,produtos_ativos bigint,primeiro_acesso_em timestamptz,ultimo_acesso_em timestamptz,total_logins integer,total_count bigint)
 language sql security definer set search_path = pg_catalog as $$
  with base as (select a.*, pg_catalog.lower(pg_catalog.btrim(a.email)) as email_normalizado from public.alunos a),
