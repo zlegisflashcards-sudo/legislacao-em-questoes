@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { sairAdministrador } from "@/app/admin/actions";
 import { exigirAdministrador } from "@/lib/admin-auth";
+import AdminNotificationBell from "@/components/admin/admin-notification-bell";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export default async function AdminPage() {
         <p>Escolha o painel que deseja acessar.</p>
       </div>
       <div className="admin-header-actions">
+        <AdminNotificationBell />
         <span>{administrator.email}</span>
         <form action={sairAdministrador}><button className="admin-button secondary">Sair</button></form>
       </div>
