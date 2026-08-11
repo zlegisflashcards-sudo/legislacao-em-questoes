@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createStudentActivationLink } from "@/lib/student-activation-server";
+import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 
 export type FirstAccessOrigin = "hotmart" | "administrativo" | "cortesia" | "amostra" | "premiacao" | "migracao";
 type AccessInput = { studentId: string; origin: FirstAccessOrigin; idempotencyKey: string; accessLabel: string; kind?: "acquisition" | "release"; notificationOrigin?: "hotmart" | "aquisicao_manual" | "liberacao_manual" };
@@ -63,6 +64,12 @@ async function deliverStudentAccessEmail(
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Falha desconhecida";
     console.error("[student-access-email]", { stage: "resend_failed", origem: input.origin, event_id: input.eventId, aluno_id: student.id, email, possui_auth: hasAuth, tipo: type, message });
+    await createOperationalAdminNotification(supabase, {
+      tipo: "erro_resend", titulo: "Falha no envio de e-mail",
+      mensagem: `${student.nome?.trim() || "Aluno"} (${email}) — ${type}: ${message}`,
+      link: `/admin/comercial?tab=alunos&q=${encodeURIComponent(email)}`,
+      entidadeTipo: "erro_resend_envio", entidadeId: input.idempotencyKey,
+    });
     throw error;
   }
 }

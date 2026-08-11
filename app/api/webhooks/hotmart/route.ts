@@ -2,9 +2,23 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { diagnosticoHottok, registrarEventoHotmart, validarHottok } from "@/lib/hotmart/webhook";
 import { notifyStudentAccess } from "@/lib/student-first-access-server";
+import { createHash } from "node:crypto";
+import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function hotmartFailureContext(payload: unknown) {
+  const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const data = root.data && typeof root.data === "object" ? root.data as Record<string, unknown> : root;
+  const purchase = data.purchase && typeof data.purchase === "object" ? data.purchase as Record<string, unknown> : data;
+  const product = purchase.product && typeof purchase.product === "object" ? purchase.product as Record<string, unknown> : {};
+  const transaction = String(purchase.transaction ?? purchase.transaction_id ?? data.transaction ?? root.transaction ?? "").trim();
+  const productCode = String(product.id ?? product.code ?? purchase.product_id ?? data.product_id ?? "").trim();
+  const status = String(purchase.status ?? data.status ?? root.event ?? "").trim();
+  const eventId = transaction || createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 32);
+  return { transaction, productCode, status, eventId };
+}
 
 export async function POST(request: Request) {
   const hottokRecebido = request.headers.get("x-hotmart-hottok");
@@ -39,7 +53,15 @@ export async function POST(request: Request) {
     if (error instanceof Error && /payload inválido|sem identificador/i.test(error.message)) {
       return NextResponse.json({ success: false, error: "Payload inválido." }, { status: 400 });
     }
-    console.error("Erro ao registrar webhook da Hotmart:", error);
+    const context = hotmartFailureContext(payload);
+    const message = error instanceof Error ? error.message.replace(/senha|token|key/gi, "dado ocultado").slice(0, 500) : "Falha desconhecida";
+    await createOperationalAdminNotification(getSupabaseServerClient(), {
+      tipo: "erro_hotmart", titulo: "Falha no processamento da Hotmart",
+      mensagem: `Transação: ${context.transaction || "não informada"}; produto: ${context.productCode || "não informado"}; status: ${context.status || "não informado"}; motivo: ${message}`,
+      link: `/admin/comercial?tab=aquisicoes&q=${encodeURIComponent(context.transaction || context.productCode)}`,
+      entidadeTipo: "erro_hotmart_evento", entidadeId: context.eventId,
+    });
+    console.error("Erro ao registrar webhook da Hotmart:", { transaction: context.transaction || null, productCode: context.productCode || null, status: context.status || null, message });
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }

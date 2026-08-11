@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
@@ -54,12 +55,14 @@ function StudentSearch({ onSelect }: { onSelect: (student: Row) => void }) {
 }
 
 export default function CommercialAdmin() {
-  const [tab, setTab] = useState<Tab>("leis");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(() => TABS.some((item) => item.id === initialTab) ? initialTab as Tab : "leis");
   const [result, setResult] = useState<PageResult>({ items: [], page: 1, pages: 1, total: 0 });
   const [laws, setLaws] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
   const [products, setProducts] = useState<Row[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
