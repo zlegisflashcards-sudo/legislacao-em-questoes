@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import { nextExamLawProgress, type StudentExam } from "@/lib/student-exams";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,10 @@ async function api(init?: RequestInit) {
   });
 }
 
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
 export function StudentExamClient() {
   const [editais, setEditais] = useState<StudentExam[]>([]);
   const [selected, setSelected] = useState("");
@@ -25,6 +29,7 @@ export function StudentExamClient() {
   const [editing, setEditing] = useState(false);
   const [progressSavingLawId, setProgressSavingLawId] = useState<number | null>(null);
   const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,14 +41,9 @@ export function StudentExamClient() {
       }
       const body = await response.json();
       if (!response.ok || !Array.isArray(body.editais)) throw new Error();
-      const requested = new URLSearchParams(window.location.search).get("edital");
       setEditais(body.editais);
       setActive(body.editalAtivo?.id ? body.editalAtivo : null);
-      setSelected((current: string) => body.editais.some((exam: StudentExam) => exam.id === current)
-        ? current
-        : body.editais.some((exam: StudentExam) => exam.id === requested)
-          ? requested!
-          : body.editalAtivo?.id ?? body.editais[0]?.id ?? "");
+      setSelected((current: string) => body.editais.some((exam: StudentExam) => exam.id === current) ? current : "");
     } catch {
       setError("Não foi possível carregar seus editais. Tente novamente em instantes.");
     } finally {
@@ -55,7 +55,8 @@ export function StudentExamClient() {
     void load();
   }, [load]);
 
-  const current = editais.find((exam) => exam.id === selected) ?? editais[0];
+  const current = editais.find((exam) => exam.id === selected) ?? null;
+  const filteredEditais = useMemo(() => editais.filter((exam) => normalizeText(exam.nome).includes(normalizeText(search))), [editais, search]);
 
   async function change(action: string, payload: Record<string, unknown>) {
     const response = await api({ method: "PATCH", body: JSON.stringify({ action, ...payload }) });
@@ -131,7 +132,7 @@ export function StudentExamClient() {
     <header className="mb-8">
       <p className="font-bold text-blue-700">Área do aluno</p>
       <div className="mt-1 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{current?.nome ?? "Meu Edital"}</h1>
+        <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{current?.nome ?? "Meu edital personalizado"}</h1>
         {current?.tipo === "personalizado" && !editing ? <button type="button" onClick={() => { setName(current.nome); setEditing(true); }} className="rounded-lg px-2 py-1 text-sm font-bold text-blue-700 underline underline-offset-4">Editar nome</button> : null}
       </div>
       {editing ? <div className="mt-3 flex flex-wrap gap-2">
@@ -143,16 +144,19 @@ export function StudentExamClient() {
 
     <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital"/>
 
-    {!loading && editais.length > 0 ? <section className="mb-6 w-full max-w-xl rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
-      <label className="text-sm font-black text-slate-700" htmlFor="active-exam">Edital em estudo</label>
-      <select id="active-exam" value={active?.id ?? ""} onChange={(event) => void makeActive(event.target.value)} className="mt-2 min-h-11 w-full min-w-0 rounded-xl border border-slate-300 px-3 text-sm sm:text-base">
-        <option value="" disabled>Selecione um edital</option>
-        {editais.map((exam) => <option key={`${exam.tipo}:${exam.id}`} value={exam.id}>{exam.nome}</option>)}
-      </select>
+    {!loading && editais.length > 0 ? <section className="mb-6 w-full max-w-2xl rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <label className="text-sm font-black text-slate-700" htmlFor="exam-search">Pesquisar editais</label>
+          <input id="exam-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar meus editais..." className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 sm:min-w-[18rem]" />
+        </div>
+        {current ? <button type="button" onClick={() => setSelected("")} className="min-h-11 rounded-xl border border-blue-200 px-4 font-black text-blue-700">Trocar edital</button> : null}
+      </div>
+      <p className="mt-3 text-sm text-slate-600">{current ? `Edital selecionado: ${current.nome}` : "Escolha um edital para visualizar suas leis."}</p>
     </section> : null}
 
-    {!loading && editais.length > 1 ? <nav aria-label="Visualizar edital" className="mb-6 flex flex-wrap gap-2">
-      {editais.map((exam) => <button key={exam.id} type="button" onClick={() => setSelected(exam.id)} className={`min-h-11 max-w-full rounded-xl px-4 py-2 text-left font-black ${current?.id === exam.id ? "bg-blue-700 text-white" : "bg-blue-50 text-blue-800"}`}>{exam.nome}</button>)}
+    {!loading && !current && editais.length > 0 ? <nav aria-label="Visualizar edital" className="mb-6 grid gap-2">
+      {filteredEditais.length > 0 ? filteredEditais.map((exam) => <button key={exam.id} type="button" onClick={() => setSelected(exam.id)} className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left font-black text-[#062a5f] shadow-sm transition hover:border-blue-200 hover:bg-blue-50">{exam.nome}</button>) : <p className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-600">Nenhum edital encontrado.</p>}
     </nav> : null}
 
     {loading ? <div role="status" className="rounded-2xl border border-blue-100 bg-white p-8">Carregando seus editais…</div> : null}
@@ -167,7 +171,7 @@ export function StudentExamClient() {
         <span className="hidden font-black text-slate-500 sm:block">{index + 1}.</span>
         <div className="min-w-0 sm:contents">
           <Link href={`/estudar/lei/${encodeURIComponent(law.slug)}`} className="col-span-2 min-w-0 break-words text-balance text-xl font-black leading-tight text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700 sm:col-span-1 sm:text-base sm:font-bold">{law.titulo}</Link>
-          <div className="flex flex-wrap items-center gap-2 sm:contents">
+          <div className="flex flex-wrap items-center gap-2 pt-2 sm:contents sm:pt-0">
             <ProgressControl label="Estudando" checked={law.emEstudo} disabled={progressSavingLawId === law.id} onClick={() => void updateLawProgress(law, "study")} />
             <ProgressControl label="Revisão" checked={law.revisao} disabled={progressSavingLawId === law.id} onClick={() => void updateLawProgress(law, "review")} />
           </div>

@@ -66,7 +66,7 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).not.toContain("current.tipo === \"personalizado\" ? <ProgressControl");
   });
 
-  it("usa checkbox visual responsivo em vez de check textual verde", () => {
+  it("usa checkbox visual responsivo e preserva o respiro mobile", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
     expect(client).toContain('aria-label={`${label} ${checked ? "concluído" : "não concluído"}`');
     expect(client).toContain('className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold');
@@ -75,11 +75,23 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain('"border-slate-200 bg-white text-slate-500 hover:bg-slate-50"');
     expect(client).toContain('text-blue-800">✓</span>');
     expect(client).toContain('text-balance text-xl font-black leading-tight');
-    expect(client).toContain('flex flex-wrap items-center gap-2 sm:contents');
+    expect(client).toContain('flex flex-wrap items-center gap-2 pt-2 sm:contents sm:pt-0');
     expect(client).toContain('hidden font-black text-slate-500 sm:block');
     expect(client).not.toContain('text-emerald-700');
     expect(client).not.toContain('}✓');
     expect(client).not.toContain('}☐');
     expect(client).not.toContain('whitespace-nowrap');
+  });
+
+  it("inicia sem edital selecionado e oferece pesquisa local", () => {
+    const client = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(client).toContain('Meu edital personalizado');
+    expect(client).toContain('Pesquisar editais');
+    expect(client).toContain('Pesquisar meus editais...');
+    expect(client).toContain('Escolha um edital para visualizar suas leis.');
+    expect(client).toContain('Nenhum edital encontrado.');
+    expect(client).toContain('Trocar edital');
+    expect(client).toContain('setSelected("")');
+    expect(client).not.toContain('body.editalAtivo?.id ?? body.editais[0]?.id ?? ""');
   });
 });

@@ -36,7 +36,7 @@ describe("painel e edital ativo", () => {
   it("mantém a seleção em Meu Edital e deriva a barra sem persistência nova", () => {
     const examClient = readFileSync("components/student-exam-client.tsx", "utf8");
     const server = readFileSync("lib/dashboard-server.ts", "utf8");
-    expect(examClient).toContain("Edital em estudo");
+    expect(examClient).toContain("Escolha um edital para visualizar suas leis.");
     expect(examClient).toContain('change("set-active"');
     expect(server).toContain("const estados = examStates(exam.leis)");
     expect(server).toContain("loadStudentExamSelection(request)");
