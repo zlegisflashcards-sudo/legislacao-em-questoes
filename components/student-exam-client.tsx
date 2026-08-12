@@ -144,20 +144,20 @@ export function StudentExamClient() {
 
     <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital"/>
 
-    {!loading && editais.length > 0 ? <section className="mb-6 w-full max-w-2xl rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <label className="text-sm font-black text-slate-700" htmlFor="exam-search">Pesquisar editais</label>
-          <input id="exam-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar meus editais..." className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 sm:min-w-[18rem]" />
-        </div>
-        {current ? <button type="button" onClick={() => setSelected("")} className="min-h-11 rounded-xl border border-blue-200 px-4 font-black text-blue-700">Trocar edital</button> : null}
-      </div>
-      <p className="mt-3 text-sm text-slate-600">{current ? `Edital selecionado: ${current.nome}` : "Escolha um edital para visualizar suas leis."}</p>
+    {!loading && !current && editais.length > 0 ? <section className="mb-6 w-full max-w-2xl rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+      <label className="text-sm font-black text-slate-700" htmlFor="exam-search">Pesquisar editais</label>
+      <input id="exam-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar meus editais..." className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 sm:min-w-[18rem]" />
+      <p className="mt-3 text-sm text-slate-600">Escolha um edital para visualizar suas leis.</p>
     </section> : null}
 
     {!loading && !current && editais.length > 0 ? <nav aria-label="Visualizar edital" className="mb-6 grid gap-2">
       {filteredEditais.length > 0 ? filteredEditais.map((exam) => <button key={exam.id} type="button" onClick={() => setSelected(exam.id)} className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left font-black text-[#062a5f] shadow-sm transition hover:border-blue-200 hover:bg-blue-50">{exam.nome}</button>) : <p className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-600">Nenhum edital encontrado.</p>}
     </nav> : null}
+
+    {!loading && current ? <section className="mb-6 flex flex-col gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-slate-600">Edital selecionado: <span className="font-black text-[#062a5f]">{current.nome}</span></p>
+      <button type="button" onClick={() => setSelected("")} className="min-h-11 rounded-xl border border-blue-200 px-4 font-black text-blue-700">Trocar edital</button>
+    </section> : null}
 
     {loading ? <div role="status" className="rounded-2xl border border-blue-100 bg-white p-8">Carregando seus editais…</div> : null}
     {!loading && error ? <div role="alert" className="rounded-2xl border border-red-200 bg-white p-6 text-red-700">{error}</div> : null}

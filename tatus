@@ -1,0 +1,139 @@
+[33mcef75b5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: rename student edital section
+[33ma32123e[m fix: require explicit exam selection in student exam view
+[33mfce9605[m fix: refine mobile layout for student exam cards
+[33m148c9c9[m fix: improve student exam mobile layout
+[33mf8ca27a[m fix: repair hotmart orphan purchase webhook
+[33m4ca2d8b[m feat: finalizar meu edital e painel do aluno
+[33m07325bd[m fix: record student access after login
+[33m8932e39[m fix: apply student access tracking migration
+[33m3b2de37[m feat: track student access activity
+[33me75fe5f[m feat: expand admin notification events
+[33mf330542[m fix: diagnose admin notification loading
+[33m2308b87[m feat: add operational admin notifications
+[33m9f4072f[m feat: add admin notification center
+[33m2b0d834[m feat: aprimora centrais de estudo e LegisCast
+[33mee181ba[m fix: unify automatic student access notifications
+[33mb399587[m feat: add student account activation links
+[33mb9b3e0e[m feat: add manual student access email
+[33m6ea13f4[m fix: separate student access grants from auth
+[33m49dc74a[m feat: notify students for newly granted access
+[33m1374da8[m fix: reuse student identity when auth is created
+[33me65e4b8[m fix: recognize supported student deletion foreign keys
+[33m1a23d5a[m fix: diagnose permanent student deletion failures
+[33m141f6ab[m feat: add permanent administrative student deletion
+[33m5ea3a1a[m fix: retry first access for idempotent Hotmart purchases
+[33m6b6388e[m fix: accept external material links
+[33mfd881b4[m fix: open valid law material links
+[33mdae7858[m fix: block duplicate public account signup
+[33m8bcdddd[m fix: search active laws by number and slug
+[33mb9bc990[m fix: separate featured products from catalog search
+[33m6498e7a[m fix: make commercial admin responsive on mobile
+[33m2865368[m fix: update account login copy
+[33mb55cf0d[m feat: let students update profile phone
+[33mdd82384[m fix: clear stale admin student list data
+[33m034e6eb[m feat: add paginated admin student list
+[33m5bc3b12[m fix: make historical Hotmart imports atomic
+[33m058b23f[m fix: accept complete Hotmart import status
+[33ma38571e[m feat: automate first access on acquisition
+[33m8182ddb[m feat: add provisional student first access
+[33m07634fb[m fix: aggregate admin products by unique id
+[33macf2373[m fix: transfer student auth before merge reassignment
+[33ma0056b8[m fix: restore student email normalizer RPC dependency
+[33m9f4c364[m fix: log real student merge RPC arguments
+[33m90a0657[m fix: diagnose and preflight student merges
+[33mc3acc68[m feat: add safe student administration tools
+[33mcfac004[m fix: enforce normalized student email identity
+[33m2b200fe[m Separa tutoriais Anki por fluxo
+[33md407ff1[m Atualiza configuração Anki sem cache
+[33m31b10c3[m Adiciona tutoriais de estudo por plataforma
+[33mdee1e14[m Organiza tutoriais Anki
+[33m1375538[m Corrige rota dos tutoriais Anki
+[33m3998a78[m Remove fallbacks dos tutoriais Anki
+[33mc6f8848[m Publica tutoriais do Anki
+[33m1c5f367[m Normaliza URLs de vídeo dos produtos
+[33m6276d57[m Reposiciona vídeo comercial do produto
+[33m55ec538[m Configura links e tutoriais do Anki
+[33m6b06685[m Atualiza contagem comercial de flashcards
+[33m2763c4f[m Completa campos comerciais de produtos
+[33mc2bb630[m Corrige rota comercial do PMMA
+[33m6bb51e6[m Remove Sheets da home comercial
+[33m62bd393[m Prioriza rota interna de produtos
+[33m17a4098[m Inclui slugs de produtos na rota
+[33m6fec112[m Corrige navegação dos produtos
+[33m76ed003[m Simplifica benefícios dos cards
+[33m7bf2234[m Aproxima cards do catálogo
+[33m0c62d6a[m Simplifica página de produto
+[33me9e437d[m Melhora cards do catálogo
+[33me127ab4[m Exibe página comercial dinâmica de produto
+[33m108bd02[m Vincula conta Auth ao aluno existente
+[33m4adc66a[m Revoga acessos por eventos Hotmart
+[33m63c8ca9[m Processa vendas aprovadas da Hotmart
+[33m0b8f7dd[m Compatibiliza webhook Hotmart v2
+[33m6601f78[m Alinha eventos Hotmart ao webhook
+[33m2470342[m Adiciona diagnóstico seguro do Hottok
+[33me727b9d[m Registra eventos de webhook Hotmart
+[33m054071a[m Exibe nome público na ficha de alunos
+[33m396ac11[m Permite editar dados de alunos
+[33m533e82f[m Corrige busca de alunos sem usuário
+[33m27c2c3c[m Inclui telefone na ficha de alunos
+[33m6eb654a[m Melhora ficha administrativa de alunos
+[33m944b445[m Aceita status Hotmart aprovados
+[33m80066b4[m Aceita email Hotmart sem hífen
+[33m64c539c[m Adiciona prévia da importação Hotmart
+[33m4e37ce1[m Vincula produtos à Hotmart
+[33m783a4df[m Importa vendas históricas da Hotmart
+[33m361ac82[m Exporta alunos ativos em CSV
+[33mea84a9d[m Adiciona consulta de alunos no admin
+[33m0e7d197[m Aprimorar jornada de estudo e LegisCast
+[33m4034c77[m Simplificar painel inicial do aluno
+[33mcb9ba67[m Ajustar conclusão e textos do Anki
+[33mdfbbfcb[m Criar estudo seguro das leis e progresso
+[33m08364c1[m Aprimorar página de configuração do Anki
+[33mffb95d5[m Criar página de configuração do Anki
+[33m4c1f015[m Ajustar card do Anki em Minhas leis
+[33mb02bd9c[m Criar passo obrigatório de configuração do Anki
+[33ma965d46[m Ajustar identificação dos cards de Minhas leis
+[33mf8e6556[m Criar página Minhas leis adquiridas
+[33m8473ad9[m Criar base editorial das leis
+[33m0cf20f8[m Criar gestão comercial administrativa
+[33m9b02cfe[m Criar estrutura comercial interna
+[33m714abeb[m Ajustar acesso ao painel e ações da conta
+[33mfc5be7e[m Adicionar dashboard e streak diário
+[33ma860e58[m Proteger geração do LegisBot
+[33m425a436[m Remover escrita anônima em produtos
+[33md3aa427[m Adicionar modo de build offline
+[33m717ca31[m Migrar lint para ESLint 9 flat
+[33m4617bdc[m Corrigir política de builds do pnpm
+[33me1e7c2a[m Atualizar ambientes e home do site
+[33ma71ffe0[m Aprimorar painel e conteúdo do LegisBot
+[33mcc7f8d2[m Corrigir sessão após cadastro na comunidade
+[33m7be9fe0[m Alterar produtos Vade Mecum para Por concurso
+[33mf328749[m Criar central administrativa e identidade oficial da comunidade
+[33m9bc529f[m Implementar comunidade nas páginas do LegisBot
+[33m5bb95a7[m fix: reconhece função administrativa do Supabase
+[33m568a993[m feat: publica comentarios do LegisBot e atalhos administrativos
+[33mdf09c98[m feat: adiciona painel administrativo do LegisBot
+[33mc5379f2[m feat: adiciona progresso local ao LegisCast
+[33m8a972da[m feat: cria central de estudos das legislacoes
+[33m45030d3[m Atualiza paginas de legislacao e experiencia do site
+[33m4d5e3a9[m Implementa fluxo completo do LegisBot
+[33m8593fdc[m Atualiza textos e CTA da Liga
+[33mfb89611[m Atualizar premiacao do Ranking Legis
+[33m57c822b[m Ajustar ranking e imagem do curso
+[33mba7af86[m Adicionar Ranking Legis com Google Sheets
+[33m8795dc1[m Atualizar design do site para versao 4.0
+[33m3493fca[m Atualizar home e pausar combo
+[33mc8107bd[m Atualizar home com hero e status de atualizacao
+[33m58a0d4b[m Remover frase da página obrigado
+[33m753c3bd[m Corrigir caracteres da página de leis flashcards
+[33m4af6f31[m Alterar rota de legislacao para leisflashcards
+[33mf8aefdc[m Ajusta textos e rodape do site
+[33mf0f53a9[m Atualiza categorias e dados das legislacoes
+[33m71333fb[m Atualiza dados das legislações
+[33mf6998d2[m Atualiza dados das legislações
+[33m04a1a10[m Ajusta home e rodape do vade mecum digital
+[33ma7721d9[m Cria página Vade Mecum
+[33mc48a3ef[m Ajusta menu principal do catálogo
+[33m6fe1fad[m Adiciona botões de encomenda e WhatsApp
+[33ma020f10[m Adiciona versão online no rodapé
+[33mc0505a9[m Implementa MVP V1 do catálogo de legislações
