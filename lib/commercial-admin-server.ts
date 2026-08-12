@@ -181,7 +181,7 @@ function pageResult(data: unknown[], count: number | null, page: number, limit: 
 }
 
 async function loadPostSalePending(supabase = getSupabaseServerClient()) {
-  const purchases = await supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso,identificador_externo").eq("status_acesso", "ativo").not("aluno_id", "is", null).order("adquirida_em", { ascending: true });
+  const purchases = await supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso,identificador_externo").eq("status_acesso", "ativo").not("aluno_id", "is", null).order("adquirida_em", { ascending: true }).order("id", { ascending: true });
   if (purchases.error) {
     logCommercialDbError("Falha ao carregar pendências do Mini-CRM", purchases.error, { etapa: "carregar_pendencias" });
     throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");

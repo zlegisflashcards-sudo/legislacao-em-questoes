@@ -20,6 +20,7 @@ const editorialMigration = readFileSync("supabase/migrations/20260806112619_crea
 const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const client = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 const studentCrm = readFileSync("components/admin/student-postsale-crm.tsx", "utf8");
+const studentsAdmin = readFileSync("components/admin/students-admin.tsx", "utf8");
 const page = readFileSync("app/admin/comercial/page.tsx", "utf8");
 const productVideoMigration = readFileSync("supabase/migrations/20260807210000_add_product_demo_video.sql", "utf8");
 const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
@@ -125,6 +126,13 @@ describe("fronteira administrativa comercial", () => {
     expect(studentCrm).toContain('className="purchase-crm-summary"');
     expect(studentCrm).toContain('className="crm-stage-list"');
     expect(studentCrm).toContain("Liberações / aquisições desta compra");
+  });
+
+  it("mantém a fila compacta e pagina alunos em lotes de cinquenta", () => {
+    expect(studentsAdmin).toContain("limit=50&page=${nextPage}");
+    expect(studentsAdmin).toContain("pendingSales.slice(0, 5)");
+    expect(studentsAdmin).not.toContain("Ver todas as pendências");
+    expect(server).toContain('.order("adquirida_em", { ascending: true }).order("id", { ascending: true })');
   });
 });
 

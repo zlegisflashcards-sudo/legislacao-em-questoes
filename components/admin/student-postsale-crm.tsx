@@ -15,28 +15,26 @@ async function json(url: string, init?: RequestInit) {
   return data;
 }
 
-export function StudentPostSaleCrm({ student, focusPurchase = "" }: { student: Row; focusPurchase?: string }) {
+export function StudentPostSaleCrm({ student, focusPurchase = "", onCycleUpdated }: { student: Row; focusPurchase?: string; onCycleUpdated?: () => void }) {
   const [cycles, setCycles] = useState<Row[]>([]);
   const [open, setOpen] = useState("");
+  const [expandedPurchase, setExpandedPurchase] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const id = text(student.id);
 
   const load = useCallback(async () => {
-    setBusy(true);
+    setBusy(true); setError("");
     try {
       const data = await json("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "crm_compras", id }) });
       const loaded = data.cycles ?? [];
       setCycles(loaded);
       if (focusPurchase) {
         const cycle = loaded.find((item: Row) => text(item.id) === focusPurchase);
-        if (cycle) setOpen(`${focusPurchase}:${Number(cycle.proxima_etapa) || 1}`);
+        if (cycle) { setExpandedPurchase(focusPurchase); setOpen(`${focusPurchase}:${Number(cycle.proxima_etapa) || 1}`); }
       }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível carregar o pós-venda.");
-    } finally {
-      setBusy(false);
-    }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar o pós-venda."); }
+    finally { setBusy(false); }
   }, [focusPurchase, id]);
 
   useEffect(() => { void load(); }, [load]);
@@ -45,25 +43,34 @@ export function StudentPostSaleCrm({ student, focusPurchase = "" }: { student: R
 
   async function done(compra: string, etapa: number) {
     setBusy(true);
-    try {
-      await json("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "crm_compra_atualizar", id: compra, data: { etapa } }) });
-      await load();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível salvar.");
-    } finally {
-      setBusy(false);
-    }
+    try { await json("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "crm_compra_atualizar", id: compra, data: { etapa } }) }); await load(); onCycleUpdated?.(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível salvar."); }
+    finally { setBusy(false); }
   }
 
-  return <section className="student-crm"><header><div><small>PÓS-VENDA</small><h3>Por compra</h3></div></header>{error ? <p className="admin-alert error">{error}</p> : null}{!busy && !cycles.length ? <p>Nenhuma compra ativa para acompanhar.</p> : cycles.map((cycle) => {
-    const stages = Array.isArray(cycle.etapas) ? cycle.etapas as boolean[] : [];
-    const next = Number(cycle.proxima_etapa) || 6;
-    const key = text(cycle.id);
-    const product = text(obj(cycle.produtos).nome) || "Produto";
-    return <article className="purchase-crm" key={key}><div><strong>{product}</strong><small>Compra em {date(cycle.adquirida_em)} · {stages.filter(Boolean).length}/6 concluídas</small><b>Próxima: Etapa {next} — {titles[next - 1]}</b></div><div className="crm-stage-grid">{titles.map((title, index) => <button key={title} type="button" className={stages[index] ? "done" : ""} onClick={() => setOpen(open === `${key}:${index + 1}` ? "" : `${key}:${index + 1}`)}>Etapa {index + 1}</button>)}</div>{open.startsWith(`${key}:`) ? (() => {
-      const stage = Number(open.split(":")[1]); const automatic = stage <= 4;
-      const detail = stage === 1 ? "Compra localizada automaticamente no sistema." : stage === 2 ? "A aquisição ativa desta compra é verificada pela fonte comercial." : stage === 3 ? text(obj(cycle.email).status) === "enviado" ? `E-mail registrado como enviado em ${date(obj(cycle.email).enviado_em)}.` : "Não há e-mail automático registrado para esta compra." : stage === 4 ? cycle.primeiro_acesso_em ? `Primeiro acesso identificado em ${date(cycle.primeiro_acesso_em)}.` : "Ainda não identificamos acesso à plataforma." : stage === 5 ? "Abra o WhatsApp, confirme o acesso à Central de Estudos e só então conclua a etapa." : "Confirme download, importação e uso dos flashcards/Anki antes de concluir.";
-      return <div className="crm-stage-detail"><h4>Etapa {stage} — {titles[stage - 1]}</h4><p>{detail}</p><p><b>Status:</b> {stages[stage - 1] ? "Concluída" : "Pendente"}</p>{stage === 5 && wa ? <a className="admin-button primary" href={wa} target="_blank" rel="noreferrer">Abrir WhatsApp</a> : null}{!automatic ? <button className="admin-button secondary" disabled={busy} onClick={() => void done(key, stage)}>Concluir Etapa {stage}</button> : null}</div>;
-    })() : null}</article>;
-  })}</section>;
+  return <section className="student-crm"><header><div><small>PÓS-VENDA</small><h3>Por compra</h3></div></header>
+    {error ? <p className="admin-alert error">{error}</p> : null}
+    {!busy && !cycles.length ? <p>Nenhuma compra ativa para acompanhar.</p> : cycles.map((cycle) => {
+      const stages = Array.isArray(cycle.etapas) ? cycle.etapas as boolean[] : [];
+      const next = Number(cycle.proxima_etapa) || 6;
+      const key = text(cycle.id);
+      const product = text(obj(cycle.produtos).nome) || "Produto";
+      const releases = Array.isArray(cycle.liberacoes) ? cycle.liberacoes as Row[] : [];
+      const expanded = expandedPurchase === key;
+      return <article className="purchase-crm" key={key}>
+        <button type="button" className="purchase-crm-summary" aria-expanded={expanded} onClick={() => setExpandedPurchase(expanded ? "" : key)}>
+          <strong>{product}</strong><small>Compra em {date(cycle.adquirida_em)} · Aquisição {text(cycle.origem) || "registrada"} · {releases.length ? `${releases.length} liberação(ões) ativa(s)` : "Sem liberação vinculada"}</small>
+          <b>{stages.filter(Boolean).length}/6 concluídas · Próxima: Etapa {next} — {titles[next - 1]}</b><span>{expanded ? "Ocultar pós-venda" : "Expandir pós-venda"}</span>
+        </button>
+        {expanded ? <><div className="purchase-releases"><strong>Liberações / aquisições desta compra</strong>{releases.length ? <ul>{releases.map((release) => <li key={text(release.id)}>{text(obj(release.leis).titulo) || "Acesso liberado"} · {text(release.origem) || "origem não informada"} · {date(release.concedida_em)}</li>)}</ul> : <p>Nenhuma liberação ativa vinculada a esta compra.</p>}</div>
+          <div className="crm-stage-list">{titles.map((title, index) => <button key={title} type="button" className={stages[index] ? "done" : ""} onClick={() => setOpen(open === `${key}:${index + 1}` ? "" : `${key}:${index + 1}`)}><strong>Etapa {index + 1} — {title}</strong><span>{stages[index] ? "Concluída" : "Pendente"}</span></button>)}</div>
+          {open.startsWith(`${key}:`) ? (() => {
+            const stage = Number(open.split(":")[1]); const automatic = stage <= 4;
+            const detail = stage === 1 ? "Compra localizada automaticamente no sistema." : stage === 2 ? "A aquisição ativa e as liberações vinculadas são verificadas pela fonte comercial." : stage === 3 ? text(obj(cycle.email).status) === "enviado" ? `E-mail registrado como enviado em ${date(obj(cycle.email).enviado_em)}.` : "Não há e-mail automático registrado para esta compra." : stage === 4 ? cycle.primeiro_acesso_em ? `Primeiro acesso identificado em ${date(cycle.primeiro_acesso_em)}.` : "Ainda não identificamos acesso à plataforma." : stage === 5 ? "Abra o WhatsApp, confirme o acesso à Central de Estudos e só então conclua a etapa." : "Confirme download, importação e uso dos flashcards/Anki antes de concluir.";
+            return <div className="crm-stage-detail"><h4>Etapa {stage} — {titles[stage - 1]}</h4><p>{detail}</p><p><b>Status:</b> {stages[stage - 1] ? "Concluída" : "Pendente"}</p>{stage === 5 && wa ? <a className="admin-button primary" href={wa} target="_blank" rel="noreferrer">Abrir WhatsApp</a> : null}{!automatic ? <button className="admin-button secondary" disabled={busy || stages[stage - 1]} onClick={() => void done(key, stage)}>{stages[stage - 1] ? "Etapa concluída" : `Concluir Etapa ${stage}`}</button> : null}</div>;
+          })() : null}
+        </> : null}
+      </article>;
+    })}
+  </section>;
 }
