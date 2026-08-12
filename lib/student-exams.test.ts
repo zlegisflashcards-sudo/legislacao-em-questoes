@@ -96,8 +96,8 @@ describe("progresso compartilhado no Meu Edital", () => {
 
   it("oculta pesquisa e lista quando um edital está selecionado", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('!loading && !current && editais.length > 0 ? <section');
-    expect(client).toContain('!loading && !current && editais.length > 0 ? <nav');
+    expect(client).toContain('!loading && editais.length > 0 && !current ? <section');
+    expect(client).toContain('!loading && editais.length > 0 && !current ? <nav');
     expect(client).toContain('!loading && current ? <section');
     expect(client).toContain('Edital selecionado: <span className="font-black text-[#062a5f]">{current.nome}</span>');
   });

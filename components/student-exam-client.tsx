@@ -144,13 +144,13 @@ export function StudentExamClient() {
 
     <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital"/>
 
-    {!loading && !current && editais.length > 0 ? <section className="mb-6 w-full max-w-2xl rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+    {!loading && editais.length > 0 && !current ? <section className="mb-6 w-full max-w-2xl rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
       <label className="text-sm font-black text-slate-700" htmlFor="exam-search">Pesquisar editais</label>
       <input id="exam-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar meus editais..." className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 sm:min-w-[18rem]" />
       <p className="mt-3 text-sm text-slate-600">Escolha um edital para visualizar suas leis.</p>
     </section> : null}
 
-    {!loading && !current && editais.length > 0 ? <nav aria-label="Visualizar edital" className="mb-6 grid gap-2">
+    {!loading && editais.length > 0 && !current ? <nav aria-label="Visualizar edital" className="mb-6 grid gap-2">
       {filteredEditais.length > 0 ? filteredEditais.map((exam) => <button key={exam.id} type="button" onClick={() => setSelected(exam.id)} className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left font-black text-[#062a5f] shadow-sm transition hover:border-blue-200 hover:bg-blue-50">{exam.nome}</button>) : <p className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-600">Nenhum edital encontrado.</p>}
     </nav> : null}
 
