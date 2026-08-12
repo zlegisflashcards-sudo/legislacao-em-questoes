@@ -6,15 +6,15 @@ const account = readFileSync("components/student-account.tsx", "utf8");
 
 describe("telefone no meu perfil", () => {
   it("salva somente o telefone do aluno autenticado", () => {
-    expect(route).toContain('Object.keys(body).join(",") !== "telefone"');
+    expect(route).toContain('!["nome", "telefone", "nome_publico"].includes(key)');
     expect(route).toContain('.eq("user_id", user.id)');
-    expect(route).toContain("value.trim()");
+    expect(route).toContain("data.telefone.trim()");
     expect(route).toContain("telefone.length > 80");
   });
   it("exibe telefone editável e e-mail somente para consulta", () => {
     expect(account).toContain('label="Telefone"');
     expect(account).toContain("E-mail de acesso:");
     expect(account).toContain("Precisa alterar seu e-mail?");
-    expect(account).toContain('body: JSON.stringify({ telefone: phoneValue || null })');
+    expect(account).toContain('nome: name || null, telefone: phoneValue || null, nome_publico: publicName || null');
   });
 });

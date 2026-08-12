@@ -24,6 +24,7 @@ export function StudentAccount() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
@@ -37,7 +38,7 @@ export function StudentAccount() {
         setEmail(data.user.email ?? "");
         const session = await supabase.auth.getSession();
         const studentProfile = await fetch("/api/aluno/perfil", { headers: { Authorization: `Bearer ${session.data.session?.access_token ?? ""}` } });
-        if (studentProfile.ok) { const details = await studentProfile.json() as { telefone?: string | null }; setPhone(details.telefone ?? ""); }
+        if (studentProfile.ok) { const details = await studentProfile.json() as { nome?: string | null; telefone?: string | null }; setFullName(details.nome ?? ""); setPhone(details.telefone ?? ""); }
         if (await needsProvisionalPasswordChange()) {
           setMode("firstAccess");
           setLoading(false);
@@ -80,8 +81,9 @@ export function StudentAccount() {
     setPending(true); setMessage("");
     const authEmail = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
+    const formMode = String(formData.get("form_mode") ?? mode);
     try {
-      if (mode === "login") {
+      if (formMode === "login") {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
         if (error) { setMessage("E-mail ou senha inválidos."); return; }
         await vincularAluno();
@@ -93,8 +95,11 @@ export function StudentAccount() {
         window.location.assign(returnPath);
         return;
       }
+      const fullName = String(formData.get("nome") ?? "").trim();
       const publicName = String(formData.get("public_name") ?? "").trim();
-      if (!validatePublicName(publicName)) {
+      if (!fullName) { setMessage("Informe seu nome completo."); return; }
+      if (fullName.length > 300) { setMessage("Nome completo excede o limite permitido."); return; }
+      if (publicName && !validatePublicName(publicName)) {
         setMessage("Use um nome público de 3 a 50 caracteres, sem símbolos especiais."); return;
       }
       const preflight = await fetch("/api/aluno/verificar-cadastro", {
@@ -114,11 +119,11 @@ export function StudentAccount() {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}${returnPath}`,
-          data: { nome_publico: publicName },
+          data: { nome: fullName, nome_publico: publicName || undefined },
         },
       });
       if (error) {
-        setMessage("Não foi possível criar a conta. O e-mail ou nome público pode já estar em uso.");
+        setMessage(/nome público|nome publico/i.test(error.message) ? "Esse nome público já está em uso. Escolha outro." : "Não foi possível criar a conta. O e-mail pode já estar em uso.");
         return;
       }
       if (data.session && data.user) {
@@ -132,7 +137,7 @@ export function StudentAccount() {
         setEmail(data.user.email ?? authEmail);
         setProfile((profileResult.data as PublicProfile | null) ?? {
           id: data.user.id,
-          nome_publico: publicName,
+          nome_publico: publicName || "",
         });
         setMode("profile");
         setMessage("Conta criada com sucesso. Você já está conectado.");
@@ -217,16 +222,17 @@ export function StudentAccount() {
   async function saveProfile(formData: FormData) {
     if (!profile) return;
     const publicName = String(formData.get("public_name") ?? "").trim();
-    if (!validatePublicName(publicName)) { setMessage("Revise o nome público."); return; }
+    if (publicName && !validatePublicName(publicName)) { setMessage("Revise o nome público."); return; }
+    const name = String(formData.get("nome") ?? "").trim();
+    if (name.length > 300) { setMessage("Nome completo excede o limite permitido."); return; }
     setPending(true);
     const phoneValue = String(formData.get("telefone") ?? "").trim();
     if (phoneValue.length > 80) { setMessage("Telefone excede o limite permitido."); return; }
     const { data: session } = await supabase.auth.getSession();
-    const phoneResult = await fetch("/api/aluno/perfil", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.session?.access_token ?? ""}` }, body: JSON.stringify({ telefone: phoneValue || null }) });
-    const { error } = await supabase.from("perfis_publicos").update({ nome_publico: publicName }).eq("id", profile.id);
-    if (!error) setProfile({ ...profile, nome_publico: publicName });
-    if (phoneResult.ok) setPhone(phoneValue);
-    setMessage(error || !phoneResult.ok ? "Não foi possível salvar seu perfil." : "Perfil atualizado.");
+    const profileResult = await fetch("/api/aluno/perfil", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.session?.access_token ?? ""}` }, body: JSON.stringify({ nome: name || null, telefone: phoneValue || null, nome_publico: publicName || null }) });
+    const saved = await profileResult.json().catch(() => ({})) as { nome?: string | null; telefone?: string | null; nome_publico?: string; error?: string };
+    if (profileResult.ok) { setProfile({ ...profile, nome_publico: saved.nome_publico ?? publicName }); setFullName(saved.nome ?? name); setPhone(saved.telefone ?? phoneValue); }
+    setMessage(profileResult.ok ? "Perfil atualizado." : saved.error || "Não foi possível salvar seu perfil.");
     setPending(false);
   }
 
@@ -239,7 +245,8 @@ export function StudentAccount() {
   if (mode === "profile" && profile) return <div className="space-y-6">
     <AccountCard title="Seu perfil na comunidade" description="Somente o nome público aparece nos comentários. Seu e-mail nunca é exibido publicamente.">
       <form action={saveProfile} className="space-y-4">
-        <Field label="Nome público" name="public_name" defaultValue={profile.nome_publico} />
+        <Field label="Nome completo" name="nome" defaultValue={fullName} hint="Nome administrativo associado à sua conta." required={false} />
+        <Field label="Nome público" name="public_name" defaultValue={profile.nome_publico} hint="Nome exibido para outras pessoas na plataforma." />
         <Field label="Telefone" name="telefone" defaultValue={phone} placeholder="(00) 00000-0000" />
         <p className="text-sm text-slate-500">E-mail de acesso: {email}<br />Precisa alterar seu e-mail? Entre em contato com nossa equipe.</p>
         <PrimaryButton pending={pending}>Salvar perfil</PrimaryButton>
@@ -261,15 +268,15 @@ export function StudentAccount() {
 
   if (mode === "forgot") return <AccountCard title="Recuperar senha" description="Enviaremos um link seguro para o e-mail cadastrado."><form action={sendRecovery} className="space-y-4"><Field label="E-mail" name="email" type="email" /><PrimaryButton pending={pending}>Enviar link de recuperação</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="mt-5 font-bold text-blue-700 hover:underline">← Voltar ao login</button></AccountCard>;
 
-  return <AccountCard title={mode === "signup" ? "Criar conta" : "Entrar na sua conta"} description={mode === "signup" ? "Crie sua conta para acessar a plataforma." : "Informe seus dados de acesso para continuar."}><form action={authenticate} className="space-y-4">{mode === "signup" ? <Field label="Nome público" name="public_name" placeholder="Ex.: Maria Concursos" /> : null}<Field label="E-mail" name="email" type="email" /><Field label="Senha" name="password" type="password" minLength={8} /><PrimaryButton pending={pending}>{mode === "signup" ? "Criar conta" : "Entrar"}</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><div className="mt-5 flex flex-wrap gap-5 text-sm"><button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">{mode === "login" ? "Criar uma conta" : "Já tenho uma conta"}</button>{mode === "login" ? <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }} className="font-bold text-slate-600 hover:text-blue-700 hover:underline">Esqueci minha senha</button> : null}</div></AccountCard>;
+  return <AccountCard title={mode === "signup" ? "Criar conta" : "Entrar na sua conta"} description={mode === "signup" ? "Crie sua conta para acessar a plataforma." : "Informe seus dados de acesso para continuar."}><form action={authenticate} className="space-y-4"><input type="hidden" name="form_mode" value={mode === "signup" ? "signup" : "login"} />{mode === "signup" ? <><Field label="Nome completo" name="nome" placeholder="Ex.: Gustavo Santos" /><Field label="Nome público (opcional)" name="public_name" placeholder="Ex.: Gustavo" hint="É o nome que poderá aparecer para outras pessoas na plataforma. Se deixar em branco, criaremos um nome automaticamente." required={false} /></> : null}<Field label="E-mail" name="email" type="email" /><Field label="Senha" name="password" type="password" minLength={8} /><PrimaryButton pending={pending}>{mode === "signup" ? "Criar conta" : "Entrar"}</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><div className="mt-5 flex flex-wrap gap-5 text-sm">{mode === "login" ? <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Criar uma conta</button> : <button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Já tenho uma conta</button>}{mode === "login" ? <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }} className="font-bold text-slate-600 hover:text-blue-700 hover:underline">Esqueci minha senha</button> : null}</div></AccountCard>;
 }
 
 function AccountCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return <div className="space-y-6"><div><h1 className="text-3xl font-black text-[#062a5f]">{title}</h1><p className="mt-2 text-slate-600">{description}</p></div><div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">{children}</div></div>;
 }
 
-function Field({ label, name, type = "text", minLength, defaultValue, placeholder, autoComplete }: { label: string; name: string; type?: string; minLength?: number; defaultValue?: string; placeholder?: string; autoComplete?: string }) {
-  return <label className="block text-sm font-bold text-slate-700">{label}<input name={name} type={type} minLength={minLength} defaultValue={defaultValue} placeholder={placeholder} autoComplete={autoComplete ?? (type === "password" ? "current-password" : undefined)} required className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-4 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" /></label>;
+function Field({ label, name, type = "text", minLength, defaultValue, placeholder, autoComplete, hint, required = true }: { label: string; name: string; type?: string; minLength?: number; defaultValue?: string; placeholder?: string; autoComplete?: string; hint?: string; required?: boolean }) {
+  return <label className="block text-sm font-bold text-slate-700">{label}{hint ? <small className="mt-1 block font-normal text-slate-500">{hint}</small> : null}<input name={name} type={type} minLength={minLength} defaultValue={defaultValue} placeholder={placeholder} autoComplete={autoComplete ?? (type === "password" ? "current-password" : undefined)} required={required} className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-4 font-normal outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" /></label>;
 }
 
 function PrimaryButton({ pending, children }: { pending: boolean; children: React.ReactNode }) {

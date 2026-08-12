@@ -70,6 +70,9 @@ function isMissingPostSaleSchema(result: { error: { code?: string; message?: str
   const message = String(result.error?.message ?? "").toLowerCase();
   return ["42p01", "pgrst205"].includes(String(result.error?.code ?? "").toLowerCase()) || message.includes("alunos_pos_venda");
 }
+function postSaleStages({ accessActive, emailSent, firstAccessAt, stage5At, stage6At }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown }) {
+  return [true, accessActive, emailSent, Boolean(firstAccessAt), Boolean(stage5At), Boolean(stage6At)];
+}
 
 async function rpc(name: string, params: JsonObject) {
   if (name === "admin_mesclar_alunos") {
@@ -170,7 +173,12 @@ export async function getCommercialResource(resource: CommercialResource, reques
     ]);
     assertQuery(result);
     assertQuery(summary);
-    const items = result.data ?? [];
+    const items = (result.data ?? []) as Record<string, unknown>[];
+    const userIds = items.map((item) => String(item.user_id ?? "")).filter(Boolean);
+    const profiles = userIds.length ? await supabase.from("perfis_publicos").select("id,nome_publico").in("id", userIds) : { data: [], error: null };
+    assertQuery(profiles);
+    const names = new Map((profiles.data ?? []).map((profile) => [String(profile.id), profile.nome_publico]));
+    for (const item of items) item.nome_publico = names.get(String(item.user_id ?? "")) ?? null;
     const total = Number(items[0]?.total_count ?? 0);
     return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 } };
   }
@@ -545,6 +553,48 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const action = requiredString(body.action, "Ação", 40);
   rejectUnknownKeys(body, ["action", "id", "data", "lei_ids"]);
 
+  if (resource === "alunos" && action === "crm_compras") {
+    const alunoId = uuid(body.id, "Aluno"); const supabase = getSupabaseServerClient();
+    const [student, purchases] = await Promise.all([
+      supabase.from("alunos").select("primeiro_acesso_em,ultimo_acesso_em").eq("id", alunoId).maybeSingle(),
+      supabase.from("compras").select("id,produto_id,adquirida_em,status_acesso,origem,identificador_externo,produtos(nome)").eq("aluno_id", alunoId).eq("status_acesso", "ativo").order("adquirida_em", { ascending: false }),
+    ]);
+    if (student.error || !student.data || purchases.error) throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
+    const studentData = student.data;
+    const ids = (purchases.data ?? []).map((p) => p.id);
+    const [manualRows, historyRows] = ids.length ? await Promise.all([supabase.from("compras_pos_venda").select("*").in("compra_id", ids), supabase.from("compras_pos_venda_historico").select("*").in("compra_id", ids).order("created_at", { ascending: false })]) : [{ data: [], error: null }, { data: [], error: null }];
+    if (manualRows.error || historyRows.error) throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+    const manualBy = new Map((manualRows.data ?? []).map((row) => [row.compra_id, row]));
+    const cycles = await Promise.all((purchases.data ?? []).map(async (purchase) => {
+      const email = await supabase.from("alunos_notificacoes_acesso").select("status,enviado_em,erro").eq("aluno_id", alunoId).ilike("idempotency_key", `%${purchase.id}%`).order("criado_em", { ascending: false }).limit(1);
+      const state = manualBy.get(purchase.id); const emailSent = email.data?.[0]?.status === "enviado";
+      const stages = postSaleStages({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });
+      const next = stages.findIndex((done) => !done) + 1;
+      return { ...purchase, etapas: stages, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), email: email.data?.[0] ?? null, primeiro_acesso_em: studentData.primeiro_acesso_em };
+    }));
+    return { cycles };
+  }
+  if (resource === "alunos" && action === "crm_pendencias") {
+    const supabase = getSupabaseServerClient();
+    const purchases = await supabase.from("compras").select("id,aluno_id,adquirida_em,status_acesso,produtos(nome),alunos(nome,email,telefone,primeiro_acesso_em)").eq("status_acesso", "ativo").order("adquirida_em", { ascending: true }).limit(200);
+    if (purchases.error) throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+    const ids = (purchases.data ?? []).map((row) => row.id);
+    const [manual, notices] = ids.length ? await Promise.all([supabase.from("compras_pos_venda").select("*").in("compra_id", ids), supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status").in("aluno_id", [...new Set((purchases.data ?? []).map((row) => row.aluno_id))])]) : [{ data: [], error: null }, { data: [], error: null }];
+    if (notices.error) throw new CommercialHttpError(500, "Não foi possível consultar os e-mails de acesso.");
+    const unavailable = Boolean(manual.error);
+    const manualBy = new Map((manual.data ?? []).map((row) => [row.compra_id, row])); const counts=[0,0,0,0,0,0];
+    const items=(purchases.data??[]).map((purchase)=>{const student=asObject(purchase.alunos);const product=asObject(purchase.produtos);const state=manualBy.get(purchase.id);const sent=(notices.data??[]).some((notice)=>notice.aluno_id===purchase.aluno_id&&notice.status==="enviado"&&String(notice.idempotency_key).includes(String(purchase.id)));const stages=postSaleStages({ accessActive: purchase.status_acesso==="ativo", emailSent: sent, firstAccessAt: student.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });const next=stages.findIndex((done)=>!done)+1;if(next)counts[next-1]+=1;return { compra_id:purchase.id, aluno_id:purchase.aluno_id,nome:student.nome??null,email:student.email??null,telefone:student.telefone??null,produto:String(product.nome ?? "")||"Produto",adquirida_em:purchase.adquirida_em,proxima_etapa:next,etapas:stages};}).filter((item)=>item.proxima_etapa>0);
+    return { unavailable, message: unavailable ? "A migration 20260812130000_move_post_sale_to_purchases.sql precisa ser aplicada para concluir e registrar as etapas manuais." : null, items, counts };
+  }
+  if (resource === "alunos" && action === "crm_compra_atualizar") {
+    const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "observacao"]);
+    const etapa = Number(data.etapa); if (![5, 6].includes(etapa)) throw new CommercialValidationError("Somente as etapas 5 e 6 são manuais.");
+    const supabase = getSupabaseServerClient(); const now = new Date().toISOString();
+    const saved = await supabase.from("compras_pos_venda").upsert({ compra_id: compraId, ...(etapa === 5 ? { etapa_5_concluida_em: now } : { etapa_6_concluida_em: now }), updated_at: now }, { onConflict: "compra_id" });
+    if (saved.error) throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+    const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: `etapa_${etapa}_concluida`, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
+  }
+
   if (resource === "alunos" && action === "crm_detalhe") {
     const alunoId = uuid(body.id, "Aluno");
     const supabase = getSupabaseServerClient();
@@ -566,7 +616,28 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const uso = String(posVenda.uso_questoes_status ?? "nao_confirmado");
     const concluidas = Number(temAcesso) + Number(email?.status === "enviado" || Boolean(email && "created_at" in email)) + Number(Boolean(student.data.primeiro_acesso_em)) + Number(Boolean(posVenda.whatsapp_enviado_em)) + Number(uso === "conseguiu_utilizar" || uso === "problema_resolvido") + Number(Boolean(posVenda.suporte_inicial_concluido_em));
     const proximaAcao = !temAcesso ? "Liberar acesso" : !(email?.status === "enviado" || Boolean(email && "created_at" in email)) ? "Verificar envio do e-mail" : !student.data.primeiro_acesso_em ? "Aguardar primeiro acesso" : !posVenda.whatsapp_enviado_em ? "Enviar WhatsApp" : uso === "precisa_ajuda" ? "Prestar suporte" : uso === "nao_confirmado" ? "Confirmar uso das questões" : "Pós-venda concluído";
-    return { ...student.data, pos_venda: posVenda, historico: history.data ?? [], crm_disponivel: !crmUnavailable, crm_mensagem: crmUnavailable ? "O Mini-CRM está pronto na interface, mas a migration 20260812100000_create_student_post_sale_crm.sql ainda precisa ser aplicada para registrar o checklist e o histórico." : null, tem_acesso: temAcesso, produtos_ativos: purchases.data?.length ?? 0, email_status: email?.status ?? (email ? "enviado" : ""), email_em: email?.enviado_em ?? email?.created_at ?? null, concluidas, total_etapas: 6, proxima_acao: proximaAcao };
+    const profile = student.data.user_id ? await supabase.from("perfis_publicos").select("nome_publico").eq("id", student.data.user_id).maybeSingle() : { data: null, error: null };
+    assertQuery(profile);
+    return { ...student.data, nome_publico: profile.data?.nome_publico ?? null, pos_venda: posVenda, historico: history.data ?? [], crm_disponivel: !crmUnavailable, crm_mensagem: crmUnavailable ? "O Mini-CRM está pronto na interface, mas a migration 20260812100000_create_student_post_sale_crm.sql ainda precisa ser aplicada para registrar o checklist e o histórico." : null, tem_acesso: temAcesso, produtos_ativos: purchases.data?.length ?? 0, email_status: email?.status ?? (email ? "enviado" : ""), email_em: email?.enviado_em ?? email?.created_at ?? null, concluidas, total_etapas: 6, proxima_acao: proximaAcao };
+  }
+  if (resource === "alunos" && action === "atualizar_ficha") {
+    const alunoId = uuid(body.id, "Aluno"); const data = asObject(body.data);
+    rejectUnknownKeys(data, ["nome", "telefone", "nome_publico"]);
+    const nome = optionalString(data.nome, "Nome completo", 300) ?? null;
+    const telefone = optionalString(data.telefone, "Telefone", 80) ?? null;
+    const nomePublico = optionalString(data.nome_publico, "Nome público", 50) ?? null;
+    const supabase = getSupabaseServerClient();
+    const current = await supabase.from("alunos").select("id,user_id,nome,telefone").eq("id", alunoId).maybeSingle();
+    if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
+    const updated = await supabase.from("alunos").update({ nome, telefone }).eq("id", alunoId).select("id,user_id,nome,email,telefone").single();
+    if (updated.error || !updated.data) throw new CommercialHttpError(500, "Não foi possível atualizar a ficha do aluno.");
+    if (current.data.user_id) {
+      const profile = await supabase.from("perfis_publicos").update({ nome_publico: nomePublico || null }).eq("id", current.data.user_id);
+      if (profile.error) throw new CommercialHttpError(profile.error.code === "23505" ? 409 : 500, profile.error.code === "23505" ? "Este nome público já está em uso." : "Não foi possível atualizar o nome público.");
+    }
+    const audit = await supabase.from("auditoria_administrativa").insert({ ator_user_id: actor, acao: "atualizar_ficha", entidade: "aluno", entidade_id: alunoId, estado_anterior: current.data, estado_posterior: { ...updated.data, nome_publico: nomePublico } });
+    assertQuery(audit);
+    return { ...updated.data, nome_publico: nomePublico };
   }
   if (resource === "alunos" && action === "crm_atualizar") {
     const alunoId = uuid(body.id, "Aluno");
