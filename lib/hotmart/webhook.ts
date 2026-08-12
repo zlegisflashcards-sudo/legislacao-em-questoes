@@ -49,6 +49,35 @@ function dataHotmart(valor: unknown) {
   return data && !Number.isNaN(data.getTime()) ? data.toISOString() : null;
 }
 
+function mensagemErroAdminSegura(error: unknown) {
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message) return message.slice(0, 1000);
+  }
+  if (typeof error === "string" && error.trim()) return error.trim().slice(0, 1000);
+  return "Falha nao identificada no processamento da Hotmart.";
+}
+
+async function obterOuCriarAlunoHotmart(
+  supabase: SupabaseClient,
+  evento: EventoHotmartNormalizado,
+  alunoExistenteId?: string | null,
+) {
+  if (alunoExistenteId) {
+    return alunoExistenteId;
+  }
+
+  const criado = await supabase.rpc("obter_ou_criar_aluno_por_email", {
+    p_email: evento.email_comprador,
+    p_nome: evento.nome_comprador,
+    p_telefone: evento.telefone_comprador,
+  });
+  if (criado.error || !criado.data) {
+    throw criado.error ?? new Error("Nao foi possivel localizar ou criar o aluno.");
+  }
+  return criado.data as string;
+}
+
 export function validarHottok(recebido: string | null, esperado: string | undefined) {
   if (!recebido || !esperado) return false;
   const recebidoBuffer = Buffer.from(recebido);
@@ -137,7 +166,7 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
     if (atualizado.error) throw atualizado.error;
     return { duplicate };
   } catch (processingError) {
-    const mensagem = processingError instanceof Error ? processingError.message.slice(0, 1000) : "Erro desconhecido";
+    const mensagem = mensagemErroAdminSegura(processingError);
     const atualizado = await supabase
       .from("hotmart_eventos")
       .update({ processado: false, erro_processamento: mensagem })
@@ -204,10 +233,19 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
     .maybeSingle();
   if (compraExistente.error) throw compraExistente.error;
   if (compraExistente.data) {
+    const alunoId = await obterOuCriarAlunoHotmart(supabase, evento, compraExistente.data.aluno_id as string | null | undefined);
+    if (!compraExistente.data.aluno_id) {
+      const vinculo = await supabase
+        .from("compras")
+        .update({ aluno_id: alunoId })
+        .eq("id", compraExistente.data.id)
+        .is("aluno_id", null);
+      if (vinculo.error) throw vinculo.error;
+    }
     await liberarLeisDaCompra(
       supabase,
       compraExistente.data.id as string,
-      compraExistente.data.aluno_id as string,
+      alunoId,
       compraExistente.data.produto_id as string,
     );
     return { duplicate: true };

@@ -40,6 +40,7 @@ function supabaseComRespostas(...steps: Step[]) {
       const query = {
         select: () => query,
         eq: () => query,
+        is: () => query,
         ilike: () => query,
         limit: () => query,
         insert: (value: unknown) => { calls.push({ table, operation: "insert", value }); return query; },
@@ -128,7 +129,7 @@ describe("recepção de webhook Hotmart", () => {
 
   it("reutiliza aluno existente e não cria liberações para transação já registrada", async () => {
     const { client, calls } = supabaseComRespostas(
-      {}, { data: { id: "compra-existente" } }, {},
+      {}, { data: { id: "compra-existente", aluno_id: "aluno-1", produto_id: "produto-1" } }, {},
     );
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
     expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
@@ -144,6 +145,39 @@ describe("recepção de webhook Hotmart", () => {
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
     expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
     expect(calls).toContainEqual(expect.objectContaining({ table: "compras", operation: "insert" }));
+  });
+
+  it("reaproveita compra Hotmart existente vinculando o aluno quando a compra estava órfã", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {},
+      { data: { id: "compra-orfa", aluno_id: null, produto_id: "produto-1" } },
+      { data: "aluno-reaproveitado" },
+      {},
+      { data: [{ lei_id: 1 }, { lei_id: 2 }] },
+      { data: [] },
+      {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    expect(calls).toContainEqual(expect.objectContaining({
+      table: "compras",
+      operation: "update",
+      value: expect.objectContaining({ aluno_id: "aluno-reaproveitado" }),
+    }));
+    expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "insert" }));
+  });
+
+  it("reaproveita compra Hotmart existente sem recriar aluno quando o vínculo já existe", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {},
+      { data: { id: "compra-vinculada", aluno_id: "aluno-1", produto_id: "produto-1" } },
+      {},
+      { data: [{ lei_id: 1 }] },
+      { data: [] },
+      {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(false);
+    expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
   });
 
   it("registra erro quando o produto Hotmart é desconhecido", async () => {
