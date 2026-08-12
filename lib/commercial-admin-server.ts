@@ -70,8 +70,23 @@ function isMissingPostSaleSchema(result: { error: { code?: string; message?: str
   const message = String(result.error?.message ?? "").toLowerCase();
   return ["42p01", "pgrst205"].includes(String(result.error?.code ?? "").toLowerCase()) || message.includes("alunos_pos_venda");
 }
+function isMissingPurchasePostSaleSchema(result: { error: { code?: string; message?: string } | null }) {
+  const message = String(result.error?.message ?? "").toLowerCase();
+  return ["42p01", "pgrst205"].includes(String(result.error?.code ?? "").toLowerCase())
+    && (message.includes("compras_pos_venda") || message.includes("relation"));
+}
 function postSaleStages({ accessActive, emailSent, firstAccessAt, stage5At, stage6At }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown }) {
   return [true, accessActive, emailSent, Boolean(firstAccessAt), Boolean(stage5At), Boolean(stage6At)];
+}
+
+function logCommercialDbError(context: string, error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined, extra: Record<string, unknown> = {}) {
+  console.error(context, {
+    ...extra,
+    code: error?.code ?? null,
+    message: String(error?.message ?? "").replace(/[\r\n]+/g, " ").slice(0, 500),
+    details: String(error?.details ?? "").replace(/[\r\n]+/g, " ").slice(0, 500),
+    hint: String(error?.hint ?? "").replace(/[\r\n]+/g, " ").slice(0, 500),
+  });
 }
 
 async function rpc(name: string, params: JsonObject) {
@@ -557,33 +572,87 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const alunoId = uuid(body.id, "Aluno"); const supabase = getSupabaseServerClient();
     const [student, purchases] = await Promise.all([
       supabase.from("alunos").select("primeiro_acesso_em,ultimo_acesso_em").eq("id", alunoId).maybeSingle(),
-      supabase.from("compras").select("id,produto_id,adquirida_em,status_acesso,origem,identificador_externo,produtos(nome)").eq("aluno_id", alunoId).eq("status_acesso", "ativo").order("adquirida_em", { ascending: false }),
+      supabase.from("compras").select("id,produto_id,adquirida_em,status_acesso,origem,identificador_externo").eq("aluno_id", alunoId).eq("status_acesso", "ativo").order("adquirida_em", { ascending: false }),
     ]);
-    if (student.error || !student.data || purchases.error) throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
+    if (student.error || !student.data || purchases.error) {
+      logCommercialDbError("Falha ao carregar o Mini-CRM por compra", student.error ?? purchases.error, { alunoId, etapa: "carregar_compras" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
+    }
     const studentData = student.data;
     const ids = (purchases.data ?? []).map((p) => p.id);
-    const [manualRows, historyRows] = ids.length ? await Promise.all([supabase.from("compras_pos_venda").select("*").in("compra_id", ids), supabase.from("compras_pos_venda_historico").select("*").in("compra_id", ids).order("created_at", { ascending: false })]) : [{ data: [], error: null }, { data: [], error: null }];
-    if (manualRows.error || historyRows.error) throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+    const [products, manualRows, historyRows, notices] = ids.length
+      ? await Promise.all([
+        supabase.from("produtos").select("id,nome").in("id", [...new Set((purchases.data ?? []).map((purchase) => purchase.produto_id).filter(Boolean))]),
+        supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
+        supabase.from("compras_pos_venda_historico").select("*").in("compra_id", ids).order("created_at", { ascending: false }),
+        supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em,erro").eq("aluno_id", alunoId),
+      ])
+      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+    if (products.error) {
+      logCommercialDbError("Falha ao carregar produtos do Mini-CRM por compra", products.error, { alunoId, etapa: "carregar_produtos" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
+    }
+    if (manualRows.error || historyRows.error) {
+      const error = manualRows.error ?? historyRows.error;
+      logCommercialDbError("Falha ao carregar dados manuais do Mini-CRM por compra", error, { alunoId, etapa: "carregar_crm" });
+      if (isMissingPurchasePostSaleSchema({ error })) {
+        throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+      }
+      throw new CommercialHttpError(500, "Não foi possível carregar as etapas manuais do pós-venda.");
+    }
+    if (notices.error) {
+      logCommercialDbError("Falha ao carregar notificações do Mini-CRM por compra", notices.error, { alunoId, etapa: "carregar_notificacoes" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
+    }
     const manualBy = new Map((manualRows.data ?? []).map((row) => [row.compra_id, row]));
+    const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
     const cycles = await Promise.all((purchases.data ?? []).map(async (purchase) => {
-      const email = await supabase.from("alunos_notificacoes_acesso").select("status,enviado_em,erro").eq("aluno_id", alunoId).ilike("idempotency_key", `%${purchase.id}%`).order("criado_em", { ascending: false }).limit(1);
-      const state = manualBy.get(purchase.id); const emailSent = email.data?.[0]?.status === "enviado";
+      const email = (notices.data ?? []).filter((notice) => notice.status === "enviado" && String(notice.idempotency_key).includes(String(purchase.id))).sort((left, right) => String(right.criado_em ?? "").localeCompare(String(left.criado_em ?? "")))[0] ?? null;
+      const state = manualBy.get(purchase.id); const emailSent = email?.status === "enviado";
       const stages = postSaleStages({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });
       const next = stages.findIndex((done) => !done) + 1;
-      return { ...purchase, etapas: stages, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), email: email.data?.[0] ?? null, primeiro_acesso_em: studentData.primeiro_acesso_em };
+      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), email, primeiro_acesso_em: studentData.primeiro_acesso_em };
     }));
     return { cycles };
   }
   if (resource === "alunos" && action === "crm_pendencias") {
     const supabase = getSupabaseServerClient();
-    const purchases = await supabase.from("compras").select("id,aluno_id,adquirida_em,status_acesso,produtos(nome),alunos(nome,email,telefone,primeiro_acesso_em)").eq("status_acesso", "ativo").order("adquirida_em", { ascending: true }).limit(200);
-    if (purchases.error) throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+    const purchases = await supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso").eq("status_acesso", "ativo").order("adquirida_em", { ascending: true }).limit(200);
+    if (purchases.error) {
+      logCommercialDbError("Falha ao carregar pendências do Mini-CRM", purchases.error, { etapa: "carregar_pendencias" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+    }
     const ids = (purchases.data ?? []).map((row) => row.id);
-    const [manual, notices] = ids.length ? await Promise.all([supabase.from("compras_pos_venda").select("*").in("compra_id", ids), supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status").in("aluno_id", [...new Set((purchases.data ?? []).map((row) => row.aluno_id))])]) : [{ data: [], error: null }, { data: [], error: null }];
-    if (notices.error) throw new CommercialHttpError(500, "Não foi possível consultar os e-mails de acesso.");
+    const studentIds = [...new Set((purchases.data ?? []).map((row) => row.aluno_id))];
+    const productIds = [...new Set((purchases.data ?? []).map((row) => row.produto_id).filter(Boolean))];
+    const [manual, notices, students, products] = ids.length ? await Promise.all([
+      supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
+      supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status").in("aluno_id", studentIds),
+      supabase.from("alunos").select("id,nome,email,telefone,primeiro_acesso_em").in("id", studentIds),
+      supabase.from("produtos").select("id,nome").in("id", productIds),
+    ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+    if (notices.error) {
+      logCommercialDbError("Falha ao consultar notificações do Mini-CRM", notices.error, { etapa: "carregar_notificacoes" });
+      throw new CommercialHttpError(500, "Não foi possível consultar os e-mails de acesso.");
+    }
+    if (students.error) {
+      logCommercialDbError("Falha ao consultar alunos do Mini-CRM", students.error, { etapa: "carregar_alunos" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+    }
+    if (products.error) {
+      logCommercialDbError("Falha ao consultar produtos do Mini-CRM", products.error, { etapa: "carregar_produtos" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+    }
+    if (manual.error && !isMissingPurchasePostSaleSchema(manual)) {
+      logCommercialDbError("Falha ao carregar etapas manuais do Mini-CRM na fila", manual.error, { etapa: "carregar_schema_opcional" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as etapas manuais do pós-venda.");
+    }
     const unavailable = Boolean(manual.error);
+    if (manual.error) logCommercialDbError("Mini-CRM por compra sem schema completo na fila", manual.error, { etapa: "carregar_schema_opcional" });
     const manualBy = new Map((manual.data ?? []).map((row) => [row.compra_id, row])); const counts=[0,0,0,0,0,0];
-    const items=(purchases.data??[]).map((purchase)=>{const student=asObject(purchase.alunos);const product=asObject(purchase.produtos);const state=manualBy.get(purchase.id);const sent=(notices.data??[]).some((notice)=>notice.aluno_id===purchase.aluno_id&&notice.status==="enviado"&&String(notice.idempotency_key).includes(String(purchase.id)));const stages=postSaleStages({ accessActive: purchase.status_acesso==="ativo", emailSent: sent, firstAccessAt: student.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });const next=stages.findIndex((done)=>!done)+1;if(next)counts[next-1]+=1;return { compra_id:purchase.id, aluno_id:purchase.aluno_id,nome:student.nome??null,email:student.email??null,telefone:student.telefone??null,produto:String(product.nome ?? "")||"Produto",adquirida_em:purchase.adquirida_em,proxima_etapa:next,etapas:stages};}).filter((item)=>item.proxima_etapa>0);
+    const studentById = new Map((students.data ?? []).map((row) => [row.id, row]));
+    const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
+    const items=(purchases.data??[]).map((purchase)=>{const student=studentById.get(purchase.aluno_id) as { nome?: unknown; email?: unknown; telefone?: unknown; primeiro_acesso_em?: unknown } | undefined;const productName=productById.get(purchase.produto_id) ?? "Produto";const state=manualBy.get(purchase.id);const sent=(notices.data??[]).some((notice)=>notice.aluno_id===purchase.aluno_id&&notice.status==="enviado"&&String(notice.idempotency_key).includes(String(purchase.id)));const stages=postSaleStages({ accessActive: purchase.status_acesso==="ativo", emailSent: sent, firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });const next=stages.findIndex((done)=>!done)+1;if(next)counts[next-1]+=1;return { compra_id:purchase.id, aluno_id:purchase.aluno_id,nome:student?.nome??null,email:student?.email??null,telefone:student?.telefone??null,produto:productName,adquirida_em:purchase.adquirida_em,proxima_etapa:next,etapas:stages};}).filter((item)=>item.proxima_etapa>0);
     return { unavailable, message: unavailable ? "A migration 20260812130000_move_post_sale_to_purchases.sql precisa ser aplicada para concluir e registrar as etapas manuais." : null, items, counts };
   }
   if (resource === "alunos" && action === "crm_compra_atualizar") {
@@ -591,7 +660,13 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const etapa = Number(data.etapa); if (![5, 6].includes(etapa)) throw new CommercialValidationError("Somente as etapas 5 e 6 são manuais.");
     const supabase = getSupabaseServerClient(); const now = new Date().toISOString();
     const saved = await supabase.from("compras_pos_venda").upsert({ compra_id: compraId, ...(etapa === 5 ? { etapa_5_concluida_em: now } : { etapa_6_concluida_em: now }), updated_at: now }, { onConflict: "compra_id" });
-    if (saved.error) throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+    if (saved.error) {
+      logCommercialDbError("Falha ao salvar etapa manual do Mini-CRM por compra", saved.error, { compraId, etapa });
+      if (isMissingPurchasePostSaleSchema(saved)) {
+        throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+      }
+      throw new CommercialHttpError(500, "Não foi possível salvar a etapa manual do pós-venda.");
+    }
     const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: `etapa_${etapa}_concluida`, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
   }
 
