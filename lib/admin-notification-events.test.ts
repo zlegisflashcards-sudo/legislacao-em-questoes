@@ -43,7 +43,7 @@ describe("eventos da central administrativa", () => {
   });
 
   it("expõe todos os tipos e mantém os links operacionais", () => {
-    for (const label of ["resposta_comentario", "denuncia_comentario", "nova_aquisicao", "nova_liberacao", "conta_ativada"]) expect(central).toContain(label);
+    for (const label of ["resposta_comentario", "denuncia_comentario", "nova_aquisicao", "nova_liberacao", "conta_ativada", "reembolso_solicitado", "reembolso_concluido", "acesso_restaurado"]) expect(central).toContain(label);
     expect(hotmart).toContain("/admin/comercial?tab=aquisicoes&q=");
     expect(commercial).toContain("/admin/comercial?tab=alunos&q=");
     expect(migration).toContain("/legisbot/");

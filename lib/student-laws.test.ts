@@ -120,7 +120,7 @@ describe("interface das leis adquiridas", () => {
     expect(client).toContain('fetch("/api/aluno/editais"');
     expect(client).toContain('action: included ? "remove" : "add"');
     expect(client).toContain('leiId: lawId');
-    expect(client).toContain('"+ Meu Edital"');
+    expect(client).toContain('"Adicionar ao edital"');
     expect(client).toContain(">✓ Meu Edital<");
     expect(client).toContain('aria-label="Remover do Meu Edital"');
     expect(client).toContain('title="Remover do Meu Edital"');

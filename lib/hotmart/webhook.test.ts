@@ -185,7 +185,7 @@ describe("recepção de webhook Hotmart", () => {
     );
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
     expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
-    expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(true);
+    expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(false);
   });
 
   it("registra erro quando o produto Hotmart é desconhecido", async () => {

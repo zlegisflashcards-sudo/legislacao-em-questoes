@@ -176,7 +176,7 @@ function StudentLawCard({ law, ankiConfigured, onAnkiRequired, inMyExam, examSav
     {inMyExam ? <div className="col-span-2 flex w-full flex-wrap items-center gap-x-2 gap-y-1 sm:w-auto">
       <span className="text-sm font-black text-emerald-700">✓ Meu Edital</span>
       <button type="button" aria-label="Remover do Meu Edital" title="Remover do Meu Edital" disabled={examSaving} onClick={() => void onToggleMyExam(law.id)} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-lg font-black leading-none text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-60">×</button>
-    </div> : <button type="button" disabled={examSaving} onClick={() => void onToggleMyExam(law.id)} className="col-span-2 min-h-10 w-full text-left text-sm font-bold text-blue-700 underline underline-offset-4 disabled:opacity-60 sm:w-auto">{examSaving ? "Adicionando…" : "+ Meu Edital"}</button>}
+    </div> : <button type="button" disabled={examSaving} onClick={() => void onToggleMyExam(law.id)} className="col-span-2 min-h-10 w-full text-left text-sm font-bold text-blue-700 underline underline-offset-4 disabled:opacity-60 sm:w-auto">{examSaving ? "Adicionando…" : "Adicionar ao edital"}</button>}
   </article>;
 }
 

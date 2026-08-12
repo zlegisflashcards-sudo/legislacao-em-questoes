@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createOperationalAdminNotification } from "../admin-notification-server";
 
 export type HotmartPayload = Record<string, unknown> & {
   id?: unknown;
@@ -152,9 +153,10 @@ async function sincronizarCompraHotmart(
   compra: { id: string; status?: string | null; status_acesso?: string | null; produto_id?: string | null; aluno_id?: string | null },
   evento: EventoHotmartNormalizado,
   acao: "ativar" | "reembolso_solicitado" | "revogar",
-) {
+): Promise<{ restored: boolean; refundRequested: boolean; concluded: boolean }> {
   const agora = evento.aprovada_em ?? new Date().toISOString();
   if (acao === "ativar") {
+    let restored = false;
     if (compra.status !== "aprovada" || compra.status_acesso !== "ativo") {
       await atualizarCompraHotmart(supabase, compra.id, {
         status: "aprovada",
@@ -166,34 +168,94 @@ async function sincronizarCompraHotmart(
         reativada_em: agora,
         reembolso_solicitado_em: null,
       });
+      restored = true;
     }
     if (compra.produto_id && compra.aluno_id) {
       await restaurarLiberacoesDaCompra(supabase, compra.id, compra.aluno_id, compra.produto_id);
     }
-    return;
+    return { restored, refundRequested: false, concluded: false };
   }
 
   if (acao === "reembolso_solicitado") {
+    let refundRequested = false;
     if (compra.status !== "reembolso_solicitado" || compra.status_acesso !== "reembolso_solicitado") {
       await atualizarCompraHotmart(supabase, compra.id, {
         status: "reembolso_solicitado",
         status_acesso: "reembolso_solicitado",
         reembolso_solicitado_em: agora,
       });
+      refundRequested = true;
     }
     await revogarLiberacoesDaCompra(supabase, compra.id, "cancelado", "Webhook Hotmart: pedido de reembolso");
-    return;
+    return { restored: false, refundRequested, concluded: false };
   }
 
   const perda = EVENTOS_PERDA_ACESSO[evento.tipo_evento as keyof typeof EVENTOS_PERDA_ACESSO] ?? EVENTOS_PERDA_ACESSO.PURCHASE_CANCELED;
+  let concluded = false;
   if (compra.status !== perda.status || compra.status_acesso !== perda.statusAcesso) {
     await atualizarCompraHotmart(supabase, compra.id, {
       status: perda.status,
       status_acesso: perda.statusAcesso,
       [perda.data]: agora,
     });
+    concluded = true;
   }
   await revogarLiberacoesDaCompra(supabase, compra.id, perda.statusLiberacao, `Webhook Hotmart: ${evento.tipo_evento}`);
+  return { restored: false, refundRequested: false, concluded };
+}
+
+function adminNotificationLink(transaction: string | null) {
+  return `/admin/comercial?tab=aquisicoes${transaction ? `&q=${encodeURIComponent(transaction)}` : ""}`;
+}
+
+function hotmartParticipantLabel(evento: EventoHotmartNormalizado, compra: { id: string; produto_id?: string | null; aluno_id?: string | null }) {
+  const aluno = evento.nome_comprador || evento.email_comprador || compra.aluno_id || "Aluno";
+  const produto = evento.hotmart_product_id || compra.produto_id || "produto Hotmart";
+  return { aluno, produto };
+}
+
+async function notificarMudancaReembolso(
+  supabase: SupabaseClient,
+  evento: EventoHotmartNormalizado,
+  compra: { id: string; produto_id?: string | null; aluno_id?: string | null },
+  resultado: { restored: boolean; refundRequested: boolean; concluded: boolean },
+) {
+  const entidadeBase = evento.codigo_transacao ?? compra.id;
+  const { aluno, produto } = hotmartParticipantLabel(evento, compra);
+  const dataHora = evento.aprovada_em ? ` Data/Hora: ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(evento.aprovada_em))}.` : "";
+
+  if (resultado.refundRequested) {
+    await createOperationalAdminNotification(supabase, {
+      tipo: "reembolso_solicitado",
+      titulo: "Reembolso solicitado",
+      mensagem: `${aluno} solicitou reembolso de ${produto}. O acesso correspondente foi suspenso.${dataHora}`,
+      link: adminNotificationLink(evento.codigo_transacao),
+      entidadeTipo: "reembolso_solicitado_hotmart",
+      entidadeId: `reembolso_solicitado:${entidadeBase}`,
+    });
+  }
+
+  if (resultado.concluded) {
+    await createOperationalAdminNotification(supabase, {
+      tipo: "reembolso_concluido",
+      titulo: evento.tipo_evento === "PURCHASE_CHARGEBACK" ? "Chargeback concluído" : evento.tipo_evento === "PURCHASE_PROTEST" ? "Protesto concluído" : "Reembolso concluído",
+      mensagem: `${aluno} teve a aquisição de ${produto} encerrada. O acesso dessa compra permanece revogado.${dataHora}`,
+      link: adminNotificationLink(evento.codigo_transacao),
+      entidadeTipo: "reembolso_concluido_hotmart",
+      entidadeId: `reembolso_concluido:${evento.tipo_evento}:${entidadeBase}`,
+    });
+  }
+
+  if (resultado.restored) {
+    await createOperationalAdminNotification(supabase, {
+      tipo: "acesso_restaurado",
+      titulo: "Acesso restaurado",
+      mensagem: `O acesso de ${aluno} ao produto ${produto} foi restaurado após atualização da Hotmart.${dataHora}`,
+      link: adminNotificationLink(evento.codigo_transacao),
+      entidadeTipo: "acesso_restaurado_hotmart",
+      entidadeId: `acesso_restaurado:${entidadeBase}`,
+    });
+  }
 }
 
 export function validarHottok(recebido: string | null, esperado: string | undefined) {
@@ -274,8 +336,24 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
   }
 
   try {
-    if (acao === "ativar") await processarVendaAprovadaHotmart(supabase, normalizado, onValidAcquisition);
-    else await processarAtualizacaoAcessoHotmart(supabase, normalizado, acao);
+    let resultadoAtualizacao: { restored: boolean; refundRequested: boolean; concluded: boolean } | null = null;
+    if (acao === "ativar") {
+      const resultadoVenda = await processarVendaAprovadaHotmart(supabase, normalizado, onValidAcquisition);
+      resultadoAtualizacao = resultadoVenda.restaurado ? { restored: true, refundRequested: false, concluded: false } : null;
+    } else {
+      resultadoAtualizacao = await processarAtualizacaoAcessoHotmart(supabase, normalizado, acao);
+    }
+    if (resultadoAtualizacao) {
+      const compra = await supabase
+        .from("compras")
+        .select("id,produto_id,aluno_id")
+        .eq("origem", "hotmart")
+        .eq("identificador_externo", normalizado.codigo_transacao)
+        .maybeSingle();
+      if (!compra.error && compra.data) {
+        await notificarMudancaReembolso(supabase, normalizado, compra.data as { id: string; produto_id?: string | null; aluno_id?: string | null }, resultadoAtualizacao);
+      }
+    }
     const atualizado = await supabase
       .from("hotmart_eventos")
       .update({ processado: true, erro_processamento: null })
@@ -297,7 +375,7 @@ export async function processarAtualizacaoAcessoHotmart(
   supabase: SupabaseClient,
   evento: EventoHotmartNormalizado,
   acao: "reembolso_solicitado" | "revogar",
-) {
+): Promise<{ restored: boolean; refundRequested: boolean; concluded: boolean } | null> {
   if (!evento.codigo_transacao) throw new Error("Evento Hotmart sem código da transação.");
 
   if (evento.hotmart_product_id) {
@@ -307,7 +385,7 @@ export async function processarAtualizacaoAcessoHotmart(
       .eq("hotmart_product_id", evento.hotmart_product_id)
       .maybeSingle();
     if (produto.error) throw produto.error;
-    if (!produto.data) return { ignored: true };
+    if (!produto.data) return null;
   }
 
   const compra = await supabase
@@ -319,8 +397,7 @@ export async function processarAtualizacaoAcessoHotmart(
   if (compra.error) throw compra.error;
   if (!compra.data) throw new Error("Compra Hotmart não encontrada para a transação.");
 
-  await sincronizarCompraHotmart(supabase, compra.data as { id: string; produto_id?: string | null; aluno_id?: string | null }, evento, acao);
-  return { ignored: false };
+  return sincronizarCompraHotmart(supabase, compra.data as { id: string; status?: string | null; status_acesso?: string | null; produto_id?: string | null; aluno_id?: string | null }, evento, acao);
 }
 
 export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, evento: EventoHotmartNormalizado, onValidAcquisition?: ValidAcquisitionHandler) {
@@ -330,7 +407,7 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
 
   const compraExistente = await supabase
     .from("compras")
-    .select("id,aluno_id,produto_id")
+    .select("id,aluno_id,produto_id,status,status_acesso")
     .eq("origem", "hotmart")
     .eq("identificador_externo", evento.codigo_transacao)
     .maybeSingle();
@@ -345,17 +422,21 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
         .is("aluno_id", null);
       if (vinculo.error) throw vinculo.error;
     }
-    await sincronizarCompraHotmart(
-      supabase,
-      {
-        id: compraExistente.data.id as string,
-        produto_id: compraExistente.data.produto_id as string,
-        aluno_id: alunoId,
-      },
-      evento,
-      "ativar",
-    );
-    return { duplicate: true };
+    return {
+      duplicate: true,
+      restaurado: (await sincronizarCompraHotmart(
+        supabase,
+        {
+          id: compraExistente.data.id as string,
+          status: compraExistente.data.status as string | null,
+          status_acesso: compraExistente.data.status_acesso as string | null,
+          produto_id: compraExistente.data.produto_id as string,
+          aluno_id: alunoId,
+        },
+        evento,
+        "ativar",
+      )).restored,
+    };
   }
 
   const produto = await supabase
@@ -413,5 +494,5 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
 
   await restaurarLiberacoesDaCompra(supabase, compraCriada.id as string, alunoId, produtoInterno.id as string);
   if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.codigo_transacao}`, accessLabel: produtoInterno.nome as string });
-  return { duplicate: false };
+  return { duplicate: false, restaurado: false };
 }
