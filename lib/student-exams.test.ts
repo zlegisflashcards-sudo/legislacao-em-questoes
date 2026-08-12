@@ -65,4 +65,17 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain("ProgressControl");
     expect(client).not.toContain("current.tipo === \"personalizado\" ? <ProgressControl");
   });
+
+  it("usa checkbox visual responsivo em vez de check textual verde", () => {
+    const client = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(client).toContain('aria-label={`${label} ${checked ? "concluído" : "não concluído"}`');
+    expect(client).toContain('className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold');
+    expect(client).toContain('className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2');
+    expect(client).toContain('"border-blue-200 bg-blue-50 text-slate-700"');
+    expect(client).toContain('"border-slate-200 bg-white text-slate-500 hover:bg-slate-50"');
+    expect(client).toContain('text-blue-800">✓</span>');
+    expect(client).not.toContain('text-emerald-700');
+    expect(client).not.toContain('}✓');
+    expect(client).not.toContain('}☐');
+  });
 });
