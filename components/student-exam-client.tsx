@@ -132,7 +132,7 @@ export function StudentExamClient() {
     <header className="mb-8">
       <p className="font-bold text-blue-700">Área do aluno</p>
       <div className="mt-1 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{current?.nome ?? "Meu edital personalizado"}</h1>
+        <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{current?.nome ?? "Meus editais"}</h1>
         {current?.tipo === "personalizado" && !editing ? <button type="button" onClick={() => { setName(current.nome); setEditing(true); }} className="rounded-lg px-2 py-1 text-sm font-bold text-blue-700 underline underline-offset-4">Editar nome</button> : null}
       </div>
       {editing ? <div className="mt-3 flex flex-wrap gap-2">

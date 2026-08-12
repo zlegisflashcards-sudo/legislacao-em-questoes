@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { googleDriveDownloadUrl, googleDriveFileId, isAccessibleMaterialReference, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, materialAccessReference, parseMaterialId, safeDownloadFileName } from "./law-material-download";
+import { attachmentDisposition, googleDriveDownloadUrl, googleDriveFileId, isAccessibleMaterialReference, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, lawDownloadFileName, materialAccessReference, originalFileNameFromDisposition, parseMaterialId, safeDownloadFileName } from "./law-material-download";
 
 const server = readFileSync("lib/law-material-download-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/estudar/lei/[slug]/materiais/[materialId]/download/route.ts", "utf8");
@@ -44,6 +44,17 @@ describe("referências seguras de material", () => {
     expect(safeDownloadFileName("Legislação em Questões\r\nmalicioso", "flashcards")).toBe("Legislacao-em-Questoesmalicioso.apkg");
     expect(safeDownloadFileName("Lei esquematizada", "pdf")).toBe("Lei-esquematizada.pdf");
   });
+
+  it("usa o nome sanitizado da lei e preserva somente a extensão original", () => {
+    expect(originalFileNameFromDisposition("attachment; filename*=UTF-8''Lei%2014.751-2023.apkg")).toBe("Lei 14.751-2023.apkg");
+    expect(originalFileNameFromDisposition('attachment; filename="Lei Orgânica.pdf"')).toBe("Lei Orgânica.pdf");
+    expect(lawDownloadFileName("Lei 14.751/2023 — Lei Orgânica Nacional", "arquivo-original.apkg", "Flashcards", "flashcards")).toBe("Lei 14.751-2023 — Lei Orgânica Nacional.apkg");
+    expect(lawDownloadFileName("  Lei Orgânica  ", "arquivo-original.pdf", "PDF", "pdf")).toBe("Lei Orgânica.pdf");
+    expect(lawDownloadFileName("Lei: inválida?", "arquivo-original.pdf", "PDF", "pdf")).toBe("Lei inválida.pdf");
+    expect(lawDownloadFileName(null, "arquivo original.pdf", "PDF", "pdf")).toBe("arquivo original.pdf");
+    expect(lawDownloadFileName(null, null, "Flashcards", "flashcards")).toBe("Flashcards.apkg");
+    expect(attachmentDisposition("Lei Orgânica.pdf")).toContain("filename*=UTF-8''Lei%20Org%C3%A2nica.pdf");
+  });
 });
 
 describe("fronteira autenticada de download", () => {
@@ -68,6 +79,9 @@ describe("fronteira autenticada de download", () => {
     expect(route).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);
     expect(server).toContain('redirect: "follow"');
     expect(server).toContain('"Content-Disposition"');
+    expect(server).toContain("originalFileNameFromDisposition(upstream.headers.get");
+    expect(server).toContain("lawDownloadFileName(lawTitle, originalFileName, title, type)");
+    expect(server).toContain("attachmentDisposition(fileName)");
     expect(server).toContain('"Cache-Control": "private, no-store, max-age=0"');
     expect(server).toContain('"X-Content-Type-Options": "nosniff"');
     expect(server).not.toContain("signedUrl");
@@ -94,5 +108,6 @@ describe("interface de download", () => {
     expect(client).toContain("Material temporariamente indisponível");
     expect(client).toContain("Preparando download…");
     expect(client).toContain("Authorization: `Bearer ${token}`");
+    expect(client).toContain("originalFileNameFromDisposition(disposition)");
   });
 });

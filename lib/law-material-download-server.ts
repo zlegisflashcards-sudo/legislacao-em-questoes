@@ -1,7 +1,7 @@
 import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
-import { googleDriveDownloadUrl, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, parseMaterialId, safeDownloadFileName } from "@/lib/law-material-download";
+import { attachmentDisposition, googleDriveDownloadUrl, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, lawDownloadFileName, originalFileNameFromDisposition, parseMaterialId } from "@/lib/law-material-download";
 import type { LawStudyMaterial } from "@/lib/law-study";
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -16,7 +16,7 @@ export async function downloadAuthorizedLawMaterial(request: Request, slug: stri
   const materialId = parseMaterialId(rawMaterialId);
   if (materialId === null) throw new LawStudyApiError(400, "Identificador de material inválido.");
 
-  const { supabase, lawId } = await authorizeLawStudy(request, slug);
+  const { supabase, lawId, title: lawTitle } = await authorizeLawStudy(request, slug);
   const { data, error } = await supabase
     .from("materiais_leis")
     .select("id,lei_id,tipo,titulo,provedor,url_externa,acao,ativo")
@@ -51,9 +51,11 @@ export async function downloadAuthorizedLawMaterial(request: Request, slug: stri
     throw new LawStudyApiError(503, "Material temporariamente indisponível.");
   }
 
+  const originalFileName = originalFileNameFromDisposition(upstream.headers.get("content-disposition"));
+  const fileName = lawDownloadFileName(lawTitle, originalFileName, title, type);
   const headers = new Headers({
     "Cache-Control": "private, no-store, max-age=0",
-    "Content-Disposition": `attachment; filename="${safeDownloadFileName(title, type)}"`,
+    "Content-Disposition": attachmentDisposition(fileName),
     "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",
   });

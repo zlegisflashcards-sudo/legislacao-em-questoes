@@ -57,3 +57,34 @@ export function safeDownloadFileName(title: string, type: LawStudyMaterial["type
   const extension = ({ flashcards: ".apkg", pdf: ".pdf", audio: ".mp3", video: ".mp4", tutorial: ".pdf", outro: "" })[type];
   return base.toLocaleLowerCase("pt-BR").endsWith(extension) ? base : `${base}${extension}`;
 }
+
+function safeOriginalFileName(value: string) {
+  const name = value.replace(/[\u0000-\u001f\u007f]/g, "").replace(/[\\/]/g, "").trim();
+  return name && name.length <= 180 ? name : null;
+}
+
+export function originalFileNameFromDisposition(value: string | null) {
+  if (!value) return null;
+  const extended = value.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i)?.[1]?.trim().replace(/^"|"$/g, "");
+  if (extended) { try { const decoded = safeOriginalFileName(decodeURIComponent(extended)); if (decoded) return decoded; } catch {} }
+  const plain = value.match(/filename\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);
+  return safeOriginalFileName(plain?.[1] ?? plain?.[2] ?? "");
+}
+
+export function attachmentDisposition(fileName: string) {
+  const fallback = fileName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/["\\]/g, "");
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+function originalExtension(fileName: string | null) {
+  const extension = fileName?.match(/(\.[A-Za-z0-9]{1,16})$/)?.[1];
+  return extension ?? null;
+}
+
+export function lawDownloadFileName(lawTitle: string | null, originalFileName: string | null, fallbackTitle: string, type: LawStudyMaterial["type"]) {
+  const base = lawTitle?.replace(/\//g, "-").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim().replace(/[. ]+$/g, "") ?? "";
+  const extension = originalExtension(originalFileName);
+  if (base && extension) return `${base}${extension}`;
+  if (originalFileName) return originalFileName;
+  return safeDownloadFileName(fallbackTitle, type);
+}

@@ -18,6 +18,7 @@ import {
 import { getAnkiYoutubeEmbedUrl } from "@/lib/anki-study";
 import { resolveLawStudyPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
 import { supabase } from "@/lib/supabase";
+import { originalFileNameFromDisposition } from "@/lib/law-material-download";
 
 type LoadStatus = "loading" | "ready" | "error";
 type LawStudyResponse = { success?: boolean; study?: LawStudyData; message?: string };
@@ -150,7 +151,7 @@ function MaterialsSection({ study }: { study: LawStudyData }) {
       }
       const blob = await response.blob();
       const disposition = response.headers.get("content-disposition") ?? "";
-      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? `material-${material.id}`;
+      const fileName = originalFileNameFromDisposition(disposition) ?? `material-${material.id}`;
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
