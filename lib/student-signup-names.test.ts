@@ -11,7 +11,7 @@ describe("nomes no cadastro", () => {
     expect(account).toContain('if (!fullName)');
   });
   it("persiste os dois valores na metadata de Auth", () => {
-    expect(account).toContain('data: { nome: fullName, nome_publico: publicName || undefined }');
+    expect(account).toContain('data: { nome: fullName, nome_publico: publicName || undefined, telefone: phone }');
   });
   it("gera e persiste nome público automático único", () => {
     expect(migration).toContain("'estudante' ||");

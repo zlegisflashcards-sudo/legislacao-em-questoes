@@ -75,8 +75,10 @@ function isMissingPurchasePostSaleSchema(result: { error: { code?: string; messa
   return ["42p01", "pgrst205"].includes(String(result.error?.code ?? "").toLowerCase())
     && (message.includes("compras_pos_venda") || message.includes("relation"));
 }
-function postSaleStages({ accessActive, emailSent, firstAccessAt, stage5At, stage6At }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown }) {
-  return [true, accessActive, emailSent, Boolean(firstAccessAt), Boolean(stage5At), Boolean(stage6At)];
+function postSaleStageState({ accessActive, emailSent, firstAccessAt, stage5At, stage6At, overrides = [] }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown; overrides?: number[] }) {
+  const automaticas = [true, accessActive, emailSent, Boolean(firstAccessAt), false, false];
+  const manuais = [1, 2, 3, 4, 5, 6].map((etapa) => overrides.includes(etapa) || (etapa === 5 && Boolean(stage5At)) || (etapa === 6 && Boolean(stage6At)));
+  return { automaticas, manuais, etapas: automaticas.map((automatic, index) => automatic || manuais[index]) };
 }
 function accessEmailForPurchase(notices: Record<string, unknown>[], purchase: Record<string, unknown>) {
   const purchaseId = String(purchase.id ?? "");
@@ -189,12 +191,13 @@ async function loadPostSalePending(supabase = getSupabaseServerClient()) {
   const ids = (purchases.data ?? []).map((row) => row.id);
   const studentIds = [...new Set((purchases.data ?? []).map((row) => row.aluno_id).filter(Boolean))];
   const productIds = [...new Set((purchases.data ?? []).map((row) => row.produto_id).filter(Boolean))];
-  const [manual, notices, students, products] = ids.length ? await Promise.all([
+  const [manual, overrides, notices, students, products] = ids.length ? await Promise.all([
     supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
+    supabase.from("compras_pos_venda_overrides").select("compra_id,etapa,concluida_em,ator_user_id,observacao").in("compra_id", ids),
     supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em").in("aluno_id", studentIds),
     supabase.from("alunos").select("id,nome,email,telefone,primeiro_acesso_em").in("id", studentIds),
     productIds.length ? supabase.from("produtos").select("id,nome").in("id", productIds) : Promise.resolve({ data: [], error: null }),
-  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
   if (students.error || products.error) {
     logCommercialDbError("Falha ao carregar dados de referência do Mini-CRM", students.error ?? products.error, { etapa: "carregar_referencias" });
     throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
@@ -209,7 +212,14 @@ async function loadPostSalePending(supabase = getSupabaseServerClient()) {
     throw new CommercialHttpError(500, "Não foi possível carregar as etapas manuais do pós-venda.");
   }
   if (manual.error) warnings.push("A migration 20260812130000_move_post_sale_to_purchases.sql precisa ser aplicada para concluir e registrar as etapas manuais.");
+  if (overrides.error && !isMissingPurchasePostSaleSchema(overrides)) {
+    logCommercialDbError("Falha ao carregar overrides do Mini-CRM na fila", overrides.error, { etapa: "carregar_overrides" });
+    throw new CommercialHttpError(500, "Não foi possível carregar os overrides manuais do pós-venda.");
+  }
+  if (overrides.error) warnings.push("A migration de overrides manuais do Mini-CRM ainda não foi aplicada; as etapas 1 a 4 não podem ser confirmadas manualmente.");
   const manualBy = new Map((manual.data ?? []).map((row) => [row.compra_id, row]));
+  const overridesByPurchase = new Map<string, number[]>();
+  for (const row of overrides.data ?? []) overridesByPurchase.set(String(row.compra_id), [...(overridesByPurchase.get(String(row.compra_id)) ?? []), Number(row.etapa)]);
   const studentById = new Map((students.data ?? []).map((row) => [row.id, row]));
   const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
   const counts = [0, 0, 0, 0, 0, 0];
@@ -217,12 +227,13 @@ async function loadPostSalePending(supabase = getSupabaseServerClient()) {
     const student = studentById.get(purchase.aluno_id) as { nome?: unknown; email?: unknown; telefone?: unknown; primeiro_acesso_em?: unknown } | undefined;
     const state = manualBy.get(purchase.id);
     const email = notices.error ? null : accessEmailForPurchase(notices.data ?? [], purchase);
-    const stages = postSaleStages({ accessActive: purchase.status_acesso === "ativo", emailSent: email?.status === "enviado", firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });
+    const stageState = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent: email?.status === "enviado", firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overridesByPurchase.get(String(purchase.id)) ?? [] });
+    const stages = stageState.etapas;
     const next = stages.findIndex((done) => !done) + 1;
     if (next) counts[next - 1] += 1;
     return { compra_id: purchase.id, aluno_id: purchase.aluno_id, nome: student?.nome ?? null, email: student?.email ?? null, telefone: student?.telefone ?? null, produto: productById.get(purchase.produto_id) ?? "Produto", adquirida_em: purchase.adquirida_em, proxima_etapa: next, etapa_titulo: next ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Confirmar acesso com o cliente", "Confirmar flashcards e Anki"][next - 1] : null, etapas: stages };
   }).filter((item) => item.proxima_etapa > 0);
-  return { items, counts, warnings, unavailable: Boolean(manual.error), message: warnings[0] ?? null, resumo: { total: items.length, etapa_1: counts[0], etapa_2: counts[1], etapa_3: counts[2], etapa_4: counts[3], etapa_5: counts[4], etapa_6: counts[5] } };
+  return { items, visibleItems: items.slice(0, 5), counts, warnings, unavailable: Boolean(manual.error || overrides.error), message: warnings[0] ?? null, resumo: { total: items.length, etapa_1: counts[0], etapa_2: counts[1], etapa_3: counts[2], etapa_4: counts[3], etapa_5: counts[4], etapa_6: counts[5] } };
 }
 
 export async function getCommercialResource(resource: CommercialResource, request: Request) {
@@ -249,7 +260,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
     const names = new Map((profiles.data ?? []).map((profile) => [String(profile.id), profile.nome_publico]));
     for (const item of items) item.nome_publico = names.get(String(item.user_id ?? "")) ?? null;
     const total = Number(items[0]?.total_count ?? 0);
-    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 }, crm_pendencias: crm.items, crm_resumo: crm.resumo, crm_avisos: crm.warnings };
+    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 }, crm_pendencias: crm.items, crm_pendencias_exibidas: crm.visibleItems, crm_resumo: crm.resumo, crm_avisos: crm.warnings };
   }
 
   if (resource === "anki_tutoriais") {
@@ -634,15 +645,16 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     }
     const studentData = student.data;
     const ids = (purchases.data ?? []).map((p) => p.id);
-    const [products, manualRows, historyRows, notices, releases] = ids.length
+    const [products, manualRows, overrideRows, historyRows, notices, releases] = ids.length
       ? await Promise.all([
         supabase.from("produtos").select("id,nome").in("id", [...new Set((purchases.data ?? []).map((purchase) => purchase.produto_id).filter(Boolean))]),
         supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
+        supabase.from("compras_pos_venda_overrides").select("compra_id,etapa,concluida_em,ator_user_id,observacao").in("compra_id", ids),
         supabase.from("compras_pos_venda_historico").select("*").in("compra_id", ids).order("created_at", { ascending: false }),
         supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em,erro").eq("aluno_id", alunoId),
         supabase.from("liberacoes_leis").select("id,compra_id,origem,status,concedida_em,leis(titulo)").in("compra_id", ids).eq("status", "ativo"),
       ])
-      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
     if (products.error) {
       logCommercialDbError("Falha ao carregar produtos do Mini-CRM por compra", products.error, { alunoId, etapa: "carregar_produtos" });
       throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
@@ -655,6 +667,10 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       }
       throw new CommercialHttpError(500, "Não foi possível carregar as etapas manuais do pós-venda.");
     }
+    if (overrideRows.error && !isMissingPurchasePostSaleSchema(overrideRows)) {
+      logCommercialDbError("Falha ao carregar overrides manuais do Mini-CRM", overrideRows.error, { alunoId, etapa: "carregar_overrides" });
+      throw new CommercialHttpError(500, "Não foi possível carregar os overrides manuais do pós-venda.");
+    }
     if (notices.error) {
       logCommercialDbError("Falha ao carregar notificações do Mini-CRM por compra", notices.error, { alunoId, etapa: "carregar_notificacoes" });
       throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
@@ -664,33 +680,44 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       throw new CommercialHttpError(500, "Não foi possível carregar as liberações do pós-venda.");
     }
     const manualBy = new Map((manualRows.data ?? []).map((row) => [row.compra_id, row]));
+    const overridesByPurchase = new Map<string, Record<string, unknown>[]>();
+    for (const row of overrideRows.data ?? []) overridesByPurchase.set(String(row.compra_id), [...(overridesByPurchase.get(String(row.compra_id)) ?? []), row]);
     const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
     const cycles = (purchases.data ?? []).map((purchase) => {
       const email = accessEmailForPurchase(notices.data ?? [], purchase);
       const state = manualBy.get(purchase.id); const emailSent = email?.status === "enviado";
-      const stages = postSaleStages({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });
+      const overrideRowsForPurchase = overridesByPurchase.get(String(purchase.id)) ?? [];
+      const stageState = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overrideRowsForPurchase.map((row) => Number(row.etapa)) });
+      const stages = stageState.etapas;
       const next = stages.findIndex((done) => !done) + 1;
-      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), email, liberacoes: (releases.data ?? []).filter((row) => row.compra_id === purchase.id), primeiro_acesso_em: studentData.primeiro_acesso_em };
+      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, etapas_automaticas: stageState.automaticas, etapas_manuais: stageState.manuais, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), overrides: overrideRowsForPurchase, email, liberacoes: (releases.data ?? []).filter((row) => row.compra_id === purchase.id), primeiro_acesso_em: studentData.primeiro_acesso_em, override_schema_disponivel: !overrideRows.error };
     });
     return { cycles };
   }
   if (resource === "alunos" && action === "crm_pendencias") {
     const crm = await loadPostSalePending();
-    return { unavailable: crm.unavailable, message: crm.message, items: crm.items, counts: crm.counts, resumo: crm.resumo, avisos: crm.warnings };
+    return { unavailable: crm.unavailable, message: crm.message, items: crm.items, items_exibidos: crm.visibleItems, counts: crm.counts, resumo: crm.resumo, avisos: crm.warnings };
   }
   if (resource === "alunos" && action === "crm_compra_atualizar") {
-    const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "observacao"]);
-    const etapa = Number(data.etapa); if (![5, 6].includes(etapa)) throw new CommercialValidationError("Somente as etapas 5 e 6 são manuais.");
+    const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "acao", "observacao"]);
+    const etapa = Number(data.etapa); if (!Number.isInteger(etapa) || etapa < 1 || etapa > 6) throw new CommercialValidationError("Etapa manual inválida.");
+    const acao = data.acao === "reabrir" ? "reabrir" : "concluir";
     const supabase = getSupabaseServerClient(); const now = new Date().toISOString();
-    const saved = await supabase.from("compras_pos_venda").upsert({ compra_id: compraId, ...(etapa === 5 ? { etapa_5_concluida_em: now } : { etapa_6_concluida_em: now }), updated_at: now }, { onConflict: "compra_id" });
+    const saved = acao === "concluir"
+      ? await supabase.from("compras_pos_venda_overrides").upsert({ compra_id: compraId, etapa, concluida_em: now, ator_user_id: actor, observacao: optionalString(data.observacao, "Observação", 2000) ?? null, updated_at: now }, { onConflict: "compra_id,etapa" })
+      : await supabase.from("compras_pos_venda_overrides").delete().eq("compra_id", compraId).eq("etapa", etapa);
     if (saved.error) {
-      logCommercialDbError("Falha ao salvar etapa manual do Mini-CRM por compra", saved.error, { compraId, etapa });
+      logCommercialDbError("Falha ao salvar override manual do Mini-CRM por compra", saved.error, { compraId, etapa, acao });
       if (isMissingPurchasePostSaleSchema(saved)) {
-        throw new CommercialHttpError(503, "A migration do Mini-CRM por compra ainda não foi aplicada.");
+        throw new CommercialHttpError(503, "A migration de overrides manuais do Mini-CRM ainda não foi aplicada.");
       }
       throw new CommercialHttpError(500, "Não foi possível salvar a etapa manual do pós-venda.");
     }
-    const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: `etapa_${etapa}_concluida`, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
+    if (acao === "reabrir" && etapa >= 5) {
+      const legacy = await supabase.from("compras_pos_venda").upsert({ compra_id: compraId, [`etapa_${etapa}_concluida_em`]: null, updated_at: now }, { onConflict: "compra_id" });
+      if (legacy.error && !isMissingPurchasePostSaleSchema(legacy)) throw new CommercialHttpError(500, "Não foi possível reabrir a etapa manual do pós-venda.");
+    }
+    const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: acao === "concluir" ? `etapa_${etapa}_concluida_manual` : `etapa_${etapa}_reaberta_manual`, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
   }
 
   if (resource === "alunos" && action === "crm_detalhe") {

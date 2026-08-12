@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { normalizeStudentPhone } from "@/lib/student-phone";
 
 function bearerToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
@@ -18,6 +19,14 @@ export async function POST(request: Request) {
   if (linkError) {
     console.error("Não foi possível vincular a conta ao aluno:", linkError.message);
     return Response.json({ success: false }, { status: 500 });
+  }
+  const telefone = normalizeStudentPhone(data.user.user_metadata?.telefone);
+  if (telefone) {
+    const { error: phoneError } = await supabase.from("alunos").update({ telefone }).eq("user_id", data.user.id);
+    if (phoneError) {
+      console.error("Não foi possível salvar o telefone do cadastro:", phoneError.message);
+      return Response.json({ success: false }, { status: 500 });
+    }
   }
   return Response.json({ success: true });
 }

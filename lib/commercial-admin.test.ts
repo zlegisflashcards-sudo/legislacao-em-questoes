@@ -126,11 +126,16 @@ describe("fronteira administrativa comercial", () => {
     expect(studentCrm).toContain('className="purchase-crm-summary"');
     expect(studentCrm).toContain('className="crm-stage-list"');
     expect(studentCrm).toContain("Liberações / aquisições desta compra");
+    expect(studentCrm).toContain("Marcar como concluída manualmente");
+    expect(studentCrm).toContain("Remover conclusão manual");
+    expect(studentCrm).toContain("Abrir WhatsApp");
   });
 
   it("mantém a fila compacta e pagina alunos em lotes de cinquenta", () => {
     expect(studentsAdmin).toContain("limit=50&page=${nextPage}");
-    expect(studentsAdmin).toContain("pendingSales.slice(0, 5)");
+    expect(studentsAdmin).toContain("setPendingSales(data.crm_pendencias_exibidas ?? [])");
+    expect(server).toContain("visibleItems: items.slice(0, 5)");
+    expect(server).toContain("crm_pendencias_exibidas: crm.visibleItems");
     expect(studentsAdmin).not.toContain("Ver todas as pendências");
     expect(server).toContain('.order("adquirida_em", { ascending: true }).order("id", { ascending: true })');
   });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { safeReturnPath } from "@/lib/safe-return-path";
+import { normalizeStudentPhone } from "@/lib/student-phone";
 
 type PublicProfile = { id: string; nome_publico: string };
 type Mode = "login" | "signup" | "forgot" | "profile" | "recover" | "firstAccess";
@@ -97,8 +98,10 @@ export function StudentAccount() {
       }
       const fullName = String(formData.get("nome") ?? "").trim();
       const publicName = String(formData.get("public_name") ?? "").trim();
+      const phone = normalizeStudentPhone(String(formData.get("telefone") ?? ""));
       if (!fullName) { setMessage("Informe seu nome completo."); return; }
       if (fullName.length > 300) { setMessage("Nome completo excede o limite permitido."); return; }
+      if (!phone) { setMessage("Informe seu telefone/WhatsApp para continuar."); return; }
       if (publicName && !validatePublicName(publicName)) {
         setMessage("Use um nome público de 3 a 50 caracteres, sem símbolos especiais."); return;
       }
@@ -119,7 +122,7 @@ export function StudentAccount() {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}${returnPath}`,
-          data: { nome: fullName, nome_publico: publicName || undefined },
+          data: { nome: fullName, nome_publico: publicName || undefined, telefone: phone },
         },
       });
       if (error) {
@@ -226,12 +229,13 @@ export function StudentAccount() {
     const name = String(formData.get("nome") ?? "").trim();
     if (name.length > 300) { setMessage("Nome completo excede o limite permitido."); return; }
     setPending(true);
-    const phoneValue = String(formData.get("telefone") ?? "").trim();
-    if (phoneValue.length > 80) { setMessage("Telefone excede o limite permitido."); return; }
+    const phoneRaw = String(formData.get("telefone") ?? "").trim();
+    const phoneValue = phoneRaw ? normalizeStudentPhone(phoneRaw) : null;
+    if (phoneRaw && !phoneValue) { setMessage("Informe um telefone/WhatsApp brasileiro válido."); return; }
     const { data: session } = await supabase.auth.getSession();
     const profileResult = await fetch("/api/aluno/perfil", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.session?.access_token ?? ""}` }, body: JSON.stringify({ nome: name || null, telefone: phoneValue || null, nome_publico: publicName || null }) });
     const saved = await profileResult.json().catch(() => ({})) as { nome?: string | null; telefone?: string | null; nome_publico?: string; error?: string };
-    if (profileResult.ok) { setProfile({ ...profile, nome_publico: saved.nome_publico ?? publicName }); setFullName(saved.nome ?? name); setPhone(saved.telefone ?? phoneValue); }
+    if (profileResult.ok) { setProfile({ ...profile, nome_publico: saved.nome_publico ?? publicName }); setFullName(saved.nome ?? name); setPhone(saved.telefone ?? phoneValue ?? ""); }
     setMessage(profileResult.ok ? "Perfil atualizado." : saved.error || "Não foi possível salvar seu perfil.");
     setPending(false);
   }
@@ -247,7 +251,7 @@ export function StudentAccount() {
       <form action={saveProfile} className="space-y-4">
         <Field label="Nome completo" name="nome" defaultValue={fullName} hint="Nome administrativo associado à sua conta." required={false} />
         <Field label="Nome público" name="public_name" defaultValue={profile.nome_publico} hint="Nome exibido para outras pessoas na plataforma." />
-        <Field label="Telefone" name="telefone" defaultValue={phone} placeholder="(00) 00000-0000" />
+        <Field label="Telefone / WhatsApp" name="telefone" defaultValue={phone} placeholder="(00) 00000-0000" />
         <p className="text-sm text-slate-500">E-mail de acesso: {email}<br />Precisa alterar seu e-mail? Entre em contato com nossa equipe.</p>
         <PrimaryButton pending={pending}>Salvar perfil</PrimaryButton>
       </form>
@@ -268,7 +272,7 @@ export function StudentAccount() {
 
   if (mode === "forgot") return <AccountCard title="Recuperar senha" description="Enviaremos um link seguro para o e-mail cadastrado."><form action={sendRecovery} className="space-y-4"><Field label="E-mail" name="email" type="email" /><PrimaryButton pending={pending}>Enviar link de recuperação</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="mt-5 font-bold text-blue-700 hover:underline">← Voltar ao login</button></AccountCard>;
 
-  return <AccountCard title={mode === "signup" ? "Criar conta" : "Entrar na sua conta"} description={mode === "signup" ? "Crie sua conta para acessar a plataforma." : "Informe seus dados de acesso para continuar."}><form action={authenticate} className="space-y-4"><input type="hidden" name="form_mode" value={mode === "signup" ? "signup" : "login"} />{mode === "signup" ? <><Field label="Nome completo" name="nome" placeholder="Ex.: Gustavo Santos" /><Field label="Nome público (opcional)" name="public_name" placeholder="Ex.: Gustavo" hint="É o nome que poderá aparecer para outras pessoas na plataforma. Se deixar em branco, criaremos um nome automaticamente." required={false} /></> : null}<Field label="E-mail" name="email" type="email" /><Field label="Senha" name="password" type="password" minLength={8} /><PrimaryButton pending={pending}>{mode === "signup" ? "Criar conta" : "Entrar"}</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><div className="mt-5 flex flex-wrap gap-5 text-sm">{mode === "login" ? <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Criar uma conta</button> : <button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Já tenho uma conta</button>}{mode === "login" ? <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }} className="font-bold text-slate-600 hover:text-blue-700 hover:underline">Esqueci minha senha</button> : null}</div></AccountCard>;
+  return <AccountCard title={mode === "signup" ? "Criar conta" : "Entrar na sua conta"} description={mode === "signup" ? "Crie sua conta para acessar a plataforma." : "Informe seus dados de acesso para continuar."}><form action={authenticate} className="space-y-4"><input type="hidden" name="form_mode" value={mode === "signup" ? "signup" : "login"} />{mode === "signup" ? <><Field label="Nome completo" name="nome" placeholder="Ex.: Gustavo Santos" /><Field label="Nome público (opcional)" name="public_name" placeholder="Ex.: Gustavo" hint="É o nome que poderá aparecer para outras pessoas na plataforma. Se deixar em branco, criaremos um nome automaticamente." required={false} /><Field label="Telefone / WhatsApp" name="telefone" placeholder="(00) 00000-0000" /></> : null}<Field label="E-mail" name="email" type="email" /><Field label="Senha" name="password" type="password" minLength={8} /><PrimaryButton pending={pending}>{mode === "signup" ? "Criar conta" : "Entrar"}</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><div className="mt-5 flex flex-wrap gap-5 text-sm">{mode === "login" ? <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Criar uma conta</button> : <button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Já tenho uma conta</button>}{mode === "login" ? <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }} className="font-bold text-slate-600 hover:text-blue-700 hover:underline">Esqueci minha senha</button> : null}</div></AccountCard>;
 }
 
 function AccountCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {

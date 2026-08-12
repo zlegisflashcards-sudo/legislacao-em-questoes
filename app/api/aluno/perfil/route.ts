@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { normalizeStudentPhone } from "@/lib/student-phone";
 
 const publicNamePattern = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{1,48}[\p{L}\p{N}]$/u;
 
@@ -22,8 +23,9 @@ export async function PATCH(request: Request) {
   const data = body as { nome?: unknown; telefone?: unknown; nome_publico?: unknown };
   if (Object.keys(data).some((key) => !["nome", "telefone", "nome_publico"].includes(key))) return Response.json({ error: "Dados inválidos." }, { status: 400 });
   if (data.telefone !== null && data.telefone !== undefined && typeof data.telefone !== "string") return Response.json({ error: "Telefone inválido." }, { status: 400 });
-  const telefone = typeof data.telefone === "string" ? data.telefone.trim() : null;
-  if (telefone && telefone.length > 80) return Response.json({ error: "Telefone excede o limite permitido." }, { status: 400 });
+  const telefoneRaw = typeof data.telefone === "string" ? data.telefone.trim() : null;
+  const telefone = telefoneRaw ? normalizeStudentPhone(telefoneRaw) : null;
+  if (telefoneRaw && !telefone) return Response.json({ error: "Informe um telefone/WhatsApp brasileiro válido." }, { status: 400 });
   const publicName = typeof data.nome_publico === "string" ? data.nome_publico.trim() || null : null;
   const name = typeof data.nome === "string" ? data.nome.trim() : null;
   if (publicName !== null && !publicNamePattern.test(publicName)) return Response.json({ error: "Use um nome público de 3 a 50 caracteres, sem símbolos especiais." }, { status: 422 });
