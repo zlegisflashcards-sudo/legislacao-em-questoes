@@ -167,7 +167,7 @@ export function StudentExamClient() {
       <Link href="/minhas-leis" className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Ir para Minhas Leis</Link>
     </section> : null}
     {!loading && !error && current && current.leis.length > 0 ? <ol className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {current.leis.map((law, index) => <li key={law.id} className="grid gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-4">
+      {current.leis.map((law, index) => <li key={law.id} className="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-4">
         <span className="hidden font-black text-slate-500 sm:block">{index + 1}.</span>
         <div className="min-w-0 sm:contents">
           <Link href={`/estudar/lei/${encodeURIComponent(law.slug)}`} className="col-span-2 min-w-0 break-words text-balance text-xl font-black leading-tight text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700 sm:col-span-1 sm:text-base sm:font-bold">{law.titulo}</Link>

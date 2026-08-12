@@ -85,13 +85,19 @@ describe("progresso compartilhado no Meu Edital", () => {
 
   it("inicia sem edital selecionado e oferece pesquisa local", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('Meu edital personalizado');
+    expect(client).toContain('Meus editais');
     expect(client).toContain('Pesquisar editais');
     expect(client).toContain('Pesquisar meus editais...');
     expect(client).toContain('Escolha um edital para visualizar suas leis.');
     expect(client).toContain('Nenhum edital encontrado.');
     expect(client).toContain('Trocar edital');
     expect(client).toContain('setSelected("")');
-    expect(client).not.toContain('body.editalAtivo?.id ?? body.editais[0]?.id ?? ""');
+  });
+
+  it("oculta pesquisa e lista quando um edital está selecionado", () => {
+    const client = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(client).toContain('!current && editais.length > 0 ? <nav');
+    expect(client).toContain('current ? `Edital selecionado: ${current.nome}` : "Escolha um edital para visualizar suas leis."');
+    expect(client).toContain('!loading && !current && editais.length > 0 ? <nav');
   });
 });
