@@ -7,6 +7,12 @@ export const dynamic = "force-dynamic";
 
 const panels = [
   {
+    href: "/admin/alunos",
+    icon: "👥",
+    title: "Alunos",
+    description: "Consulte fichas de alunos, acessos, comunicação e o Mini-CRM de pós-venda.",
+  },
+  {
     href: "/admin/comercial",
     icon: "🧾",
     title: "Gestão comercial",

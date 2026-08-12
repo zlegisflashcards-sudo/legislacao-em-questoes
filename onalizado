@@ -1,0 +1,267 @@
+[33mcommit cef75b5b3dc709e3448eff6ae46fea7a5c26a372[m
+Author: Legis Flashcards <zlegisflashcards@gmail.com>
+Date:   Wed Aug 12 11:04:37 2026 -0300
+
+    fix: rename student edital section
+
+[1mdiff --git a/components/law-study-page-client.tsx b/components/law-study-page-client.tsx[m
+[1mindex 441084c..6edd81b 100644[m
+[1m--- a/components/law-study-page-client.tsx[m
+[1m+++ b/components/law-study-page-client.tsx[m
+[36m@@ -18,6 +18,7 @@[m [mimport {[m
+ import { getAnkiYoutubeEmbedUrl } from "@/lib/anki-study";[m
+ import { resolveLawStudyPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";[m
+ import { supabase } from "@/lib/supabase";[m
+[32m+[m[32mimport { originalFileNameFromDisposition } from "@/lib/law-material-download";[m
+ [m
+ type LoadStatus = "loading" | "ready" | "error";[m
+ type LawStudyResponse = { success?: boolean; study?: LawStudyData; message?: string };[m
+[36m@@ -150,7 +151,7 @@[m [mfunction MaterialsSection({ study }: { study: LawStudyData }) {[m
+       }[m
+       const blob = await response.blob();[m
+       const disposition = response.headers.get("content-disposition") ?? "";[m
+[31m-      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? `material-${material.id}`;[m
+[32m+[m[32m      const fileName = originalFileNameFromDisposition(disposition) ?? `material-${material.id}`;[m
+       const objectUrl = URL.createObjectURL(blob);[m
+       const link = document.createElement("a");[m
+       link.href = objectUrl;[m
+[1mdiff --git a/components/student-exam-client.tsx b/components/student-exam-client.tsx[m
+[1mindex af58fce..becc2be 100644[m
+[1m--- a/components/student-exam-client.tsx[m
+[1m+++ b/components/student-exam-client.tsx[m
+[36m@@ -132,7 +132,7 @@[m [mexport function StudentExamClient() {[m
+     <header className="mb-8">[m
+       <p className="font-bold text-blue-700">Área do aluno</p>[m
+       <div className="mt-1 flex flex-wrap items-center gap-3">[m
+[31m-        <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{current?.nome ?? "Meu edital personalizado"}</h1>[m
+[32m+[m[32m        <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{current?.nome ?? "Meus editais"}</h1>[m
+         {current?.tipo === "personalizado" && !editing ? <button type="button" onClick={() => { setName(current.nome); setEditing(true); }} className="rounded-lg px-2 py-1 text-sm font-bold text-blue-700 underline underline-offset-4">Editar nome</button> : null}[m
+       </div>[m
+       {editing ? <div className="mt-3 flex flex-wrap gap-2">[m
+[1mdiff --git a/lib/law-material-download-server.ts b/lib/law-material-download-server.ts[m
+[1mindex ff3c29a..7a3d15f 100644[m
+[1m--- a/lib/law-material-download-server.ts[m
+[1m+++ b/lib/law-material-download-server.ts[m
+[36m@@ -1,7 +1,7 @@[m
+ import "server-only";[m
+ [m
+ import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";[m
+[31m-import { googleDriveDownloadUrl, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, parseMaterialId, safeDownloadFileName } from "@/lib/law-material-download";[m
+[32m+[m[32mimport { attachmentDisposition, googleDriveDownloadUrl, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, lawDownloadFileName, originalFileNameFromDisposition, parseMaterialId } from "@/lib/law-material-download";[m
+ import type { LawStudyMaterial } from "@/lib/law-study";[m
+ [m
+ function record(value: unknown): Record<string, unknown> | null {[m
+[36m@@ -16,7 +16,7 @@[m [mexport async function downloadAuthorizedLawMaterial(request: Request, slug: stri[m
+   const materialId = parseMaterialId(rawMaterialId);[m
+   if (materialId === null) throw new LawStudyApiError(400, "Identificador de material inválido.");[m
+ [m
+[31m-  const { supabase, lawId } = await authorizeLawStudy(request, slug);[m
+[32m+[m[32m  const { supabase, lawId, title: lawTitle } = await authorizeLawStudy(request, slug);[m
+   const { data, error } = await supabase[m
+     .from("materiais_leis")[m
+     .select("id,lei_id,tipo,titulo,provedor,url_externa,acao,ativo")[m
+[36m@@ -51,9 +51,11 @@[m [mexport async function downloadAuthorizedLawMaterial(request: Request, slug: stri[m
+     throw new LawStudyApiError(503, "Material temporariamente indisponível.");[m
+   }[m
+ [m
+[32m+[m[32m  const originalFileName = originalFileNameFromDisposition(upstream.headers.get("content-disposition"));[m
+[32m+[m[32m  const fileName = lawDownloadFileName(lawTitle, originalFileName, title, type);[m
+   const headers = new Headers({[m
+     "Cache-Control": "private, no-store, max-age=0",[m
+[31m-    "Content-Disposition": `attachment; filename="${safeDownloadFileName(title, type)}"`,[m
+[32m+[m[32m    "Content-Disposition": attachmentDisposition(fileName),[m
+     "Content-Type": contentType,[m
+     "X-Content-Type-Options": "nosniff",[m
+   });[m
+[1mdiff --git a/lib/law-material-download.test.ts b/lib/law-material-download.test.ts[m
+[1mindex 1d86832..2fd434e 100644[m
+[1m--- a/lib/law-material-download.test.ts[m
+[1m+++ b/lib/law-material-download.test.ts[m
+[36m@@ -1,6 +1,6 @@[m
+ import { readFileSync } from "node:fs";[m
+ import { describe, expect, it } from "vitest";[m
+[31m-import { googleDriveDownloadUrl, googleDriveFileId, isAccessibleMaterialReference, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, materialAccessReference, parseMaterialId, safeDownloadFileName } from "./law-material-download";[m
+[32m+[m[32mimport { attachmentDisposition, googleDriveDownloadUrl, googleDriveFileId, isAccessibleMaterialReference, isAllowedGoogleDriveResponseUrl, isDownloadableMaterialReference, lawDownloadFileName, materialAccessReference, originalFileNameFromDisposition, parseMaterialId, safeDownloadFileName } from "./law-material-download";[m
+ [m
+ const server = readFileSync("lib/law-material-download-server.ts", "utf8");[m
+ const route = readFileSync("app/api/aluno/estudar/lei/[slug]/materiais/[materialId]/download/route.ts", "utf8");[m
+[36m@@ -44,6 +44,17 @@[m [mdescribe("referências seguras de material", () => {[m
+     expect(safeDownloadFileName("Legislação em Questões\r\nmalicioso", "flashcards")).toBe("Legislacao-em-Questoesmalicioso.apkg");[m
+     expect(safeDownloadFileName("Lei esquematizada", "pdf")).toBe("Lei-esquematizada.pdf");[m
+   });[m
+[32m+[m
+[32m+[m[32m  it("usa o nome sanitizado da lei e preserva somente a extensão original", () => {[m
+[32m+[m[32m    expect(originalFileNameFromDisposition("attachment; filename*=UTF-8''Lei%2014.751-2023.apkg")).toBe("Lei 14.751-2023.apkg");[m
+[32m+[m[32m    expect(originalFileNameFromDisposition('attachment; filename="Lei Orgânica.pdf"')).toBe("Lei Orgânica.pdf");[m
+[32m+[m[32m    expect(lawDownloadFileName("Lei 14.751/2023 — Lei Orgânica Nacional", "arquivo-original.apkg", "Flashcards", "flashcards")).toBe("Lei 14.751-2023 — Lei Orgânica Nacional.apkg");[m
+[32m+[m[32m    expect(lawDownloadFileName("  Lei Orgânica  ", "arquivo-original.pdf", "PDF", "pdf")).toBe("Lei Orgânica.pdf");[m
+[32m+[m[32m    expect(lawDownloadFileName("Lei: inválida?", "arquivo-original.pdf", "PDF", "pdf")).toBe("Lei inválida.pdf");[m
+[32m+[m[32m    expect(lawDownloadFileName(null, "arquivo original.pdf", "PDF", "pdf")).toBe("arquivo original.pdf");[m
+[32m+[m[32m    expect(lawDownloadFileName(null, null, "Flashcards", "flashcards")).toBe("Flashcards.apkg");[m
+[32m+[m[32m    expect(attachmentDisposition("Lei Orgânica.pdf")).toContain("filename*=UTF-8''Lei%20Org%C3%A2nica.pdf");[m
+[32m+[m[32m  });[m
+ });[m
+ [m
+ describe("fronteira autenticada de download", () => {[m
+[36m@@ -68,6 +79,9 @@[m [mdescribe("fronteira autenticada de download", () => {[m
+     expect(route).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);[m
+     expect(server).toContain('redirect: "follow"');[m
+     expect(server).toContain('"Content-Disposition"');[m
+[32m+[m[32m    expect(server).toContain("originalFileNameFromDisposition(upstream.headers.get");[m
+[32m+[m[32m    expect(server).toContain("lawDownloadFileName(lawTitle, originalFileName, title, type)");[m
+[32m+[m[32m    expect(server).toContain("attachmentDisposition(fileName)");[m
+     expect(server).toContain('"Cache-Control": "private, no-store, max-age=0"');[m
+     expect(server).toContain('"X-Content-Type-Options": "nosniff"');[m
+     expect(server).not.toContain("signedUrl");[m
+[36m@@ -94,5 +108,6 @@[m [mdescribe("interface de download", () => {[m
+     expect(client).toContain("Material temporariamente indisponível");[m
+     expect(client).toContain("Preparando download…");[m
+     expect(client).toContain("Authorization: `Bearer ${token}`");[m
+[32m+[m[32m    expect(client).toContain("originalFileNameFromDisposition(disposition)");[m
+   });[m
+ });[m
+[1mdiff --git a/lib/law-material-download.ts b/lib/law-material-download.ts[m
+[1mindex c44bad8..5c27038 100644[m
+[1m--- a/lib/law-material-download.ts[m
+[1m+++ b/lib/law-material-download.ts[m
+[36m@@ -57,3 +57,34 @@[m [mexport function safeDownloadFileName(title: string, type: LawStudyMaterial["type[m
+   const extension = ({ flashcards: ".apkg", pdf: ".pdf", audio: ".mp3", video: ".mp4", tutorial: ".pdf", outro: "" })[type];[m
+   return base.toLocaleLowerCase("pt-BR").endsWith(extension) ? base : `${base}${extension}`;[m
+ }[m
+[32m+[m
+[32m+[m[32mfunction safeOriginalFileName(value: string) {[m
+[32m+[m[32m  const name = value.replace(/[\u0000-\u001f\u007f]/g, "").replace(/[\\/]/g, "").trim();[m
+[32m+[m[32m  return name && name.length <= 180 ? name : null;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function originalFileNameFromDisposition(value: string | null) {[m
+[32m+[m[32m  if (!value) return null;[m
+[32m+[m[32m  const extended = value.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i)?.[1]?.trim().replace(/^"|"$/g, "");[m
+[32m+[m[32m  if (extended) { try { const decoded = safeOriginalFileName(decodeURIComponent(extended)); if (decoded) return decoded; } catch {} }[m
+[32m+[m[32m  const plain = value.match(/filename\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);[m
+[32m+[m[32m  return safeOriginalFileName(plain?.[1] ?? plain?.[2] ?? "");[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function attachmentDisposition(fileName: string) {[m
+[32m+[m[32m  const fallback = fileName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/["\\]/g, "");[m
+[32m+[m[32m  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction originalExtension(fileName: string | null) {[m
+[32m+[m[32m  const extension = fileName?.match(/(\.[A-Za-z0-9]{1,16})$/)?.[1];[m
+[32m+[m[32m  return extension ?? null;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport function lawDownloadFileName(lawTitle: string | null, originalFileName: string | null, fallbackTitle: string, type: LawStudyMaterial["type"]) {[m
+[32m+[m[32m  const base = lawTitle?.replace(/\//g, "-").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim().replace(/[. ]+$/g, "") ?? "";[m
+[32m+[m[32m  const extension = originalExtension(originalFileName);[m
+[32m+[m[32m  if (base && extension) return `${base}${extension}`;[m
+[32m+[m[32m  if (originalFileName) return originalFileName;[m
+[32m+[m[32m  return safeDownloadFileName(fallbackTitle, type);[m
+[32m+[m[32m}[m
+[1mdiff --git a/supabase/audit_remote_migrations_readonly.sql b/supabase/audit_remote_migrations_readonly.sql[m
+[1mnew file mode 100644[m
+[1mindex 0000000..0946b9b[m
+[1m--- /dev/null[m
+[1m+++ b/supabase/audit_remote_migrations_readonly.sql[m
+[36m@@ -0,0 +1,100 @@[m
+[32m+[m[32m-- Auditoria SOMENTE LEITURA das migrations divergentes.[m
+[32m+[m[32m-- Cole no SQL Editor do projeto remoto. Nao executa DDL/DML nem chama funcoes de negocio.[m
+[32m+[m
+[32m+[m[32m-- 0. Historico remoto relevante.[m
+[32m+[m[32mselect version, inserted_at from supabase_migrations.schema_migrations[m
+[32m+[m[32mwhere version in ('20260807153000','20260807170000','20260807200000','20260808230000','20260810090000','20260810110000','20260810120000','20260810130000','20260810140000','20260810150000','20260810160000','20260810170000','20260810180000','20260810190000','20260810200000','20260810210000','20260811090000','20260811100000','20260811110000','20260811120000')[m
+[32m+[m[32morder by version;[m
+[32m+[m
+[32m+[m[32m-- Utilitarios de leitura repetidos: tabelas/colunas, constraints, indices, RLS/policies/grants.[m
+[32m+[m[32mselect table_name, column_name, data_type, is_nullable, column_default[m
+[32m+[m[32mfrom information_schema.columns where table_schema='public' and table_name in[m
+[32m+[m[32m ('produtos','hotmart_eventos','alunos','compras','alunos_primeiro_acesso_envios','alunos_notificacoes_acesso','alunos_ativacoes_pendentes','admin_notificacoes')[m
+[32m+[m[32morder by table_name, ordinal_position;[m
+[32m+[m
+[32m+[m[32mselect c.relname as table_name, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as rls_forced[m
+[32m+[m[32mfrom pg_class c join pg_namespace n on n.oid=c.relnamespace[m
+[32m+[m[32mwhere n.nspname='public' and c.relname in ('hotmart_eventos','alunos_primeiro_acesso_envios','alunos_notificacoes_acesso','alunos_ativacoes_pendentes','admin_notificacoes')[m
+[32m+[m[32morder by c.relname;[m
+[32m+[m
+[32m+[m[32mselect tablename, policyname, permissive, roles, cmd, qual, with_check[m
+[32m+[m[32mfrom pg_policies where schemaname='public' and tablename in ('hotmart_eventos','alunos_primeiro_acesso_envios','alunos_notificacoes_acesso','alunos_ativacoes_pendentes','admin_notificacoes')[m
+[32m+[m[32morder by tablename, policyname;[m
+[32m+[m
+[32m+[m[32mselect table_name, grantee, privilege_type[m
+[32m+[m[32mfrom information_schema.role_table_grants[m
+[32m+[m[32mwhere table_schema='public' and table_name in ('hotmart_eventos','alunos_primeiro_acesso_envios','alunos_notificacoes_acesso','alunos_ativacoes_pendentes','admin_notificacoes')[m
+[32m+[m[32morder by table_name, grantee, privilege_type;[m
+[32m+[m
+[32m+[m[32mselect conrelid::regclass::text as table_name, conname, contype, pg_get_constraintdef(oid) as definition[m
+[32m+[m[32mfrom pg_constraint where connamespace='public'::regnamespace and conrelid = any(array_remove(array[[m
+[32m+[m[32m  to_regclass('public.hotmart_eventos'),to_regclass('public.alunos'),to_regclass('public.compras'),[m
+[32m+[m[32m  to_regclass('public.alunos_primeiro_acesso_envios'),to_regclass('public.alunos_notificacoes_acesso'),[m
+[32m+[m[32m  to_regclass('public.alunos_ativacoes_pendentes'),to_regclass('public.admin_notificacoes')],null))[m
+[32m+[m[32morder by table_name, conname;[m
+[32m+[m
+[32m+[m[32mselect schemaname, tablename, indexname, indexdef from pg_indexes[m
+[32m+[m[32mwhere schemaname='public' and (indexname in ('produtos_hotmart_product_id_unique_idx','hotmart_eventos_codigo_transacao_idx','hotmart_eventos_recebido_em_idx','alunos_email_normalizado_idx','alunos_ativacoes_pendentes_aluno_pendente_idx','admin_notificacoes_nao_lidas_idx','admin_notificacoes_lista_idx')[m
+[32m+[m[32mor tablename in ('hotmart_eventos','alunos_primeiro_acesso_envios','alunos_notificacoes_acesso','alunos_ativacoes_pendentes','admin_notificacoes'))[m
+[32m+[m[32morder by tablename,indexname;[m
+[32m+[m
+[32m+[m[32m-- Todas as funcoes das migrations divergentes; compare pg_get_functiondef ao SQL local.[m
+[32m+[m[32mselect p.oid::regprocedure as signature, p.prosecdef as security_definer, p.proconfig as config, pg_get_functiondef(p.oid) as definition[m
+[32m+[m[32mfrom pg_proc p join pg_namespace n on n.oid=p.pronamespace[m
+[32m+[m[32mwhere n.nspname='public' and p.proname in ('vincular_aluno_para_usuario','criar_aluno_para_usuario','normalizar_email_aluno','proteger_identidade_aluno','obter_ou_criar_aluno_por_email','admin_mesclar_alunos','admin_importar_aquisicao_hotmart_historica','admin_listar_alunos','admin_resumo_exclusao_aluno','admin_excluir_aluno_definitivamente','criar_notificacao_admin_novo_comentario')[m
+[32m+[m[32morder by signature;[m
+[32m+[m
+[32m+[m[32mselect c.relname as table_name,t.tgname,t.tgenabled,pg_get_triggerdef(t.oid) as definition[m
+[32m+[m[32mfrom pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace[m
+[32m+[m[32mwhere n.nspname='public' and not t.tgisinternal and t.tgname in ('alunos_proteger_identidade_email','criar_notificacao_admin_novo_comentario')[m
+[32m+[m[32morder by table_name,t.tgname;[m
+[32m+[m
+[32m+[m[32m-- 20260807153000_add_unique_hotmart_product_id.sql: precondicao de dados do indice UNIQUE.[m
+[32m+[m[32mselect hotmart_product_id,count(*) as quantidade[m
+[32m+[m[32mfrom public.produtos where hotmart_product_id is not null[m
+[32m+[m[32mgroup by hotmart_product_id having count(*)>1 order by quantidade desc,hotmart_product_id;[m
+[32m+[m
+[32m+[m[32m-- 20260807170000_create_hotmart_eventos.sql: tabela, PK/FKs, indices, RLS e grants aparecem nos blocos gerais.[m
+[32m+[m[32mselect to_regclass('public.hotmart_eventos') as hotmart_eventos_exists;[m
+[32m+[m
+[32m+[m[32m-- 20260807200000_link_existing_students_on_auth.sql: somente definicoes das funcoes acima.[m
+[32m+[m[32m-- Diagnostico nao invasivo de vinculos inconsistentes: e-mails repetidos e IDs Auth repetidos.[m
+[32m+[m[32mselect lower(btrim(email)) as email_normalizado,count(*) from public.alunos[m
+[32m+[m[32mwhere email is not null group by lower(btrim(email)) having count(*)>1 order by count(*) desc,email_normalizado;[m
+[32m+[m[32mselect user_id,count(*) from public.alunos where user_id is not null group by user_id having count(*)>1;[m
+[32m+[m
+[32m+[m[32m-- 20260808230000_enforce_student_email_identity.sql: funcao, trigger e indice acima; duplicidades abaixo.[m
+[32m+[m[32mselect lower(btrim(email)) as email_normalizado,count(*)[m
+[32m+[m[32mfrom public.alunos where email is not null[m
+[32m+[m[32mgroup by lower(btrim(email)) having count(*)>1 order by count(*) desc,email_normalizado;[m
+[32m+[m
+[32m+[m[32m-- 20260810090000 / 20260810120000: admin_mesclar_alunos. Nunca execute a funcao; definicao acima.[m
+[32m+[m[32m-- 20260810110000: normalizar_email_aluno. Definicao acima.[m
+[32m+[m
+[32m+[m[32m-- 20260810130000_add_student_provisional_password_flag.sql.[m
+[32m+[m[32mselect column_name,data_type,is_nullable,column_default[m
+[32m+[m[32mfrom information_schema.columns where table_schema='public' and table_name='alunos' and column_name='deve_trocar_senha';[m
+[32m+[m
+[32m+[m[32m-- 20260810140000_add_student_first_access_delivery.sql.[m
+[32m+[m[32mselect to_regclass('public.alunos_primeiro_acesso_envios') as alunos_primeiro_acesso_envios_exists;[m
+[32m+[m
+[32m+[m[32m-- 20260810150000_make_historical_hotmart_import_atomic.sql: apenas definicao acima.[m
+[32m+[m[32m-- 20260810160000_add_admin_student_list.sql: objeto atual pode ter sido sobrescrito por 20260811120000; definicao acima.[m
+[32m+[m
+[32m+[m[32m-- 20260810170000/20260810180000: FK compras.aluno_id e funcoes de exclusao; nao execute as funcoes.[m
+[32m+[m[32mselect a.attname as column_name,a.attnotnull as not_null,pg_get_expr(d.adbin,d.adrelid) as default_expression[m
+[32m+[m[32mfrom pg_attribute a left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum[m
+[32m+[m[32mwhere a.attrelid=to_regclass('public.compras') and a.attname='aluno_id' and a.attnum>0 and not a.attisdropped;[m
+[32m+[m[32mselect conname,pg_get_constraintdef(oid) as definition from pg_constraint[m
+[32m+[m[32mwhere conrelid=to_regclass('public.compras') and conname='compras_aluno_id_fkey';[m
+[32m+[m
+[32m+[m[32m-- 20260810190000: vincular_aluno_para_usuario/criar_aluno_para_usuario, definicoes acima.[m
+[32m+[m
+[32m+[m[32m-- 20260810200000_add_student_access_notifications.sql.[m
+[32m+[m[32mselect to_regclass('public.alunos_notificacoes_acesso') as alunos_notificacoes_acesso_exists;[m
+[32m+[m
+[32m+[m[32m-- 20260810210000_add_student_account_activation_tokens.sql.[m
+[32m+[m[32mselect to_regclass('public.alunos_ativacoes_pendentes') as alunos_ativacoes_pendentes_exists;[m
+[32m+[m
+[32m+[m[32m-- 20260811090000_create_admin_notifications.sql: tabela, constraints, indices, RLS/grants, funcao e trigger acima.[m
+[32m+[m[32mselect to_regclass('public.admin_notificacoes') as admin_notificacoes_exists;[m

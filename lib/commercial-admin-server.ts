@@ -66,6 +66,10 @@ async function requireAdmin(): Promise<User> {
 function assertQuery(result: { error: { message?: string } | null }) {
   if (result.error) throw new CommercialHttpError(500, "Não foi possível consultar os dados comerciais.");
 }
+function isMissingPostSaleSchema(result: { error: { code?: string; message?: string } | null }) {
+  const message = String(result.error?.message ?? "").toLowerCase();
+  return ["42p01", "pgrst205"].includes(String(result.error?.code ?? "").toLowerCase()) || message.includes("alunos_pos_venda");
+}
 
 async function rpc(name: string, params: JsonObject) {
   if (name === "admin_mesclar_alunos") {
@@ -540,6 +544,48 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const body = await readCommercialBody(request);
   const action = requiredString(body.action, "Ação", 40);
   rejectUnknownKeys(body, ["action", "id", "data", "lei_ids"]);
+
+  if (resource === "alunos" && action === "crm_detalhe") {
+    const alunoId = uuid(body.id, "Aluno");
+    const supabase = getSupabaseServerClient();
+    const [student, purchases, crm, notifications, manualEmails, history] = await Promise.all([
+      supabase.from("alunos").select("id,user_id,nome,email,telefone,primeiro_acesso_em,ultimo_acesso_em,total_logins").eq("id", alunoId).maybeSingle(),
+      supabase.from("compras").select("produto_id,status_acesso").eq("aluno_id", alunoId).eq("status_acesso", "ativo"),
+      supabase.from("alunos_pos_venda").select("*").eq("aluno_id", alunoId).maybeSingle(),
+      supabase.from("alunos_notificacoes_acesso").select("status,enviado_em,criado_em,erro").eq("aluno_id", alunoId).order("criado_em", { ascending: false }).limit(1),
+      supabase.from("auditoria_administrativa").select("created_at,acao,detalhes").eq("entidade", "aluno").eq("entidade_id", alunoId).eq("acao", "email_acesso_manual_enviado").order("created_at", { ascending: false }).limit(1),
+      supabase.from("alunos_pos_venda_historico").select("id,acao,status,observacao,created_at").eq("aluno_id", alunoId).order("created_at", { ascending: false }).limit(30),
+    ]);
+    if (student.error || !student.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
+    for (const result of [purchases, notifications, manualEmails]) assertQuery(result);
+    const crmUnavailable = isMissingPostSaleSchema(crm) || isMissingPostSaleSchema(history);
+    if (!crmUnavailable) { assertQuery(crm); assertQuery(history); }
+    const posVenda = crm.data ?? { uso_questoes_status: "nao_confirmado" };
+    const email = (notifications.data?.[0] ?? manualEmails.data?.[0] ?? null) as { status?: string; enviado_em?: string; criado_em?: string; created_at?: string } | null;
+    const temAcesso = (purchases.data?.length ?? 0) > 0;
+    const uso = String(posVenda.uso_questoes_status ?? "nao_confirmado");
+    const concluidas = Number(temAcesso) + Number(email?.status === "enviado" || Boolean(email && "created_at" in email)) + Number(Boolean(student.data.primeiro_acesso_em)) + Number(Boolean(posVenda.whatsapp_enviado_em)) + Number(uso === "conseguiu_utilizar" || uso === "problema_resolvido") + Number(Boolean(posVenda.suporte_inicial_concluido_em));
+    const proximaAcao = !temAcesso ? "Liberar acesso" : !(email?.status === "enviado" || Boolean(email && "created_at" in email)) ? "Verificar envio do e-mail" : !student.data.primeiro_acesso_em ? "Aguardar primeiro acesso" : !posVenda.whatsapp_enviado_em ? "Enviar WhatsApp" : uso === "precisa_ajuda" ? "Prestar suporte" : uso === "nao_confirmado" ? "Confirmar uso das questões" : "Pós-venda concluído";
+    return { ...student.data, pos_venda: posVenda, historico: history.data ?? [], crm_disponivel: !crmUnavailable, crm_mensagem: crmUnavailable ? "O Mini-CRM está pronto na interface, mas a migration 20260812100000_create_student_post_sale_crm.sql ainda precisa ser aplicada para registrar o checklist e o histórico." : null, tem_acesso: temAcesso, produtos_ativos: purchases.data?.length ?? 0, email_status: email?.status ?? (email ? "enviado" : ""), email_em: email?.enviado_em ?? email?.created_at ?? null, concluidas, total_etapas: 6, proxima_acao: proximaAcao };
+  }
+  if (resource === "alunos" && action === "crm_atualizar") {
+    const alunoId = uuid(body.id, "Aluno");
+    const data = asObject(body.data);
+    rejectUnknownKeys(data, ["tipo", "status", "observacao"]);
+    const tipo = requiredString(data.tipo, "Tipo", 40);
+    const status = optionalString(data.status, "Status", 50);
+    if (!['whatsapp_aberto', 'whatsapp_enviado', 'uso_questoes', 'suporte_concluido'].includes(tipo)) throw new CommercialValidationError("Ação de pós-venda inválida.");
+    if (tipo === "uso_questoes" && !["nao_confirmado", "conseguiu_utilizar", "precisa_ajuda", "problema_resolvido"].includes(status ?? "")) throw new CommercialValidationError("Status de uso das questões inválido.");
+    const supabase = getSupabaseServerClient();
+    const now = new Date().toISOString();
+    const patch = tipo === "whatsapp_enviado" ? { whatsapp_enviado_em: now, updated_at: now } : tipo === "uso_questoes" ? { uso_questoes_status: status, uso_questoes_atualizado_em: now, updated_at: now } : tipo === "suporte_concluido" ? { suporte_inicial_concluido_em: now, updated_at: now } : { updated_at: now };
+    const saved = await supabase.from("alunos_pos_venda").upsert({ aluno_id: alunoId, ...patch }, { onConflict: "aluno_id" });
+    if (isMissingPostSaleSchema(saved)) throw new CommercialHttpError(503, "A migration do Mini-CRM ainda não foi aplicada. Aplique 20260812100000_create_student_post_sale_crm.sql para salvar ações de pós-venda.");
+    assertQuery(saved);
+    const event = await supabase.from("alunos_pos_venda_historico").insert({ aluno_id: alunoId, ator_user_id: actor, acao: tipo, status: status ?? null, observacao: optionalString(data.observacao, "Observação", 2000) ?? null });
+    assertQuery(event);
+    return { ok: true };
+  }
 
   if (resource === "alunos" && action === "criar") {
     const data = validateStudentData(body.data);
