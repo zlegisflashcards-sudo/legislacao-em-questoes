@@ -20,12 +20,21 @@ const payloadV2 = {
   },
 };
 
-function payloadPerda(event: "PURCHASE_CANCELED" | "PURCHASE_REFUNDED" | "PURCHASE_CHARGEBACK") {
+function payloadPerda(event: "PURCHASE_CANCELED" | "PURCHASE_REFUNDED" | "PURCHASE_CHARGEBACK" | "PURCHASE_PROTEST") {
   return {
     ...payloadV2,
     id: `evt-${event.toLowerCase()}`,
     event,
     data: { ...payloadV2.data, purchase: { ...payloadV2.data.purchase, status: event.replace("PURCHASE_", "") } },
+  };
+}
+
+function payloadPedidoReembolso() {
+  return {
+    ...payloadV2,
+    id: "evt-refund-request",
+    event: "PURCHASE_REFUND_REQUEST",
+    data: { ...payloadV2.data, purchase: { ...payloadV2.data.purchase, status: "PARTIALLY_REFUNDED" } },
   };
 }
 
@@ -154,7 +163,7 @@ describe("recepção de webhook Hotmart", () => {
       { data: "aluno-reaproveitado" },
       {},
       { data: [{ lei_id: 1 }, { lei_id: 2 }] },
-      { data: [] },
+      { data: [{ id: 1, lei_id: 1, status: "ativo" }, { id: 2, lei_id: 2, status: "ativo" }] },
       {},
     );
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
@@ -169,15 +178,14 @@ describe("recepção de webhook Hotmart", () => {
   it("reaproveita compra Hotmart existente sem recriar aluno quando o vínculo já existe", async () => {
     const { client, calls } = supabaseComRespostas(
       {},
-      { data: { id: "compra-vinculada", aluno_id: "aluno-1", produto_id: "produto-1" } },
-      {},
+      { data: { id: "compra-vinculada", aluno_id: "aluno-1", produto_id: "produto-1", status: "aprovada", status_acesso: "ativo" } },
       { data: [{ lei_id: 1 }] },
-      { data: [] },
+      { data: [{ id: 1, lei_id: 1, status: "ativo" }] },
       {},
     );
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
-    expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(false);
     expect(calls.some((call) => call.table === "alunos" && call.operation === "insert")).toBe(false);
+    expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(true);
   });
 
   it("registra erro quando o produto Hotmart é desconhecido", async () => {
@@ -211,6 +219,35 @@ describe("recepção de webhook Hotmart", () => {
     expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "update", value: expect.objectContaining({ status: statusLiberacao }) }));
   });
 
+  it("marca pedido de reembolso como pendente e suspende as liberações da compra", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", produto_id: "produto-1", aluno_id: "aluno-1", status: "aprovada", status_acesso: "ativo" } }, {}, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadPedidoReembolso())).resolves.toEqual({ duplicate: false });
+    expect(calls).toContainEqual(expect.objectContaining({
+      table: "compras",
+      operation: "update",
+      value: expect.objectContaining({ status_acesso: "reembolso_solicitado" }),
+    }));
+    expect(calls).toContainEqual(expect.objectContaining({
+      table: "liberacoes_leis",
+      operation: "update",
+      value: expect.objectContaining({ status: "cancelado" }),
+    }));
+  });
+
+  it("restaura a compra e as liberações quando o evento volta a aprovado", async () => {
+    const { client, calls } = supabaseComRespostas(
+      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", aluno_id: "aluno-1", produto_id: "produto-1", status: "cancelada", status_acesso: "cancelado" } }, {}, { data: [{ lei_id: 1 }] }, { data: [{ id: 10, lei_id: 1, status: "cancelado" }] }, {}, {},
+    );
+    await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
+    expect(calls).toContainEqual(expect.objectContaining({
+      table: "compras",
+      operation: "update",
+      value: expect.objectContaining({ status_acesso: "ativo" }),
+    }));
+  });
+
   it("registra erro se a compra de perda de acesso não existe", async () => {
     const { client, calls } = supabaseComRespostas({}, { data: { id: "produto-1" } }, { data: null }, {});
     await expect(registrarEventoHotmart(client as never, payloadPerda("PURCHASE_CANCELED"))).rejects.toThrow("Compra Hotmart não encontrada");
@@ -227,7 +264,7 @@ describe("recepção de webhook Hotmart", () => {
 
   it("não altera a compra novamente quando ela já está revogada", async () => {
     const { client, calls } = supabaseComRespostas(
-      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "cancelada" } }, {}, {},
+      {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "cancelada", status_acesso: "cancelado" } }, {}, {},
     );
     await expect(registrarEventoHotmart(client as never, payloadPerda("PURCHASE_CANCELED"))).resolves.toEqual({ duplicate: false });
     expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(false);

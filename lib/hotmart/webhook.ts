@@ -31,10 +31,13 @@ export type EventoHotmartNormalizado = {
 
 type ValidAcquisitionHandler = (input: { studentId: string; origin: "hotmart"; idempotencyKey: string; accessLabel: string }) => Promise<void>;
 
+const EVENTOS_ATIVACAO = new Set(["PURCHASE_APPROVED", "PURCHASE_COMPLETE"]);
+const EVENTOS_PEDIDO_REEMBOLSO = new Set(["PURCHASE_REFUND_REQUEST", "PURCHASE_REFUND_REQUESTED", "PURCHASE_REFUND_PENDING"]);
 const EVENTOS_PERDA_ACESSO = {
   PURCHASE_CANCELED: { status: "cancelada", statusAcesso: "cancelado", statusLiberacao: "cancelado", data: "cancelada_em" },
   PURCHASE_REFUNDED: { status: "reembolsada", statusAcesso: "reembolsado", statusLiberacao: "reembolsado", data: "reembolsada_em" },
   PURCHASE_CHARGEBACK: { status: "chargeback", statusAcesso: "reembolsado", statusLiberacao: "reembolsado", data: "reembolsada_em" },
+  PURCHASE_PROTEST: { status: "protestada", statusAcesso: "cancelado", statusLiberacao: "cancelado", data: "cancelada_em" },
 } as const;
 
 function texto(valor: unknown) {
@@ -76,6 +79,121 @@ async function obterOuCriarAlunoHotmart(
     throw criado.error ?? new Error("Nao foi possivel localizar ou criar o aluno.");
   }
   return criado.data as string;
+}
+
+function classificarAcaoHotmart(evento: EventoHotmartNormalizado) {
+  if (EVENTOS_ATIVACAO.has(evento.tipo_evento ?? "") || ["APPROVED", "COMPLETE"].includes(evento.status_transacao ?? "")) {
+    return "ativar" as const;
+  }
+  if (EVENTOS_PEDIDO_REEMBOLSO.has(evento.tipo_evento ?? "") || evento.status_transacao === "PARTIALLY_REFUNDED") {
+    return "reembolso_solicitado" as const;
+  }
+  if ((evento.tipo_evento ?? "") in EVENTOS_PERDA_ACESSO || ["CANCELLED", "CHARGEBACK", "DISPUTE", "REFUNDED"].includes(evento.status_transacao ?? "")) {
+    return "revogar" as const;
+  }
+  return "ignorar" as const;
+}
+
+async function restaurarLiberacoesDaCompra(supabase: SupabaseClient, compraId: string, alunoId: string, produtoId: string) {
+  const leis = await supabase.from("produto_leis").select("lei_id").eq("produto_id", produtoId);
+  if (leis.error) throw leis.error;
+  if (!leis.data?.length) return;
+
+  const existentes = await supabase.from("liberacoes_leis").select("id,lei_id,status").eq("compra_id", compraId);
+  if (existentes.error) throw existentes.error;
+
+  const leisExistentes = new Set((existentes.data ?? []).map(({ lei_id }) => lei_id));
+  const pendentes = leis.data.filter(({ lei_id }) => !leisExistentes.has(lei_id));
+  if (pendentes.length) {
+    const liberacoes = await supabase.from("liberacoes_leis").insert(
+      pendentes.map(({ lei_id }) => ({
+        aluno_id: alunoId,
+        lei_id,
+        compra_id: compraId,
+        produto_id: produtoId,
+        origem: "hotmart",
+        status: "ativo",
+        motivo: "Webhook Hotmart: restauração de acesso",
+      })),
+    );
+    if (liberacoes.error) throw liberacoes.error;
+  }
+
+  const aRestaurar = (existentes.data ?? []).filter((row) => row.status !== "ativo").map((row) => row.id);
+  if (aRestaurar.length) {
+    const atualizacao = await supabase
+      .from("liberacoes_leis")
+      .update({ status: "ativo", motivo: null, revogada_por: null, revogada_em: null })
+      .in("id", aRestaurar);
+    if (atualizacao.error) throw atualizacao.error;
+  }
+}
+
+async function revogarLiberacoesDaCompra(supabase: SupabaseClient, compraId: string, statusLiberacao: string, motivo: string) {
+  const liberacoes = await supabase
+    .from("liberacoes_leis")
+    .update({ status: statusLiberacao, motivo, revogada_em: new Date().toISOString() })
+    .eq("compra_id", compraId)
+    .eq("status", "ativo");
+  if (liberacoes.error) throw liberacoes.error;
+}
+
+async function atualizarCompraHotmart(
+  supabase: SupabaseClient,
+  compraId: string,
+  atualizacao: Record<string, string | null>,
+) {
+  const compraAtualizada = await supabase.from("compras").update(atualizacao).eq("id", compraId);
+  if (compraAtualizada.error) throw compraAtualizada.error;
+}
+
+async function sincronizarCompraHotmart(
+  supabase: SupabaseClient,
+  compra: { id: string; status?: string | null; status_acesso?: string | null; produto_id?: string | null; aluno_id?: string | null },
+  evento: EventoHotmartNormalizado,
+  acao: "ativar" | "reembolso_solicitado" | "revogar",
+) {
+  const agora = evento.aprovada_em ?? new Date().toISOString();
+  if (acao === "ativar") {
+    if (compra.status !== "aprovada" || compra.status_acesso !== "ativo") {
+      await atualizarCompraHotmart(supabase, compra.id, {
+        status: "aprovada",
+        status_acesso: "ativo",
+        comprada_em: agora,
+        adquirida_em: agora,
+        cancelada_em: null,
+        reembolsada_em: null,
+        reativada_em: agora,
+        reembolso_solicitado_em: null,
+      });
+    }
+    if (compra.produto_id && compra.aluno_id) {
+      await restaurarLiberacoesDaCompra(supabase, compra.id, compra.aluno_id, compra.produto_id);
+    }
+    return;
+  }
+
+  if (acao === "reembolso_solicitado") {
+    if (compra.status !== "reembolso_solicitado" || compra.status_acesso !== "reembolso_solicitado") {
+      await atualizarCompraHotmart(supabase, compra.id, {
+        status: "reembolso_solicitado",
+        status_acesso: "reembolso_solicitado",
+        reembolso_solicitado_em: agora,
+      });
+    }
+    await revogarLiberacoesDaCompra(supabase, compra.id, "cancelado", "Webhook Hotmart: pedido de reembolso");
+    return;
+  }
+
+  const perda = EVENTOS_PERDA_ACESSO[evento.tipo_evento as keyof typeof EVENTOS_PERDA_ACESSO] ?? EVENTOS_PERDA_ACESSO.PURCHASE_CANCELED;
+  if (compra.status !== perda.status || compra.status_acesso !== perda.statusAcesso) {
+    await atualizarCompraHotmart(supabase, compra.id, {
+      status: perda.status,
+      status_acesso: perda.statusAcesso,
+      [perda.data]: agora,
+    });
+  }
+  await revogarLiberacoesDaCompra(supabase, compra.id, perda.statusLiberacao, `Webhook Hotmart: ${evento.tipo_evento}`);
 }
 
 export function validarHottok(recebido: string | null, esperado: string | undefined) {
@@ -150,15 +268,14 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
   }
   if (error && error.code !== "23505") throw error;
 
-  const perdaAcesso = EVENTOS_PERDA_ACESSO[normalizado.tipo_evento as keyof typeof EVENTOS_PERDA_ACESSO];
-  const vendaAprovada = normalizado.tipo_evento === "PURCHASE_APPROVED" && normalizado.status_transacao === "APPROVED";
-  if (!vendaAprovada && !perdaAcesso) {
+  const acao = classificarAcaoHotmart(normalizado);
+  if (acao === "ignorar") {
     return { duplicate };
   }
 
   try {
-    if (vendaAprovada) await processarVendaAprovadaHotmart(supabase, normalizado, onValidAcquisition);
-    else await processarPerdaAcessoHotmart(supabase, normalizado, perdaAcesso);
+    if (acao === "ativar") await processarVendaAprovadaHotmart(supabase, normalizado, onValidAcquisition);
+    else await processarAtualizacaoAcessoHotmart(supabase, normalizado, acao);
     const atualizado = await supabase
       .from("hotmart_eventos")
       .update({ processado: true, erro_processamento: null })
@@ -176,10 +293,10 @@ export async function registrarEventoHotmart(supabase: SupabaseClient, payload: 
   }
 }
 
-export async function processarPerdaAcessoHotmart(
+export async function processarAtualizacaoAcessoHotmart(
   supabase: SupabaseClient,
   evento: EventoHotmartNormalizado,
-  perda: (typeof EVENTOS_PERDA_ACESSO)[keyof typeof EVENTOS_PERDA_ACESSO],
+  acao: "reembolso_solicitado" | "revogar",
 ) {
   if (!evento.codigo_transacao) throw new Error("Evento Hotmart sem código da transação.");
 
@@ -195,28 +312,14 @@ export async function processarPerdaAcessoHotmart(
 
   const compra = await supabase
     .from("compras")
-    .select("id,status")
+    .select("id,status,status_acesso,produto_id,aluno_id")
     .eq("origem", "hotmart")
     .eq("identificador_externo", evento.codigo_transacao)
     .maybeSingle();
   if (compra.error) throw compra.error;
   if (!compra.data) throw new Error("Compra Hotmart não encontrada para a transação.");
 
-  const agora = new Date().toISOString();
-  if (compra.data.status !== perda.status) {
-    const compraAtualizada = await supabase
-      .from("compras")
-      .update({ status: perda.status, status_acesso: perda.statusAcesso, [perda.data]: agora })
-      .eq("id", compra.data.id);
-    if (compraAtualizada.error) throw compraAtualizada.error;
-  }
-
-  const liberacoes = await supabase
-    .from("liberacoes_leis")
-    .update({ status: perda.statusLiberacao, revogada_em: agora })
-    .eq("compra_id", compra.data.id)
-    .eq("status", "ativo");
-  if (liberacoes.error) throw liberacoes.error;
+  await sincronizarCompraHotmart(supabase, compra.data as { id: string; produto_id?: string | null; aluno_id?: string | null }, evento, acao);
   return { ignored: false };
 }
 
@@ -242,11 +345,15 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
         .is("aluno_id", null);
       if (vinculo.error) throw vinculo.error;
     }
-    await liberarLeisDaCompra(
+    await sincronizarCompraHotmart(
       supabase,
-      compraExistente.data.id as string,
-      alunoId,
-      compraExistente.data.produto_id as string,
+      {
+        id: compraExistente.data.id as string,
+        produto_id: compraExistente.data.produto_id as string,
+        aluno_id: alunoId,
+      },
+      evento,
+      "ativar",
     );
     return { duplicate: true };
   }
@@ -304,32 +411,7 @@ export async function processarVendaAprovadaHotmart(supabase: SupabaseClient, ev
     throw compra.error ?? new Error("Não foi possível registrar a compra.");
   }
 
-  await liberarLeisDaCompra(supabase, compraCriada.id as string, alunoId, produtoInterno.id as string);
+  await restaurarLiberacoesDaCompra(supabase, compraCriada.id as string, alunoId, produtoInterno.id as string);
   if (onValidAcquisition) await onValidAcquisition({ studentId: alunoId, origin: "hotmart", idempotencyKey: `hotmart:${evento.codigo_transacao}`, accessLabel: produtoInterno.nome as string });
   return { duplicate: false };
-}
-
-async function liberarLeisDaCompra(
-  supabase: SupabaseClient,
-  compraId: string,
-  alunoId: string,
-  produtoId: string,
-) {
-  const leis = await supabase.from("produto_leis").select("lei_id").eq("produto_id", produtoId);
-  if (leis.error) throw leis.error;
-  if (!leis.data?.length) return;
-
-  const existentes = await supabase.from("liberacoes_leis").select("lei_id").eq("compra_id", compraId);
-  if (existentes.error) throw existentes.error;
-  const leisExistentes = new Set((existentes.data ?? []).map(({ lei_id }) => lei_id));
-  const pendentes = leis.data.filter(({ lei_id }) => !leisExistentes.has(lei_id));
-  if (pendentes.length) {
-    const liberacoes = await supabase.from("liberacoes_leis").insert(
-      pendentes.map(({ lei_id }) => ({
-        aluno_id: alunoId, lei_id, compra_id: compraId, produto_id: produtoId,
-        origem: "hotmart", status: "ativo", motivo: "Webhook Hotmart: PURCHASE_APPROVED",
-      })),
-    );
-    if (liberacoes.error) throw liberacoes.error;
-  }
 }
