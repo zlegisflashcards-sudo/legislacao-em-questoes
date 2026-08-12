@@ -106,11 +106,11 @@ describe("página autenticada do Anki", () => {
     for (const forbidden of ["public.leis", "liberacoes_leis", "lei_id", "service_role", "/api/"]) expect(client.toLowerCase()).not.toContain(forbidden);
   });
 
-  it("reutiliza as abas sem botão Voltar e mantém Meu edital como Em breve", () => {
+  it("reutiliza as abas sem botão Voltar e direciona para Meu edital", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
     expect(tabs).toContain("Minhas leis");
     expect(tabs).toContain("Meu edital");
-    expect(tabs).toContain("Em breve");
+    expect(tabs).toContain('href="/meu-edital"');
     expect(client).not.toContain("Voltar");
   });
 

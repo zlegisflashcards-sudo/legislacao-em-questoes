@@ -1,0 +1,4 @@
+import { loadStudentExamSelection, mutateStudentExam, studentExamErrorResponse } from "@/lib/student-exams-server";
+export const dynamic="force-dynamic";
+export async function GET(request:Request){try{const data=await loadStudentExamSelection(request);return Response.json({success:true,...data},{headers:{"Cache-Control":"private, no-store, max-age=0"}})}catch(error){return studentExamErrorResponse(error)}}
+export async function PATCH(request:Request){try{if(!request.headers.get("content-type")?.includes("application/json"))return Response.json({success:false,message:"Conteúdo inválido."},{status:415}); const body=await request.json() as Record<string,unknown>; if(typeof body.action!=="string")return Response.json({success:false,message:"Ação inválida."},{status:400}); await mutateStudentExam(request,body.action,body); return Response.json({success:true},{headers:{"Cache-Control":"private, no-store, max-age=0"}})}catch(error){return studentExamErrorResponse(error)}}

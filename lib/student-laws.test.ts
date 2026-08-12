@@ -116,10 +116,23 @@ describe("fronteira autenticada das leis adquiridas", () => {
 });
 
 describe("interface das leis adquiridas", () => {
+  it("integra cada card ao Meu Edital sem alterar a rota de estudo", () => {
+    expect(client).toContain('fetch("/api/aluno/editais"');
+    expect(client).toContain('action: included ? "remove" : "add"');
+    expect(client).toContain('leiId: lawId');
+    expect(client).toContain('"+ Meu Edital"');
+    expect(client).toContain(">✓ Meu Edital<");
+    expect(client).toContain('aria-label="Remover do Meu Edital"');
+    expect(client).toContain('title="Remover do Meu Edital"');
+    expect(client).toContain(">×</button>");
+    expect(client).toContain('setMyExamLawIds');
+    expect(client).toContain('flex w-full flex-wrap');
+  });
+
   it("cria a rota oficial e as duas abas", () => {
     expect(page).toContain("<StudentLawsClient />");
     expect(client).toContain("Minhas leis adquiridas");
-    expect(client).toContain("<StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} />");
+    expect(client).toContain('<StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} meuEditalHref="/meu-edital" />');
   });
 
   it("mantém o card obrigatório do Anki em primeiro lugar e com a estrutura dos cards de lei", () => {

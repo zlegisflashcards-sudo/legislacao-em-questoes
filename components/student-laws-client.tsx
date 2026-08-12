@@ -7,6 +7,7 @@ import { StudentAreaTabs, type StudentAreaTabId } from "@/components/student-are
 import { readAnkiConfigured, shouldPromptBeforeLawStudy } from "@/lib/anki-study";
 import { filterStudentLaws, studentLawShortNameForDisplay, type StudentLaw } from "@/lib/student-laws";
 import { supabase } from "@/lib/supabase";
+import type { StudentExam } from "@/lib/student-exams";
 
 type StudentLawsResponse = { leis?: StudentLaw[]; total?: number; message?: string };
 type AnkiSetupStatus = "loading" | "pending" | "configured";
@@ -15,13 +16,14 @@ async function studentRequest() {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   const userId = data.session?.user.id ?? null;
-  if (!token || !userId) return { response: new Response(null, { status: 401 }), userId: null };
+  if (!token || !userId) return { response: new Response(null, { status: 401 }), userId: null, token: null };
   return {
     response: await fetch("/api/aluno/minhas-leis", {
       cache: "no-store",
       headers: { Authorization: `Bearer ${token}` },
     }),
     userId,
+    token,
   };
 }
 
@@ -34,12 +36,15 @@ export function StudentLawsClient() {
   const [userId, setUserId] = useState<string | null>(null);
   const [ankiStatus, setAnkiStatus] = useState<AnkiSetupStatus>("loading");
   const [pendingLawHref, setPendingLawHref] = useState<string | null>(null);
+  const [myExamLawIds, setMyExamLawIds] = useState<number[]>([]);
+  const [examFeedback, setExamFeedback] = useState("");
+  const [examSavingLawId, setExamSavingLawId] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
     async function load() {
       try {
-        const { response, userId: authenticatedUserId } = await studentRequest();
+        const { response, userId: authenticatedUserId, token } = await studentRequest();
         if (response.status === 401) {
           window.location.replace("/conta?modo=login&retorno=%2Fminhas-leis");
           return;
@@ -48,6 +53,11 @@ export function StudentLawsClient() {
         const result = await response.json() as StudentLawsResponse;
         if (!response.ok || !Array.isArray(result.leis)) throw new Error(result.message);
         if (active) setLaws(result.leis);
+        const examsResponse = await fetch("/api/aluno/editais", { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+        const examsResult = await examsResponse.json() as { editais?: StudentExam[] };
+        if (!examsResponse.ok || !Array.isArray(examsResult.editais)) throw new Error();
+        const customExam = examsResult.editais.find((exam) => exam.tipo === "personalizado");
+        if (active) setMyExamLawIds(customExam?.leis.map((law) => law.id) ?? []);
       } catch {
         if (active) setError("Não foi possível carregar suas leis. Tente novamente em instantes.");
       } finally {
@@ -66,6 +76,21 @@ export function StudentLawsClient() {
   const closeAnkiPrompt = useCallback(() => setPendingLawHref(null), []);
 
   const filteredLaws = useMemo(() => filterStudentLaws(laws, search), [laws, search]);
+  const toggleMyExamLaw = useCallback(async (lawId: number) => {
+    const included = myExamLawIds.includes(lawId);
+    setExamSavingLawId(lawId);
+    setExamFeedback("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      const response = await fetch("/api/aluno/editais", { method: "PATCH", headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}`, "Content-Type": "application/json" }, body: JSON.stringify({ action: included ? "remove" : "add", leiId: lawId }) });
+      const result = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) throw new Error(result?.message || "Não foi possível atualizar seu edital.");
+      setMyExamLawIds((ids) => included ? ids.filter((id) => id !== lawId) : [...ids, lawId]);
+      setExamFeedback(included ? "Lei removida do Meu Edital." : "Lei adicionada ao Meu Edital.");
+    } catch (toggleError) {
+      setExamFeedback(toggleError instanceof Error ? toggleError.message : "Não foi possível atualizar seu edital.");
+    } finally { setExamSavingLawId(null); }
+  }, [myExamLawIds]);
 
   return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
     <header className="mb-8">
@@ -74,7 +99,7 @@ export function StudentLawsClient() {
       <p className="mt-3 max-w-2xl text-slate-600">Acesse as leis liberadas para sua conta e prepare sua rotina de estudo.</p>
     </header>
 
-    <StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} />
+    <StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} meuEditalHref="/meu-edital" />
 
     {activeTab === "leis" ? <section id="student-laws-panel" role="tabpanel" aria-label="Minhas leis" className="grid gap-6">
       <AnkiModule status={ankiStatus} />
@@ -84,12 +109,13 @@ export function StudentLawsClient() {
         <input id="student-laws-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Título, código ou nome curto" className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 px-4 text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
         <p className="mt-3 text-sm font-semibold text-slate-500" aria-live="polite">{laws.length} {laws.length === 1 ? "lei liberada" : "leis liberadas"}</p>
       </div> : null}
+      {examFeedback ? <p role="status" aria-live="polite" className="text-sm font-semibold text-slate-600">{examFeedback}</p> : null}
 
       {loading ? <div role="status" className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Carregando suas leis…</div> : null}
       {!loading && error ? <ErrorState message={error} /> : null}
       {!loading && !error && laws.length === 0 ? <EmptyState /> : null}
       {!loading && !error && laws.length > 0 && filteredLaws.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-xl font-black text-[#062a5f]">Nenhuma lei encontrada</h2><p className="mt-2 text-slate-600">Tente pesquisar por outro título, código ou nome curto.</p></div> : null}
-      {!loading && !error && filteredLaws.length > 0 ? <div className="grid gap-4" aria-label="Leis liberadas">{filteredLaws.map((law) => <StudentLawCard key={law.id} law={law} ankiConfigured={ankiStatus === "configured"} onAnkiRequired={setPendingLawHref} />)}</div> : null}
+      {!loading && !error && filteredLaws.length > 0 ? <div className="grid gap-4" aria-label="Leis liberadas">{filteredLaws.map((law) => <StudentLawCard key={law.id} law={law} ankiConfigured={ankiStatus === "configured"} onAnkiRequired={setPendingLawHref} inMyExam={myExamLawIds.includes(law.id)} examSaving={examSavingLawId === law.id} onToggleMyExam={toggleMyExamLaw} />)}</div> : null}
     </section> : <section id="student-exam-panel" role="tabpanel" aria-label="Meu edital" className="rounded-3xl border border-blue-100 bg-white p-8 text-center shadow-sm sm:p-12">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Em breve</p>
       <h2 className="mt-3 text-2xl font-black text-[#062a5f]">Meu edital</h2>
@@ -128,7 +154,7 @@ function AnkiIcon() {
   </span>;
 }
 
-function StudentLawCard({ law, ankiConfigured, onAnkiRequired }: { law: StudentLaw; ankiConfigured: boolean; onAnkiRequired: (lawHref: string) => void }) {
+function StudentLawCard({ law, ankiConfigured, onAnkiRequired, inMyExam, examSaving, onToggleMyExam }: { law: StudentLaw; ankiConfigured: boolean; onAnkiRequired: (lawHref: string) => void; inMyExam: boolean; examSaving: boolean; onToggleMyExam: (lawId: number) => Promise<void> }) {
   const shortName = studentLawShortNameForDisplay(law);
   const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`;
   return <article className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex sm:flex-row sm:items-center sm:gap-5">
@@ -147,6 +173,10 @@ function StudentLawCard({ law, ankiConfigured, onAnkiRequired }: { law: StudentL
       event.preventDefault();
       onAnkiRequired(lawHref);
     }} className="col-span-2 inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:w-auto">Baixar questões</Link>
+    {inMyExam ? <div className="col-span-2 flex w-full flex-wrap items-center gap-x-2 gap-y-1 sm:w-auto">
+      <span className="text-sm font-black text-emerald-700">✓ Meu Edital</span>
+      <button type="button" aria-label="Remover do Meu Edital" title="Remover do Meu Edital" disabled={examSaving} onClick={() => void onToggleMyExam(law.id)} className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-lg font-black leading-none text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-60">×</button>
+    </div> : <button type="button" disabled={examSaving} onClick={() => void onToggleMyExam(law.id)} className="col-span-2 min-h-10 w-full text-left text-sm font-bold text-blue-700 underline underline-offset-4 disabled:opacity-60 sm:w-auto">{examSaving ? "Adicionando…" : "+ Meu Edital"}</button>}
   </article>;
 }
 

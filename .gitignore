@@ -24,3 +24,6 @@ tsconfig.tsbuildinfo
 .codex-remote-attachments/
 supabase/.temp/
 .codex-backups/
+.codex-*.log
+
+.vercel

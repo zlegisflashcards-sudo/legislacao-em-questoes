@@ -1,60 +1,45 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { dailyGuidance, normalizeProgress, parseDailyReviewRpc } from "./dashboard";
+import { examStates, percentage } from "./dashboard";
 
-describe("dashboard do estudante", () => {
-  it("não inventa progresso quando o valor é ausente", () => {
-    expect(normalizeProgress(null)).toBeNull();
-    expect(normalizeProgress(undefined)).toBeNull();
-    expect(normalizeProgress(Number.NaN)).toBeNull();
-    expect(normalizeProgress(45.6)).toBe(46);
+describe("painel e edital ativo", () => {
+  it("calcula percentual e estados mutuamente exclusivos", () => {
+    const states = examStates([
+      ...Array.from({ length: 5 }, () => ({ revisao: true, emEstudo: false })),
+      ...Array.from({ length: 4 }, () => ({ revisao: false, emEstudo: true })),
+      ...Array.from({ length: 3 }, () => ({ revisao: false, emEstudo: false })),
+    ]);
+    expect(states).toEqual({ revisao: 5, emEstudo: 4, restantes: 3 });
+    expect(percentage(states.revisao, 12)).toBe(42);
   });
 
-  it("limita progresso válido ao intervalo acessível", () => {
-    expect(normalizeProgress(-2)).toBe(0);
-    expect(normalizeProgress(120)).toBe(100);
+  it("prioriza revisão sobre estudo e trata edital vazio ou integralmente concluído", () => {
+    expect(examStates([{ revisao: true, emEstudo: true }])).toEqual({ revisao: 1, emEstudo: 0, restantes: 0 });
+    expect(examStates([])).toEqual({ revisao: 0, emEstudo: 0, restantes: 0 });
+    expect(percentage(0, 0)).toBeNull();
+    expect(examStates([{ revisao: true, emEstudo: true }, { revisao: true, emEstudo: false }])).toEqual({ revisao: 2, emEstudo: 0, restantes: 0 });
   });
 
-  it("interpreta o estado persistido da revisão", () => {
-    expect(parseDailyReviewRpc([{ data_revisao: "2026-08-04", hoje_concluida: true, streak_atual: 3 }])).toEqual({
-      dataRevisao: "2026-08-04",
-      hojeConcluida: true,
-      streakAtual: 3,
-    });
-    expect(parseDailyReviewRpc([])).toEqual({ dataRevisao: null, hojeConcluida: false, streakAtual: 0 });
+  it("mantém o painel somente leitura e renderiza estados, frase e link do edital", () => {
+    const client = readFileSync("components/dashboard-client.tsx", "utf8");
+    const route = readFileSync("app/api/dashboard/route.ts", "utf8");
+    expect(client).toContain("Monte seu edital de estudo");
+    expect(client).toContain("0 leis no edital");
+    expect(client).toContain("SegmentedBar");
+    expect(client).toContain("No Anki, a constância vale mais que a pressa");
+    expect(client).toContain("Ver edital →");
+    expect(client).not.toContain("<select");
+    expect(client).not.toContain('method: "PATCH"');
+    expect(route).not.toContain("PATCH");
   });
 
-  it("mantém a orientação disponível para os fluxos que ainda a utilizam", () => {
-    expect(dailyGuidance(false)).toBe("Faça primeiro sua revisão diária antes de avançar para um novo conteúdo.");
-    expect(dailyGuidance(true)).toBe("Revisão concluída. Agora você pode avançar no seu edital.");
-  });
-
-  it("mostra a saudação e o acesso real às leis adquiridas", () => {
-    const source = readFileSync("components/dashboard-client.tsx", "utf8");
-    expect(source).toContain("`Olá, ${nomePublico}`");
-    expect(source).toContain('href="/minhas-leis"');
-    expect(source).toContain("Acessar minhas leis adquiridas");
-  });
-
-  it("apresenta somente um spoiler discreto dos recursos futuros", () => {
-    const source = readFileSync("components/dashboard-client.tsx", "utf8");
-    const spoiler = source.slice(source.indexOf('<aside aria-labelledby="dashboard-coming-soon-title"'), source.indexOf("</aside>") + "</aside>".length);
-    expect(spoiler).toContain("Em breve");
-    expect(spoiler).toContain("Seu painel de estudos ficará ainda mais completo, com edital personalizado, progresso, sequência de revisões e acompanhamento da sua evolução.");
-    expect(spoiler).not.toContain("<button");
-    expect(spoiler).not.toContain("<Link");
-  });
-
-  it("não exibe métricas, progresso ou edital simulados no painel provisório", () => {
-    const source = readFileSync("components/dashboard-client.tsx", "utf8");
-    for (const forbidden of ["streakAtual", "hojeConcluida", "editalAtivo", "progressbar", "Marcar revisão", "Abrir meu edital", "Sequência de estudos"]) {
-      expect(source).not.toContain(forbidden);
-    }
-  });
-
-  it("protege a rota no cliente e preserva o retorno", () => {
-    const source = readFileSync("components/dashboard-client.tsx", "utf8");
-    expect(source).toContain("/conta?modo=login&retorno=%2Fdashboard");
-    expect(source).toContain('Authorization: `Bearer ${token}`');
+  it("mantém a seleção em Meu Edital e deriva a barra sem persistência nova", () => {
+    const examClient = readFileSync("components/student-exam-client.tsx", "utf8");
+    const server = readFileSync("lib/dashboard-server.ts", "utf8");
+    expect(examClient).toContain("Edital em estudo");
+    expect(examClient).toContain('change("set-active"');
+    expect(server).toContain("const estados = examStates(exam.leis)");
+    expect(server).toContain("loadStudentExamSelection(request)");
+    expect(server).not.toContain("setDashboardExam");
   });
 });
