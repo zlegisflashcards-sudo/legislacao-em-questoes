@@ -74,8 +74,12 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain('"border-blue-200 bg-blue-50 text-slate-700"');
     expect(client).toContain('"border-slate-200 bg-white text-slate-500 hover:bg-slate-50"');
     expect(client).toContain('text-blue-800">✓</span>');
+    expect(client).toContain('text-balance text-xl font-black leading-tight');
+    expect(client).toContain('flex flex-wrap items-center gap-2 sm:contents');
+    expect(client).toContain('hidden font-black text-slate-500 sm:block');
     expect(client).not.toContain('text-emerald-700');
     expect(client).not.toContain('}✓');
     expect(client).not.toContain('}☐');
+    expect(client).not.toContain('whitespace-nowrap');
   });
 });

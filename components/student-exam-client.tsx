@@ -164,11 +164,15 @@ export function StudentExamClient() {
     </section> : null}
     {!loading && !error && current && current.leis.length > 0 ? <ol className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {current.leis.map((law, index) => <li key={law.id} className="grid gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-4">
-        <span className="font-black text-slate-500">{index + 1}.</span>
-        <Link href={`/estudar/lei/${encodeURIComponent(law.slug)}`} className="min-w-0 break-words font-bold text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{law.titulo}</Link>
-        <ProgressControl label="Estudando" checked={law.emEstudo} disabled={progressSavingLawId === law.id} onClick={() => void updateLawProgress(law, "study")}/>
-        <ProgressControl label="Revisão" checked={law.revisao} disabled={progressSavingLawId === law.id} onClick={() => void updateLawProgress(law, "review")}/>
-        {current.tipo === "personalizado" ? <span className="flex flex-wrap gap-1 sm:justify-end">
+        <span className="hidden font-black text-slate-500 sm:block">{index + 1}.</span>
+        <div className="min-w-0 sm:contents">
+          <Link href={`/estudar/lei/${encodeURIComponent(law.slug)}`} className="col-span-2 min-w-0 break-words text-balance text-xl font-black leading-tight text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700 sm:col-span-1 sm:text-base sm:font-bold">{law.titulo}</Link>
+          <div className="flex flex-wrap items-center gap-2 sm:contents">
+            <ProgressControl label="Estudando" checked={law.emEstudo} disabled={progressSavingLawId === law.id} onClick={() => void updateLawProgress(law, "study")} />
+            <ProgressControl label="Revisão" checked={law.revisao} disabled={progressSavingLawId === law.id} onClick={() => void updateLawProgress(law, "review")} />
+          </div>
+        </div>
+        {current.tipo === "personalizado" ? <span className="col-span-2 flex flex-wrap gap-1 sm:col-span-1 sm:justify-end">
           <button type="button" aria-label={`Subir ${law.titulo}`} disabled={index === 0} onClick={() => void move(index, -1)} className="min-h-10 px-2 font-black text-blue-700 disabled:text-slate-300">↑</button>
           <button type="button" aria-label={`Descer ${law.titulo}`} disabled={index === current.leis.length - 1} onClick={() => void move(index, 1)} className="min-h-10 px-2 font-black text-blue-700 disabled:text-slate-300">↓</button>
           <button type="button" onClick={() => void change("remove", { leiId: law.id }).catch((reason) => setError(reason.message))} className="min-h-10 px-2 text-sm font-bold text-red-700">Remover</button>
@@ -179,10 +183,10 @@ export function StudentExamClient() {
 }
 
 function ProgressControl({ label, checked, disabled, onClick }: { label: string; checked: boolean; disabled: boolean; onClick: () => void }) {
-  return <button type="button" aria-pressed={checked} aria-label={`${label} ${checked ? "concluído" : "não concluído"}`} disabled={disabled} onClick={onClick} className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${checked ? "border-blue-200 bg-blue-50 text-slate-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
+  return <button type="button" aria-pressed={checked} aria-label={`${label} ${checked ? "concluído" : "não concluído"}`} disabled={disabled} onClick={onClick} className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:px-3.5 ${checked ? "border-blue-200 bg-blue-50 text-slate-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
     <span aria-hidden="true" className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${checked ? "border-blue-600 bg-blue-100" : "border-slate-300 bg-slate-50"}`}>
       {checked ? <span className="text-sm leading-none text-blue-800">✓</span> : null}
     </span>
-    <span className="whitespace-nowrap">{label}</span>
+    <span>{label}</span>
   </button>;
 }
