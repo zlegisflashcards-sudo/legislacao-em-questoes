@@ -19,6 +19,7 @@ const migration = readFileSync("supabase/migrations/20260805171529_create_commer
 const editorialMigration = readFileSync("supabase/migrations/20260806112619_create_law_editorial_metadata.sql", "utf8");
 const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const client = readFileSync("components/admin/commercial-admin.tsx", "utf8");
+const studentCrm = readFileSync("components/admin/student-postsale-crm.tsx", "utf8");
 const page = readFileSync("app/admin/comercial/page.tsx", "utf8");
 const productVideoMigration = readFileSync("supabase/migrations/20260807210000_add_product_demo_video.sql", "utf8");
 const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
@@ -105,6 +106,25 @@ describe("fronteira administrativa comercial", () => {
     expect(productHighlightMigration).toContain("p_dados?'destaque'");
     expect(server).toContain('"destaque"');
     expect(client).toContain('name="destaque"');
+  });
+
+  it("mantém a fila por compra resiliente a compras órfãs e ao identificador real do e-mail", () => {
+    expect(server).toContain('.not("aluno_id", "is", null)');
+    expect(server).toContain("function accessEmailForPurchase");
+    expect(server).toContain("`hotmart:${externalId}`");
+    expect(server).toContain("`administrativo:${purchaseId}`");
+    expect(server).toContain("async function loadPostSalePending");
+    expect(server).toContain("crm_pendencias: crm.items");
+    expect(server).toContain("crm_resumo: crm.resumo");
+    expect(server).toContain("crm_avisos: crm.warnings");
+    expect(server).not.toContain("Não foi possível consultar os e-mails de acesso.");
+  });
+
+  it("exibe cada ciclo por compra em etapas verticais expansíveis", () => {
+    expect(studentCrm).toContain("expandedPurchase");
+    expect(studentCrm).toContain('className="purchase-crm-summary"');
+    expect(studentCrm).toContain('className="crm-stage-list"');
+    expect(studentCrm).toContain("Liberações / aquisições desta compra");
   });
 });
 

@@ -78,6 +78,14 @@ function isMissingPurchasePostSaleSchema(result: { error: { code?: string; messa
 function postSaleStages({ accessActive, emailSent, firstAccessAt, stage5At, stage6At }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown }) {
   return [true, accessActive, emailSent, Boolean(firstAccessAt), Boolean(stage5At), Boolean(stage6At)];
 }
+function accessEmailForPurchase(notices: Record<string, unknown>[], purchase: Record<string, unknown>) {
+  const purchaseId = String(purchase.id ?? "");
+  const externalId = String(purchase.identificador_externo ?? "");
+  const keys = new Set([purchaseId && `administrativo:${purchaseId}`, externalId && `hotmart:${externalId}`].filter(Boolean));
+  return notices
+    .filter((notice) => notice.status === "enviado" && keys.has(String(notice.idempotency_key ?? "")))
+    .sort((left, right) => String(right.criado_em ?? "").localeCompare(String(left.criado_em ?? "")))[0] ?? null;
+}
 
 function logCommercialDbError(context: string, error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined, extra: Record<string, unknown> = {}) {
   console.error(context, {
@@ -172,6 +180,51 @@ function pageResult(data: unknown[], count: number | null, page: number, limit: 
   return { items: data, page, limit, total: count ?? 0, pages: Math.max(1, Math.ceil((count ?? 0) / limit)) };
 }
 
+async function loadPostSalePending(supabase = getSupabaseServerClient()) {
+  const purchases = await supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso,identificador_externo").eq("status_acesso", "ativo").not("aluno_id", "is", null).order("adquirida_em", { ascending: true });
+  if (purchases.error) {
+    logCommercialDbError("Falha ao carregar pendências do Mini-CRM", purchases.error, { etapa: "carregar_pendencias" });
+    throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+  }
+  const ids = (purchases.data ?? []).map((row) => row.id);
+  const studentIds = [...new Set((purchases.data ?? []).map((row) => row.aluno_id).filter(Boolean))];
+  const productIds = [...new Set((purchases.data ?? []).map((row) => row.produto_id).filter(Boolean))];
+  const [manual, notices, students, products] = ids.length ? await Promise.all([
+    supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
+    supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em").in("aluno_id", studentIds),
+    supabase.from("alunos").select("id,nome,email,telefone,primeiro_acesso_em").in("id", studentIds),
+    productIds.length ? supabase.from("produtos").select("id,nome").in("id", productIds) : Promise.resolve({ data: [], error: null }),
+  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  if (students.error || products.error) {
+    logCommercialDbError("Falha ao carregar dados de referência do Mini-CRM", students.error ?? products.error, { etapa: "carregar_referencias" });
+    throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+  }
+  const warnings: string[] = [];
+  if (notices.error) {
+    logCommercialDbError("Falha ao consultar notificações do Mini-CRM", notices.error, { etapa: "carregar_notificacoes" });
+    warnings.push("Não foi possível confirmar os e-mails de acesso; a Etapa 3 foi mantida como pendente para revisão.");
+  }
+  if (manual.error && !isMissingPurchasePostSaleSchema(manual)) {
+    logCommercialDbError("Falha ao carregar etapas manuais do Mini-CRM na fila", manual.error, { etapa: "carregar_schema_opcional" });
+    throw new CommercialHttpError(500, "Não foi possível carregar as etapas manuais do pós-venda.");
+  }
+  if (manual.error) warnings.push("A migration 20260812130000_move_post_sale_to_purchases.sql precisa ser aplicada para concluir e registrar as etapas manuais.");
+  const manualBy = new Map((manual.data ?? []).map((row) => [row.compra_id, row]));
+  const studentById = new Map((students.data ?? []).map((row) => [row.id, row]));
+  const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
+  const counts = [0, 0, 0, 0, 0, 0];
+  const items = (purchases.data ?? []).map((purchase) => {
+    const student = studentById.get(purchase.aluno_id) as { nome?: unknown; email?: unknown; telefone?: unknown; primeiro_acesso_em?: unknown } | undefined;
+    const state = manualBy.get(purchase.id);
+    const email = notices.error ? null : accessEmailForPurchase(notices.data ?? [], purchase);
+    const stages = postSaleStages({ accessActive: purchase.status_acesso === "ativo", emailSent: email?.status === "enviado", firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });
+    const next = stages.findIndex((done) => !done) + 1;
+    if (next) counts[next - 1] += 1;
+    return { compra_id: purchase.id, aluno_id: purchase.aluno_id, nome: student?.nome ?? null, email: student?.email ?? null, telefone: student?.telefone ?? null, produto: productById.get(purchase.produto_id) ?? "Produto", adquirida_em: purchase.adquirida_em, proxima_etapa: next, etapa_titulo: next ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Confirmar acesso com o cliente", "Confirmar flashcards e Anki"][next - 1] : null, etapas: stages };
+  }).filter((item) => item.proxima_etapa > 0);
+  return { items, counts, warnings, unavailable: Boolean(manual.error), message: warnings[0] ?? null, resumo: { total: items.length, etapa_1: counts[0], etapa_2: counts[1], etapa_3: counts[2], etapa_4: counts[3], etapa_5: counts[4], etapa_6: counts[5] } };
+}
+
 export async function getCommercialResource(resource: CommercialResource, request: Request) {
   await requireAdmin();
   const supabase = getSupabaseServerClient();
@@ -182,9 +235,10 @@ export async function getCommercialResource(resource: CommercialResource, reques
   if (resource === "alunos") {
     const filter = url.searchParams.get("filtro") ?? "todos";
     if (!["todos", "com_auth", "sem_auth", "duplicados", "entrou_hoje", "ultimos_7_dias", "ultimos_30_dias", "nunca_entrou"].includes(filter)) throw new CommercialValidationError("Filtro de alunos inválido.");
-    const [result, summary] = await Promise.all([
+    const [result, summary, crm] = await Promise.all([
       supabase.rpc("admin_listar_alunos", { p_q: q, p_filtro: filter, p_limit: limit, p_offset: from }),
       supabase.rpc("admin_resumo_acessos_alunos"),
+      loadPostSalePending(supabase),
     ]);
     assertQuery(result);
     assertQuery(summary);
@@ -195,7 +249,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
     const names = new Map((profiles.data ?? []).map((profile) => [String(profile.id), profile.nome_publico]));
     for (const item of items) item.nome_publico = names.get(String(item.user_id ?? "")) ?? null;
     const total = Number(items[0]?.total_count ?? 0);
-    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 } };
+    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 }, crm_pendencias: crm.items, crm_resumo: crm.resumo, crm_avisos: crm.warnings };
   }
 
   if (resource === "anki_tutoriais") {
@@ -580,14 +634,15 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     }
     const studentData = student.data;
     const ids = (purchases.data ?? []).map((p) => p.id);
-    const [products, manualRows, historyRows, notices] = ids.length
+    const [products, manualRows, historyRows, notices, releases] = ids.length
       ? await Promise.all([
         supabase.from("produtos").select("id,nome").in("id", [...new Set((purchases.data ?? []).map((purchase) => purchase.produto_id).filter(Boolean))]),
         supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
         supabase.from("compras_pos_venda_historico").select("*").in("compra_id", ids).order("created_at", { ascending: false }),
         supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em,erro").eq("aluno_id", alunoId),
+        supabase.from("liberacoes_leis").select("id,compra_id,origem,status,concedida_em,leis(titulo)").in("compra_id", ids).eq("status", "ativo"),
       ])
-      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
     if (products.error) {
       logCommercialDbError("Falha ao carregar produtos do Mini-CRM por compra", products.error, { alunoId, etapa: "carregar_produtos" });
       throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
@@ -604,56 +659,24 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       logCommercialDbError("Falha ao carregar notificações do Mini-CRM por compra", notices.error, { alunoId, etapa: "carregar_notificacoes" });
       throw new CommercialHttpError(500, "Não foi possível carregar as compras do pós-venda.");
     }
+    if (releases.error) {
+      logCommercialDbError("Falha ao carregar liberações do Mini-CRM por compra", releases.error, { alunoId, etapa: "carregar_liberacoes" });
+      throw new CommercialHttpError(500, "Não foi possível carregar as liberações do pós-venda.");
+    }
     const manualBy = new Map((manualRows.data ?? []).map((row) => [row.compra_id, row]));
     const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
-    const cycles = await Promise.all((purchases.data ?? []).map(async (purchase) => {
-      const email = (notices.data ?? []).filter((notice) => notice.status === "enviado" && String(notice.idempotency_key).includes(String(purchase.id))).sort((left, right) => String(right.criado_em ?? "").localeCompare(String(left.criado_em ?? "")))[0] ?? null;
+    const cycles = (purchases.data ?? []).map((purchase) => {
+      const email = accessEmailForPurchase(notices.data ?? [], purchase);
       const state = manualBy.get(purchase.id); const emailSent = email?.status === "enviado";
       const stages = postSaleStages({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });
       const next = stages.findIndex((done) => !done) + 1;
-      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), email, primeiro_acesso_em: studentData.primeiro_acesso_em };
-    }));
+      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), email, liberacoes: (releases.data ?? []).filter((row) => row.compra_id === purchase.id), primeiro_acesso_em: studentData.primeiro_acesso_em };
+    });
     return { cycles };
   }
   if (resource === "alunos" && action === "crm_pendencias") {
-    const supabase = getSupabaseServerClient();
-    const purchases = await supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso").eq("status_acesso", "ativo").order("adquirida_em", { ascending: true }).limit(200);
-    if (purchases.error) {
-      logCommercialDbError("Falha ao carregar pendências do Mini-CRM", purchases.error, { etapa: "carregar_pendencias" });
-      throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
-    }
-    const ids = (purchases.data ?? []).map((row) => row.id);
-    const studentIds = [...new Set((purchases.data ?? []).map((row) => row.aluno_id))];
-    const productIds = [...new Set((purchases.data ?? []).map((row) => row.produto_id).filter(Boolean))];
-    const [manual, notices, students, products] = ids.length ? await Promise.all([
-      supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
-      supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status").in("aluno_id", studentIds),
-      supabase.from("alunos").select("id,nome,email,telefone,primeiro_acesso_em").in("id", studentIds),
-      supabase.from("produtos").select("id,nome").in("id", productIds),
-    ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
-    if (notices.error) {
-      logCommercialDbError("Falha ao consultar notificações do Mini-CRM", notices.error, { etapa: "carregar_notificacoes" });
-      throw new CommercialHttpError(500, "Não foi possível consultar os e-mails de acesso.");
-    }
-    if (students.error) {
-      logCommercialDbError("Falha ao consultar alunos do Mini-CRM", students.error, { etapa: "carregar_alunos" });
-      throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
-    }
-    if (products.error) {
-      logCommercialDbError("Falha ao consultar produtos do Mini-CRM", products.error, { etapa: "carregar_produtos" });
-      throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
-    }
-    if (manual.error && !isMissingPurchasePostSaleSchema(manual)) {
-      logCommercialDbError("Falha ao carregar etapas manuais do Mini-CRM na fila", manual.error, { etapa: "carregar_schema_opcional" });
-      throw new CommercialHttpError(500, "Não foi possível carregar as etapas manuais do pós-venda.");
-    }
-    const unavailable = Boolean(manual.error);
-    if (manual.error) logCommercialDbError("Mini-CRM por compra sem schema completo na fila", manual.error, { etapa: "carregar_schema_opcional" });
-    const manualBy = new Map((manual.data ?? []).map((row) => [row.compra_id, row])); const counts=[0,0,0,0,0,0];
-    const studentById = new Map((students.data ?? []).map((row) => [row.id, row]));
-    const productById = new Map((products.data ?? []).map((row) => [row.id, row.nome]));
-    const items=(purchases.data??[]).map((purchase)=>{const student=studentById.get(purchase.aluno_id) as { nome?: unknown; email?: unknown; telefone?: unknown; primeiro_acesso_em?: unknown } | undefined;const productName=productById.get(purchase.produto_id) ?? "Produto";const state=manualBy.get(purchase.id);const sent=(notices.data??[]).some((notice)=>notice.aluno_id===purchase.aluno_id&&notice.status==="enviado"&&String(notice.idempotency_key).includes(String(purchase.id)));const stages=postSaleStages({ accessActive: purchase.status_acesso==="ativo", emailSent: sent, firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em });const next=stages.findIndex((done)=>!done)+1;if(next)counts[next-1]+=1;return { compra_id:purchase.id, aluno_id:purchase.aluno_id,nome:student?.nome??null,email:student?.email??null,telefone:student?.telefone??null,produto:productName,adquirida_em:purchase.adquirida_em,proxima_etapa:next,etapas:stages};}).filter((item)=>item.proxima_etapa>0);
-    return { unavailable, message: unavailable ? "A migration 20260812130000_move_post_sale_to_purchases.sql precisa ser aplicada para concluir e registrar as etapas manuais." : null, items, counts };
+    const crm = await loadPostSalePending();
+    return { unavailable: crm.unavailable, message: crm.message, items: crm.items, counts: crm.counts, resumo: crm.resumo, avisos: crm.warnings };
   }
   if (resource === "alunos" && action === "crm_compra_atualizar") {
     const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "observacao"]);
