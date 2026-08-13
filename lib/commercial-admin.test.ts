@@ -115,7 +115,6 @@ describe("fronteira administrativa comercial", () => {
     expect(server).toContain("`hotmart:${externalId}`");
     expect(server).toContain("`administrativo:${purchaseId}`");
     expect(server).toContain("async function loadPostSalePending");
-    expect(server).toContain("crm_pendencias: crm.items");
     expect(server).toContain("crm_resumo: crm.resumo");
     expect(server).toContain("crm_avisos: crm.warnings");
     expect(server).not.toContain("Não foi possível consultar os e-mails de acesso.");
@@ -134,10 +133,18 @@ describe("fronteira administrativa comercial", () => {
   it("mantém a fila compacta e pagina alunos em lotes de cinquenta", () => {
     expect(studentsAdmin).toContain("limit=50&page=${nextPage}");
     expect(studentsAdmin).toContain("setPendingSales(data.crm_pendencias_exibidas ?? [])");
-    expect(server).toContain("visibleItems: items.slice(0, 5)");
+    expect(server).toContain("filteredItems.slice(0, 5)");
     expect(server).toContain("crm_pendencias_exibidas: crm.visibleItems");
     expect(studentsAdmin).not.toContain("Ver todas as pendências");
     expect(server).toContain('.order("adquirida_em", { ascending: true }).order("id", { ascending: true })');
+  });
+
+  it("filtra a fila no backend e preserva o limite operacional de cinco", () => {
+    expect(server).toContain("crm_etapa");
+    expect(server).toContain("filteredItems.slice(0, 5)");
+    expect(studentsAdmin).toContain("Todos {pendingTotal}");
+    expect(studentsAdmin).toContain("Nenhuma compra pendente nesta etapa.");
+    expect(studentsAdmin).toContain("setPendingStage(stage)");
   });
 });
 

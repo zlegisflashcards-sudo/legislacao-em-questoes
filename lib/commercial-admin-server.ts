@@ -182,7 +182,7 @@ function pageResult(data: unknown[], count: number | null, page: number, limit: 
   return { items: data, page, limit, total: count ?? 0, pages: Math.max(1, Math.ceil((count ?? 0) / limit)) };
 }
 
-async function loadPostSalePending(supabase = getSupabaseServerClient()) {
+async function loadPostSalePending(supabase = getSupabaseServerClient(), stageFilter = 0) {
   const purchases = await supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso,identificador_externo").eq("status_acesso", "ativo").not("aluno_id", "is", null).order("adquirida_em", { ascending: true }).order("id", { ascending: true });
   if (purchases.error) {
     logCommercialDbError("Falha ao carregar pendências do Mini-CRM", purchases.error, { etapa: "carregar_pendencias" });
@@ -233,7 +233,8 @@ async function loadPostSalePending(supabase = getSupabaseServerClient()) {
     if (next) counts[next - 1] += 1;
     return { compra_id: purchase.id, aluno_id: purchase.aluno_id, nome: student?.nome ?? null, email: student?.email ?? null, telefone: student?.telefone ?? null, produto: productById.get(purchase.produto_id) ?? "Produto", adquirida_em: purchase.adquirida_em, proxima_etapa: next, etapa_titulo: next ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Confirmar acesso com o cliente", "Confirmar flashcards e Anki"][next - 1] : null, etapas: stages };
   }).filter((item) => item.proxima_etapa > 0);
-  return { items, visibleItems: items.slice(0, 5), counts, warnings, unavailable: Boolean(manual.error || overrides.error), message: warnings[0] ?? null, resumo: { total: items.length, etapa_1: counts[0], etapa_2: counts[1], etapa_3: counts[2], etapa_4: counts[3], etapa_5: counts[4], etapa_6: counts[5] } };
+  const filteredItems = stageFilter ? items.filter((item) => item.proxima_etapa === stageFilter) : items;
+  return { visibleItems: filteredItems.slice(0, 5), counts, warnings, unavailable: Boolean(manual.error || overrides.error), message: warnings[0] ?? null, resumo: { total: items.length, etapa_1: counts[0], etapa_2: counts[1], etapa_3: counts[2], etapa_4: counts[3], etapa_5: counts[4], etapa_6: counts[5] } };
 }
 
 export async function getCommercialResource(resource: CommercialResource, request: Request) {
@@ -246,10 +247,12 @@ export async function getCommercialResource(resource: CommercialResource, reques
   if (resource === "alunos") {
     const filter = url.searchParams.get("filtro") ?? "todos";
     if (!["todos", "com_auth", "sem_auth", "duplicados", "entrou_hoje", "ultimos_7_dias", "ultimos_30_dias", "nunca_entrou"].includes(filter)) throw new CommercialValidationError("Filtro de alunos inválido.");
+    const crmStage = Number(url.searchParams.get("crm_etapa") ?? "0");
+    if (!Number.isInteger(crmStage) || crmStage < 0 || crmStage > 6) throw new CommercialValidationError("Filtro de etapa do pós-venda inválido.");
     const [result, summary, crm] = await Promise.all([
       supabase.rpc("admin_listar_alunos", { p_q: q, p_filtro: filter, p_limit: limit, p_offset: from }),
       supabase.rpc("admin_resumo_acessos_alunos"),
-      loadPostSalePending(supabase),
+      loadPostSalePending(supabase, crmStage),
     ]);
     assertQuery(result);
     assertQuery(summary);
@@ -260,7 +263,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
     const names = new Map((profiles.data ?? []).map((profile) => [String(profile.id), profile.nome_publico]));
     for (const item of items) item.nome_publico = names.get(String(item.user_id ?? "")) ?? null;
     const total = Number(items[0]?.total_count ?? 0);
-    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 }, crm_pendencias: crm.items, crm_pendencias_exibidas: crm.visibleItems, crm_resumo: crm.resumo, crm_avisos: crm.warnings };
+    return { ...pageResult(items, total, page, limit), resumo_acessos: summary.data?.[0] ?? { total_alunos: 0, com_auth: 0, entraram_hoje: 0, ultimos_7_dias: 0, nunca_entraram: 0 }, crm_pendencias_exibidas: crm.visibleItems, crm_resumo: crm.resumo, crm_avisos: crm.warnings };
   }
 
   if (resource === "anki_tutoriais") {
@@ -696,7 +699,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   }
   if (resource === "alunos" && action === "crm_pendencias") {
     const crm = await loadPostSalePending();
-    return { unavailable: crm.unavailable, message: crm.message, items: crm.items, items_exibidos: crm.visibleItems, counts: crm.counts, resumo: crm.resumo, avisos: crm.warnings };
+    return { unavailable: crm.unavailable, message: crm.message, items_exibidos: crm.visibleItems, counts: crm.counts, resumo: crm.resumo, avisos: crm.warnings };
   }
   if (resource === "alunos" && action === "crm_compra_atualizar") {
     const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "acao", "observacao"]);
