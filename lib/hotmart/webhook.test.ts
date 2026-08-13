@@ -41,9 +41,9 @@ function payloadPedidoReembolso() {
 type Step = { data?: unknown; error?: unknown };
 
 function supabaseComRespostas(...steps: Step[]) {
-  const calls: Array<{ table: string; operation: "insert" | "update"; value: unknown }> = [];
+  const calls: Array<{ table: string; operation: "insert" | "update" | "rpc"; value: unknown }> = [];
   const client = {
-    rpc: async () => steps.shift() ?? {},
+    rpc: async (name: string, value: unknown) => { calls.push({ table: "rpc", operation: "rpc", value: { name, ...value as object } }); return steps.shift() ?? {}; },
     from(table: string) {
       const response = steps.shift() ?? {};
       const query = {
@@ -172,7 +172,7 @@ describe("recepção de webhook Hotmart", () => {
       operation: "update",
       value: expect.objectContaining({ aluno_id: "aluno-reaproveitado" }),
     }));
-    expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "insert" }));
+    expect(calls).toContainEqual(expect.objectContaining({ table: "rpc", operation: "rpc", value: expect.objectContaining({ name: "definir_status_acesso_compra", p_status_acesso: "ativo" }) }));
   });
 
   it("reaproveita compra Hotmart existente sem recriar aluno quando o vínculo já existe", async () => {
@@ -210,13 +210,13 @@ describe("recepção de webhook Hotmart", () => {
     ["PURCHASE_CANCELED", "cancelada", "cancelado"],
     ["PURCHASE_REFUNDED", "reembolsada", "reembolsado"],
     ["PURCHASE_CHARGEBACK", "chargeback", "reembolsado"],
-  ] as const)("revoga a compra ativa para %s", async (event, statusCompra, statusLiberacao) => {
+  ] as const)("traduz %s e delega a revogação para a rotina central", async (event, statusCompra, statusLiberacao) => {
     const { client, calls } = supabaseComRespostas(
       {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "aprovada" } }, {}, {}, {},
     );
     await expect(registrarEventoHotmart(client as never, payloadPerda(event))).resolves.toEqual({ duplicate: false });
-    expect(calls).toContainEqual(expect.objectContaining({ table: "compras", operation: "update", value: expect.objectContaining({ status: statusCompra }) }));
-    expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "update", value: expect.objectContaining({ status: statusLiberacao }) }));
+    expect(calls).toContainEqual(expect.objectContaining({ table: "rpc", operation: "rpc", value: expect.objectContaining({ name: "definir_status_acesso_compra", p_status_legado: statusCompra, p_status_acesso: statusLiberacao }) }));
+    expect(calls.some((call) => ["compras", "liberacoes_leis"].includes(call.table) && call.operation === "update")).toBe(false);
   });
 
   it("marca pedido de reembolso como pendente e suspende as liberações da compra", async () => {
@@ -225,14 +225,8 @@ describe("recepção de webhook Hotmart", () => {
     );
     await expect(registrarEventoHotmart(client as never, payloadPedidoReembolso())).resolves.toEqual({ duplicate: false });
     expect(calls).toContainEqual(expect.objectContaining({
-      table: "compras",
-      operation: "update",
-      value: expect.objectContaining({ status_acesso: "reembolso_solicitado" }),
-    }));
-    expect(calls).toContainEqual(expect.objectContaining({
-      table: "liberacoes_leis",
-      operation: "update",
-      value: expect.objectContaining({ status: "cancelado" }),
+      table: "rpc", operation: "rpc",
+      value: expect.objectContaining({ name: "definir_status_acesso_compra", p_status_acesso: "reembolso_solicitado" }),
     }));
   });
 
@@ -242,9 +236,8 @@ describe("recepção de webhook Hotmart", () => {
     );
     await expect(registrarEventoHotmart(client as never, payloadV2)).resolves.toEqual({ duplicate: false });
     expect(calls).toContainEqual(expect.objectContaining({
-      table: "compras",
-      operation: "update",
-      value: expect.objectContaining({ status_acesso: "ativo" }),
+      table: "rpc", operation: "rpc",
+      value: expect.objectContaining({ name: "definir_status_acesso_compra", p_status_acesso: "ativo" }),
     }));
   });
 
@@ -268,7 +261,7 @@ describe("recepção de webhook Hotmart", () => {
     );
     await expect(registrarEventoHotmart(client as never, payloadPerda("PURCHASE_CANCELED"))).resolves.toEqual({ duplicate: false });
     expect(calls.some((call) => call.table === "compras" && call.operation === "update")).toBe(false);
-    expect(calls).toContainEqual(expect.objectContaining({ table: "liberacoes_leis", operation: "update" }));
+    expect(calls).toContainEqual(expect.objectContaining({ table: "rpc", operation: "rpc", value: expect.objectContaining({ name: "definir_status_acesso_compra" }) }));
   });
 
   it("revoga somente liberações vinculadas à compra, preservando outras origens", async () => {
@@ -276,7 +269,7 @@ describe("recepção de webhook Hotmart", () => {
       {}, { data: { id: "produto-1" } }, { data: { id: "compra-1", status: "aprovada" } }, {}, {}, {},
     );
     await registrarEventoHotmart(client as never, payloadPerda("PURCHASE_REFUNDED"));
-    expect(calls.filter((call) => call.table === "liberacoes_leis" && call.operation === "update")).toHaveLength(1);
+    expect(calls.filter((call) => call.table === "rpc" && call.operation === "rpc")).toHaveLength(1);
     expect(calls.some((call) => call.operation === "insert" && call.table === "liberacoes_leis")).toBe(false);
   });
 });

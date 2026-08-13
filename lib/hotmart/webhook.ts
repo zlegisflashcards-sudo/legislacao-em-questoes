@@ -130,24 +130,6 @@ async function restaurarLiberacoesDaCompra(supabase: SupabaseClient, compraId: s
   }
 }
 
-async function revogarLiberacoesDaCompra(supabase: SupabaseClient, compraId: string, statusLiberacao: string, motivo: string) {
-  const liberacoes = await supabase
-    .from("liberacoes_leis")
-    .update({ status: statusLiberacao, motivo, revogada_em: new Date().toISOString() })
-    .eq("compra_id", compraId)
-    .eq("status", "ativo");
-  if (liberacoes.error) throw liberacoes.error;
-}
-
-async function atualizarCompraHotmart(
-  supabase: SupabaseClient,
-  compraId: string,
-  atualizacao: Record<string, string | null>,
-) {
-  const compraAtualizada = await supabase.from("compras").update(atualizacao).eq("id", compraId);
-  if (compraAtualizada.error) throw compraAtualizada.error;
-}
-
 async function sincronizarCompraHotmart(
   supabase: SupabaseClient,
   compra: { id: string; status?: string | null; status_acesso?: string | null; produto_id?: string | null; aluno_id?: string | null },
@@ -155,53 +137,32 @@ async function sincronizarCompraHotmart(
   acao: "ativar" | "reembolso_solicitado" | "revogar",
 ): Promise<{ restored: boolean; refundRequested: boolean; concluded: boolean }> {
   const agora = evento.aprovada_em ?? new Date().toISOString();
+  const perdido = EVENTOS_PERDA_ACESSO[evento.tipo_evento as keyof typeof EVENTOS_PERDA_ACESSO] ?? EVENTOS_PERDA_ACESSO.PURCHASE_CANCELED;
+  const transicao = acao === "ativar"
+    ? { statusAcesso: "ativo", status: "aprovada", acao: "hotmart_ativar", motivo: "Webhook Hotmart: acesso aprovado" }
+    : acao === "reembolso_solicitado"
+      ? { statusAcesso: "reembolso_solicitado", status: "reembolso_solicitado", acao: "hotmart_reembolso_solicitado", motivo: "Webhook Hotmart: pedido de reembolso" }
+      : { statusAcesso: perdido.statusAcesso, status: perdido.status, acao: "hotmart_revogar", motivo: `Webhook Hotmart: ${evento.tipo_evento}` };
+  const result = await supabase.rpc("definir_status_acesso_compra", {
+    p_compra_id: compra.id,
+    p_status_acesso: transicao.statusAcesso,
+    p_status_legado: transicao.status,
+    p_acao: transicao.acao,
+    p_ator_user_id: null,
+    p_motivo: transicao.motivo,
+    p_ocorrido_em: agora,
+  });
+  if (result.error) throw result.error;
+
   if (acao === "ativar") {
-    let restored = false;
-    if (compra.status !== "aprovada" || compra.status_acesso !== "ativo") {
-      await atualizarCompraHotmart(supabase, compra.id, {
-        status: "aprovada",
-        status_acesso: "ativo",
-        comprada_em: agora,
-        adquirida_em: agora,
-        cancelada_em: null,
-        reembolsada_em: null,
-        reativada_em: agora,
-        reembolso_solicitado_em: null,
-      });
-      restored = true;
-    }
-    if (compra.produto_id && compra.aluno_id) {
-      await restaurarLiberacoesDaCompra(supabase, compra.id, compra.aluno_id, compra.produto_id);
-    }
-    return { restored, refundRequested: false, concluded: false };
+    return { restored: compra.status !== "aprovada" || compra.status_acesso !== "ativo", refundRequested: false, concluded: false };
   }
 
   if (acao === "reembolso_solicitado") {
-    let refundRequested = false;
-    if (compra.status !== "reembolso_solicitado" || compra.status_acesso !== "reembolso_solicitado") {
-      await atualizarCompraHotmart(supabase, compra.id, {
-        status: "reembolso_solicitado",
-        status_acesso: "reembolso_solicitado",
-        reembolso_solicitado_em: agora,
-      });
-      refundRequested = true;
-    }
-    await revogarLiberacoesDaCompra(supabase, compra.id, "cancelado", "Webhook Hotmart: pedido de reembolso");
-    return { restored: false, refundRequested, concluded: false };
+    return { restored: false, refundRequested: compra.status !== "reembolso_solicitado" || compra.status_acesso !== "reembolso_solicitado", concluded: false };
   }
 
-  const perda = EVENTOS_PERDA_ACESSO[evento.tipo_evento as keyof typeof EVENTOS_PERDA_ACESSO] ?? EVENTOS_PERDA_ACESSO.PURCHASE_CANCELED;
-  let concluded = false;
-  if (compra.status !== perda.status || compra.status_acesso !== perda.statusAcesso) {
-    await atualizarCompraHotmart(supabase, compra.id, {
-      status: perda.status,
-      status_acesso: perda.statusAcesso,
-      [perda.data]: agora,
-    });
-    concluded = true;
-  }
-  await revogarLiberacoesDaCompra(supabase, compra.id, perda.statusLiberacao, `Webhook Hotmart: ${evento.tipo_evento}`);
-  return { restored: false, refundRequested: false, concluded };
+  return { restored: false, refundRequested: false, concluded: compra.status !== perdido.status || compra.status_acesso !== perdido.statusAcesso };
 }
 
 function adminNotificationLink(transaction: string | null) {

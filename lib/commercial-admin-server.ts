@@ -1017,6 +1017,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       } catch { /* A aquisição já foi registrada; a falha de primeiro acesso é auditada sem credenciais. */ }
       return registered;
     }
+    if (action === "solicitar_reembolso") return rpc("admin_solicitar_reembolso_aquisicao", { p_ator_user_id: actor, p_compra_id: purchaseId });
     if (action === "cancelar") return rpc("admin_cancelar_aquisicao", { p_ator_user_id: actor, p_compra_id: purchaseId });
     if (action === "reembolsar") return rpc("admin_reembolsar_aquisicao", { p_ator_user_id: actor, p_compra_id: purchaseId });
     if (action === "reativar") return rpc("admin_reativar_aquisicao", { p_ator_user_id: actor, p_compra_id: purchaseId });
