@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 const migration = readFileSync("supabase/migrations/20260809010000_admin_student_management.sql", "utf8");
 const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const ui = readFileSync("components/admin/commercial-admin.tsx", "utf8");
+const studentsUi = readFileSync("components/admin/students-admin.tsx", "utf8");
+const phoneMigration = readFileSync("supabase/migrations/20260812150000_add_phone_to_admin_student_creation.sql", "utf8");
 
 describe("gerência administrativa de alunos", () => {
   it("cria manualmente, normaliza e rejeita e-mail existente", () => {
@@ -47,6 +49,20 @@ describe("gerência administrativa de alunos", () => {
   it("mantém ações exclusivamente no endpoint administrativo", () => {
     expect(server).toContain('resource === "alunos" && action === "mesclar"');
     expect(ui).toContain("Mesclar cadastros");
-    expect(ui).toContain("Novo aluno");
+    expect(studentsUi).toContain("+ Cadastrar aluno");
+    expect(ui).not.toContain("Novo aluno");
+  });
+  it("reutiliza o cadastro administrativo no Painel de Alunos e localiza duplicidade", () => {
+    expect(studentsUi).toContain('action: "criar"');
+    expect(studentsUi).toContain("Já existe um aluno cadastrado com este e-mail.");
+    expect(studentsUi).toContain("Abrir aluno existente");
+    expect(studentsUi).toContain("Abrir ficha");
+  });
+  it("normaliza e persiste telefone opcional pelo mesmo cadastro administrativo", () => {
+    expect(server).toContain("normalizeStudentPhone(phoneRaw)");
+    expect(server).toContain("p_telefone: data.telefone");
+    expect(studentsUi).toContain('name="telefone" type="tel"');
+    expect(phoneMigration).toContain("p_telefone text default null");
+    expect(phoneMigration).toContain("insert into public.alunos(nome,email,telefone)");
   });
 });

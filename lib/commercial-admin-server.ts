@@ -7,6 +7,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { notifyStudentAccess, sendManualStudentAccessEmail, type FirstAccessOrigin } from "@/lib/student-first-access-server";
 import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
+import { normalizeStudentPhone } from "@/lib/student-phone";
 import {
   COMMERCIAL_ORIGINS,
   EDITORIAL_IMPORTANCE,
@@ -533,10 +534,13 @@ function validateStudentData(raw: unknown) {
   rejectUnknownKeys(data, ["nome", "email", "telefone"]);
   const email = requiredString(data.email, "E-mail", 320).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CommercialValidationError("E-mail inválido.");
+  const phoneRaw = optionalString(data.telefone, "Telefone", 80);
+  const telefone = phoneRaw ? normalizeStudentPhone(phoneRaw) : null;
+  if (phoneRaw && !telefone) throw new CommercialValidationError("Informe um telefone/WhatsApp brasileiro válido.");
   return {
     nome: optionalString(data.nome, "Nome", 300) ?? null,
     email,
-    telefone: optionalString(data.telefone, "Telefone", 80) ?? null,
+    telefone,
   };
 }
 
@@ -788,7 +792,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
 
   if (resource === "alunos" && action === "criar") {
     const data = validateStudentData(body.data);
-    return rpc("admin_criar_aluno", { p_ator_user_id: actor, p_nome: data.nome, p_email: data.email });
+    return rpc("admin_criar_aluno", { p_ator_user_id: actor, p_nome: data.nome, p_email: data.email, p_telefone: data.telefone });
   }
   if (resource === "alunos" && action === "gerar_senha_provisoria") {
     const alunoId = uuid(body.id, "Aluno");
