@@ -194,7 +194,7 @@ async function loadPostSalePending(supabase = getSupabaseServerClient(), stageFi
   const productIds = [...new Set((purchases.data ?? []).map((row) => row.produto_id).filter(Boolean))];
   const [manual, overrides, notices, students, products] = ids.length ? await Promise.all([
     supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
-    supabase.from("compras_pos_venda_overrides").select("compra_id,etapa,concluida_em,ator_user_id,observacao").in("compra_id", ids),
+    supabase.from("compras_pos_venda_overrides").select("compra_id,etapa,concluida_em,ator_user_id,observacao,resultado_final").in("compra_id", ids),
     supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em").in("aluno_id", studentIds),
     supabase.from("alunos").select("id,nome,email,telefone,primeiro_acesso_em").in("id", studentIds),
     productIds.length ? supabase.from("produtos").select("id,nome").in("id", productIds) : Promise.resolve({ data: [], error: null }),
@@ -232,7 +232,7 @@ async function loadPostSalePending(supabase = getSupabaseServerClient(), stageFi
     const stages = stageState.etapas;
     const next = stages.findIndex((done) => !done) + 1;
     if (next) counts[next - 1] += 1;
-    return { compra_id: purchase.id, aluno_id: purchase.aluno_id, nome: student?.nome ?? null, email: student?.email ?? null, telefone: student?.telefone ?? null, produto: productById.get(purchase.produto_id) ?? "Produto", adquirida_em: purchase.adquirida_em, proxima_etapa: next, etapa_titulo: next ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Confirmar acesso com o cliente", "Confirmar flashcards e Anki"][next - 1] : null, etapas: stages };
+    return { compra_id: purchase.id, aluno_id: purchase.aluno_id, nome: student?.nome ?? null, email: student?.email ?? null, telefone: student?.telefone ?? null, produto: productById.get(purchase.produto_id) ?? "Produto", adquirida_em: purchase.adquirida_em, proxima_etapa: next, etapa_titulo: next ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Enviar mensagem pelo WhatsApp", "Retorno final do cliente"][next - 1] : null, etapas: stages };
   }).filter((item) => item.proxima_etapa > 0);
   const filteredItems = stageFilter ? items.filter((item) => item.proxima_etapa === stageFilter) : items;
   return { visibleItems: filteredItems.slice(0, 5), counts, warnings, unavailable: Boolean(manual.error || overrides.error), message: warnings[0] ?? null, resumo: { total: items.length, etapa_1: counts[0], etapa_2: counts[1], etapa_3: counts[2], etapa_4: counts[3], etapa_5: counts[4], etapa_6: counts[5] } };
@@ -656,7 +656,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       ? await Promise.all([
         supabase.from("produtos").select("id,nome").in("id", [...new Set((purchases.data ?? []).map((purchase) => purchase.produto_id).filter(Boolean))]),
         supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
-        supabase.from("compras_pos_venda_overrides").select("compra_id,etapa,concluida_em,ator_user_id,observacao").in("compra_id", ids),
+        supabase.from("compras_pos_venda_overrides").select("compra_id,etapa,concluida_em,ator_user_id,observacao,resultado_final").in("compra_id", ids),
         supabase.from("compras_pos_venda_historico").select("*").in("compra_id", ids).order("created_at", { ascending: false }),
         supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,enviado_em,criado_em,erro").eq("aluno_id", alunoId),
         supabase.from("liberacoes_leis").select("id,compra_id,origem,status,concedida_em,leis(titulo)").in("compra_id", ids).eq("status", "ativo"),
@@ -697,7 +697,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       const stageState = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overrideRowsForPurchase.map((row) => Number(row.etapa)) });
       const stages = stageState.etapas;
       const next = stages.findIndex((done) => !done) + 1;
-      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, etapas_automaticas: stageState.automaticas, etapas_manuais: stageState.manuais, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), overrides: overrideRowsForPurchase, email, liberacoes: (releases.data ?? []).filter((row) => row.compra_id === purchase.id), primeiro_acesso_em: studentData.primeiro_acesso_em, override_schema_disponivel: !overrideRows.error };
+      return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, etapas_automaticas: stageState.automaticas, etapas_manuais: stageState.manuais, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), overrides: overrideRowsForPurchase, etapa_6_resultado: overrideRowsForPurchase.find((row) => Number(row.etapa) === 6)?.resultado_final ?? null, email, liberacoes: (releases.data ?? []).filter((row) => row.compra_id === purchase.id), primeiro_acesso_em: studentData.primeiro_acesso_em, override_schema_disponivel: !overrideRows.error };
     });
     return { cycles };
   }
@@ -708,10 +708,12 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "alunos" && action === "crm_compra_atualizar") {
     const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "acao", "observacao"]);
     const etapa = Number(data.etapa); if (!Number.isInteger(etapa) || etapa < 1 || etapa > 6) throw new CommercialValidationError("Etapa manual inválida.");
-    const acao = data.acao === "reabrir" ? "reabrir" : "concluir";
+    const acao = data.acao === "reabrir" || data.acao === "finalizar_confirmado" || data.acao === "finalizar_sem_resposta" ? data.acao : "concluir";
+    if ((acao === "finalizar_confirmado" || acao === "finalizar_sem_resposta") && etapa !== 6) throw new CommercialValidationError("Resultado final disponível somente na Etapa 6.");
     const supabase = getSupabaseServerClient(); const now = new Date().toISOString();
-    const saved = acao === "concluir"
-      ? await supabase.from("compras_pos_venda_overrides").upsert({ compra_id: compraId, etapa, concluida_em: now, ator_user_id: actor, observacao: optionalString(data.observacao, "Observação", 2000) ?? null, updated_at: now }, { onConflict: "compra_id,etapa" })
+    const resultadoFinal = acao === "finalizar_confirmado" ? "cliente_confirmou" : acao === "finalizar_sem_resposta" ? "nao_respondeu" : null;
+    const saved = acao !== "reabrir"
+      ? await supabase.from("compras_pos_venda_overrides").upsert({ compra_id: compraId, etapa, concluida_em: now, ator_user_id: actor, observacao: optionalString(data.observacao, "Observação", 2000) ?? null, resultado_final: resultadoFinal, updated_at: now }, { onConflict: "compra_id,etapa" })
       : await supabase.from("compras_pos_venda_overrides").delete().eq("compra_id", compraId).eq("etapa", etapa);
     if (saved.error) {
       logCommercialDbError("Falha ao salvar override manual do Mini-CRM por compra", saved.error, { compraId, etapa, acao });
@@ -724,7 +726,8 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       const legacy = await supabase.from("compras_pos_venda").upsert({ compra_id: compraId, [`etapa_${etapa}_concluida_em`]: null, updated_at: now }, { onConflict: "compra_id" });
       if (legacy.error && !isMissingPurchasePostSaleSchema(legacy)) throw new CommercialHttpError(500, "Não foi possível reabrir a etapa manual do pós-venda.");
     }
-    const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: acao === "concluir" ? `etapa_${etapa}_concluida_manual` : `etapa_${etapa}_reaberta_manual`, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
+    const historyAction = acao === "reabrir" ? `etapa_${etapa}_reaberta_manual` : acao === "finalizar_confirmado" ? "etapa_6_cliente_confirmou" : acao === "finalizar_sem_resposta" ? "etapa_6_cliente_nao_respondeu" : `etapa_${etapa}_concluida_manual`;
+    const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: historyAction, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
   }
 
   if (resource === "alunos" && action === "crm_detalhe") {
@@ -835,7 +838,17 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "alunos" && action === "enviar_email_acesso") {
     const alunoId = uuid(body.id, "Aluno");
     try {
-      return await sendManualStudentAccessEmail(getSupabaseServerClient(), alunoId, actor);
+      const data = asObject(body.data);
+      rejectUnknownKeys(data, ["compra_id"]);
+      const compraId = data.compra_id ? uuid(data.compra_id, "Compra") : null;
+      const supabase = getSupabaseServerClient();
+      let context: { purchaseId?: string; accessLabel?: string } | undefined;
+      if (compraId) {
+        const purchase = await supabase.from("compras").select("id,aluno_id,produto_id,status_acesso,produtos(nome)").eq("id", compraId).maybeSingle();
+        if (purchase.error || !purchase.data || purchase.data.aluno_id !== alunoId || purchase.data.status_acesso !== "ativo") throw new CommercialHttpError(422, "Compra ativa do aluno não encontrada para o envio de e-mail.");
+        context = { purchaseId: compraId, accessLabel: String((purchase.data.produtos as { nome?: string } | null)?.nome ?? "seus acessos") };
+      }
+      return await sendManualStudentAccessEmail(supabase, alunoId, actor, context);
     } catch (error) {
       console.error("Falha no envio administrativo de e-mail de acesso", {
         aluno_id: alunoId,

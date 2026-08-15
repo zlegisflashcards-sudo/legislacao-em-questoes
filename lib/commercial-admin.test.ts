@@ -24,6 +24,7 @@ const studentsAdmin = readFileSync("components/admin/students-admin.tsx", "utf8"
 const page = readFileSync("app/admin/comercial/page.tsx", "utf8");
 const productVideoMigration = readFileSync("supabase/migrations/20260807210000_add_product_demo_video.sql", "utf8");
 const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
+const postSaleFinalOutcomeMigration = readFileSync("supabase/migrations/20260815100000_add_purchase_post_sale_final_outcome.sql", "utf8");
 
 describe("validação da administração comercial", () => {
   it("aceita slug normalizado e rejeita valores perigosos", () => {
@@ -145,6 +146,19 @@ describe("fronteira administrativa comercial", () => {
     expect(studentsAdmin).toContain("Todos {pendingTotal}");
     expect(studentsAdmin).toContain("Nenhuma compra pendente nesta etapa.");
     expect(studentsAdmin).toContain("setPendingStage(stage)");
+  });
+
+  it("vincula o e-mail de acesso à compra e encerra a etapa final por resultado", () => {
+    expect(studentCrm).toContain('action: "enviar_email_acesso", id, data: { compra_id: compra }');
+    expect(server).toContain('purchaseId: compraId');
+    expect(server).toContain('administrativo:${purchaseId}');
+    expect(studentCrm).toContain("Enviar mensagem pelo WhatsApp");
+    expect(studentCrm).toContain("Retorno final do cliente");
+    expect(studentCrm).toContain("Cliente confirmou");
+    expect(studentCrm).toContain("Cliente não respondeu");
+    expect(server).toContain("etapa_6_cliente_confirmou");
+    expect(server).toContain("etapa_6_cliente_nao_respondeu");
+    expect(postSaleFinalOutcomeMigration).toContain("resultado_final in ('cliente_confirmou', 'nao_respondeu')");
   });
 });
 

@@ -113,14 +113,19 @@ export async function notifyStudentAccess(supabase: SupabaseClient, input: Acces
 }
 
 /** Explicit administrative resend. It intentionally does not reserve an acquisition notification. */
-export async function sendManualStudentAccessEmail(supabase: SupabaseClient, studentId: string, actorUserId: string) {
+export async function sendManualStudentAccessEmail(supabase: SupabaseClient, studentId: string, actorUserId: string, context?: { purchaseId?: string; accessLabel?: string }) {
   const result = await supabase.from("alunos").select("id,user_id,nome,email").eq("id", studentId).single();
   if (result.error || !result.data) throw new Error("Aluno nao encontrado para o envio de e-mail.");
   const student = result.data;
-  const idempotencyKey = `administrativo-email-acesso:${randomUUID()}`;
+  const purchaseId = context?.purchaseId;
+  const idempotencyKey = purchaseId ? `administrativo:${purchaseId}` : `administrativo-email-acesso:${randomUUID()}`;
   try {
-    const delivery = await deliverStudentAccessEmail(supabase, { ...student, email: normalizedEmail(String(student.email)) }, { accessLabel: "seus acessos", idempotencyKey, origin: "manual_admin", eventId: idempotencyKey });
-    await audit(supabase, "email_acesso_manual_enviado", student.id, { tipo: delivery.type, status_http: delivery.statusHttp, resend_code: delivery.resendCode }, actorUserId);
+    const delivery = await deliverStudentAccessEmail(supabase, { ...student, email: normalizedEmail(String(student.email)) }, { accessLabel: context?.accessLabel ?? "seus acessos", idempotencyKey, origin: "manual_admin", eventId: idempotencyKey });
+    if (purchaseId) {
+      const saved = await supabase.from("alunos_notificacoes_acesso").upsert({ aluno_id: student.id, idempotency_key: idempotencyKey, tipo: "nova_aquisicao", origem: "administrativo", descricao: context?.accessLabel ?? "seus acessos", status: "enviado", enviado_em: new Date().toISOString(), erro: null }, { onConflict: "idempotency_key" });
+      if (saved.error) throw new Error("Nao foi possivel registrar o e-mail enviado para esta compra.");
+    }
+    await audit(supabase, "email_acesso_manual_enviado", student.id, { tipo: delivery.type, status_http: delivery.statusHttp, resend_code: delivery.resendCode, compra_id: purchaseId ?? null }, actorUserId);
     return { sent: true, type: delivery.type };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Falha desconhecida";
