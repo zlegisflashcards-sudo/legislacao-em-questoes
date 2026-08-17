@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import {
   encontrarLegislacaoPorSlug,
@@ -19,6 +20,10 @@ type LegislacaoPageProps = {
     slug: string;
   }>;
 };
+
+const siteUrl = new URL(
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.legisflashcards.com.br",
+);
 
 type ProdutoCatalogo = {
   nome: string;
@@ -146,6 +151,70 @@ export async function generateStaticParams() {
   }
 
   return slugsProdutos.map((slug) => ({ slug }));
+}
+
+function criarMetadataComercial({
+  slug,
+  nome,
+  descricao,
+}: {
+  slug: string;
+  nome: string;
+  descricao: string;
+}): Metadata {
+  const title = `${nome} | LegisFlashcards`;
+  const url = new URL(`/leisflashcards/${slug}`, siteUrl).toString();
+
+  return {
+    title,
+    description: descricao,
+    openGraph: {
+      title,
+      description: descricao,
+      url,
+      siteName: "LegisFlashcards",
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description: descricao,
+    },
+  };
+}
+
+export async function generateMetadata({
+  params,
+}: LegislacaoPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const produto = await carregarProdutoCatalogo(slug);
+
+  if (produto) {
+    return criarMetadataComercial({
+      slug,
+      nome: produto.nome,
+      descricao:
+        produto.descricao ||
+        "Material de legislação em flashcards para concursos.",
+    });
+  }
+
+  const legislacao = encontrarLegislacaoPorSlug(await getLegislacoes(), slug);
+
+  if (!legislacao) {
+    return {
+      title: "LegisFlashcards",
+      description: "Materiais de legislação organizados para concursos.",
+    };
+  }
+
+  return criarMetadataComercial({
+    slug: legislacao.slug,
+    nome: legislacao.nome,
+    descricao:
+      legislacao.descricaoCurta ||
+      "Material de legislação em flashcards para concursos.",
+  });
 }
 
 export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
