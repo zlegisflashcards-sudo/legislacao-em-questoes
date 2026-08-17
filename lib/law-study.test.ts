@@ -6,6 +6,7 @@ import {
   LAW_STUDY_PLATFORMS,
   isValidLawSlug,
   lawMaterialActionLabel,
+  lawMaterialAvailabilityLabel,
   lawStudyShortName,
 } from "./law-study";
 
@@ -30,10 +31,15 @@ describe("contrato da página de estudo da lei", () => {
     expect(lawStudyShortName("Constituição Federal", " CONSTITUIÇÃO FEDERAL ")).toBeNull();
   });
 
-  it("habilita ações de material com URL válida e mantém indisponível sem URL", () => {
+  it("prioriza o link e informa a previsão apenas quando o material ainda não está disponível", () => {
     expect(lawMaterialActionLabel({ type: "flashcards", action: "baixar" })).toBe("Baixar flashcards");
     expect(lawMaterialActionLabel({ type: "pdf", action: "baixar" })).toBe("Baixar PDF");
+    expect(lawMaterialAvailabilityLabel({ accessAvailable: true, availableAt: "2026-08-25" })).toBeNull();
+    expect(lawMaterialAvailabilityLabel({ accessAvailable: false, availableAt: null })).toBe("Em breve");
+    expect(lawMaterialAvailabilityLabel({ accessAvailable: false, availableAt: "2026-08-25" })).toBe("Disponível em 25/08/2026");
     expect(client).toContain("material.accessAvailable");
+    expect(client).toContain("lawMaterialAvailabilityLabel(material)");
+    expect(client).toContain("break-words");
     expect(client).toContain('window.open(material.accessUrl, "_blank", "noopener,noreferrer")');
   });
 });
@@ -49,7 +55,7 @@ describe("autorização e exposição segura", () => {
   });
 
   it("consulta somente campos seguros e conteúdo visível ao aluno", () => {
-    expect(server).toContain('select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material")');
+    expect(server).toContain('select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista")');
     expect(server).toContain('select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at")');
     expect(server).toContain('.eq("visivel_aluno", true)');
     for (const forbidden of ["observacao_interna", "criado_por", "compra_id", "produto_id", "email"]) expect(server).not.toContain(forbidden);

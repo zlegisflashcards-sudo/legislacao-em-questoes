@@ -441,7 +441,7 @@ function validateLawData(raw: unknown, update = false) {
 function validateMaterialData(raw: unknown, update = false) {
   const allowed = [
     "lei_id", "tipo", "titulo", "descricao", "provedor", "url_externa", "acao", "ordem", "ativo",
-    "quantidade_itens", "versao_material", "revisado_em", "publicado_em", "observacao_interna",
+    "quantidade_itens", "versao_material", "revisado_em", "publicado_em", "data_entrega_prevista", "observacao_interna",
   ] as const;
   const data = update ? allowedUpdate(raw, allowed.filter((key) => key !== "lei_id")) : asObject(raw);
   rejectUnknownKeys(data, update ? allowed.filter((key) => key !== "lei_id") : allowed);
@@ -454,7 +454,7 @@ function validateMaterialData(raw: unknown, update = false) {
     result.descricao = update ? value : value ?? null;
   }
   if (!update || "provedor" in data) result.provedor = enumValue(data.provedor, MATERIAL_PROVIDERS, "Provedor");
-  if (!update || "url_externa" in data) result.url_externa = requiredString(data.url_externa, "URL externa", 4000);
+  if (!update || "url_externa" in data) result.url_externa = optionalString(data.url_externa, "URL externa", 4000) ?? null;
   if (!update || "acao" in data) result.acao = enumValue(data.acao, MATERIAL_ACTIONS, "Ação");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
   if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
@@ -462,6 +462,7 @@ function validateMaterialData(raw: unknown, update = false) {
   if (!update || "versao_material" in data) result.versao_material = optionalString(data.versao_material, "Versão do material", 100) ?? null;
   if (!update || "revisado_em" in data) result.revisado_em = optionalIsoDate(data.revisado_em, "Data de revisão") ?? null;
   if (!update || "publicado_em" in data) result.publicado_em = optionalIsoDate(data.publicado_em, "Data de publicação") ?? null;
+  if (!update || "data_entrega_prevista" in data) result.data_entrega_prevista = optionalIsoDate(data.data_entrega_prevista, "Data de entrega prevista") ?? null;
   if (!update || "observacao_interna" in data) result.observacao_interna = optionalString(data.observacao_interna, "Observação interna", 4000) ?? null;
   return result;
 }

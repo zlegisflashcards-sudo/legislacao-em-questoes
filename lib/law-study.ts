@@ -23,6 +23,7 @@ export type LawStudyMaterial = {
   action: "abrir" | "baixar" | "assistir";
   itemCount: number | null;
   version: string | null;
+  availableAt: string | null;
   accessAvailable: boolean;
   accessUrl: string | null;
 };
@@ -91,6 +92,12 @@ export function lawMaterialActionLabel(material: Pick<LawStudyMaterial, "type" |
   if (material.action === "baixar" && material.type === "pdf") return "Baixar PDF";
   if (material.action === "baixar") return "Baixar material";
   return "Abrir material";
+}
+
+export function lawMaterialAvailabilityLabel(material: Pick<LawStudyMaterial, "accessAvailable" | "availableAt">) {
+  if (material.accessAvailable) return null;
+  const match = material.availableAt?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `Disponível em ${match[3]}/${match[2]}/${match[1]}` : "Em breve";
 }
 
 export function lawHistoryDate(value: string) {
