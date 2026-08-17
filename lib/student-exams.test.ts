@@ -66,6 +66,16 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).not.toContain("current.tipo === \"personalizado\" ? <ProgressControl");
   });
 
+  it("mantém o edital do produto sincronizado pela composição viva de produto_leis", () => {
+    const migration = readFileSync("supabase/migrations/20260811150000_create_student_exam_notices.sql", "utf8");
+    expect(migration).toContain("join public.produto_leis pl on pl.produto_id=p.id");
+    expect(migration).toContain("order by pl.ordem,l.id");
+    expect(migration).toContain("p.tipo_produto='edital'");
+    expect(migration).toContain("exists(select 1 from public.liberacoes_leis r join aluno a on a.id=r.aluno_id where r.produto_id=p.id and r.status='ativo')");
+    expect(migration).not.toContain("cache");
+    expect(migration).not.toContain("materialized");
+  });
+
   it("usa checkbox visual responsivo e preserva o respiro mobile", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
     expect(client).toContain('aria-label={`${label} ${checked ? "concluído" : "não concluído"}`');
