@@ -6,10 +6,10 @@ export type LawStudyPlatform = {
 };
 
 export const LAW_STUDY_PLATFORMS: Record<LawStudyPlatformId, LawStudyPlatform> = {
-  computador: { label: "Computador", description: "Tutorial de estudo desta lei no computador." },
-  android: { label: "Android", description: "Tutorial de estudo desta lei no Android." },
-  ios: { label: "iOS", description: "Tutorial de estudo desta lei no iPhone e iPad." },
-  navegador: { label: "Navegador", description: "Tutorial de estudo desta lei pelo navegador." },
+  computador: { label: "Anki — Computador", description: "Tutorial de estudo desta lei no computador." },
+  android: { label: "AnkiDroid — Android", description: "Tutorial de estudo desta lei no Android." },
+  ios: { label: "AnkiMobile — iPhone", description: "Tutorial de estudo desta lei no iPhone e iPad." },
+  navegador: { label: "Online — Em breve", description: "Tutorial de estudo desta lei pelo navegador." },
 };
 
 export const LAW_STUDY_PLATFORM_IDS = Object.keys(LAW_STUDY_PLATFORMS) as LawStudyPlatformId[];

@@ -11,7 +11,7 @@ export type AnkiPlatformTutorial = {
 
 export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutorial> = {
   computador: {
-    label: "Computador",
+    label: "Anki — Computador",
     description: "Windows, Mac e Linux",
     officialUrl: null,
     buttonLabel: "Baixar o Anki",
@@ -19,7 +19,7 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
     videoUrl: null,
   },
   android: {
-    label: "Android",
+    label: "AnkiDroid — Android",
     description: "AnkiDroid",
     officialUrl: null,
     buttonLabel: "Baixar na Google Play",
@@ -27,7 +27,7 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
     videoUrl: null,
   },
   ios: {
-    label: "iOS",
+    label: "AnkiMobile — iPhone",
     description: "iPhone e iPad",
     officialUrl: null,
     buttonLabel: "Baixar na App Store",
@@ -35,11 +35,11 @@ export const ANKI_PLATFORM_TUTORIALS: Record<AnkiPlatformId, AnkiPlatformTutoria
     videoUrl: null,
   },
   navegador: {
-    label: "Navegador",
-    description: "AnkiWeb",
+    label: "Online — Em breve",
+    description: "No site",
     officialUrl: null,
     buttonLabel: "Acessar o AnkiWeb",
-    note: "Gratuito — permite estudar e sincronizar baralhos direto da web",
+    note: "",
     videoUrl: null,
   },
 };

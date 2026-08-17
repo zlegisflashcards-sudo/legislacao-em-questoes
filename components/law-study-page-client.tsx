@@ -23,14 +23,15 @@ import { originalFileNameFromDisposition } from "@/lib/law-material-download";
 type LoadStatus = "loading" | "ready" | "error";
 type LawStudyResponse = { success?: boolean; study?: LawStudyData; message?: string };
 
-export function LawStudyPageClient({ slug, ankiTutorialSettings }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null }) {
-  const [status, setStatus] = useState<LoadStatus>("loading");
-  const [study, setStudy] = useState<LawStudyData | null>(null);
+export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null; publicStudy?: LawStudyData }) {
+  const [status, setStatus] = useState<LoadStatus>(publicStudy ? "ready" : "loading");
+  const [study, setStudy] = useState<LawStudyData | null>(publicStudy ?? null);
   const [message, setMessage] = useState("");
   const [activeStudyPlatform, setActiveStudyPlatform] = useState<LawStudyPlatformId>(DEFAULT_LAW_STUDY_PLATFORM);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
+    if (publicStudy) return;
     let active = true;
     async function load() {
       try {
@@ -62,26 +63,24 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings }: { slug: strin
     }
     void load();
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, publicStudy]);
 
-  if (status === "loading") return <PageFrame><div role="status" className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Verificando sua sessão e o acesso à lei…</div></PageFrame>;
-  if (status === "error" || !study) return <PageFrame><div role="alert" className="rounded-2xl border border-red-200 bg-white p-8 text-red-700 shadow-sm"><p>{message || "Não foi possível carregar esta lei."}</p><button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Tentar novamente</button></div></PageFrame>;
+  if (status === "loading") return <PageFrame publicMode={Boolean(publicStudy)}><div role="status" className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Verificando sua sessão e o acesso à lei…</div></PageFrame>;
+  if (status === "error" || !study) return <PageFrame publicMode={Boolean(publicStudy)}><div role="alert" className="rounded-2xl border border-red-200 bg-white p-8 text-red-700 shadow-sm"><p>{message || "Não foi possível carregar esta lei."}</p><button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Tentar novamente</button></div></PageFrame>;
 
-  return <PageFrame>
+  return <PageFrame publicMode={Boolean(publicStudy)}>
     <div className="grid min-w-0 gap-6">
       <LawHeader study={study} />
       <LawStudyTutorial activePlatform={activeStudyPlatform} onPlatformChange={setActiveStudyPlatform} settings={ankiTutorialSettings} />
-      <MaterialsSection study={study} />
-      <StudyGuidance />
-      <LawProgress slug={study.law.slug} progress={study.progress} onSaved={(progress) => setStudy((current) => current ? { ...current, progress } : current)} />
-      <HistorySection history={study.history} showAll={showAllHistory} onShowAll={() => setShowAllHistory(true)} />
+      <MaterialsSection study={study} publicMode={Boolean(publicStudy)} />
+      {!publicStudy ? <><StudyGuidance /><LawProgress slug={study.law.slug} progress={study.progress} onSaved={(progress) => setStudy((current) => current ? { ...current, progress } : current)} /><HistorySection history={study.history} showAll={showAllHistory} onShowAll={() => setShowAllHistory(true)} /></> : null}
     </div>
   </PageFrame>;
 }
 
-function PageFrame({ children }: { children: React.ReactNode }) {
+function PageFrame({ children, publicMode = false }: { children: React.ReactNode; publicMode?: boolean }) {
   return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-    <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />
+    {!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}
     {children}
   </div>;
 }
@@ -111,14 +110,15 @@ function LawStudyTutorial({ activePlatform, onPlatformChange, settings }: { acti
     <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do tutorial da página de estudo">
       {LAW_STUDY_PLATFORM_IDS.map((platformId) => {
         const selected = platformId === activePlatform;
-        return <button key={platformId} type="button" aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{LAW_STUDY_PLATFORMS[platformId].label}</button>;
+        const unavailable = platformId === "navegador";
+        return <button key={platformId} type="button" disabled={unavailable} aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${unavailable ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400" : selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{LAW_STUDY_PLATFORMS[platformId].label}</button>;
       })}
     </div>
     {embedUrl ? <iframe key={activePlatform} src={embedUrl} title={`Como estudar esta lei no ${LAW_STUDY_PLATFORMS[activePlatform].label}`} className="mt-5 aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : null}
   </section>;
 }
 
-function MaterialsSection({ study }: { study: LawStudyData }) {
+function MaterialsSection({ study, publicMode = false }: { study: LawStudyData; publicMode?: boolean }) {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [downloadErrors, setDownloadErrors] = useState<Record<number, string>>({});
 
@@ -130,6 +130,11 @@ function MaterialsSection({ study }: { study: LawStudyData }) {
     setDownloadingId(material.id);
     setDownloadErrors((current) => ({ ...current, [material.id]: "" }));
     try {
+      if (publicMode) {
+        const response = await fetch(`/api/tutorial/amostra/materiais/${material.id}/download`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Material temporariamente indisponível.");
+        const blob = await response.blob(); const disposition = response.headers.get("content-disposition") ?? ""; const fileName = originalFileNameFromDisposition(disposition) ?? `material-${material.id}`; const objectUrl = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = objectUrl; link.download = fileName; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(objectUrl); return;
+      }
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
       const token = data.session?.access_token;

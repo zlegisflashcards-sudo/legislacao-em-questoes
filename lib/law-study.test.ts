@@ -84,7 +84,7 @@ describe("interface de estudo", () => {
     for (const expected of ["study.law.title", "study.law.shortName", "study.law.totalFlashcards > 0", "aspect-video w-full", "Como estudar esta lei", "resolveLawStudyPlatformTutorials", "Plataformas do tutorial da página de estudo", "Mantenha suas revisões em dia antes de avançar para novos cartões."]) expect(client).toContain(expected);
     expect(client).not.toContain("Como usar o Anki");
     expect(client).not.toContain("Tutorial em preparação");
-    for (const platform of ["Computador", "Android", "iOS", "Navegador"]) expect(contract).toContain(`label: "${platform}"`);
+    for (const platform of ["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]) expect(contract).toContain(`label: "${platform}"`);
   });
 
   it("renderiza materiais dinâmicos e o estado vazio", () => {

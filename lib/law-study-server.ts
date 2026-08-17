@@ -10,6 +10,8 @@ export class LawStudyApiError extends Error {
   }
 }
 
+export const PUBLIC_SAMPLE_LAW_SLUG = "cf0800";
+
 function bearerToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
   if (!authorization.startsWith("Bearer ")) return null;
@@ -133,6 +135,20 @@ export async function loadLawStudy(request: Request, slug: string): Promise<LawS
       questionsFinished: record(progressResult.data)?.questoes_finalizadas === true,
     },
   };
+}
+
+export async function loadPublicSampleLawStudy(): Promise<LawStudyData> {
+  const supabase = getSupabaseServerClient();
+  const { data: lawData, error: lawError } = await supabase.from("leis").select("id,slug,titulo,nome_curto,codigo").eq("slug", PUBLIC_SAMPLE_LAW_SLUG).eq("ativo", true).maybeSingle();
+  if (lawError) throw new LawStudyApiError(503, "Não foi possível carregar a amostra agora.");
+  const law = record(lawData);
+  const lawId = positiveInteger(law?.id);
+  const title = text(law?.titulo);
+  if (lawId === null || !title) throw new LawStudyApiError(404, "Amostra não encontrada.");
+  const { data: materialsData, error: materialsError } = await supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true });
+  if (materialsError) throw new LawStudyApiError(503, "Não foi possível carregar os materiais da amostra.");
+  const materials = parseLawStudyMaterials(materialsData);
+  return { law: { id: lawId, slug: PUBLIC_SAMPLE_LAW_SLUG, title, shortName: lawStudyShortName(title, text(law?.nome_curto)), code: text(law?.codigo), totalFlashcards: materials.reduce((total, material) => material.type === "flashcards" ? total + (material.itemCount ?? 0) : total, 0) }, materials, history: [], progress: { inStudy: false, questionsFinished: false } };
 }
 
 export type LawProgressInput = { inStudy: boolean; questionsFinished: boolean };

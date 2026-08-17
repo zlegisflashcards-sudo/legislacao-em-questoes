@@ -30,7 +30,7 @@ describe("configuração dos tutoriais do Anki", () => {
   it("mantém quatro plataformas tipadas, Computador como padrão e sem URLs padrão", () => {
     expect(ANKI_PLATFORM_IDS).toEqual(["computador", "android", "ios", "navegador"]);
     expect(DEFAULT_ANKI_PLATFORM).toBe("computador");
-    expect(Object.values(ANKI_PLATFORM_TUTORIALS).map((item) => item.label)).toEqual(["Computador", "Android", "iOS", "Navegador"]);
+    expect(Object.values(ANKI_PLATFORM_TUTORIALS).map((item) => item.label)).toEqual(["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]);
     expect(Object.values(ANKI_PLATFORM_TUTORIALS).every((item) => item.videoUrl === null && item.officialUrl === null)).toBe(true);
   });
 
@@ -38,7 +38,7 @@ describe("configuração dos tutoriais do Anki", () => {
     expect(ANKI_PLATFORM_TUTORIALS.computador).toMatchObject({ description: "Windows, Mac e Linux", buttonLabel: "Baixar o Anki", note: "Gratuito" });
     expect(ANKI_PLATFORM_TUTORIALS.android).toMatchObject({ description: "AnkiDroid", buttonLabel: "Baixar na Google Play", note: "Gratuito" });
     expect(ANKI_PLATFORM_TUTORIALS.ios).toMatchObject({ description: "iPhone e iPad", buttonLabel: "Baixar na App Store", note: "Aplicativo pago mantido pelo desenvolvedor principal" });
-    expect(ANKI_PLATFORM_TUTORIALS.navegador).toMatchObject({ description: "AnkiWeb", buttonLabel: "Acessar o AnkiWeb", note: "Gratuito — permite estudar e sincronizar baralhos direto da web" });
+    expect(ANKI_PLATFORM_TUTORIALS.navegador).toMatchObject({ description: "No site", buttonLabel: "Acessar o AnkiWeb", note: "" });
   });
 
   it("aceita somente URLs HTTPS conhecidas do YouTube com ID válido", () => {
@@ -115,7 +115,9 @@ describe("página autenticada do Anki", () => {
   });
 
   it("exibe cabeçalho, plataformas e instruções acessíveis", () => {
-    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Configure o Anki antes de baixar e estudar seus materiais.", "Você pode escolher apenas uma plataforma para fazer as questões ou usar todas sincronizadas.", "Instalar ou acessar o Anki", "Criar e entrar na sua conta", "Ativar a sincronização", "Preparar o aplicativo para importar os materiais"]) expect(client).toContain(expected);
+    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Nesta mini aula, vamos apenas baixar e instalar o aplicativo. Na próxima aula, você vai baixar as questões.", "Não sabe qual escolher?", "Ver qual opção é ideal para mim", "Celular ou tablet:", "Navegador:", "aguarde novidades."]) expect(client).toContain(expected);
+    expect(client).not.toContain("Neste tutorial, você aprenderá a:");
+    for (const expected of ["Agora que você instalou e configurou o Anki:", "Sua conta está pronta;", "A sincronização está configurada;", "O aplicativo está preparado para receber seus materiais.", "Próximo passo: escolha uma legislação para baixar, importar e começar a estudar.", "Escolher uma lei para estudar", 'href="/minhas-leis"']) expect(client).toContain(expected);
     expect(client).not.toContain("A obrigatoriedade é pedagógica e não bloqueia outras áreas da sua conta.");
     expect(client).toContain("aria-pressed={selected}");
     expect(client).toContain("grid-cols-2");
