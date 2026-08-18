@@ -191,11 +191,6 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
       setError("Falha ao enviar e-mail. Consulte o log do servidor.");
     } finally { setBusy(false); }
   }
-  async function createStudent(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
-    try { const data = Object.fromEntries(new FormData(event.currentTarget)); const created = await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "criar", data }) }); await selectStudent(created); setMessage("Aluno criado manualmente."); event.currentTarget.reset(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível criar o aluno."); } finally { setBusy(false); }
-  }
   async function beginDeleteStudent() {
     if (!student) return;
     setBusy(true); setError(""); setMessage(""); setDeleteConfirmation(""); setDeleteAuth(Boolean(student.user_id));
@@ -297,7 +292,6 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
 
   return <><section className="commercial-card">
     <h2>Alunos</h2><p>Use <strong>Abrir Mini-CRM</strong> para visualizar a ficha de pós-venda do aluno.</p>
-    <form className="commercial-form-grid" onSubmit={createStudent}><h3>Novo aluno</h3><input name="nome" placeholder="Nome" /><input name="email" type="email" placeholder="E-mail" required /><button className="admin-button secondary" disabled={busy}>Criar aluno</button></form>
     <div className="commercial-form-actions">{[["todos","Todos"],["com_auth","Com Auth"],["sem_auth","Sem Auth"],["duplicados","Duplicados"]].map(([value,label]) => <button key={value} type="button" className={`admin-button ${filter===value ? "primary" : "secondary"}`} onClick={() => { setDuplicateRows(null); setFilter(value); }}>{label}</button>)}</div>
     <StudentSearch onSelect={selectStudent} />
     {duplicateRows ? <p>Mostrando {duplicateRows.length} cadastro(s) com o mesmo e-mail normalizado.</p> : null}<div className="student-mobile-cards">{(duplicateRows ?? rows).map((row) => <article key={text(row.id)}><button type="button" onClick={() => void selectStudent(row)}><strong>{text(row.nome) || "Sem nome"} ›</strong><span>Abrir Mini-CRM</span></button><a href={`mailto:${text(row.email)}`}>{text(row.email)}</a>{text(row.telefone) ? <a href={`https://wa.me/${text(row.telefone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer">{text(row.telefone)}</a> : null}<small>{text(row.produtos_ativos)} produto(s) ativo(s) · {row.primeiro_acesso_em ? "já acessou" : "sem primeiro acesso"}</small></article>)}</div><DataTable headers={["Aluno", "Telefone", "UUID", "Auth", "Produtos ativos", "Criado", ""]}>{(duplicateRows ?? rows).map((row) => <tr key={text(row.id)}><td><strong>{text(row.nome) || "Sem nome"}</strong><small>{text(row.email)}</small>{Number(row.duplicados) > 1 ? <p className="admin-alert error">⚠ {text(row.duplicados)} cadastros com este e-mail <button type="button" onClick={() => void viewDuplicates(row)}>Ver duplicados</button></p> : null}</td><td>{text(row.telefone) || "—"}</td><td><small>{text(row.id)}</small></td><td>{text(row.user_id) ? "Sim" : "Não"}</td><td>{text(row.produtos_ativos)}</td><td>{date(row.criado_em)}</td><td><button type="button" className="admin-button primary" onClick={() => void selectStudent(row)}>Abrir Mini-CRM</button></td></tr>)}</DataTable>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   HIGHLIGHT_COLORS,
@@ -16,10 +16,11 @@ type HighlightPaletteProps = {
   onChange: (color: HighlightColor) => void;
   disabled?: boolean;
   label: string;
+  className?: string;
 };
 
-function HighlightPalette({ value, onChange, disabled = false, label }: HighlightPaletteProps) {
-  return <div className="highlight-palette" role="radiogroup" aria-label={label}>
+function HighlightPalette({ value, onChange, disabled = false, label, className = "" }: HighlightPaletteProps) {
+  return <div className={`highlight-palette ${className}`.trim()} role="radiogroup" aria-label={label}>
     {HIGHLIGHT_COLORS.map((option) => {
       const selected = value === option;
       const optionLabel = HIGHLIGHT_COLOR_LABELS[option];
@@ -47,11 +48,13 @@ type HighlightsResponse = {
   message?: string;
   highlights?: LegisBotHighlight[];
   highlight?: LegisBotHighlight;
+  replaced?: boolean;
 };
 
 type Props = {
   slug: string;
   ordem: string;
+  legislationText: string;
   selection: HighlightSelection | null;
   selectedHighlight: LegisBotHighlight | null;
   onHighlightsChange: (highlights: LegisBotHighlight[]) => void;
@@ -70,6 +73,7 @@ async function authHeaders(json = false): Promise<HeadersInit> {
 export default function LegisBotPersonalHighlights({
   slug,
   ordem,
+  legislationText,
   selection,
   selectedHighlight,
   onHighlightsChange,
@@ -82,6 +86,10 @@ export default function LegisBotPersonalHighlights({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false);
+  const [mobileSelection, setMobileSelection] = useState<HighlightSelection | null>(null);
+  const [lastCreatedHighlight, setLastCreatedHighlight] = useState<LegisBotHighlight | null>(null);
+  const mobileSelectionArea = useRef<HTMLTextAreaElement>(null);
   const returnPath = `/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`;
   const apiUrl = `/api/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}/destaques`;
 
@@ -96,6 +104,7 @@ export default function LegisBotPersonalHighlights({
     setMessage("");
     if (!token) {
       setAuthenticated(false);
+      setLastCreatedHighlight(null);
       replaceHighlights([]);
       setLoading(false);
       return;
@@ -140,15 +149,29 @@ export default function LegisBotPersonalHighlights({
     };
   }, [loadWithToken]);
 
-  async function createOrReplaceHighlight() {
-    if (!selection || saving) return;
+  function captureMobileSelection() {
+    const textarea = mobileSelectionArea.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = legislationText.slice(start, end);
+    setMobileSelection(text.trim() ? { start, end, text } : null);
+  }
+
+  function closeMobileSelector() {
+    setMobileSelectorOpen(false);
+    setMobileSelection(null);
+  }
+
+  async function createOrReplaceHighlight(targetSelection = selection, closeAfterSave = false) {
+    if (!targetSelection || saving) return;
     setSaving(true);
     setMessage("");
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: await authHeaders(true),
-        body: JSON.stringify({ ...selection, color }),
+        body: JSON.stringify({ ...targetSelection, color }),
       });
       const result = await response.json() as HighlightsResponse;
       if (!response.ok || !result.success || !result.highlight) {
@@ -159,9 +182,11 @@ export default function LegisBotPersonalHighlights({
         ...highlights.filter((item) => item.id !== result.highlight?.id),
         result.highlight,
       ]);
+      setLastCreatedHighlight(response.status === 201 && !result.replaced ? result.highlight : null);
       onSelectionClear();
       window.getSelection()?.removeAllRanges();
-      setMessage("Destaque salvo.");
+      if (closeAfterSave) closeMobileSelector();
+      setMessage("Destaque salvo ✓");
     } catch {
       setMessage("Não foi possível salvar o destaque.");
     } finally {
@@ -209,10 +234,36 @@ export default function LegisBotPersonalHighlights({
         return;
       }
       replaceHighlights(highlights.filter((item) => item.id !== selectedHighlight.id));
+      if (lastCreatedHighlight?.id === selectedHighlight.id) setLastCreatedHighlight(null);
       onSelectedHighlightClear();
       setMessage("Destaque removido.");
     } catch {
       setMessage("Não foi possível remover o destaque.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function undoLastHighlight() {
+    if (!lastCreatedHighlight || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/legisbot/destaques/${lastCreatedHighlight.id}`, {
+        method: "DELETE",
+        headers: await authHeaders(),
+      });
+      const result = await response.json() as HighlightsResponse;
+      if (!response.ok || !result.success) {
+        setMessage(result.message ?? "Não foi possível desfazer o destaque.");
+        return;
+      }
+      replaceHighlights(highlights.filter((item) => item.id !== lastCreatedHighlight.id));
+      setLastCreatedHighlight(null);
+      onSelectedHighlightClear();
+      setMessage("Último destaque desfeito.");
+    } catch {
+      setMessage("Não foi possível desfazer o destaque.");
     } finally {
       setSaving(false);
     }
@@ -234,17 +285,27 @@ export default function LegisBotPersonalHighlights({
       <div><p className="community-eyebrow">Marca-texto pessoal</p><h2 id="highlights-title">Seus destaques</h2></div>
       <span>{highlights.length} {highlights.length === 1 ? "trecho" : "trechos"}</span>
     </div>
-    <p className="highlights-instructions">Escolha uma cor, selecione um trecho diretamente no texto legal acima e aplique o destaque.</p>
-    <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do novo destaque" />
+    <p className="highlights-instructions highlights-desktop-instructions">Escolha uma cor, selecione um trecho diretamente no texto legal acima e aplique o destaque.</p>
+    <p className="highlights-instructions highlights-mobile-instructions">Abra o seletor para marcar um trecho da legislação.</p>
+    <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do novo destaque" className="highlights-primary-palette" />
+    <button type="button" className="highlights-mobile-open" onClick={() => { setMobileSelection(null); setMobileSelectorOpen(true); }}>Selecionar trecho da legislação</button>
     {selection ? <div className="highlights-selection">
       <p><strong>Trecho selecionado:</strong> “{selection.text}”</p>
-      <div><button type="button" disabled={saving} onClick={() => void createOrReplaceHighlight()}>{saving ? "Salvando…" : "Aplicar destaque"}</button><button type="button" onClick={onSelectionClear}>Cancelar</button></div>
+      <div><button type="button" disabled={saving} onClick={() => void createOrReplaceHighlight(selection)}>{saving ? "Salvando…" : "Aplicar destaque"}</button><button type="button" onClick={onSelectionClear}>Cancelar</button></div>
     </div> : <p className="highlights-selection-hint">Selecione o texto com o mouse ou com os controles nativos do celular.</p>}
     {selectedHighlight ? <div className="highlights-edit" role="dialog" aria-label="Editar destaque selecionado">
       <p><strong>Destaque selecionado:</strong> “{selectedHighlight.text}”</p>
       <HighlightPalette value={selectedHighlight.color} onChange={(nextColor) => void changeColor(nextColor)} disabled={saving} label="Nova cor do destaque" />
       <div className="highlights-edit-actions"><button type="button" disabled={saving} className="danger" onClick={() => void removeHighlight()}>Remover destaque</button><button type="button" onClick={onSelectedHighlightClear}>Fechar</button></div>
     </div> : null}
-    {message ? <p className="community-message" role="status">{message}</p> : null}
+    {message ? <div className="highlights-feedback" role="status"><span>{message}</span>{lastCreatedHighlight ? <button type="button" disabled={saving} onClick={() => void undoLastHighlight()}>↶ Desfazer</button> : null}</div> : null}
+    {mobileSelectorOpen ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal highlight-mobile-selector" role="dialog" aria-modal="true" aria-labelledby="highlight-mobile-title">
+      <h3 id="highlight-mobile-title">Selecionar trecho da legislação</h3>
+      <p>Selecione somente o trecho que deseja destacar.</p>
+      <textarea ref={mobileSelectionArea} readOnly value={legislationText} rows={14} onSelect={captureMobileSelection} onTouchEnd={() => window.setTimeout(captureMobileSelection, 80)} />
+      {mobileSelection ? <p className="highlight-mobile-selection"><strong>Trecho selecionado:</strong> “{mobileSelection.text}”</p> : <p className="highlight-mobile-hint">Toque e segure sobre o texto para iniciar a seleção.</p>}
+      <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do destaque no celular" />
+      <div className="community-modal-actions"><button type="button" onClick={closeMobileSelector}>Cancelar</button><button type="button" disabled={!mobileSelection || saving} onClick={() => void createOrReplaceHighlight(mobileSelection, true)}>{saving ? "Salvando…" : "Salvar destaque"}</button></div>
+    </div></div> : null}
   </section>;
 }

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   isHighlightColor,
@@ -7,6 +8,9 @@ import {
   validateHighlightSelection,
   type LegisBotHighlight,
 } from "./legisbot-highlights";
+
+const highlightsComponent = readFileSync("components/legisbot-personal-highlights.tsx", "utf8");
+const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
 
 const highlight: LegisBotHighlight = {
   id: "4a1da739-c1ad-40d1-9f86-4b604162d09b",
@@ -32,6 +36,20 @@ describe("destaques pessoais do LegisBot", () => {
 
   it.each(["laranja", "", null, 1])("rejeita cor fora da lista: %s", (color) => {
     expect(isHighlightColor(color)).toBe(false);
+  });
+
+  it("reaproveita a seleção nativa da legislação no modal mobile", () => {
+    expect(highlightsComponent).toContain("mobileSelectionArea.current");
+    expect(highlightsComponent).toContain("textarea.selectionStart");
+    expect(highlightsComponent).toContain("textarea.selectionEnd");
+    expect(highlightsComponent).toContain("legislationText.slice(start, end)");
+    expect(legisBotPage).toContain("legislationText={textoLegal}");
+  });
+
+  it("desfaz somente o destaque recém-criado usando a exclusão existente", () => {
+    expect(highlightsComponent).toContain("response.status === 201");
+    expect(highlightsComponent).toContain("/api/legisbot/destaques/${lastCreatedHighlight.id}");
+    expect(highlightsComponent).toContain("item.id !== lastCreatedHighlight.id");
   });
 
   it("extrai e aceita somente o trecho literal nas posições enviadas", () => {

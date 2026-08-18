@@ -370,6 +370,7 @@ export default function LegisBotPageClient({
           <LegisBotPersonalHighlights
             slug={slugNormalizado}
             ordem={ordemNormalizada}
+            legislationText={textoLegal}
             selection={highlightSelection}
             selectedHighlight={selectedHighlight}
             onHighlightsChange={updateHighlights}
