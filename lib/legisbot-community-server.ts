@@ -2,6 +2,7 @@ import "server-only";
 
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { normalizeCommunityIdentifiers } from "@/lib/legisbot-community";
 
 export class CommunityApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -44,4 +45,20 @@ export async function requirePublicProfile(userId: string) {
   if (error) throw error;
   if (!data) throw new CommunityApiError(409, "Conclua seu perfil público antes de participar.");
   return data as { id: string; nome_publico: string };
+}
+
+export async function getPublicCommunityContributionCount(
+  slug: string,
+  ordem: string,
+): Promise<number> {
+  const identifiers = normalizeCommunityIdentifiers(slug, ordem);
+  const { count, error } = await getSupabaseServerClient()
+    .from("legisbot_comentarios_comunidade")
+    .select("id", { count: "exact", head: true })
+    .eq("slug", identifiers.slug)
+    .eq("ordem", identifiers.ordem)
+    .eq("status", "publicado");
+
+  if (error) throw error;
+  return count ?? 0;
 }

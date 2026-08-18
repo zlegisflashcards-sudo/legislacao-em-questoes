@@ -18,6 +18,7 @@ type CommunityResponse = {
   message?: string;
   comments?: CommunityComment[];
   total?: number;
+  contributionTotal?: number;
   page?: number;
   hasMore?: boolean;
   legislationText?: string;
@@ -26,7 +27,11 @@ type CommunityResponse = {
 };
 
 type QuoteSelection = { text: string; start: number; end: number };
-type Props = { slug: string; ordem: string };
+type Props = {
+  slug: string;
+  ordem: string;
+  onContributionCountChange?: (count: number) => void;
+};
 
 const REPORT_REASONS = [
   ["incorreto", "Informação incorreta"],
@@ -56,7 +61,11 @@ async function authHeaders(json = false): Promise<HeadersInit> {
   return headers;
 }
 
-export default function LegisBotCommunity({ slug, ordem }: Props) {
+export default function LegisBotCommunity({
+  slug,
+  ordem,
+  onContributionCountChange,
+}: Props) {
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [sort, setSort] = useState<CommunitySort>("relevant");
   const [page, setPage] = useState(1);
@@ -93,6 +102,7 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
       setComments((current) => append ? [...current, ...(result.comments ?? [])] : result.comments ?? []);
       setPage(requestedPage);
       setTotal(result.total ?? 0);
+      onContributionCountChange?.(result.contributionTotal ?? 0);
       setHasMore(Boolean(result.hasMore));
       setAuthenticated(Boolean(result.authenticated));
       setCanPublishOfficial(Boolean(result.canPublishOfficial));
@@ -102,7 +112,7 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [ordem, slug, sort]);
+  }, [onContributionCountChange, ordem, slug, sort]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -250,8 +260,8 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
 
     {authenticated ? <div className="community-editor">
       {replyTo ? <div className="community-context"><span>Respondendo a <strong>{replyTo.publicName}</strong></span><button type="button" onClick={() => setReplyTo(null)}>Cancelar resposta</button></div> : null}
-      {quote ? <blockquote className="community-quote selected"><span>Trecho destacado da legislação</span><mark>{quote.text}</mark><button type="button" onClick={() => setQuote(null)}>Remover destaque</button></blockquote> : null}
-      <div className="community-toolbar" aria-label="Formatação do comentário"><button type="button" onClick={() => insertMarkup("**")}>Negrito</button><button type="button" onClick={() => insertMarkup("*")}>Itálico</button><button type="button" onClick={() => insertMarkup("> ", "")}>Citação</button><button type="button" onClick={() => insertMarkup("- ", "")}>Lista</button><button type="button" onClick={() => setQuoteOpen(true)}>🖍️ Destacar e comentar</button></div>
+      {quote ? <blockquote className="community-quote selected"><span>Trecho citado da legislação</span><mark>{quote.text}</mark><button type="button" onClick={() => setQuote(null)}>Remover citação</button></blockquote> : null}
+      <div className="community-toolbar" aria-label="Formatação do comentário"><button type="button" onClick={() => insertMarkup("**")}>Negrito</button><button type="button" onClick={() => insertMarkup("*")}>Itálico</button><button type="button" onClick={() => insertMarkup("> ", "")}>Citação</button><button type="button" onClick={() => insertMarkup("- ", "")}>Lista</button><button type="button" onClick={() => setQuoteOpen(true)}>💬 Citar trecho</button></div>
       {canPublishOfficial ? <fieldset className="community-identity"><legend>Publicar como</legend><label><input type="radio" name="community_identity" checked={!publishAsTeam} onChange={() => setPublishAsTeam(false)} /> Perfil pessoal</label><label><input type="radio" name="community_identity" checked={publishAsTeam} onChange={() => setPublishAsTeam(true)} /> Legis Flashcards ✓</label></fieldset> : null}
       <textarea ref={editor} value={content} onChange={(event) => setContent(event.target.value)} maxLength={COMMUNITY_MAX_LENGTH} rows={5} placeholder="Escreva sua contribuição para a discussão…" />
       <div className="community-editor-footer"><span>{content.length}/{COMMUNITY_MAX_LENGTH}</span><button type="button" disabled={submitting} onClick={() => void publish()}>{submitting ? "Publicando…" : "Publicar comentário"}</button></div>
@@ -265,7 +275,7 @@ export default function LegisBotCommunity({ slug, ordem }: Props) {
     {hasMore ? <button className="community-load-more" type="button" disabled={loading} onClick={() => void load(page + 1, true)}>{loading ? "Carregando…" : "Carregar mais comentários"}</button> : null}
     {visibleCount > 0 && !hasMore ? <p className="community-end">Você chegou ao fim da discussão.</p> : null}
 
-    {quoteOpen ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal" role="dialog" aria-modal="true" aria-labelledby="quote-dialog-title"><h3 id="quote-dialog-title">Destacar trecho da legislação</h3><p>Selecione somente o trecho relevante. O texto citado será conferido com a legislação original antes da publicação.</p><textarea ref={quoteArea} readOnly value={legislationText} rows={12} /><div className="community-modal-actions"><button type="button" onClick={() => setQuoteOpen(false)}>Cancelar</button><button type="button" onClick={confirmQuote}>Usar trecho selecionado</button></div></div></div> : null}
+    {quoteOpen ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal" role="dialog" aria-modal="true" aria-labelledby="quote-dialog-title"><h3 id="quote-dialog-title">Citar trecho da legislação</h3><p>Selecione somente o trecho relevante. O texto citado será conferido com a legislação original antes da publicação.</p><textarea ref={quoteArea} readOnly value={legislationText} rows={12} /><div className="community-modal-actions"><button type="button" onClick={() => setQuoteOpen(false)}>Cancelar</button><button type="button" onClick={confirmQuote}>Citar trecho selecionado</button></div></div></div> : null}
     {reporting ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal small" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title"><h3 id="report-dialog-title">Denunciar comentário</h3><label>Motivo<select value={reportReason} onChange={(event) => setReportReason(event.target.value)}>{REPORT_REASONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><div className="community-modal-actions"><button type="button" onClick={() => setReporting(null)}>Cancelar</button><button type="button" disabled={submitting} onClick={() => void submitReport()}>Enviar denúncia</button></div></div></div> : null}
   </section>;
 }

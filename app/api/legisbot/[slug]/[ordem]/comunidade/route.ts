@@ -12,6 +12,7 @@ import {
 import {
   CommunityApiError,
   communityJsonError,
+  getPublicCommunityContributionCount,
   getRequestUser,
   requirePublicProfile,
   requireRequestUser,
@@ -105,7 +106,11 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (sort === "recent") rootsQuery = rootsQuery.order("created_at", { ascending: false });
     if (sort === "oldest") rootsQuery = rootsQuery.order("created_at", { ascending: true });
 
-    const { data: rootsData, error: rootsError, count } = await rootsQuery.range(start, start + COMMUNITY_PAGE_SIZE - 1);
+    const [rootsResult, contributionTotal] = await Promise.all([
+      rootsQuery.range(start, start + COMMUNITY_PAGE_SIZE - 1),
+      getPublicCommunityContributionCount(slug, ordem),
+    ]);
+    const { data: rootsData, error: rootsError, count } = rootsResult;
     if (rootsError) throw rootsError;
     const roots = (rootsData ?? []) as DbComment[];
     const rootIds = roots.map((row) => row.id);
@@ -152,6 +157,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       success: true,
       comments: serializedRoots.filter((row) => row.status !== "removido" || row.replies.length > 0),
       total: count ?? 0,
+      contributionTotal,
       page,
       pageSize: COMMUNITY_PAGE_SIZE,
       hasMore: start + roots.length < (count ?? 0),

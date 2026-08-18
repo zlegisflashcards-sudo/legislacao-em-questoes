@@ -1,0 +1,219 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import {
+  type HighlightColor,
+  type HighlightSelection,
+  type LegisBotHighlight,
+} from "@/lib/legisbot-highlights";
+
+type HighlightsResponse = {
+  success: boolean;
+  message?: string;
+  highlights?: LegisBotHighlight[];
+  highlight?: LegisBotHighlight;
+};
+
+type Props = {
+  slug: string;
+  ordem: string;
+  selection: HighlightSelection | null;
+  selectedHighlight: LegisBotHighlight | null;
+  onHighlightsChange: (highlights: LegisBotHighlight[]) => void;
+  onSelectionClear: () => void;
+  onSelectedHighlightClear: () => void;
+};
+
+async function authHeaders(json = false): Promise<HeadersInit> {
+  const { data } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {};
+  if (json) headers["Content-Type"] = "application/json";
+  if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+  return headers;
+}
+
+export default function LegisBotPersonalHighlights({
+  slug,
+  ordem,
+  selection,
+  selectedHighlight,
+  onHighlightsChange,
+  onSelectionClear,
+  onSelectedHighlightClear,
+}: Props) {
+  const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [color, setColor] = useState<HighlightColor>("amarelo");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const returnPath = `/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`;
+  const apiUrl = `/api/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}/destaques`;
+
+  const replaceHighlights = useCallback((next: LegisBotHighlight[]) => {
+    const ordered = [...next].sort((a, b) => a.start - b.start);
+    setHighlights(ordered);
+    onHighlightsChange(ordered);
+  }, [onHighlightsChange]);
+
+  const loadWithToken = useCallback(async (token: string | null) => {
+    setLoading(true);
+    setMessage("");
+    if (!token) {
+      setAuthenticated(false);
+      replaceHighlights([]);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12_000);
+    try {
+      const response = await fetch(apiUrl, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+      const result = await response.json() as HighlightsResponse;
+      if (response.status === 401) {
+        setAuthenticated(false);
+        replaceHighlights([]);
+        return;
+      }
+      if (!response.ok || !result.success) throw new Error(result.message);
+      setAuthenticated(true);
+      replaceHighlights(result.highlights ?? []);
+    } catch {
+      setMessage("Não foi possível carregar seus destaques.");
+    } finally {
+      window.clearTimeout(timeout);
+      setLoading(false);
+    }
+  }, [apiUrl, replaceHighlights]);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) void loadWithToken(data.session?.access_token ?? null);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) void loadWithToken(session?.access_token ?? null);
+    });
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
+  }, [loadWithToken]);
+
+  async function createOrReplaceHighlight() {
+    if (!selection || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: await authHeaders(true),
+        body: JSON.stringify({ ...selection, color }),
+      });
+      const result = await response.json() as HighlightsResponse;
+      if (!response.ok || !result.success || !result.highlight) {
+        setMessage(result.message ?? "Não foi possível salvar o destaque.");
+        return;
+      }
+      replaceHighlights([
+        ...highlights.filter((item) => item.id !== result.highlight?.id),
+        result.highlight,
+      ]);
+      onSelectionClear();
+      window.getSelection()?.removeAllRanges();
+      setMessage("Destaque salvo.");
+    } catch {
+      setMessage("Não foi possível salvar o destaque.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeColor(nextColor: HighlightColor) {
+    if (!selectedHighlight || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/legisbot/destaques/${selectedHighlight.id}`, {
+        method: "PATCH",
+        headers: await authHeaders(true),
+        body: JSON.stringify({ color: nextColor }),
+      });
+      const result = await response.json() as HighlightsResponse;
+      if (!response.ok || !result.success) {
+        setMessage(result.message ?? "Não foi possível trocar a cor.");
+        return;
+      }
+      replaceHighlights(highlights.map((item) => item.id === selectedHighlight.id ? { ...item, color: nextColor } : item));
+      onSelectedHighlightClear();
+      setMessage("Cor do destaque atualizada.");
+    } catch {
+      setMessage("Não foi possível trocar a cor.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeHighlight() {
+    if (!selectedHighlight || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/legisbot/destaques/${selectedHighlight.id}`, {
+        method: "DELETE",
+        headers: await authHeaders(),
+      });
+      const result = await response.json() as HighlightsResponse;
+      if (!response.ok || !result.success) {
+        setMessage(result.message ?? "Não foi possível remover o destaque.");
+        return;
+      }
+      replaceHighlights(highlights.filter((item) => item.id !== selectedHighlight.id));
+      onSelectedHighlightClear();
+      setMessage("Destaque removido.");
+    } catch {
+      setMessage("Não foi possível remover o destaque.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading || authenticated === null) {
+    return <section className="highlights-tool"><p className="highlights-status">Carregando seus destaques…</p></section>;
+  }
+
+  if (!authenticated) {
+    return <section className="highlights-tool highlights-login-callout">
+      <p>Entre na sua conta para salvar seus destaques.</p>
+      <div><Link href={`/conta?modo=login&retorno=${encodeURIComponent(returnPath)}`}>Entrar</Link><Link href={`/conta?modo=cadastro&retorno=${encodeURIComponent(returnPath)}`}>Criar conta</Link></div>
+    </section>;
+  }
+
+  return <section className="highlights-tool" aria-labelledby="highlights-title">
+    <div className="highlights-tool-heading">
+      <div><p className="community-eyebrow">Marca-texto pessoal</p><h2 id="highlights-title">Seus destaques</h2></div>
+      <span>{highlights.length} {highlights.length === 1 ? "trecho" : "trechos"}</span>
+    </div>
+    <p className="highlights-instructions">Escolha uma cor, selecione um trecho diretamente no texto legal acima e aplique o destaque.</p>
+    <div className="highlights-colors" role="radiogroup" aria-label="Cor do novo destaque">
+      <button type="button" role="radio" aria-checked={color === "amarelo"} className={color === "amarelo" ? "active yellow" : "yellow"} onClick={() => setColor("amarelo")}>🟨 Amarelo</button>
+      <button type="button" role="radio" aria-checked={color === "rosa"} className={color === "rosa" ? "active pink" : "pink"} onClick={() => setColor("rosa")}>🌸 Rosa</button>
+    </div>
+    {selection ? <div className="highlights-selection">
+      <p><strong>Trecho selecionado:</strong> “{selection.text}”</p>
+      <div><button type="button" disabled={saving} onClick={() => void createOrReplaceHighlight()}>{saving ? "Salvando…" : "Aplicar destaque"}</button><button type="button" onClick={onSelectionClear}>Cancelar</button></div>
+    </div> : <p className="highlights-selection-hint">Selecione o texto com o mouse ou com os controles nativos do celular.</p>}
+    {selectedHighlight ? <div className="highlights-edit" role="dialog" aria-label="Editar destaque selecionado">
+      <p><strong>Destaque selecionado:</strong> “{selectedHighlight.text}”</p>
+      <div><button type="button" disabled={saving || selectedHighlight.color === "amarelo"} onClick={() => void changeColor("amarelo")}>Trocar para amarelo</button><button type="button" disabled={saving || selectedHighlight.color === "rosa"} onClick={() => void changeColor("rosa")}>Trocar para rosa</button><button type="button" disabled={saving} className="danger" onClick={() => void removeHighlight()}>Remover</button><button type="button" onClick={onSelectedHighlightClear}>Fechar</button></div>
+    </div> : null}
+    {message ? <p className="community-message" role="status">{message}</p> : null}
+  </section>;
+}

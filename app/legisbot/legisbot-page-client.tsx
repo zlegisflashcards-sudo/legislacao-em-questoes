@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { limparApresentacao } from "@/lib/legisbot/clean-comment";
 import LegisBotCommentContent from "@/components/legisbot-comment-content";
 import LegisBotCommunity from "@/components/legisbot-community";
 import { legalHtmlToPlainText } from "@/lib/legisbot-community";
 import { supabase } from "@/lib/supabase";
+import LegisBotStudyTabs, { type LegisBotStudyTab } from "@/components/legisbot-study-tabs";
+import LegisBotPersonalHighlights from "@/components/legisbot-personal-highlights";
+import {
+  isHighlightCompatible,
+  type HighlightSelection,
+  type LegisBotHighlight,
+} from "@/lib/legisbot-highlights";
 
 const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado" };
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
@@ -28,6 +35,7 @@ type LegisBotPageClientProps = {
   slug: string;
   ordem: string;
   dadosIniciais: DadosLegislacao;
+  initialCommunityCount: number;
   adminShortcut?: ReactNode;
 };
 
@@ -42,10 +50,81 @@ type LegisBotApiResponse = {
   reason?: "legisbot_resting" | "rate_limited" | "cooldown" | "attempts_exhausted";
 };
 
+type HighlightedLegalTextProps = {
+  text: string;
+  highlights: LegisBotHighlight[];
+  selectionEnabled: boolean;
+  onSelection: (selection: HighlightSelection | null) => void;
+  onHighlightClick: (highlight: LegisBotHighlight) => void;
+};
+
+function HighlightedLegalText({
+  text,
+  highlights,
+  selectionEnabled,
+  onSelection,
+  onHighlightClick,
+}: HighlightedLegalTextProps) {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const compatibleHighlights = useMemo(
+    () => highlights.filter((item) => isHighlightCompatible(item, text)).sort((a, b) => a.start - b.start),
+    [highlights, text],
+  );
+
+  const parts = useMemo(() => {
+    const result: ReactNode[] = [];
+    let cursor = 0;
+    for (const highlight of compatibleHighlights) {
+      if (highlight.start > cursor) result.push(text.slice(cursor, highlight.start));
+      result.push(
+        <mark
+          key={highlight.id}
+          className={`personal-highlight ${highlight.color}`}
+          data-highlight-id={highlight.id}
+          title="Toque para editar este destaque"
+          onClick={() => onHighlightClick(highlight)}
+        >
+          {text.slice(highlight.start, highlight.end)}
+        </mark>,
+      );
+      cursor = highlight.end;
+    }
+    if (cursor < text.length) result.push(text.slice(cursor));
+    return result;
+  }, [compatibleHighlights, onHighlightClick, text]);
+
+  const captureSelection = useCallback(() => {
+    if (!selectionEnabled || !textRef.current) return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+    const range = selection.getRangeAt(0);
+    const root = textRef.current;
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+      onSelection(null);
+      return;
+    }
+    const before = document.createRange();
+    before.selectNodeContents(root);
+    before.setEnd(range.startContainer, range.startOffset);
+    const start = before.toString().length;
+    const selectedText = range.toString();
+    const end = start + selectedText.length;
+    onSelection(selectedText.trim() ? { start, end, text: text.slice(start, end) } : null);
+  }, [onSelection, selectionEnabled, text]);
+
+  return <p
+    ref={textRef}
+    className={selectionEnabled ? "highlight-selection-enabled" : ""}
+    onMouseUp={captureSelection}
+    onTouchEnd={() => window.setTimeout(captureSelection, 80)}
+  >{parts}</p>;
+}
+
 export default function LegisBotPageClient({
   slug,
   ordem,
   dadosIniciais,
+  initialCommunityCount,
   adminShortcut,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -57,6 +136,11 @@ export default function LegisBotPageClient({
   const [statusMessage, setStatusMessage] = useState("");
   const [readRevision, setReadRevision] = useState(0);
   const [returnPath, setReturnPath] = useState(`/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`);
+  const [communityCount, setCommunityCount] = useState(initialCommunityCount);
+  const [activeStudyTab, setActiveStudyTab] = useState<LegisBotStudyTab>("legisbot");
+  const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
+  const [highlightSelection, setHighlightSelection] = useState<HighlightSelection | null>(null);
+  const [selectedHighlight, setSelectedHighlight] = useState<LegisBotHighlight | null>(null);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
@@ -203,6 +287,61 @@ export default function LegisBotPageClient({
     }
   }
 
+  const updateCommunityCount = useCallback((count: number) => {
+    setCommunityCount(Math.max(0, count));
+  }, []);
+
+  const updateHighlights = useCallback((items: LegisBotHighlight[]) => {
+    setHighlights(items);
+  }, []);
+
+  const selectHighlight = useCallback((item: LegisBotHighlight) => {
+    if (activeStudyTab !== "highlights") return;
+    setHighlightSelection(null);
+    setSelectedHighlight(item);
+  }, [activeStudyTab]);
+
+  const selectLegalText = useCallback((selection: HighlightSelection | null) => {
+    setSelectedHighlight(null);
+    setHighlightSelection(selection);
+  }, []);
+
+  const changeStudyTab = useCallback((tab: LegisBotStudyTab) => {
+    setActiveStudyTab(tab);
+    if (tab !== "highlights") {
+      setHighlightSelection(null);
+      setSelectedHighlight(null);
+      window.getSelection()?.removeAllRanges();
+    }
+  }, []);
+
+  const legisBotContent = <>
+    <section className="question-block" aria-label="Pergunta feita ao LegisBot">
+      <span className="question-label">👤 Você perguntou:</span>
+      <div className="question-card">🤖 LegisBot, pode me explicar este artigo?</div>
+    </section>
+
+    <article className="bot-answer" aria-labelledby="legisbot-answer-title">
+      <div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2 id="legisbot-answer-title">LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
+      <div className="answer-content answer-freeform" aria-live="polite">
+        {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
+        {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
+        {answerState === "processing" || answerState === "generating" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
+        {answerState === "not_found" && authenticated === null ? <p className="answer-status">Verificando sua conta…</p> : null}
+        {answerState === "not_found" && authenticated === false ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado. Entre na sua conta para solicitar a explicação.</p><a className="legisbot-generate-button" href={loginUrl}>Entrar para gerar comentário</a></div> : null}
+        {answerState === "not_found" && authenticated === true ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado.</p><button className="legisbot-generate-button" type="button" onClick={() => void gerarComentario()}>Gerar comentário com o LegisBot</button></div> : null}
+        {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
+        {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
+        {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Tente novamente mais tarde.</p> : null}
+        {answerState === "limited" ? <p className="answer-status answer-error">{statusMessage}</p> : null}
+        {answerState === "error" ? <p className="answer-status answer-error">{statusMessage || "Não foi possível carregar a explicação no momento. Tente novamente mais tarde."}</p> : null}
+      </div>
+    </article>
+
+    <div className="legisbot-report"><a href="mailto:zlegisflashcards@gmail.com?subject=Reportar%20erro%20no%20LegisBot">⚑ Reportar erro</a></div>
+    <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
+  </>;
+
   return <div className="legisbot-page" data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
@@ -213,33 +352,32 @@ export default function LegisBotPageClient({
         <h1>{assunto}</h1>
       </header>
 
-      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><p>{textoLegal}</p></section> : null}
-
-      <section className="question-block" aria-label="Pergunta feita ao LegisBot">
-        <span className="question-label">👤 Você perguntou:</span>
-        <div className="question-card">🤖 LegisBot, pode me explicar este artigo?</div>
-      </section>
-
-      <article className="bot-answer" aria-labelledby="legisbot-answer-title">
-        <div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2 id="legisbot-answer-title">LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
-        <div className="answer-content answer-freeform" aria-live="polite">
-          {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
-          {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
-          {answerState === "processing" || answerState === "generating" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
-          {answerState === "not_found" && authenticated === null ? <p className="answer-status">Verificando sua conta…</p> : null}
-          {answerState === "not_found" && authenticated === false ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado. Entre na sua conta para solicitar a explicação.</p><a className="legisbot-generate-button" href={loginUrl}>Entrar para gerar comentário</a></div> : null}
-          {answerState === "not_found" && authenticated === true ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado.</p><button className="legisbot-generate-button" type="button" onClick={() => void gerarComentario()}>Gerar comentário com o LegisBot</button></div> : null}
-          {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
-          {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
-          {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Tente novamente mais tarde.</p> : null}
-          {answerState === "limited" ? <p className="answer-status answer-error">{statusMessage}</p> : null}
-          {answerState === "error" ? <p className="answer-status answer-error">{statusMessage || "Não foi possível carregar a explicação no momento. Tente novamente mais tarde."}</p> : null}
-        </div>
-      </article>
-
-      <div className="legisbot-report"><a href="mailto:zlegisflashcards@gmail.com?subject=Reportar%20erro%20no%20LegisBot">⚑ Reportar erro</a></div>
-      <LegisBotCommunity slug={slug} ordem={ordem} />
-      <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
+      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><HighlightedLegalText text={textoLegal} highlights={highlights} selectionEnabled={activeStudyTab === "highlights"} onSelection={selectLegalText} onHighlightClick={selectHighlight} /></section> : null}
+      <LegisBotStudyTabs
+        slug={slugNormalizado}
+        ordem={ordemNormalizada}
+        communityCount={communityCount}
+        onActiveTabChange={changeStudyTab}
+        legisBotContent={legisBotContent}
+        communityContent={
+          <LegisBotCommunity
+            slug={slugNormalizado}
+            ordem={ordemNormalizada}
+            onContributionCountChange={updateCommunityCount}
+          />
+        }
+        highlightsContent={
+          <LegisBotPersonalHighlights
+            slug={slugNormalizado}
+            ordem={ordemNormalizada}
+            selection={highlightSelection}
+            selectedHighlight={selectedHighlight}
+            onHighlightsChange={updateHighlights}
+            onSelectionClear={() => setHighlightSelection(null)}
+            onSelectedHighlightClear={() => setSelectedHighlight(null)}
+          />
+        }
+      />
     </main>
   </div>;
 }
