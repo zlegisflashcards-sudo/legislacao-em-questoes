@@ -228,12 +228,16 @@ describe("operações comerciais auditáveis", () => {
     expect(client.match(/window\.confirm/g)?.length).toBeGreaterThanOrEqual(3);
     expect(client).not.toContain("localStorage");
     expect(client).not.toContain("sessionStorage");
-    expect(client).toContain("sem efeito retroativo");
+    expect(client).toContain("Composição ordenada atualizada.");
   });
 
   it("mantém o fluxo Hotmart existente fora da nova implementação", () => {
     expect(server).not.toContain("lib/hotmart");
     expect(client).not.toContain("webhook");
     expect(migration).not.toContain("hotmart_eventos");
+  });
+
+  it("salva a composição do produto por RPC centralizada", () => {
+    expect(server).toContain('rpc("admin_definir_leis_produto"');
   });
 });

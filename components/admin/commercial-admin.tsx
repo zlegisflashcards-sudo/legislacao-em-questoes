@@ -411,10 +411,10 @@ function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    await mutate("produtos", { action: "definir_leis", id: product.id, lei_ids: selected.map(Number) }, "Composição ordenada atualizada sem efeito retroativo.");
+    await mutate("produtos", { action: "definir_leis", id: product.id, lei_ids: selected.map(Number) }, "Composição ordenada atualizada.");
   }
   return <form className="commercial-composition" onSubmit={save}>
-    <h3>Leis do produto</h3><p>Ordene com as setas. Alterar esta composição não cria liberações retroativas.</p>
+    <h3>Leis do produto</h3><p>Ordene com as setas. Em produtos do tipo edital, novas leis são sincronizadas para compras ativas.</p>
     <div className="commercial-composition-add"><select value={candidate} onChange={(event) => setCandidate(event.target.value)}><option value="">Adicionar lei…</option>{laws.filter((law) => !selected.includes(text(law.id))).map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select><button type="button" className="admin-button secondary" disabled={!candidate} onClick={() => { setSelected([...selected, candidate]); setCandidate(""); }}>Adicionar</button></div>
     <ol>{selected.map((id, index) => <li key={id}><span>{title(id)}</span><div><button type="button" disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Mover ${title(id)} para cima`}>↑</button><button type="button" disabled={index === selected.length - 1} onClick={() => move(index, 1)} aria-label={`Mover ${title(id)} para baixo`}>↓</button><button type="button" onClick={() => setSelected(selected.filter((item) => item !== id))}>Remover</button></div></li>)}</ol>
     <button className="admin-button primary" disabled={busy}>Salvar composição</button>
