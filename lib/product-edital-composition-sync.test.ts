@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync("supabase/migrations/20260818100000_sync_active_edital_product_composition.sql", "utf8");
+const reconciliationMigration = readFileSync("supabase/migrations/20260818113000_fix_edital_release_reconciliation.sql", "utf8");
+const adminServer = readFileSync("lib/commercial-admin-server.ts", "utf8");
+const adminClient = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 
 type Purchase = { id: string; studentId: string; productId: string; status: "ativo" | "cancelado" | "reembolsado" };
 type Release = { purchaseId: string; lawId: number; origin: string };
@@ -61,6 +64,15 @@ describe("sincronização da composição viva de edital", () => {
     expect(result).not.toContainEqual({ purchaseId: "reembolsada", lawId: 7, origin: "produto" });
     expect(result).toContainEqual({ purchaseId: "outra-compra", lawId: 9, origin: "hotmart" });
   });
+
+  it("não deixa uma compra ativa órfã bloquear compradores ativos válidos", () => {
+    const purchases = [
+      { id: "valida", studentId: "aluno-a", productId: "produto-x", status: "ativo" as const },
+      { id: "orfã", studentId: "", productId: "produto-x", status: "ativo" as const },
+    ];
+    const validPurchases = purchases.filter((purchase) => purchase.studentId);
+    expect(synchronize("produto-x", [8], validPurchases, [])).toEqual([{ purchaseId: "valida", lawId: 8, origin: "produto" }]);
+  });
 });
 
 describe("contrato SQL da sincronização", () => {
@@ -81,5 +93,15 @@ describe("contrato SQL da sincronização", () => {
     expect(migration).toContain("'id',p.id::text");
     expect(migration).not.toContain("insert into public.editais_personalizados_leis");
     expect(migration).not.toContain("materiais_leis");
+  });
+
+  it("filtra compras órfãs e permite reconciliar a composição já salva", () => {
+    expect(reconciliationMigration).toContain("and c.aluno_id is not null");
+    expect(reconciliationMigration).toContain("compras_sem_aluno_ignoradas");
+    expect(adminServer).toContain('"sincronizar_liberacoes_editais"');
+    expect(adminServer).toContain('rpc("admin_sincronizar_composicao_edital_produto"');
+    expect(adminClient).toContain("Sincronizar compras ativas");
+    expect(reconciliationMigration).toContain("admin_reconciliar_liberacoes_editais_ativos");
+    expect(reconciliationMigration).toContain("'todos_editais'");
   });
 });

@@ -989,6 +989,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     }
     if (action === "atualizar") return rpc("admin_atualizar_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_dados: validateProductData(body.data, true) });
     if (action === "definir_leis") return rpc("admin_definir_leis_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_lei_ids: idList(body.lei_ids, "Lista de leis") });
+    if (action === "sincronizar_liberacoes_editais") return rpc("admin_sincronizar_composicao_edital_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto") });
   }
 
   if (resource === "aquisicoes") {
