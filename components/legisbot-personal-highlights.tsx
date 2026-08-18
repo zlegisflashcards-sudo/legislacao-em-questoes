@@ -16,11 +16,10 @@ type HighlightPaletteProps = {
   onChange: (color: HighlightColor) => void;
   disabled?: boolean;
   label: string;
-  className?: string;
 };
 
-function HighlightPalette({ value, onChange, disabled = false, label, className = "" }: HighlightPaletteProps) {
-  return <div className={`highlight-palette ${className}`.trim()} role="radiogroup" aria-label={label}>
+function HighlightPalette({ value, onChange, disabled = false, label }: HighlightPaletteProps) {
+  return <div className="highlight-palette" role="radiogroup" aria-label={label}>
     {HIGHLIGHT_COLORS.map((option) => {
       const selected = value === option;
       const optionLabel = HIGHLIGHT_COLOR_LABELS[option];
@@ -55,10 +54,8 @@ type Props = {
   slug: string;
   ordem: string;
   legislationText: string;
-  selection: HighlightSelection | null;
   selectedHighlight: LegisBotHighlight | null;
   onHighlightsChange: (highlights: LegisBotHighlight[]) => void;
-  onSelectionClear: () => void;
   onSelectedHighlightClear: () => void;
 };
 
@@ -74,10 +71,8 @@ export default function LegisBotPersonalHighlights({
   slug,
   ordem,
   legislationText,
-  selection,
   selectedHighlight,
   onHighlightsChange,
-  onSelectionClear,
   onSelectedHighlightClear,
 }: Props) {
   const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
@@ -86,10 +81,10 @@ export default function LegisBotPersonalHighlights({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false);
-  const [mobileSelection, setMobileSelection] = useState<HighlightSelection | null>(null);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [selectorSelection, setSelectorSelection] = useState<HighlightSelection | null>(null);
   const [lastCreatedHighlight, setLastCreatedHighlight] = useState<LegisBotHighlight | null>(null);
-  const mobileSelectionArea = useRef<HTMLTextAreaElement>(null);
+  const selectionArea = useRef<HTMLTextAreaElement>(null);
   const returnPath = `/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`;
   const apiUrl = `/api/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}/destaques`;
 
@@ -149,21 +144,21 @@ export default function LegisBotPersonalHighlights({
     };
   }, [loadWithToken]);
 
-  function captureMobileSelection() {
-    const textarea = mobileSelectionArea.current;
+  function captureSelectorSelection() {
+    const textarea = selectionArea.current;
     if (!textarea) return;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = legislationText.slice(start, end);
-    setMobileSelection(text.trim() ? { start, end, text } : null);
+    setSelectorSelection(text.trim() ? { start, end, text } : null);
   }
 
-  function closeMobileSelector() {
-    setMobileSelectorOpen(false);
-    setMobileSelection(null);
+  function closeSelector() {
+    setSelectorOpen(false);
+    setSelectorSelection(null);
   }
 
-  async function createOrReplaceHighlight(targetSelection = selection, closeAfterSave = false) {
+  async function createOrReplaceHighlight(targetSelection: HighlightSelection) {
     if (!targetSelection || saving) return;
     setSaving(true);
     setMessage("");
@@ -183,9 +178,8 @@ export default function LegisBotPersonalHighlights({
         result.highlight,
       ]);
       setLastCreatedHighlight(response.status === 201 && !result.replaced ? result.highlight : null);
-      onSelectionClear();
       window.getSelection()?.removeAllRanges();
-      if (closeAfterSave) closeMobileSelector();
+      closeSelector();
       setMessage("Destaque salvo ✓");
     } catch {
       setMessage("Não foi possível salvar o destaque.");
@@ -269,6 +263,31 @@ export default function LegisBotPersonalHighlights({
     }
   }
 
+  async function undoAllHighlights() {
+    if (!highlights.length || saving) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const headers = await authHeaders();
+      const results = await Promise.all(highlights.map(async (item) => {
+        const response = await fetch(`/api/legisbot/destaques/${item.id}`, { method: "DELETE", headers });
+        const result = await response.json() as HighlightsResponse;
+        return response.ok && result.success;
+      }));
+      if (results.some((success) => !success)) throw new Error("partial_delete");
+      replaceHighlights([]);
+      setLastCreatedHighlight(null);
+      onSelectedHighlightClear();
+      setMessage("Todos os destaques deste artigo foram desfeitos.");
+    } catch {
+      const { data } = await supabase.auth.getSession();
+      await loadWithToken(data.session?.access_token ?? null);
+      setMessage("Não foi possível desfazer todos os destaques.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading || authenticated === null) {
     return <section className="highlights-tool"><p className="highlights-status">Carregando seus destaques…</p></section>;
   }
@@ -285,27 +304,21 @@ export default function LegisBotPersonalHighlights({
       <div><p className="community-eyebrow">Marca-texto pessoal</p><h2 id="highlights-title">Seus destaques</h2></div>
       <span>{highlights.length} {highlights.length === 1 ? "trecho" : "trechos"}</span>
     </div>
-    <p className="highlights-instructions highlights-desktop-instructions">Escolha uma cor, selecione um trecho diretamente no texto legal acima e aplique o destaque.</p>
-    <p className="highlights-instructions highlights-mobile-instructions">Abra o seletor para marcar um trecho da legislação.</p>
-    <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do novo destaque" className="highlights-primary-palette" />
-    <button type="button" className="highlights-mobile-open" onClick={() => { setMobileSelection(null); setMobileSelectorOpen(true); }}>Selecionar trecho da legislação</button>
-    {selection ? <div className="highlights-selection">
-      <p><strong>Trecho selecionado:</strong> “{selection.text}”</p>
-      <div><button type="button" disabled={saving} onClick={() => void createOrReplaceHighlight(selection)}>{saving ? "Salvando…" : "Aplicar destaque"}</button><button type="button" onClick={onSelectionClear}>Cancelar</button></div>
-    </div> : <p className="highlights-selection-hint">Selecione o texto com o mouse ou com os controles nativos do celular.</p>}
+    <p className="highlights-instructions">Abra o seletor para marcar um trecho da legislação.</p>
+    <button type="button" className="highlights-selector-open" onClick={() => { setSelectorSelection(null); setSelectorOpen(true); }}>Selecionar trecho da legislação</button>
     {selectedHighlight ? <div className="highlights-edit" role="dialog" aria-label="Editar destaque selecionado">
       <p><strong>Destaque selecionado:</strong> “{selectedHighlight.text}”</p>
       <HighlightPalette value={selectedHighlight.color} onChange={(nextColor) => void changeColor(nextColor)} disabled={saving} label="Nova cor do destaque" />
       <div className="highlights-edit-actions"><button type="button" disabled={saving} className="danger" onClick={() => void removeHighlight()}>Remover destaque</button><button type="button" onClick={onSelectedHighlightClear}>Fechar</button></div>
     </div> : null}
-    {message ? <div className="highlights-feedback" role="status"><span>{message}</span>{lastCreatedHighlight ? <button type="button" disabled={saving} onClick={() => void undoLastHighlight()}>↶ Desfazer</button> : null}</div> : null}
-    {mobileSelectorOpen ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal highlight-mobile-selector" role="dialog" aria-modal="true" aria-labelledby="highlight-mobile-title">
-      <h3 id="highlight-mobile-title">Selecionar trecho da legislação</h3>
+    {message || highlights.length ? <div className="highlights-feedback" role="status">{message ? <span>{message}</span> : null}<div className="highlights-feedback-actions">{lastCreatedHighlight ? <button type="button" disabled={saving} onClick={() => void undoLastHighlight()}>↶ Desfazer último</button> : null}{highlights.length ? <button type="button" disabled={saving} onClick={() => window.confirm("Desfazer todos os destaques deste artigo?") && void undoAllHighlights()}>↶ Desfazer tudo</button> : null}</div></div> : null}
+    {selectorOpen ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal highlight-selector" role="dialog" aria-modal="true" aria-labelledby="highlight-selector-title">
+      <h3 id="highlight-selector-title">Selecionar trecho da legislação</h3>
       <p>Selecione somente o trecho que deseja destacar.</p>
-      <textarea ref={mobileSelectionArea} readOnly value={legislationText} rows={14} onSelect={captureMobileSelection} onTouchEnd={() => window.setTimeout(captureMobileSelection, 80)} />
-      {mobileSelection ? <p className="highlight-mobile-selection"><strong>Trecho selecionado:</strong> “{mobileSelection.text}”</p> : <p className="highlight-mobile-hint">Toque e segure sobre o texto para iniciar a seleção.</p>}
-      <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do destaque no celular" />
-      <div className="community-modal-actions"><button type="button" onClick={closeMobileSelector}>Cancelar</button><button type="button" disabled={!mobileSelection || saving} onClick={() => void createOrReplaceHighlight(mobileSelection, true)}>{saving ? "Salvando…" : "Salvar destaque"}</button></div>
+      <textarea ref={selectionArea} readOnly value={legislationText} rows={14} onSelect={captureSelectorSelection} onTouchEnd={() => window.setTimeout(captureSelectorSelection, 80)} />
+      {selectorSelection ? <p className="highlight-selector-selection"><strong>Trecho selecionado:</strong> “{selectorSelection.text}”</p> : <p className="highlight-selector-hint">Selecione o texto com o mouse ou toque e segure no celular.</p>}
+      <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do destaque" />
+      <div className="community-modal-actions"><button type="button" onClick={closeSelector}>Cancelar</button><button type="button" disabled={!selectorSelection || saving} onClick={() => { if (selectorSelection) void createOrReplaceHighlight(selectorSelection); }}>{saving ? "Salvando…" : "Salvar destaque"}</button></div>
     </div></div> : null}
   </section>;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { limparApresentacao } from "@/lib/legisbot/clean-comment";
 import LegisBotCommentContent from "@/components/legisbot-comment-content";
 import LegisBotCommunity from "@/components/legisbot-community";
@@ -10,7 +10,6 @@ import LegisBotStudyTabs, { type LegisBotStudyTab } from "@/components/legisbot-
 import LegisBotPersonalHighlights from "@/components/legisbot-personal-highlights";
 import {
   isHighlightCompatible,
-  type HighlightSelection,
   type LegisBotHighlight,
 } from "@/lib/legisbot-highlights";
 
@@ -53,19 +52,14 @@ type LegisBotApiResponse = {
 type HighlightedLegalTextProps = {
   text: string;
   highlights: LegisBotHighlight[];
-  selectionEnabled: boolean;
-  onSelection: (selection: HighlightSelection | null) => void;
   onHighlightClick: (highlight: LegisBotHighlight) => void;
 };
 
 function HighlightedLegalText({
   text,
   highlights,
-  selectionEnabled,
-  onSelection,
   onHighlightClick,
 }: HighlightedLegalTextProps) {
-  const textRef = useRef<HTMLParagraphElement>(null);
   const compatibleHighlights = useMemo(
     () => highlights.filter((item) => isHighlightCompatible(item, text)).sort((a, b) => a.start - b.start),
     [highlights, text],
@@ -93,31 +87,7 @@ function HighlightedLegalText({
     return result;
   }, [compatibleHighlights, onHighlightClick, text]);
 
-  const captureSelection = useCallback(() => {
-    if (!selectionEnabled || !textRef.current) return;
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-    const range = selection.getRangeAt(0);
-    const root = textRef.current;
-    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
-      onSelection(null);
-      return;
-    }
-    const before = document.createRange();
-    before.selectNodeContents(root);
-    before.setEnd(range.startContainer, range.startOffset);
-    const start = before.toString().length;
-    const selectedText = range.toString();
-    const end = start + selectedText.length;
-    onSelection(selectedText.trim() ? { start, end, text: text.slice(start, end) } : null);
-  }, [onSelection, selectionEnabled, text]);
-
-  return <p
-    ref={textRef}
-    className={selectionEnabled ? "highlight-selection-enabled" : ""}
-    onMouseUp={captureSelection}
-    onTouchEnd={() => window.setTimeout(captureSelection, 80)}
-  >{parts}</p>;
+  return <p>{parts}</p>;
 }
 
 export default function LegisBotPageClient({
@@ -139,7 +109,6 @@ export default function LegisBotPageClient({
   const [communityCount, setCommunityCount] = useState(initialCommunityCount);
   const [activeStudyTab, setActiveStudyTab] = useState<LegisBotStudyTab>("legisbot");
   const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
-  const [highlightSelection, setHighlightSelection] = useState<HighlightSelection | null>(null);
   const [selectedHighlight, setSelectedHighlight] = useState<LegisBotHighlight | null>(null);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
@@ -297,21 +266,13 @@ export default function LegisBotPageClient({
 
   const selectHighlight = useCallback((item: LegisBotHighlight) => {
     if (activeStudyTab !== "highlights") return;
-    setHighlightSelection(null);
     setSelectedHighlight(item);
   }, [activeStudyTab]);
-
-  const selectLegalText = useCallback((selection: HighlightSelection | null) => {
-    setSelectedHighlight(null);
-    setHighlightSelection(selection);
-  }, []);
 
   const changeStudyTab = useCallback((tab: LegisBotStudyTab) => {
     setActiveStudyTab(tab);
     if (tab !== "highlights") {
-      setHighlightSelection(null);
       setSelectedHighlight(null);
-      window.getSelection()?.removeAllRanges();
     }
   }, []);
 
@@ -352,7 +313,7 @@ export default function LegisBotPageClient({
         <h1>{assunto}</h1>
       </header>
 
-      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><HighlightedLegalText text={textoLegal} highlights={highlights} selectionEnabled={activeStudyTab === "highlights"} onSelection={selectLegalText} onHighlightClick={selectHighlight} /></section> : null}
+      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><HighlightedLegalText text={textoLegal} highlights={highlights} onHighlightClick={selectHighlight} /></section> : null}
       <LegisBotStudyTabs
         slug={slugNormalizado}
         ordem={ordemNormalizada}
@@ -371,10 +332,8 @@ export default function LegisBotPageClient({
             slug={slugNormalizado}
             ordem={ordemNormalizada}
             legislationText={textoLegal}
-            selection={highlightSelection}
             selectedHighlight={selectedHighlight}
             onHighlightsChange={updateHighlights}
-            onSelectionClear={() => setHighlightSelection(null)}
             onSelectedHighlightClear={() => setSelectedHighlight(null)}
           />
         }

@@ -38,18 +38,25 @@ describe("destaques pessoais do LegisBot", () => {
     expect(isHighlightColor(color)).toBe(false);
   });
 
-  it("reaproveita a seleção nativa da legislação no modal mobile", () => {
-    expect(highlightsComponent).toContain("mobileSelectionArea.current");
+  it("usa um único seletor modal com a seleção nativa da legislação", () => {
+    expect(highlightsComponent).toContain("selectionArea.current");
     expect(highlightsComponent).toContain("textarea.selectionStart");
     expect(highlightsComponent).toContain("textarea.selectionEnd");
     expect(highlightsComponent).toContain("legislationText.slice(start, end)");
     expect(legisBotPage).toContain("legislationText={textoLegal}");
+    expect(legisBotPage).not.toContain("selectionEnabled");
   });
 
   it("desfaz somente o destaque recém-criado usando a exclusão existente", () => {
     expect(highlightsComponent).toContain("response.status === 201");
     expect(highlightsComponent).toContain("/api/legisbot/destaques/${lastCreatedHighlight.id}");
     expect(highlightsComponent).toContain("item.id !== lastCreatedHighlight.id");
+  });
+
+  it("desfaz todos os destaques do artigo pelas exclusões existentes", () => {
+    expect(highlightsComponent).toContain("Promise.all(highlights.map");
+    expect(highlightsComponent).toContain("replaceHighlights([])");
+    expect(highlightsComponent).toContain("↶ Desfazer tudo");
   });
 
   it("extrai e aceita somente o trecho literal nas posições enviadas", () => {
