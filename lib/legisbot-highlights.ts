@@ -1,7 +1,15 @@
 import { legalHtmlToPlainText, normalizeCommunityIdentifiers } from "./legisbot-community";
 
-export const HIGHLIGHT_COLORS = ["amarelo", "rosa"] as const;
+export const HIGHLIGHT_COLORS = ["amarelo", "verde", "azul", "roxo", "rosa"] as const;
 export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
+
+export const HIGHLIGHT_COLOR_LABELS: Record<HighlightColor, string> = {
+  amarelo: "Amarelo",
+  verde: "Verde",
+  azul: "Azul",
+  roxo: "Roxo",
+  rosa: "Rosa",
+};
 
 export type LegisBotHighlight = {
   id: string;

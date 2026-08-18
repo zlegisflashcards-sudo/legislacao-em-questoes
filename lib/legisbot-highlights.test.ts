@@ -26,11 +26,11 @@ describe("destaques pessoais do LegisBot", () => {
     });
   });
 
-  it.each(["amarelo", "rosa"])("aceita a cor %s", (color) => {
+  it.each(["amarelo", "verde", "azul", "roxo", "rosa"])("aceita a cor %s", (color) => {
     expect(isHighlightColor(color)).toBe(true);
   });
 
-  it.each(["azul", "", null, 1])("rejeita cor fora da lista: %s", (color) => {
+  it.each(["laranja", "", null, 1])("rejeita cor fora da lista: %s", (color) => {
     expect(isHighlightColor(color)).toBe(false);
   });
 

@@ -4,10 +4,43 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
+  HIGHLIGHT_COLORS,
+  HIGHLIGHT_COLOR_LABELS,
   type HighlightColor,
   type HighlightSelection,
   type LegisBotHighlight,
 } from "@/lib/legisbot-highlights";
+
+type HighlightPaletteProps = {
+  value: HighlightColor;
+  onChange: (color: HighlightColor) => void;
+  disabled?: boolean;
+  label: string;
+};
+
+function HighlightPalette({ value, onChange, disabled = false, label }: HighlightPaletteProps) {
+  return <div className="highlight-palette" role="radiogroup" aria-label={label}>
+    {HIGHLIGHT_COLORS.map((option) => {
+      const selected = value === option;
+      const optionLabel = HIGHLIGHT_COLOR_LABELS[option];
+      return <button
+        key={option}
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        aria-label={optionLabel}
+        title={optionLabel}
+        className={`highlight-color-option ${selected ? "active" : ""}`}
+        disabled={disabled}
+        onClick={() => onChange(option)}
+      >
+        <span className={`highlight-color-swatch ${option}`} aria-hidden="true">
+          {selected ? <span className="highlight-color-check">✓</span> : null}
+        </span>
+      </button>;
+    })}
+  </div>;
+}
 
 type HighlightsResponse = {
   success: boolean;
@@ -202,17 +235,15 @@ export default function LegisBotPersonalHighlights({
       <span>{highlights.length} {highlights.length === 1 ? "trecho" : "trechos"}</span>
     </div>
     <p className="highlights-instructions">Escolha uma cor, selecione um trecho diretamente no texto legal acima e aplique o destaque.</p>
-    <div className="highlights-colors" role="radiogroup" aria-label="Cor do novo destaque">
-      <button type="button" role="radio" aria-checked={color === "amarelo"} className={color === "amarelo" ? "active yellow" : "yellow"} onClick={() => setColor("amarelo")}>🟨 Amarelo</button>
-      <button type="button" role="radio" aria-checked={color === "rosa"} className={color === "rosa" ? "active pink" : "pink"} onClick={() => setColor("rosa")}>🌸 Rosa</button>
-    </div>
+    <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do novo destaque" />
     {selection ? <div className="highlights-selection">
       <p><strong>Trecho selecionado:</strong> “{selection.text}”</p>
       <div><button type="button" disabled={saving} onClick={() => void createOrReplaceHighlight()}>{saving ? "Salvando…" : "Aplicar destaque"}</button><button type="button" onClick={onSelectionClear}>Cancelar</button></div>
     </div> : <p className="highlights-selection-hint">Selecione o texto com o mouse ou com os controles nativos do celular.</p>}
     {selectedHighlight ? <div className="highlights-edit" role="dialog" aria-label="Editar destaque selecionado">
       <p><strong>Destaque selecionado:</strong> “{selectedHighlight.text}”</p>
-      <div><button type="button" disabled={saving || selectedHighlight.color === "amarelo"} onClick={() => void changeColor("amarelo")}>Trocar para amarelo</button><button type="button" disabled={saving || selectedHighlight.color === "rosa"} onClick={() => void changeColor("rosa")}>Trocar para rosa</button><button type="button" disabled={saving} className="danger" onClick={() => void removeHighlight()}>Remover</button><button type="button" onClick={onSelectedHighlightClear}>Fechar</button></div>
+      <HighlightPalette value={selectedHighlight.color} onChange={(nextColor) => void changeColor(nextColor)} disabled={saving} label="Nova cor do destaque" />
+      <div className="highlights-edit-actions"><button type="button" disabled={saving} className="danger" onClick={() => void removeHighlight()}>Remover destaque</button><button type="button" onClick={onSelectedHighlightClear}>Fechar</button></div>
     </div> : null}
     {message ? <p className="community-message" role="status">{message}</p> : null}
   </section>;
