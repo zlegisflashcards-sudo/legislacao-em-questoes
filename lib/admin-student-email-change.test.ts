@@ -54,4 +54,10 @@ describe("troca administrativa de e-mail", () => {
     expect(panel).toContain('action: "atualizar", id: student.id, data');
     expect(panel.indexOf("createStudentEmailChangePayload(text(student.id), text(data.email), \"ALTERAR\")")).toBeLessThan(panel.indexOf('action: "atualizar", id: student.id, data'));
   });
+
+  it("mantem o e-mail do formulario de edicao controlado e digitavel", () => {
+    expect(panel).toContain('value={studentEditEmail}');
+    expect(panel).toContain('onChange={(event) => setStudentEditEmail(event.target.value)}');
+    expect(panel).toContain('if (!editing) setStudentEditEmail(text(student.email));');
+  });
 });
