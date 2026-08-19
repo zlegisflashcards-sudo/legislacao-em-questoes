@@ -284,8 +284,18 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
     setBusy(true); setError(""); setMessage("");
     try {
       const data = Object.fromEntries(new FormData(event.currentTarget));
+      const nextEmail = text(data.email).trim().toLowerCase();
+      const currentEmail = text(student.email).trim().toLowerCase();
+      let updatedStudent = student;
+      if (nextEmail !== currentEmail) {
+        const emailResult = await requestJson("/api/admin/comercial/alunos", {
+          method: "POST",
+          body: JSON.stringify(createStudentEmailChangePayload(text(student.id), text(data.email), "ALTERAR")),
+        });
+        updatedStudent = { ...updatedStudent, ...emailResult };
+      }
       const updated = await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "atualizar", id: student.id, data }) });
-      setStudent({ ...student, ...updated }); setEditing(false); setMessage("Dados do aluno atualizados.");
+      setStudent({ ...updatedStudent, ...updated }); setEditing(false); setMessage("Dados do aluno atualizados.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar os dados do aluno."); }
     finally { setBusy(false); }
   }

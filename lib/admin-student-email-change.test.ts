@@ -47,4 +47,11 @@ describe("troca administrativa de e-mail", () => {
     expect(panel).toContain("setStudent({ ...student, ...updated })");
     expect(panel).toContain("E-mail de acesso atualizado com sucesso.");
   });
+
+  it("reutiliza a troca segura ao salvar o e-mail pelo formulario de edicao", () => {
+    expect(panel).toContain("const nextEmail = text(data.email).trim().toLowerCase();");
+    expect(panel).toContain('createStudentEmailChangePayload(text(student.id), text(data.email), "ALTERAR")');
+    expect(panel).toContain('action: "atualizar", id: student.id, data');
+    expect(panel.indexOf("createStudentEmailChangePayload(text(student.id), text(data.email), \"ALTERAR\")")).toBeLessThan(panel.indexOf('action: "atualizar", id: student.id, data'));
+  });
 });
