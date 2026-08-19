@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createStudentEmailChangePayload } from "@/lib/admin-student-email-change";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number; resumo_acessos?: Row };
@@ -172,6 +173,8 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
   const [deletionSummary, setDeletionSummary] = useState<Row | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteAuth, setDeleteAuth] = useState(true);
+  const [emailChange, setEmailChange] = useState<{ email: string; confirmation: string } | null>(null);
+  const [emailChangeError, setEmailChangeError] = useState("");
   async function generateStudentProvisionalPassword() {
     if (!student || !window.confirm(`${text(student.user_id) ? "Gerar senha provisória" : "Criar acesso"} para este aluno? A senha será exibida uma única vez.`)) return;
     setBusy(true); setError(""); setMessage(""); setProvisionalPassword("");
@@ -286,16 +289,23 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar os dados do aluno."); }
     finally { setBusy(false); }
   }
-  async function changeStudentAccessEmail() {
+  function beginStudentAccessEmailChange() {
     if (!student) return;
-    const email = window.prompt("Novo e-mail de acesso", text(student.email));
-    if (!email || email.trim().toLowerCase() === text(student.email).trim().toLowerCase()) return;
-    if (!window.confirm(`O login do aluno será alterado de ${text(student.email)} para ${email.trim()}. Ele deverá usar o novo e-mail nos próximos acessos. Continuar?`)) return;
-    const confirmation = window.prompt("Digite ALTERAR para confirmar a troca do e-mail de acesso.");
-    if (confirmation !== "ALTERAR") return setError("Troca de e-mail cancelada: confirmação não informada.");
+    setEmailChange({ email: text(student.email), confirmation: "" });
+    setEmailChangeError("");
+  }
+  async function changeStudentAccessEmail() {
+    if (!student || !emailChange) return;
     setBusy(true); setError(""); setMessage("");
-    try { const updated = await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "trocar_email_acesso", id: student.id, data: { email, confirmacao: confirmation } }) }); setStudent({ ...student, ...updated }); setMessage("E-mail de acesso atualizado. Oriente o aluno a usar o novo e-mail."); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível trocar o e-mail de acesso."); }
+    try {
+      const payload = createStudentEmailChangePayload(text(student.id), emailChange.email, emailChange.confirmation);
+      const updated = await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify(payload) });
+      setStudent({ ...student, ...updated });
+      setEmailChange(null);
+      setEmailChangeError("");
+      setMessage("E-mail de acesso atualizado com sucesso.");
+    }
+    catch (caught) { setEmailChangeError(caught instanceof Error ? caught.message : "Não foi possível trocar o e-mail de acesso."); }
     finally { setBusy(false); }
   }
 
@@ -313,13 +323,14 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
     {message ? <div className="admin-alert success" role="status">{message}</div> : null}
     {student && !busy && !error ? <>
       <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Nome público/usuário:</strong> {text(student.nome_publico) || "Não cadastrado"}</p><p><strong>Telefone:</strong> {text(student.telefone) || "Não informado"}</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p><p><strong>UUID:</strong> <small>{text(student.id)}</small></p><button type="button" className="admin-button secondary" disabled={busy} onClick={() => void generateStudentProvisionalPassword()}>{text(student.user_id) ? "Gerar senha provisória" : "Criar acesso"}</button><button type="button" className="admin-button secondary" disabled={busy} onClick={() => void sendStudentAccessEmail()}>Enviar e-mail de acesso</button><button type="button" className="admin-button secondary" onClick={() => setEditing(!editing)}>{editing ? "Cancelar edição" : "Editar dados"}</button></div>
-      <button type="button" className="admin-button secondary" disabled={busy} onClick={() => void changeStudentAccessEmail()}>Trocar e-mail de acesso</button>
+      <button type="button" className="admin-button secondary" disabled={busy} onClick={beginStudentAccessEmailChange}>Trocar e-mail de acesso</button>
       {provisionalPassword ? <div className="admin-alert success" role="status"><strong>Senha provisória (copie agora): </strong><code>{provisionalPassword}</code><p>Ela não será exibida novamente após sair desta tela.</p></div> : null}
       {editing ? <form className="commercial-card commercial-form-grid" onSubmit={saveStudent}><h3>Editar dados cadastrais</h3><input name="nome" defaultValue={text(student.nome)} placeholder="Nome" /><input name="email" type="email" defaultValue={text(student.email)} placeholder="E-mail" required /><input name="telefone" defaultValue={text(student.telefone)} placeholder="Telefone opcional" /><p><small>UUID e user_id são somente leitura e não são alterados.</small></p><button className="admin-button primary" disabled={busy}>Salvar dados</button></form> : null}
       <form className="commercial-card commercial-form-grid" onSubmit={mergeStudent}><h3>Mesclar cadastros</h3><p>Cadastro principal: <small>{text(student.id)}</small></p><input name="secundario" placeholder="UUID do cadastro secundário" required /><input name="nome_final" defaultValue={text(student.nome)} placeholder="Nome final (opcional)" /><p><small>A confirmação seguinte mostra o UUID mantido e o removido. Mesclagem é bloqueada se houver dois Auth diferentes.</small></p><button className="admin-button secondary" disabled={busy}>Confirmar mesclagem</button></form>
       {Number(student.duplicados) > 1 ? <p className="admin-alert error">Possível cadastro duplicado. Considere mesclar os cadastros antes de excluir.</p> : null}
       <button type="button" className="admin-button danger" disabled={busy} onClick={() => void beginDeleteStudent()}>🗑 Excluir aluno</button>
       {deletionSummary ? <div className="student-delete-modal" role="presentation"><section className="commercial-card commercial-form-grid" role="dialog" aria-modal="true" aria-label="Confirmar exclusão definitiva do aluno"><h3>Excluir definitivamente</h3><p className="commercial-selection"><strong>{text(deletionSummary.nome) || "Sem nome"}</strong><br />{text(deletionSummary.email)}<br /><small>{text(deletionSummary.aluno_id)}</small></p><p><strong>Auth:</strong> {text(deletionSummary.user_id) ? "Será removido" : "Sem conta vinculada"}</p><p><strong>Compras/aquisições:</strong> {text(deletionSummary.compras)} (preservadas sem vínculo pessoal)</p><p><strong>Produtos/liberações:</strong> {text(deletionSummary.produtos)} produto(s) e {text(deletionSummary.liberacoes)} liberação(ões)</p><p><strong>Progresso/primeiro acesso:</strong> {text(deletionSummary.progresso)} progresso(s) e {text(deletionSummary.primeiro_acesso)} registro(s)</p><p className="admin-alert error">Tem certeza que deseja excluir este aluno? Esta ação é permanente e pode remover os dados vinculados a este cadastro.</p>{text(deletionSummary.user_id) ? <label><input type="checkbox" checked={deleteAuth} onChange={(event) => setDeleteAuth(event.target.checked)} /> Excluir também a conta Auth (recomendado)</label> : null}<label>Digite <strong>EXCLUIR</strong> para confirmar<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label><div className="commercial-form-actions"><button type="button" className="admin-button secondary" disabled={busy} onClick={() => setDeletionSummary(null)}>Cancelar</button><button type="button" className="admin-button danger" disabled={busy || deleteConfirmation.trim() !== "EXCLUIR" || (Boolean(deletionSummary.user_id) && !deleteAuth)} onClick={() => void deleteStudent()}>Excluir definitivamente</button></div></section></div> : null}
+      {emailChange && student ? <div className="student-delete-modal" role="presentation"><section className="commercial-card commercial-form-grid" role="dialog" aria-modal="true" aria-label="Trocar e-mail de acesso"><h3>Trocar e-mail de acesso</h3><p>O login será atualizado para o novo e-mail. Compras, liberações e o cadastro do aluno serão preservados.</p><p><strong>Aluno:</strong> {text(student.nome) || "Sem nome"}<br /><strong>E-mail atual:</strong> {text(student.email)}</p><label>Novo e-mail<input type="email" value={emailChange.email} onChange={(event) => setEmailChange({ ...emailChange, email: event.target.value })} autoComplete="email" required /></label><label>Digite <strong>ALTERAR</strong> para confirmar<input value={emailChange.confirmation} onChange={(event) => setEmailChange({ ...emailChange, confirmation: event.target.value })} autoComplete="off" required /></label>{emailChangeError ? <p className="admin-alert error" role="alert">{emailChangeError}</p> : null}<div className="commercial-form-actions"><button type="button" className="admin-button secondary" disabled={busy} onClick={() => { setEmailChange(null); setEmailChangeError(""); }}>Cancelar</button><button type="button" className="admin-button primary" disabled={busy || emailChange.confirmation !== "ALTERAR" || emailChange.email.trim().toLowerCase() === text(student.email).trim().toLowerCase()} onClick={() => void changeStudentAccessEmail()}>{busy ? "Atualizando…" : "Confirmar alteração"}</button></div></section></div> : null}
       <h3>Aquisições</h3>
       {acquisitions.length ? <DataTable headers={["Produto", "Origem", "Data", "Status", "Transação externa"]}>{acquisitions.map((row) => <tr key={text(row.id)}><td>{text(relation(row, "produtos").nome) || "Produto não informado"}</td><td>{text(row.origem)}</td><td>{date(row.adquirida_em)}</td><td>{text(row.status_acesso)}</td><td>{text(row.identificador_externo || row.hotmart_transaction_id) || "—"}</td></tr>)}</DataTable> : <p>Nenhuma aquisição encontrada para este aluno.</p>}
       <h3>Leis liberadas</h3>
