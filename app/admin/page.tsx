@@ -19,6 +19,12 @@ const panels = [
     description: "Gerencie o catálogo interno, aquisições, liberações e a trilha de auditoria.",
   },
   {
+    href: "/admin/questoes",
+    icon: "✅",
+    title: "Legis Questões",
+    description: "Cadastre e gerencie as questões vinculadas às leis ativas da plataforma.",
+  },
+  {
     href: "/admin/legisbot",
     icon: "🤖",
     title: "Painel do LegisBot",

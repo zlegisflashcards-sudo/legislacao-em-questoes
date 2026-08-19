@@ -286,6 +286,18 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar os dados do aluno."); }
     finally { setBusy(false); }
   }
+  async function changeStudentAccessEmail() {
+    if (!student) return;
+    const email = window.prompt("Novo e-mail de acesso", text(student.email));
+    if (!email || email.trim().toLowerCase() === text(student.email).trim().toLowerCase()) return;
+    if (!window.confirm(`O login do aluno será alterado de ${text(student.email)} para ${email.trim()}. Ele deverá usar o novo e-mail nos próximos acessos. Continuar?`)) return;
+    const confirmation = window.prompt("Digite ALTERAR para confirmar a troca do e-mail de acesso.");
+    if (confirmation !== "ALTERAR") return setError("Troca de e-mail cancelada: confirmação não informada.");
+    setBusy(true); setError(""); setMessage("");
+    try { const updated = await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "trocar_email_acesso", id: student.id, data: { email, confirmacao: confirmation } }) }); setStudent({ ...student, ...updated }); setMessage("E-mail de acesso atualizado. Oriente o aluno a usar o novo e-mail."); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível trocar o e-mail de acesso."); }
+    finally { setBusy(false); }
+  }
 
   const productCount = new Set(acquisitions.map((row) => text(row.produto_id)).filter(Boolean)).size;
   const activeLawCount = new Set(releases.filter((row) => row.status === "ativo").map((row) => text(row.lei_id)).filter(Boolean)).size;
@@ -301,6 +313,7 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
     {message ? <div className="admin-alert success" role="status">{message}</div> : null}
     {student && !busy && !error ? <>
       <div className="commercial-form-grid"><p className="commercial-selection"><strong>Aluno:</strong> {text(student.nome) || text(student.nome_publico) || "Sem nome"} ({text(student.email)})</p><p><strong>Nome público/usuário:</strong> {text(student.nome_publico) || "Não cadastrado"}</p><p><strong>Telefone:</strong> {text(student.telefone) || "Não informado"}</p><p><strong>Status geral:</strong> {activeLawCount ? "Acesso ativo" : "Sem acesso ativo"}</p><p><strong>Produtos adquiridos:</strong> {productCount}</p><p><strong>Leis com acesso ativo:</strong> {activeLawCount}</p><p><strong>UUID:</strong> <small>{text(student.id)}</small></p><button type="button" className="admin-button secondary" disabled={busy} onClick={() => void generateStudentProvisionalPassword()}>{text(student.user_id) ? "Gerar senha provisória" : "Criar acesso"}</button><button type="button" className="admin-button secondary" disabled={busy} onClick={() => void sendStudentAccessEmail()}>Enviar e-mail de acesso</button><button type="button" className="admin-button secondary" onClick={() => setEditing(!editing)}>{editing ? "Cancelar edição" : "Editar dados"}</button></div>
+      {text(student.user_id) ? <button type="button" className="admin-button secondary" disabled={busy} onClick={() => void changeStudentAccessEmail()}>Trocar e-mail de acesso</button> : null}
       {provisionalPassword ? <div className="admin-alert success" role="status"><strong>Senha provisória (copie agora): </strong><code>{provisionalPassword}</code><p>Ela não será exibida novamente após sair desta tela.</p></div> : null}
       {editing ? <form className="commercial-card commercial-form-grid" onSubmit={saveStudent}><h3>Editar dados cadastrais</h3><input name="nome" defaultValue={text(student.nome)} placeholder="Nome" /><input name="email" type="email" defaultValue={text(student.email)} placeholder="E-mail" required /><input name="telefone" defaultValue={text(student.telefone)} placeholder="Telefone opcional" /><p><small>UUID e user_id são somente leitura e não são alterados.</small></p><button className="admin-button primary" disabled={busy}>Salvar dados</button></form> : null}
       <form className="commercial-card commercial-form-grid" onSubmit={mergeStudent}><h3>Mesclar cadastros</h3><p>Cadastro principal: <small>{text(student.id)}</small></p><input name="secundario" placeholder="UUID do cadastro secundário" required /><input name="nome_final" defaultValue={text(student.nome)} placeholder="Nome final (opcional)" /><p><small>A confirmação seguinte mostra o UUID mantido e o removido. Mesclagem é bloqueada se houver dois Auth diferentes.</small></p><button className="admin-button secondary" disabled={busy}>Confirmar mesclagem</button></form>
