@@ -1,25 +1,8 @@
 import "server-only";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
-const supabaseUrl = process.env.QUESTOES_SUPABASE_URL;
-const supabaseSecretKey = process.env.QUESTOES_SUPABASE_SECRET_KEY;
-
-if (!supabaseUrl) {
-  throw new Error("QUESTOES_SUPABASE_URL não configurada.");
-}
-
-if (!supabaseSecretKey) {
-  throw new Error("QUESTOES_SUPABASE_SECRET_KEY não configurada.");
-}
-
-export const supabaseQuestoes = createClient(
-  supabaseUrl,
-  supabaseSecretKey,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  }
-);
+/**
+ * Legis Questões é parte do projeto principal. O alias evita uma segunda
+ * configuração e mantém todos os acessos server-side no Supabase oficial.
+ */
+export const supabaseQuestoes = getSupabaseServerClient();
