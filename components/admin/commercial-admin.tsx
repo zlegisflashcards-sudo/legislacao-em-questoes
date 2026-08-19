@@ -185,7 +185,7 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
     if (!student) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "enviar_email_acesso", id: student.id }) });
+      await requestJson("/api/admin/comercial/alunos", { method: "POST", body: JSON.stringify({ action: "enviar_email_acesso", id: student.id, data: {} }) });
       setMessage("E-mail enviado com sucesso.");
     } catch {
       setError("Falha ao enviar e-mail. Consulte o log do servidor.");

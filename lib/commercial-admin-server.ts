@@ -839,7 +839,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "alunos" && action === "enviar_email_acesso") {
     const alunoId = uuid(body.id, "Aluno");
     try {
-      const data = asObject(body.data);
+      const data = asObject(body.data ?? {});
       rejectUnknownKeys(data, ["compra_id"]);
       const compraId = data.compra_id ? uuid(data.compra_id, "Compra") : null;
       const supabase = getSupabaseServerClient();

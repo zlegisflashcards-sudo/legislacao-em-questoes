@@ -37,4 +37,9 @@ describe("envio manual administrativo de e-mail de acesso", () => {
     expect(panel).toContain("E-mail enviado com sucesso.");
     expect(panel).toContain("Falha ao enviar e-mail. Consulte o log do servidor.");
   });
+
+  it("envia um objeto data vazio e aceita contexto opcional no handler", () => {
+    expect(panel).toContain('action: "enviar_email_acesso", id: student.id, data: {}');
+    expect(server).toContain('const data = asObject(body.data ?? {});');
+  });
 });
