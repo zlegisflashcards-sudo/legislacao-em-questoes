@@ -925,17 +925,29 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const supabase = getSupabaseServerClient();
     const current = await supabase.from("alunos").select("id,nome,email,user_id").eq("id", alunoId).single();
     if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
-    if (!current.data.user_id) throw new CommercialHttpError(422, "O aluno não possui conta Auth vinculada; use a edição cadastral normal.");
     if (String(current.data.email).trim().toLowerCase() === email) return current.data;
     const duplicate = await supabase.from("alunos").select("id").ilike("email", email).neq("id", alunoId).limit(1);
     if (duplicate.error) throw new CommercialHttpError(500, "Não foi possível validar o novo e-mail.");
     if (duplicate.data?.length) throw new CommercialHttpError(409, "Já existe outro aluno com este e-mail.");
     const authConflict = await findAuthUserByEmail(email);
     if (authConflict && authConflict.id !== current.data.user_id) throw new CommercialHttpError(409, "Já existe uma conta Auth com este e-mail.");
-    const authUpdated = await supabase.auth.admin.updateUserById(current.data.user_id, { email });
-    if (authUpdated.error) throw new CommercialHttpError(502, "Não foi possível atualizar o e-mail da conta Auth.");
+    let authChanged = false;
+    if (current.data.user_id) {
+      const authCurrent = await supabase.auth.admin.getUserById(current.data.user_id);
+      if (authCurrent.error || !authCurrent.data.user) throw new CommercialHttpError(404, "A conta Auth vinculada ao aluno não foi encontrada.");
+      if (String(authCurrent.data.user.email ?? "").trim().toLowerCase() !== String(current.data.email).trim().toLowerCase()) throw new CommercialHttpError(409, "O e-mail do cadastro e da conta Auth estão divergentes; corrija a divergência antes de alterar.");
+      const authUpdated = await supabase.auth.admin.updateUserById(current.data.user_id, { email });
+      if (authUpdated.error) throw new CommercialHttpError(502, "Não foi possível atualizar o e-mail da conta Auth.");
+      authChanged = true;
+    }
     const updated = await supabase.from("alunos").update({ email }).eq("id", alunoId).select("id,nome,email,user_id,telefone").single();
-    if (updated.error || !updated.data) throw new CommercialHttpError(500, "A conta Auth foi atualizada, mas o cadastro do aluno não pôde ser sincronizado. Não continue sem suporte técnico.");
+    if (updated.error || !updated.data) {
+      if (authChanged && current.data.user_id) {
+        const restored = await supabase.auth.admin.updateUserById(current.data.user_id, { email: current.data.email });
+        if (restored.error) logCommercialDbError("Falha ao compensar e-mail Auth", restored.error, { alunoId });
+      }
+      throw new CommercialHttpError(500, "Não foi possível sincronizar o cadastro; a conta Auth foi restaurada para o e-mail anterior quando possível.");
+    }
     const audit = await supabase.from("auditoria_administrativa").insert({ ator_user_id: actor, acao: "trocar_email_acesso", entidade: "aluno", entidade_id: alunoId, estado_anterior: { email: current.data.email, user_id: current.data.user_id }, estado_posterior: { email, user_id: current.data.user_id } });
     if (audit.error) logCommercialDbError("Falha ao auditar troca de e-mail", audit.error, { alunoId });
     return updated.data;
