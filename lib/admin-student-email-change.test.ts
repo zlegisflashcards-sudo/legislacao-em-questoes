@@ -56,8 +56,14 @@ describe("troca administrativa de e-mail", () => {
   });
 
   it("mantem o e-mail do formulario de edicao controlado e digitavel", () => {
-    expect(panel).toContain('value={studentEditEmail}');
-    expect(panel).toContain('onChange={(event) => setStudentEditEmail(event.target.value)}');
-    expect(panel).toContain('if (!editing) setStudentEditEmail(text(student.email));');
+    const inputStart = panel.indexOf('<input name="email"');
+    const inputEnd = panel.indexOf('placeholder="E-mail"', inputStart);
+    const input = inputStart >= 0 && inputEnd >= inputStart ? panel.slice(inputStart, inputEnd) : "";
+    expect(input).toContain('value={editForm.email}');
+    expect(input).toContain('onChange={(event) => setEditForm((previous) => ({ ...previous, email: event.target.value }))}');
+    expect(input).not.toContain("readOnly");
+    expect(input).not.toContain("disabled");
+    expect(input).not.toContain("pointerEvents");
+    expect(panel).toContain('setEditForm({ email: text(student.email) })');
   });
 });
