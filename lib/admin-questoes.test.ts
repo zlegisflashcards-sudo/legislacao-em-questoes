@@ -50,4 +50,16 @@ describe("administração de Legis Questões", () => {
     expect(deck).toContain("buildStoredTree");
     expect(study).toContain("descendantStructureIds");
   });
+
+  it("oferece o fluxo visual de análise e confirmação do TXT sem alterar o servidor", () => {
+    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    expect(panel).toContain('type="file" accept=".txt,text/plain"');
+    expect(panel).toContain("await file.text()");
+    expect(panel).toContain('action:"previsualizar_anki"');
+    expect(panel).toContain('action:"importar_anki"');
+    expect(panel).toContain("Existem problemas que precisam ser corrigidos antes da importação.");
+    expect(panel).toContain("Importar outro TXT");
+    expect(panel).toContain("await reload()");
+    expect(panel).toContain("Duplicadas:");
+  });
 });
