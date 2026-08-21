@@ -23,15 +23,20 @@ export async function coachStudents(url: URL) {
   const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 25));
   const filter = url.searchParams.get("filter") ?? "todos";
   const query = text(url.searchParams.get("q")).toLowerCase();
+  // Na visão inicial, a atividade é a ordem pedagógica mais útil para o Coach.
+  // A paginação só pode acontecer depois de calcular essa atividade para todos.
+  const orderByStudyActivity = filter === "todos" && !query;
   const supabase = getSupabaseServerClient();
   let studentsQuery = supabase.from("alunos").select("id,nome,email", { count: "exact" });
   if (query) {
     const pattern = `%${query.replace(/[%_]/g, "\\$&")}%`;
     studentsQuery = studentsQuery.or(`nome.ilike.${pattern},email.ilike.${pattern}`);
   }
-  const { data: students, error, count } = await studentsQuery
-    .order("nome")
-    .range((page - 1) * limit, page * limit - 1);
+  studentsQuery = studentsQuery.order("nome");
+  if (!orderByStudyActivity) {
+    studentsQuery = studentsQuery.range((page - 1) * limit, page * limit - 1);
+  }
+  const { data: students, error, count } = await studentsQuery;
   if (error) throw new CoachAdminError(503, "Não foi possível carregar os alunos.");
   const selected = students ?? [];
   const ids = selected.map((student) => student.id);
@@ -48,7 +53,14 @@ export async function coachStudents(url: URL) {
     const law = active && !Array.isArray(active.leis) ? active.leis : Array.isArray(active?.leis) ? active?.leis[0] : null;
     return { id: student.id, name: text(student.nome) || "Aluno sem nome", email: text(student.email), state, lastActivity: last, completedCampaigns: completed, currentLaw: active ? { title: text(law?.titulo) || "Lei", slug: text(law?.slug), score: effectiveScore(active), errors: active.total_erros } : null };
   }).filter((item) => filter === "todos" || (filter === "concluiu" ? item.completedCampaigns > 0 : item.state === filter));
-  return { items, page, limit, total: count ?? items.length };
+  if (!orderByStudyActivity) return { items, page, limit, total: count ?? items.length };
+  const ordered = items.sort((a, b) => {
+    const right = b.lastActivity ? Date.parse(b.lastActivity) : Number.NEGATIVE_INFINITY;
+    const left = a.lastActivity ? Date.parse(a.lastActivity) : Number.NEGATIVE_INFINITY;
+    return right - left || a.name.localeCompare(b.name, "pt-BR");
+  });
+  const start = (page - 1) * limit;
+  return { items: ordered.slice(start, start + limit), page, limit, total: count ?? ordered.length };
 }
 
 export async function coachStudent(studentId: string) {
