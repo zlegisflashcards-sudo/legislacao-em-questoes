@@ -9,7 +9,8 @@ import {
 } from "@/lib/legislacoes";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 
-export const revalidate = 60;
+// A quantidade de flashcards vem de public.questions e precisa refletir o banco principal em runtime.
+export const dynamic = "force-dynamic";
 
 type PagamentoPageProps = {
   params: Promise<{

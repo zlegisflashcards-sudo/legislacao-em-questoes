@@ -18,7 +18,8 @@ type CentralLegislacaoPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export const revalidate = 60;
+// A quantidade de flashcards vem de public.questions e precisa refletir o banco principal em runtime.
+export const dynamic = "force-dynamic";
 
 function getDestaqueAlteracao(status: StatusAtualizacao) {
   return {

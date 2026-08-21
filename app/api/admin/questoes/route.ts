@@ -7,6 +7,7 @@ import {
   deleteStructureNode,
   structureDeletionSummary,
   deactivateAdminQuestion,
+  reactivateAdminQuestion,
   listAdminQuestionLaws,
   listAdminQuestions,
   previewAnkiImport,
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
     else if (body.action === "atualizar_rapido") data = await updateQuickAdminQuestion(body);
     else if (body.action === "desativar") data = await deactivateAdminQuestion(body);
+    else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);
     else if (body.action === "atualizar_estrutura") data = await updateStructureNode(body);
     else if (body.action === "desativar_estrutura") data = await deactivateStructureNode(body);

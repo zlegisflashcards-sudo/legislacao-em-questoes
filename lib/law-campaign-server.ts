@@ -1,8 +1,7 @@
 import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
-import { supabaseQuestoes } from "@/lib/supabase-questoes-server";
-import { unifiedLawBySlug, unifiedQuestions, unifiedStructure, usesUnifiedStagingQuestions } from "@/lib/unified-questions-staging-server";
+import { mainLawBySlug, mainQuestions, mainStructure } from "@/lib/questions-main-server";
 
 type Question = { id: string; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: string; titulo: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null; ultima_alteracao_legislativa: string | null; structure_id: number | null };
 type Level = { id: number; ordem: number; chave_origem?: string; nome: string; questoes_ids: string[]; proxima_posicao: number; pendencias_ids: string[]; total_erros: number; concluido: boolean };
@@ -13,24 +12,12 @@ function score(errors: number) { return Math.max(0, 10000 - errors * 100); }
 function normalizedAnswer(value: string) { const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(); return ["certo", "certa", "correto", "correta"].includes(normalized) ? "certo" : ["errado", "errada", "incorreto", "incorreta"].includes(normalized) ? "errado" : null; }
 
 async function loadQuestionSnapshot(slug: string) {
-  if (usesUnifiedStagingQuestions(slug)) {
-    const law = await unifiedLawBySlug(slug);
-    if (!law) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
-    const [questions, structures] = await Promise.all([unifiedQuestions(Number(law.id)), unifiedStructure(Number(law.id))]);
-    if (!questions.length) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
-    console.info("questoes_source=staging", { slug });
-    return snapshotFromRows(String(law.titulo), questions as Question[], structures);
-  }
-  const { data: law, error: lawError } = await supabaseQuestoes.from("laws").select("id,titulo").eq("slug", slug).eq("ativo", true).maybeSingle();
-  if (lawError || !law) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
-  const [questionsResult, structureResult] = await Promise.all([
-    supabaseQuestoes.from("questions").select("id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,capitulo,secao,subsecao,artigo,ultima_alteracao_legislativa,structure_id").eq("law_id", law.id).eq("ativo", true).order("ordem", { ascending: true }),
-    supabaseQuestoes.from("law_structure").select("id,parent_id,nome,ordem").eq("law_id", law.id).eq("ativo", true).order("ordem", { ascending: true }),
-  ]);
-  if (questionsResult.error || structureResult.error) throw new LawStudyApiError(503, "Não foi possível carregar as questões agora.");
-  const questions = (questionsResult.data ?? []) as Question[];
+  const law = await mainLawBySlug(slug);
+  if (!law) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
+  let questions: Question[]; let structures: Array<{ id: number; parent_id: number | null; nome: string }>;
+  try { [questions, structures] = await Promise.all([mainQuestions(law.id), mainStructure(law.id)]); } catch { throw new LawStudyApiError(503, "Não foi possível carregar as questões agora."); }
   if (!questions.length) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
-  return snapshotFromRows(law.titulo, questions, structureResult.data ?? []);
+  return snapshotFromRows(law.titulo, questions, structures);
 }
 
 function snapshotFromRows(title: string, questions: Question[], structures: Array<{ id: number; parent_id: number | null; nome: string }>) {

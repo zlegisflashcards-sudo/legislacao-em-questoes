@@ -22,7 +22,7 @@ create table if not exists public.questions (
   justificativa text,
   assunto text,
   legislacao text,
-  ordem text not null check (ordem ~ '^\d+(?:\.\d+)*$'),
+  ordem text not null check (btrim(ordem) <> ''),
   titulo text,
   total_artigos integer check (total_artigos is null or total_artigos >= 0),
   slug text not null check (slug ~ '^[a-z0-9-]{1,160}$'),

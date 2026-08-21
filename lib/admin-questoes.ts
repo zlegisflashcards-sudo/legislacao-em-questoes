@@ -44,7 +44,7 @@ function optionalInteger(value: unknown, field: string) {
 
 function order(value: unknown) {
   if (typeof value === "number" && Number.isInteger(value) && value >= 0) return String(value);
-  if (typeof value !== "string" || !/^\d+(?:\.\d+)*$/.test(value.trim())) throw new Error("Ordem inválido.");
+  if (typeof value !== "string" || !/^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*$/.test(value.trim())) throw new Error("Ordem inválido.");
   return value.trim();
 }
 

@@ -103,7 +103,7 @@ describe("interface de download", () => {
   });
 
   it("mantém tutorial e download autenticado do Anki", () => {
-    expect(client).toContain('resolveLawStudyPlatformTutorials'); expect(client).toContain('Baixar para o Anki');
+    expect(client).toContain('resolveLawStudyPlatformTutorials'); expect(client).toContain('Baixar deck (.apkg)');
     expect(client).toContain("Authorization: `Bearer ${token}`");
     expect(client).toContain('material.type === "pdf" ? "material.pdf" : "flashcards.apkg"');
   });

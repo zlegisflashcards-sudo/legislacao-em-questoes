@@ -27,18 +27,21 @@ describe("administração de Legis Questões", () => {
     expect(lawDisplayName({ titulo: "Constituição Federal", nome_curto: "CF" })).toBe("CF — Constituição Federal");
   });
 
-  it("mantém autenticação administrativa e separa os dois Supabases no servidor", () => {
+  it("mantém autenticação administrativa e usa exclusivamente o schema principal", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     expect(server).toContain('import "server-only"');
     expect(server).toContain("await obterAdministrador()");
     expect(server).toContain('getSupabaseServerClient()');
-    expect(server).toContain('supabaseQuestoes.from("laws")');
-    expect(server).toContain("ensureQuestionLaw(law)");
-    expect(server).toContain('.eq("law_id", questionLaw.id)');
+    expect(server).toContain('.from("leis")');
+    expect(server).toContain('.from("questions")');
+    expect(server).toContain('.from("law_structure")');
+    expect(server).toContain('.eq("lei_id", current.id)');
+    expect(server).not.toContain("getSupabaseQuestoesClient");
     expect(server).toContain("update({ ativo: false })");
     expect(route).toContain("createAdminQuestion");
     expect(route).toContain("deactivateAdminQuestion");
+    expect(route).toContain("reactivateAdminQuestion");
   });
 
   it("protege a edição rápida do player e mantém os vínculos estruturais fora dela", () => {
@@ -64,7 +67,7 @@ describe("administração de Legis Questões", () => {
     expect(migration).toContain("create table if not exists public.law_structure");
     expect(migration).toContain("structure_id bigint null references public.law_structure(id)");
     expect(migration).toContain("enable row level security");
-    expect(server).toContain("validateQuestionStructure");
+    expect(server).toContain("validateStructure");
     expect(server).toContain("createStructureNode");
     expect(deck).toContain("buildStoredTree");
     expect(study).toContain("descendantStructureIds");
@@ -97,9 +100,9 @@ describe("administração de Legis Questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
-    expect(server).toContain("async function persistImportedQuestions");
-    expect(server).toContain("return persistImportedQuestions(slug(body.law_slug), parsed.rows, preview)");
-    expect(server).toContain("return persistImportedQuestions(lawSlug, parsed.rows, preview, ignored)");
+    expect(server).toContain("async function persist(");
+    expect(server).toContain("return persist(slug(body.law_slug), parsed.rows, data)");
+    expect(server).toContain("return persist(slug(body.lawSlug), parsed.rows, data, parsed.unrecognizedModels");
     expect(route).toContain('action !== "importar_apkg"');
     expect(panel).toContain('action", "importar_apkg"');
     expect(panel).toContain("notas ignoradas por modelo");
@@ -109,7 +112,7 @@ describe("administração de Legis Questões", () => {
     const config = readFileSync("next.config.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const parser = readFileSync("lib/anki-apkg-import.ts", "utf8");
-    expect(config).toContain('serverExternalPackages: ["sql.js"]');
+    expect(config).toContain('serverExternalPackages: ["sql.js", "ankipack"]');
     expect(route).toContain('export const runtime = "nodejs"');
     expect(parser).toContain('await import("sql.js")');
     expect(parser).not.toContain('import initSqlJs from "sql.js"');
@@ -117,10 +120,10 @@ describe("administração de Legis Questões", () => {
 
   it("mantém o contrato APKG completo mesmo sem coleções opcionais", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    const preview = server.slice(server.indexOf("export async function previewApkgImport"), server.indexOf("type ImportPreview"));
+    const preview = server.slice(server.indexOf("export async function previewApkgImport"), server.indexOf("async function persist"));
     expect(preview).toContain("unrecognizedModels: parsed.unrecognizedModels ?? []");
     expect(preview).toContain("media: parsed.media ?? []");
-    expect(preview).toContain("samples: rows.slice(0, 5)");
+    expect(preview).toContain("samples: parsed.rows.slice(0, 5)");
   });
 
   it("renderiza detalhes de erros impeditivos nas prévias TXT e APKG", () => {
@@ -151,15 +154,15 @@ describe("administração de Legis Questões", () => {
     expect(editor).not.toContain("sanitizeLegisQuestoesHtml");
   });
 
-  it("bloqueia TXT de outra legislação antes de consultar o banco de questões", () => {
+  it("bloqueia TXT de outra legislação antes de planejar ou persistir questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    const preview = server.slice(server.indexOf("export async function previewAnkiImport"), server.indexOf("export async function importAnkiTxt"));
-    expect(preview.indexOf("if (!slugCheck.valid)")).toBeLessThan(preview.indexOf("const questionLaw = staging ? null : await findQuestionLaw(law.slug);"));
+    const preview = server.slice(server.indexOf("async function preview("), server.indexOf("export async function previewAnkiImport"));
+    expect(preview.indexOf("validateImportSlug(parsed.rows, current.slug)")).toBeLessThan(preview.indexOf("planQuestionDeckStructure(rows, nodes)"));
   });
 
   it("aplica o slug efetivo no servidor tanto na prévia quanto na importação", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    expect(server).toContain("rowsWithEffectiveSlug(parsed.rows, law.slug)");
+    expect(server).toContain("withSlug(parsed.rows, current.slug)");
     expect(server).toContain("const duplicate = known.has(`${row.slug}");
     expect(server).toContain("slug: row.slug");
   });
@@ -168,8 +171,8 @@ describe("administração de Legis Questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
     const decks = readFileSync("components/legis-questoes-client.tsx", "utf8");
-    expect(server).toContain("planQuestionDeckStructure(rows, structure)");
-    expect(server).toContain("createImportStructure(questionLaw.id, newRows)");
+    expect(server).toContain("planQuestionDeckStructure(rows, nodes)");
+    expect(server).toContain('db().from("law_structure").insert');
     expect(panel).toContain("Estrutura:");
     expect(panel).toContain("será criada");
     expect(decks).toContain("compareQuestionStructureNames");
@@ -182,7 +185,7 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain("structureDeletionSummary");
     expect(server).toContain('.in("structure_id", ids)');
     expect(server).toContain("pode_excluir");
-    expect(server).toContain("Mova ou exclua essas questões antes de remover a estrutura.");
+    expect(server).toContain("questões vinculadas a ele ou aos seus subitens");
     expect(route).toContain('action === "resumo_exclusao_estrutura"');
     expect(route).toContain('action === "excluir_estrutura"');
     expect(panel).toContain('action: "resumo_exclusao_estrutura"');

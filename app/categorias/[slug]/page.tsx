@@ -14,7 +14,8 @@ type CategoriaPageProps = {
   }>;
 };
 
-export const revalidate = 60;
+// A quantidade de flashcards vem de public.questions e precisa refletir o banco principal em runtime.
+export const dynamic = "force-dynamic";
 
 export function generateStaticParams() {
   return categoriasLegislacao.map((categoria) => ({

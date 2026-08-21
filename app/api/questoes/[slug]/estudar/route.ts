@@ -1,6 +1,5 @@
 import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
-import { supabaseQuestoes } from "@/lib/supabase-questoes-server";
-import { unifiedLawBySlug, unifiedQuestions, unifiedStructure, usesUnifiedStagingQuestions } from "@/lib/unified-questions-staging-server";
+import { mainLawBySlug, mainQuestions, mainStructure } from "@/lib/questions-main-server";
 
 type RouteContext = {
   params: Promise<{
@@ -16,8 +15,7 @@ const ALLOWED_FILTERS = [
 ] as const;
 
 async function descendantStructureIds(lawId: number, rootId: number) {
-  const { data, error } = await supabaseQuestoes.from("law_structure").select("id,parent_id").eq("law_id", lawId).eq("ativo", true);
-  if (error) throw error;
+  const data = await mainStructure(lawId);
   const ids = new Set<number>([rootId]);
   let changed = true;
   while (changed) { changed = false; for (const node of data ?? []) if (node.parent_id && ids.has(node.parent_id) && !ids.has(node.id)) { ids.add(node.id); changed = true; } }
@@ -35,28 +33,7 @@ export async function GET(
 
     // Autoriza o acesso usando o banco principal.
     await authorizeLawStudy(request, slug);
-    if (usesUnifiedStagingQuestions(slug)) {
-      const law = await unifiedLawBySlug(slug);
-      if (!law) return Response.json({ success: false, message: "Esta lei ainda não possui questões disponíveis." }, { status: 404 });
-      const url = new URL(request.url); const structure = await unifiedStructure(Number(law.id));
-      const root = Number(url.searchParams.get("structure_id")); let ids: number[] | undefined;
-      if (Number.isSafeInteger(root) && root > 0) { const set = new Set<number>([root]); let changed = true; while (changed) { changed = false; for (const node of structure) if (node.parent_id && set.has(node.parent_id) && !set.has(node.id)) { set.add(node.id); changed = true; } } ids = [...set]; }
-      const values = Object.fromEntries(ALLOWED_FILTERS.flatMap((field) => { const value = url.searchParams.get(field)?.trim(); return value ? [[field, value]] : []; }));
-      const questions = await unifiedQuestions(Number(law.id), { structureIds: ids, values });
-      console.info("questoes_source=staging", { slug });
-      return Response.json({ success: true, law, filters: values, questions, total: questions.length }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
-    }
-
-    const { data: law, error: lawError } = await supabaseQuestoes
-      .from("laws")
-      .select("id, slug, titulo, nome_curto")
-      .eq("slug", slug)
-      .eq("ativo", true)
-      .maybeSingle();
-
-    if (lawError) {
-      throw lawError;
-    }
+    const law = await mainLawBySlug(slug);
 
     if (!law) {
       return Response.json(
@@ -75,59 +52,25 @@ export async function GET(
 
     const url = new URL(request.url);
 
-    let query = supabaseQuestoes
-      .from("questions")
-      .select(`
-        id,
-        pergunta,
-        resposta,
-        justificativa,
-        assunto,
-        legislacao,
-        ordem,
-        titulo,
-        capitulo,
-        secao,
-        subsecao,
-        artigo,
-        structure_id,
-        ultima_alteracao_legislativa
-      `)
-      .eq("law_id", law.id)
-      .eq("ativo", true);
-
     const structureId = Number(url.searchParams.get("structure_id"));
+    let ids: number[] | undefined;
     if (Number.isSafeInteger(structureId) && structureId > 0) {
-      const ids = await descendantStructureIds(law.id, structureId);
-      query = query.in("structure_id", ids);
+      ids = await descendantStructureIds(law.id, structureId);
     }
+    const filters: Record<string, string> = {};
     for (const filter of ALLOWED_FILTERS) {
       const value = url.searchParams.get(filter)?.trim();
-
-      if (value) {
-        query = query.eq(filter, value);
-      }
+      if (value) filters[filter] = value;
     }
-
-    const { data: questions, error: questionsError } =
-      await query.order("ordem", { ascending: true });
-
-    if (questionsError) {
-      throw questionsError;
-    }
+    const questions = await mainQuestions(law.id, { structureIds: ids, values: filters });
 
     return Response.json(
       {
         success: true,
         law,
-        filters: Object.fromEntries(
-          ALLOWED_FILTERS.flatMap((filter) => {
-            const value = url.searchParams.get(filter)?.trim();
-            return value ? [[filter, value]] : [];
-          })
-        ),
-        questions: questions ?? [],
-        total: questions?.length ?? 0,
+        filters,
+        questions,
+        total: questions.length,
       },
       {
         headers: {
