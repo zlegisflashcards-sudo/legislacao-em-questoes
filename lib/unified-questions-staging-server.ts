@@ -1,7 +1,7 @@
 import "server-only";
 import { Client } from "pg";
 
-/** Transição explícita: somente l14751 usa o schema unificado quando o staging foi configurado. */
+/** Transição explícita: somente l14751 usa o schema unificado enquanto a fonte de staging estiver configurada. */
 export const UNIFIED_STAGING_LAW_SLUG = "l14751";
 
 // O Next carrega `.env.local`, mas não `.env.staging.local` automaticamente.
@@ -11,7 +11,14 @@ if (!process.env.STAGING_DATABASE_URL) {
   try { process.loadEnvFile(".env.staging.local"); } catch { /* A mensagem explícita é emitida ao acessar l14751. */ }
 }
 
-export function usesUnifiedStagingQuestions(slug: string) { return slug === UNIFIED_STAGING_LAW_SLUG; }
+/**
+ * A fonte unificada desta etapa pertence ao ambiente de staging local. Em um
+ * ambiente que não a configura, a lei continua na fonte legada oficial; essa
+ * decisão é feita antes de qualquer consulta e não é um fallback após falha.
+ */
+export function usesUnifiedStagingQuestions(slug: string) {
+  return slug === UNIFIED_STAGING_LAW_SLUG && Boolean(process.env.STAGING_DATABASE_URL);
+}
 export async function withUnifiedStagingClient<T>(work: (client: Client) => Promise<T>) {
   const connectionString = process.env.STAGING_DATABASE_URL;
   if (!connectionString) throw new Error("STAGING_DATABASE_URL não configurada para a fonte unificada de questões.");

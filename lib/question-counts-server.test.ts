@@ -17,6 +17,7 @@ describe("contagem automática de flashcards", () => {
 
   it("usa slug para selecionar a fonte e devolve zero para lei sem questões", () => {
     expect(counts).toContain("usesUnifiedStagingQuestions");
+    expect(unified).toContain('Boolean(process.env.STAGING_DATABASE_URL)');
     expect(counts).toContain("new Map(unique.map((slug) => [slug, 0]))");
     expect(catalog).toContain("counts.get(legislacao.slug) ?? 0");
   });
