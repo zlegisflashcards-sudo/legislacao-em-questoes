@@ -1,0 +1,800 @@
+:root {
+  --lf-blue: #0b75ef;
+  --lf-cyan: #18bdf2;
+  --lf-navy: #071426;
+  --lf-ink: #111827;
+  --lf-muted: #64748b;
+  --lf-line: #d7e2ef;
+}
+
+.lf-update-banner {
+  width: fit-content;
+  max-width: calc(100% - 8px);
+  margin: 0 4px 10px;
+  padding: 7px 12px;
+  align-self: flex-start;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid rgba(58,170,255,.48);
+  border-radius: 999px;
+  background: rgba(7,20,38,.88);
+  color: #82c7ff;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.lf-update-icon { flex: 0 0 auto; }
+.lf-update-link { color: inherit; overflow-wrap: anywhere; text-decoration: none; }
+.lf-update-link:hover, .lf-update-link:focus { color: #b4ddff; text-decoration: underline; }
+.nightMode .lf-update-banner { border-color: rgba(58,170,255,.55); background: rgba(7,24,45,.92); }
+
+* { box-sizing: border-box; }
+
+html,
+body { margin: 0; min-height: 100%; background: #000; }
+
+.card {
+  margin: 0;
+  min-height: 100vh;
+  padding: 24px 12px 44px;
+  background: #000;
+  color: var(--lf-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.lf-shell {
+  width: 100%;
+  max-width: 760px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.lf-card {
+  width: 100%;
+  max-width: 100%;
+  min-height: auto;
+  height: auto;
+  overflow: hidden;
+  border: 1.5px solid var(--lf-blue);
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 0 5px rgba(11,117,239,.4), 0 0 16px rgba(11,117,239,.16), 0 18px 42px rgba(0,0,0,.68);
+}
+
+.lf-window {
+  height: 64px;
+  padding: 0 26px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #fff;
+  background: linear-gradient(110deg, #123f88, #071426 78%);
+}
+
+.lf-header-bolt {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #32aaff;
+  border-radius: 50%;
+  background: #07182d;
+  color: #3aaaff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 0 7px rgba(58,170,255,.8);
+  box-shadow: 0 0 10px rgba(22,140,255,.32), inset 0 0 8px rgba(22,140,255,.14);
+}
+
+.lf-window-title { font-size: 17px; font-weight: 600; }
+.lf-version { margin-left: auto; font-size: 13px; opacity: .82; }
+
+.lf-body { width: 100%; max-width: 100%; height: auto; padding: 22px clamp(20px, 5vw, 44px) 30px; box-sizing: border-box; }
+
+.lf-ui-block { position: relative; }
+.lf-ui-block + .lf-ui-block { margin-top: 28px; padding-top: 0; border-top: 0; }
+
+.lf-back-start { margin-top: 22px; padding-top: 22px; border-top: 1px solid #dbe5ef; }
+
+.lf-progress-row { display: flex; align-items: center; gap: 14px; }
+
+.lf-track {
+  flex: 1;
+  height: 26px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid #cad7e5;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #f4f7fa 0, #f4f7fa calc(12.5% - 1px), #dce5ef calc(12.5% - 1px), #dce5ef 12.5%);
+}
+
+.lf-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #075cff, var(--lf-cyan));
+  transition: width .4s ease;
+}
+
+.lf-progress-label {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 1px 4px rgba(0,0,0,.7);
+  transform: translateY(-50%);
+}
+
+.lf-pct {
+  min-width: 68px;
+  padding: 7px 12px;
+  border: 1.5px solid var(--lf-blue);
+  border-radius: 999px;
+  color: var(--lf-blue);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.lf-progress-complete .lf-track { box-shadow: 0 0 14px rgba(22,140,255,.28); }
+.lf-progress-complete .lf-fill { width: 100% !important; box-shadow: 0 0 16px rgba(74,180,255,.52); animation: lf-energy 2.4s ease-in-out infinite; }
+
+@keyframes lf-energy { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+
+.lf-phase { width: max-content; max-width: 100%; margin: 8px 0 0; display: flex; align-items: center; gap: 5px; color: rgba(82,97,116,.72); font-size: 11px; line-height: 1.3; }
+
+.lf-location-icon { width: 14px; height: 14px; flex: 0 0 14px; color: rgba(11,117,239,.78); }
+.lf-location-icon svg { width: 100%; height: 100%; display: block; }
+.lf-phase-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.lf-question {
+  padding: 22px 24px;
+  border: 1px solid #c9d8e9;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15,42,70,.055);
+  font-size: clamp(20px, 3vw, 27px);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.lf-context { margin: 0 0 16px; color: #5b6676; font-size: inherit; font-weight: 400; line-height: inherit; }
+.lf-context strong { color: var(--lf-blue); font-weight: 700; }
+.lf-statement, .lf-statement * { color: var(--lf-ink); font-size: inherit; font-weight: 400 !important; }
+
+.lf-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.lf-answer-btn {
+  min-height: 58px;
+  padding: 12px 18px;
+  border: 1.5px solid var(--lf-blue);
+  border-radius: 16px;
+  outline: none;
+  background: #fff;
+  color: var(--lf-blue);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lf-answer-btn:active { transform: scale(.985); }
+.lf-answer-btn.selecionado { background: linear-gradient(135deg, #096fe5, #24aaf7); color: #fff; box-shadow: 0 7px 18px rgba(11,117,239,.22); }
+.lf-actions-static { pointer-events: none; }
+
+.lf-result {
+  margin-top: 0;
+  padding: 15px 18px;
+  display: block;
+  border: 1px solid var(--lf-line);
+  background: #f8fafc;
+  color: var(--lf-muted);
+  border-radius: 16px;
+}
+
+.lf-result-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+}
+
+.lf-result-top { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
+
+.lf-result-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: 19px; font-weight: 900; }
+.lf-result-correct { border-color: #39bb70; background: #f0fbf4; color: #08793c; }
+.lf-result-wrong { border-color: #ef6574; background: #fff3f4; color: #ba263a; }
+.lf-result-neutral { color: var(--lf-muted); font-size: 13px; }
+
+.lf-result-note { display: none; margin-left: auto; color: currentColor; font-size: 12px; font-weight: 500; text-align: right; }
+.lf-result-note.mostrar { display: block; }
+
+.lf-key { margin: 7px 0 0; padding-left: 46px; display: flex; justify-content: flex-start; gap: 6px; color: #111827; font-size: 12px; opacity: 1; }
+.lf-key strong { color: #111827; font-weight: 650; }
+
+.lf-explanation {
+  margin-top: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.lf-professor-toggle {
+  width: 100%;
+  padding: 11px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: #172a42;
+  font: inherit;
+  font-size: clamp(20px, 3vw, 27px);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lf-professor-toggle:hover,
+.lf-professor-toggle:focus,
+.lf-professor-toggle:active {
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+.lf-professor-icon { color: var(--lf-blue); font-size: 12px; }
+.lf-professor-title { font-size: clamp(20px, 3vw, 27px) !important; }
+.lf-professor-content {
+  margin: 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #3b495b;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.lf-professor-content[hidden] { display: none; }
+.lf-correction-text { color: #3b495b; }
+
+.lf-law-block {
+  margin-top: 0;
+  padding: 16px 18px;
+  border-left: 3px solid var(--lf-blue);
+  background: #fff;
+  color: #27364a;
+}
+
+.lf-law-title { margin: 20px 0 9px; color: #172a42; font-size: 15px; font-weight: 700; }
+.lf-law-text { margin-top: 8px; }
+
+.lf-report-link {
+  width: max-content;
+  margin: 0;
+  padding: 6px 11px;
+  display: block;
+  border: 1px solid rgba(239,68,68,.55);
+  border-radius: 999px;
+  color: #ff7d7d;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: .02em;
+  text-decoration: none;
+}
+
+.lf-report-link:hover, .lf-report-link:focus { border-color: rgba(239,68,68,.8); color: #ff9b9b; }
+
+.lf-legisbot-link,
+.lf-law-update-link {
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 7px 13px;
+  display: block;
+  border: 1px solid rgba(58,170,255,.48);
+  border-radius: 999px;
+  color: #55adf5;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.3;
+  letter-spacing: .01em;
+  text-align: center;
+  text-decoration: none;
+}
+
+.lf-legisbot-link:hover,
+.lf-legisbot-link:focus,
+.lf-law-update-link:hover,
+.lf-law-update-link:focus {
+  border-color: rgba(58,170,255,.78);
+  color: #82c7ff;
+}
+
+
+.lf-legisbot-row {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.lf-legisbot-link {
+  width: auto;
+  max-width: 100%;
+  min-height: 42px;
+  padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #0d8f70;
+  border-radius: 12px;
+  background: #10a37f;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(16,163,127,.18);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
+.lf-legisbot-link:hover,
+.lf-legisbot-link:focus {
+  border-color: #0b7f64;
+  background: #0e906f;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(31,140,255,.24);
+}
+
+.nightMode .lf-legisbot-link {
+  border-color: #24c39a;
+  background: #10a37f;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(0,0,0,.28);
+}
+.lf-trust-footer {
+  width: 100%;
+  margin-top: 13px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.lf-update-line {
+  color: #9aa8ba;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.lf-update-note {
+  margin-top: 2px;
+  color: #748297;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.lf-trust-actions {
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+img, video, iframe { max-width: 100%; }
+
+.tabela-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: block;
+}
+
+.tabela-scroll table {
+  min-width: 650px;
+  width: max-content;
+  max-width: none;
+  border-collapse: collapse;
+}
+
+@media (max-width: 500px) {
+  .card { padding: 10px 6px 34px; }
+  .lf-card { border-radius: 22px; }
+  .lf-window { height: 52px; padding: 0 18px; }
+  .lf-window-title { font-size: 14px; }
+  .lf-header-bolt { width: 28px; height: 28px; flex-basis: 28px; }
+  .lf-body { padding: 17px 18px 24px; }
+  .lf-ui-block + .lf-ui-block { margin-top: 22px; padding-top: 0; }
+  .lf-back-start { margin-top: 18px; padding-top: 18px; }
+  .lf-track { height: 22px; }
+  .lf-pct { min-width: 55px; padding: 6px 9px; font-size: 14px; }
+  .lf-question { padding: 18px; font-size: 20px; }
+  .lf-legisbot-row { margin-top: 14px; }
+  .lf-legisbot-link { width: 100%; min-height: 44px; padding: 11px 13px; font-size: 12px; }
+  .lf-actions { gap: 10px; }
+  .lf-answer-btn { min-height: 54px; }
+  .lf-explanation { margin-top: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-fill, .lf-answer-btn { transition: none; }
+  .lf-progress-complete .lf-fill { animation: none; }
+}
+
+/* Tema escuro automatico do Anki */
+.card.nightMode {
+  color: #e7eef8;
+  background: #00050b;
+}
+
+.nightMode .lf-card {
+  border-color: #168cff;
+  background: #07111f;
+  box-shadow: 0 0 7px rgba(22,140,255,.38), 0 0 22px rgba(22,140,255,.16), 0 18px 42px rgba(0,0,0,.78);
+}
+
+.nightMode .lf-window { background: linear-gradient(110deg, #123f88, #030b16 80%); }
+.nightMode .lf-body { color: #d8e2ee; }
+
+.nightMode .lf-track {
+  border-color: #29435f;
+  background: repeating-linear-gradient(90deg, #0b1725 0, #0b1725 calc(12.5% - 1px), #1e3145 calc(12.5% - 1px), #1e3145 12.5%);
+}
+
+.nightMode .lf-pct {
+  border-color: #168cff;
+  background: #06101c;
+  color: #3aaaff;
+}
+
+.nightMode .lf-phase { color: rgba(190,205,222,.68); }
+.nightMode .lf-location-icon { color: #3aaaff; }
+
+.nightMode .lf-question {
+  border-color: #294766;
+  background: #0a1727;
+  box-shadow: 0 8px 22px rgba(0,0,0,.22);
+}
+
+.nightMode .lf-context { color: #b7c3d2; }
+.nightMode .lf-context strong { color: #3aaaff; }
+.nightMode .lf-statement,
+.nightMode .lf-statement * {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  color: #e8eef8 !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+.nightMode .lf-answer-btn {
+  border-color: #168cff;
+  background: #081422;
+  color: #3aaaff;
+}
+
+.nightMode .lf-answer-btn.selecionado {
+  background: linear-gradient(135deg, #096fe5, #24aaf7);
+  color: #fff;
+}
+
+.nightMode .lf-back-start { border-top-color: #29415a; }
+
+.nightMode .lf-result {
+  border-color: #2b4159;
+  background: #0a1623;
+  color: #aebccd;
+}
+
+.nightMode .lf-result-correct {
+  border-color: #34c878;
+  background: rgba(15,83,48,.28);
+  color: #69dc96;
+}
+
+.nightMode .lf-result-wrong {
+  border-color: #ff5364;
+  background: rgba(112,22,36,.28);
+  color: #ff7885;
+}
+
+.nightMode .lf-key,
+.nightMode .lf-key strong { color: #f4f7fb; }
+.nightMode .lf-professor-toggle { color: #f0f5fb; }
+.nightMode .lf-professor-content,
+.nightMode .lf-correction-text { color: #c3cedb; }
+.nightMode .lf-law-title { color: #e9eff6; }
+.nightMode .lf-legisbot-link,
+.nightMode .lf-law-update-link {
+  border-color: rgba(58,170,255,.5);
+  color: #63b8ff;
+}
+
+.nightMode .lf-update-line { color: #a7b5c6; }
+.nightMode .lf-update-note { color: #78899d; }
+
+/* A legislacao permanece clara para leitura prolongada. */
+.nightMode .lf-law-block {
+  border-left-color: #168cff;
+  background: #fff;
+  color: #27364a;
+}
+
+/* Mantem o card fluido mesmo quando o Anki desktop aplica dimensoes genericas. */
+.lf-shell,
+.lf-card,
+.lf-body {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+}
+
+.lf-shell {
+  width: 100% !important;
+  max-width: 760px !important;
+}
+
+.lf-card {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+@media (max-width: 600px) {
+  .lf-shell {
+    width: 100% !important;
+    max-width: calc(100vw - 12px) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .lf-shell {
+    width: 92vw !important;
+    max-width: 1040px !important;
+  }
+}
+
+@media (min-width: 1100px) {
+  .lf-shell {
+    width: 88vw !important;
+    max-width: 1180px !important;
+  }
+}
+
+@media (min-width: 1400px) {
+  .lf-shell {
+    width: 82vw !important;
+    max-width: 1280px !important;
+  }
+}
+/* LegisBot: aparece no verso, ligado diretamente ao trecho da legislação. */
+.lf-legisbot-row {
+  width: 100%;
+  margin-top: 12px;
+  display: flex;
+}
+
+.lf-legisbot-link,
+.nightMode .lf-legisbot-link {
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 11px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 1px solid #4aa8ff;
+  border-radius: 12px;
+  background: #eaf5ff;
+  color: #075ea8;
+  box-shadow: 0 8px 18px rgba(58,170,255,.14);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
+.lf-legisbot-link:hover,
+.lf-legisbot-link:focus,
+.nightMode .lf-legisbot-link:hover,
+.nightMode .lf-legisbot-link:focus {
+  border-color: #238ce8;
+  background: #d8edff;
+  color: #054f91;
+  box-shadow: 0 10px 22px rgba(58,170,255,.22);
+}
+
+@media (max-width: 500px) {
+  .lf-legisbot-row { margin-top: 12px; }
+  .lf-legisbot-link,
+  .nightMode .lf-legisbot-link {
+    min-height: 44px;
+    padding: 11px 12px;
+    font-size: 12px;
+  }
+}
+/* LegisBot: título do trecho em azul para acompanhar o botão. */
+.lf-law-title,
+.nightMode .lf-law-title {
+  color: #075ea8;
+}
+/* LegisBot: botão azul para abrir o ChatGPT com prompt pronto. */
+.lf-legisbot-link,
+.nightMode .lf-legisbot-link {
+  border-color: #1f8cff;
+  background: #edf6ff;
+  color: #075ea8;
+  box-shadow: 0 8px 18px rgba(31,140,255,.16);
+}
+
+.lf-legisbot-link:hover,
+.lf-legisbot-link:focus,
+.nightMode .lf-legisbot-link:hover,
+.nightMode .lf-legisbot-link:focus {
+  border-color: #0b76db;
+  background: #dcebff;
+  color: #054f91;
+  box-shadow: 0 10px 22px rgba(31,140,255,.24);
+}
+
+/* Barra compacta de ações abaixo do trecho da lei. */
+.lf-card-actions,
+.nightMode .lf-card-actions {
+  width: 100%;
+  margin-top: 14px;
+  padding-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.lf-card-action,
+.nightMode .lf-card-action {
+  min-height: 34px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.lf-card-actions .lf-legisbot-link,
+.lf-card-actions .lf-legisbot-link:visited,
+.nightMode .lf-card-actions .lf-legisbot-link,
+.nightMode .lf-card-actions .lf-legisbot-link:visited {
+  width: auto;
+  min-height: 34px;
+  padding: 8px 13px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f6df6;
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(47,109,246,.22);
+}
+
+.lf-card-actions .lf-legisbot-link:hover,
+.lf-card-actions .lf-legisbot-link:focus,
+.nightMode .lf-card-actions .lf-legisbot-link:hover,
+.nightMode .lf-card-actions .lf-legisbot-link:focus {
+  background: #255ee4;
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(47,109,246,.28);
+}
+
+@media (max-width: 500px) {
+  .lf-card-actions,
+  .nightMode .lf-card-actions {
+    gap: 7px;
+  }
+
+  .lf-card-action,
+  .nightMode .lf-card-action,
+  .lf-card-actions .lf-legisbot-link,
+  .nightMode .lf-card-actions .lf-legisbot-link {
+    min-height: 32px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+/* Barra visual: três CTAs equivalentes, todos usando o fluxo antigo do LegisBot. */
+.lf-card-actions,
+.nightMode .lf-card-actions {
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.lf-card-actions .lf-legisbot-link,
+.lf-card-actions .lf-legisbot-link:visited,
+.nightMode .lf-card-actions .lf-legisbot-link,
+.nightMode .lf-card-actions .lf-legisbot-link:visited {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 38px;
+  padding: 9px 8px;
+  border: 1px solid #d4e2f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #52627a;
+  box-shadow: 0 4px 12px rgba(15,39,75,.06);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.lf-card-actions .lf-legisbot-link:hover,
+.lf-card-actions .lf-legisbot-link:focus,
+.nightMode .lf-card-actions .lf-legisbot-link:hover,
+.nightMode .lf-card-actions .lf-legisbot-link:focus {
+  border-color: #2f6df6;
+  background: #f5f9ff;
+  color: #1f4fb5;
+  box-shadow: 0 6px 16px rgba(47,109,246,.14);
+}
+
+@media (max-width: 500px) {
+  .lf-card-actions,
+  .nightMode .lf-card-actions {
+    gap: 6px;
+  }
+
+  .lf-card-actions .lf-legisbot-link,
+  .nightMode .lf-card-actions .lf-legisbot-link {
+    min-height: 36px;
+    padding: 8px 5px;
+    font-size: 11px;
+  }
+}
+
+

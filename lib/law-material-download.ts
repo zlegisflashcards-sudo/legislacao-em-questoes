@@ -19,7 +19,9 @@ export function googleDriveFileId(value: string) {
 }
 
 export function isDownloadableMaterialReference(provider: string | null, action: string | null, value: string | null) {
-  return provider === "google_drive" && action === "baixar" && value !== null && googleDriveFileId(value) !== null;
+  // Alguns PDFs históricos foram cadastrados como "abrir", embora a central
+  // os apresente como download. Ambos usam o mesmo arquivo do Google Drive.
+  return provider === "google_drive" && (action === "baixar" || action === "abrir") && value !== null && googleDriveFileId(value) !== null;
 }
 
 export function isAccessibleMaterialReference(_provider: string | null, value: string | null) {

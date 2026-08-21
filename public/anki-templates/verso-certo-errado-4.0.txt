@@ -1,0 +1,294 @@
+<main class="lf-shell">
+  {{#ultimaAlteracaoLegislativa}}<aside class="lf-update-banner" aria-label="Atualização legislativa">
+    <span class="lf-update-icon" aria-hidden="true">&#128260;</span>
+    <a id="lf_law_update" class="lf-update-link" href="#" data-slug="{{slug}}" target="_blank" rel="noopener noreferrer" title="Ver detalhes desta atualização">{{ultimaAlteracaoLegislativa}} <span aria-hidden="true">&#8599;</span></a>
+  </aside>{{/ultimaAlteracaoLegislativa}}
+
+  <section class="lf-card">
+    <header class="lf-window">
+      <span class="lf-header-bolt" aria-hidden="true">&#9889;&#65038;</span>
+      <span class="lf-window-title">Legislação em Questões</span>
+      <span class="lf-version">4.0</span>
+    </header>
+
+    <div class="lf-body">
+      <section class="lf-ui-block lf-navigation">
+        <div class="lf-progress-row">
+          <div class="lf-track">
+            <div class="lf-fill" id="lf_pb"></div>
+            <span class="lf-progress-label">Seu progresso</span>
+          </div>
+          <span class="lf-pct" id="lf_pct">0%</span>
+        </div>
+
+        <div class="lf-phase">
+          <span class="lf-location-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 15.8s5-5.1 5-9.1a5 5 0 0 0-10 0c0 4 5 9.1 5 9.1z"></path>
+              <circle cx="12" cy="6.8" r="1.8"></circle>
+              <ellipse cx="12" cy="19" rx="7" ry="2.2"></ellipse>
+            </svg>
+          </span>
+          <span class="lf-phase-text">{{Deck}}</span>
+        </div>
+      </section>
+
+      <section class="lf-ui-block lf-question-block">
+        <div class="lf-question">
+          <p class="lf-context">Conforme o(a) <strong>{{titulo}}</strong>, julgue o item que se segue.</p>
+          <div class="lf-statement">{{pergunta}}</div>
+        </div>
+      </section>
+
+      <section class="lf-ui-block lf-interactivity">
+        <div class="lf-actions lf-actions-static" aria-hidden="true">
+          <button id="lf_back_certo" class="lf-answer-btn" type="button" tabindex="-1">Certo</button>
+          <button id="lf_back_errado" class="lf-answer-btn" type="button" tabindex="-1">Errado</button>
+        </div>
+
+        <div class="lf-back-start">
+          <div id="lf_result_panel" class="lf-result" aria-live="polite">
+            <div class="lf-result-top">
+              <div id="correcao" class="lf-result-main"></div>
+              <div id="lf_reward" class="lf-result-note"></div>
+            </div>
+            <div class="lf-key">
+              <span>Gabarito</span><span aria-hidden="true">&bull;</span><strong>{{resposta}}</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="lf-explanation">
+        <div id="lf_professor_toggle" class="lf-professor-toggle"
+          aria-expanded="false" aria-controls="lf_professor_content" onclick="alternarComentarioProfessor()">
+          <span id="lf_professor_icon" class="lf-professor-icon" aria-hidden="true">&#9654;</span>
+          <span class="lf-professor-title">Comentário do professor</span>
+        </div>
+
+        <div id="lf_professor_content" class="lf-professor-content" hidden>
+          <div class="lf-correction-text">{{edit:justificativa}}</div>
+          <div class="lf-law-title">&#128220; {{assunto}}</div>
+          <div class="lf-law-block">
+            <div class="lf-law-text">{{legislação}}</div>
+          </div>
+          <div class="lf-legisbot-row lf-card-actions">
+            <a id="lf_legisbot" class="lf-legisbot-link lf-card-action" href="#" data-aba="legisbot" target="_blank" rel="noopener noreferrer">&#129302; LegisBot</a>
+            <a class="lf-legisbot-link lf-card-action" href="#" data-aba="comunidade" target="_blank" rel="noopener noreferrer">&#128172; Comunidade</a>
+            <a class="lf-legisbot-link lf-card-action" href="#" data-aba="destaques" target="_blank" rel="noopener noreferrer">&#128397;&#65039; Destaques</a>
+          </div>
+          <span id="lf_legisbot_titulo" hidden>{{titulo}}</span>
+          <span id="lf_legisbot_assunto" hidden>{{assunto}}</span>
+          <textarea id="lf_legisbot_trecho" hidden>{{legislação}}</textarea>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <aside class="lf-trust-footer" aria-label="Melhoria contínua do material">
+    <div class="lf-trust-actions">
+      <a id="lf_report_error" class="lf-report-link" href="#" data-ordem="{{ordem}}">Reportar erro</a>
+      <span id="lf_report_titulo" hidden>{{titulo}}</span>
+      <span id="lf_report_assunto" hidden>{{assunto}}</span>
+    </div>
+  </aside>
+</main>
+
+<script>
+(function () {
+  document.querySelectorAll('table').forEach(function (tabela) {
+    var parent = tabela.parentElement;
+    if (!parent || parent.classList.contains('tabela-scroll')) return;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'tabela-scroll';
+    tabela.parentNode.insertBefore(wrapper, tabela);
+    wrapper.appendChild(tabela);
+  });
+})();
+
+(function () {
+  if (!document.querySelector('.nightMode')) return;
+  document.querySelectorAll('.lf-statement, .lf-statement *').forEach(function (el) {
+    if (!el.style) return;
+    el.style.removeProperty('background');
+    el.style.removeProperty('background-color');
+    el.style.removeProperty('background-image');
+    el.style.removeProperty('color');
+    el.style.removeProperty('filter');
+    el.style.removeProperty('opacity');
+  });
+})();
+</script>
+
+<script>
+function alternarComentarioProfessor() {
+  var botao = document.getElementById('lf_professor_toggle');
+  var conteudo = document.getElementById('lf_professor_content');
+  var icone = document.getElementById('lf_professor_icon');
+  if (!botao || !conteudo || !icone) return;
+
+  var abrir = conteudo.hasAttribute('hidden');
+  if (abrir) {
+    conteudo.removeAttribute('hidden');
+  } else {
+    conteudo.setAttribute('hidden', 'hidden');
+  }
+
+  botao.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  icone.innerHTML = abrir ? '&#9660;' : '&#9654;';
+}
+</script>
+
+<script>
+(function () {
+  var selo = document.getElementById('lf_update_seal');
+  if (!selo) return;
+
+  var atualizacao = (selo.getAttribute('data-update') || '').trim();
+  selo.textContent = (atualizacao && atualizacao.charAt(0) !== '{')
+    ? 'Selo de atualização: ' + atualizacao
+    : 'Atualização legislativa: consultar no site';
+})();
+</script>
+
+<script>
+(function () {
+  var link = document.getElementById('lf_law_update');
+  if (!link) return;
+
+  var slug = (link.getAttribute('data-slug') || '').trim();
+  slug = slug.replace(/^\/+|\/+$/g, '');
+  var siteBase = 'https://www.legisflashcards.com.br';
+
+  link.href = (slug && slug.charAt(0) !== '{')
+    ? siteBase + '/leisflashcards/' + encodeURIComponent(slug)
+    : siteBase;
+})();
+</script>
+
+<script>
+(function () {
+  var link = document.getElementById('lf_report_error');
+  if (!link) return;
+  var ordem = link.getAttribute('data-ordem') || '';
+  var tituloEl = document.getElementById('lf_report_titulo');
+  var assuntoEl = document.getElementById('lf_report_assunto');
+  var titulo = tituloEl ? tituloEl.textContent.trim() : '';
+  var assuntoCard = assuntoEl ? assuntoEl.textContent.trim() : '';
+  var assuntoEmail = 'ERRO NO FLASHCARD - ' + (assuntoCard || 'Assunto');
+  var corpo = '\uD83D\uDCDD Descrição do erro:\n(Descreva aqui)\n\n\uD83D\uDCF7 Se possível, envie um print em anexo.';
+  link.href = 'mailto:zlegisflashcards@gmail.com?subject=' + encodeURIComponent(assuntoEmail)
+    + '&body=' + encodeURIComponent(corpo);
+})();
+</script>
+
+<script>
+(function () {
+  var total = Number('{{TotalArtigos}}'.replace(/[^0-9.]/g, '')) || 0;
+  var ref = String('{{ordem}}') || '';
+  var idx = 0;
+  var mOrdem = ref.match(/^\s*(\d{4})/);
+
+  if (mOrdem) idx = parseInt(mOrdem[1], 10) || 0;
+
+  var pctFinal = (total > 0 && idx > 0)
+    ? Math.max(0, Math.min(100, Math.round((idx / total) * 100)))
+    : 0;
+
+  var bar = document.getElementById('lf_pb');
+  var pctSpan = document.getElementById('lf_pct');
+  var textoBarra = document.querySelector('.lf-progress-label');
+  var progresso = document.querySelector('.lf-progress-row');
+
+  if (bar && pctSpan) {
+    bar.style.width = pctFinal + '%';
+    pctSpan.textContent = pctFinal + '%';
+  }
+
+  if (pctFinal === 100) {
+    if (textoBarra) textoBarra.textContent = 'Lei concluída.';
+    if (progresso) progresso.classList.add('lf-progress-complete');
+  }
+
+  var escolha = window.localStorage.getItem('escolha_usuario') || '';
+  var resposta = '{{resposta}}';
+
+  function limpar(txt) {
+    return (txt || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim().toLowerCase();
+  }
+
+  var correcaoEl = document.getElementById('correcao');
+  var painelResultado = document.getElementById('lf_result_panel');
+  var recompensaEl = document.getElementById('lf_reward');
+  var botaoCerto = document.getElementById('lf_back_certo');
+  var botaoErrado = document.getElementById('lf_back_errado');
+  if (!correcaoEl) return;
+
+  if (limpar(escolha) === 'certo' && botaoCerto) {
+    botaoCerto.classList.add('selecionado');
+  } else if (limpar(escolha) === 'errado' && botaoErrado) {
+    botaoErrado.classList.add('selecionado');
+  }
+
+  if (!escolha) {
+    correcaoEl.innerHTML = '<span class="lf-result-neutral">Nenhuma resposta foi marcada na frente.</span>';
+    return;
+  }
+
+  if (limpar(escolha) === limpar(resposta)) {
+    correcaoEl.innerHTML = '<span class="lf-result-icon">&#10003;</span><span><strong>Parabéns! Você acertou.</strong></span>';
+    if (painelResultado) painelResultado.classList.add('lf-result-correct');
+  } else {
+    correcaoEl.innerHTML = '<span class="lf-result-icon">&#10005;</span><span><strong>Você errou.</strong></span>';
+    if (painelResultado) painelResultado.classList.add('lf-result-wrong');
+
+    if (recompensaEl) {
+      recompensaEl.textContent = 'Revise e tente novamente.';
+      recompensaEl.classList.add('mostrar');
+    }
+  }
+})();
+</script>
+<script>
+(function () {
+  var botoesLegisbot = document.querySelectorAll('.lf-card-actions .lf-legisbot-link');
+  if (!botoesLegisbot.length) return;
+
+  function valorDoCampo(id, preservarTexto) {
+    var elemento = document.getElementById(id);
+    if (!elemento) return '';
+    var valor = typeof elemento.value === 'string'
+      ? elemento.value
+      : (elemento.textContent || '');
+    return preservarTexto ? valor : valor.trim();
+  }
+
+  var slug = '{{slug}}'.trim();
+  var ordem = '{{ordem}}'.trim();
+  var titulo = valorDoCampo('lf_legisbot_titulo', false);
+  var assunto = valorDoCampo('lf_legisbot_assunto', false);
+  var legislacao = valorDoCampo('lf_legisbot_trecho', true);
+  var base = 'https://www.legisflashcards.com.br/legisbot/';
+  var hrefBase = base
+    + encodeURIComponent(slug)
+    + '/'
+    + encodeURIComponent(ordem)
+    + '?titulo='
+    + encodeURIComponent(titulo)
+    + '&assunto='
+    + encodeURIComponent(assunto)
+    + '&legislacao='
+    + encodeURIComponent(legislacao);
+
+  for (var i = 0; i < botoesLegisbot.length; i++) {
+    var aba = botoesLegisbot[i].getAttribute('data-aba') || 'legisbot';
+    botoesLegisbot[i].href = hrefBase + '&aba=' + encodeURIComponent(aba);
+  }
+})();
+</script>
+
+

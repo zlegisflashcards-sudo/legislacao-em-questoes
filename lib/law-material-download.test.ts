@@ -21,7 +21,7 @@ describe("referências seguras de material", () => {
     expect(googleDriveFileId(`https://evil.example/file/d/${id}`)).toBeNull();
     expect(googleDriveFileId(`http://drive.google.com/file/d/${id}/view`)).toBeNull();
     expect(isDownloadableMaterialReference("google_drive", "baixar", `https://drive.google.com/file/d/${id}/view`)).toBe(true);
-    expect(isDownloadableMaterialReference("google_drive", "abrir", `https://drive.google.com/file/d/${id}/view`)).toBe(false);
+    expect(isDownloadableMaterialReference("google_drive", "abrir", `https://drive.google.com/file/d/${id}/view`)).toBe(true);
     expect(isAccessibleMaterialReference("google_drive", `https://drive.google.com/file/d/${id}/view`)).toBe(true);
     expect(isAccessibleMaterialReference("google_drive", "https://drive.google.com/drive/folders/abc123")).toBe(true);
     expect(isAccessibleMaterialReference("externo", "https://example.com/material")).toBe(true);

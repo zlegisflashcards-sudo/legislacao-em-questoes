@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Deck, Note, Notetype, Package } from "ankipack";
 import { ankiApkgFileName, stableAnkiGuid, stableAnkiId } from "./anki-apkg-identity";
 
-const templateDirectory = "C:/Users/User/Documents/certo errado 4.0/";
+// Os templates fazem parte do projeto para também existirem no runtime serverless.
+const templateDirectory = join(process.cwd(), "public", "anki-templates");
 const fieldNames = ["pergunta", "resposta", "justificativa", "assunto", "legislação", "titulo", "TotalArtigos", "ordem", "slug", "ultimaAlteracaoLegislativa"];
 
 type ExportLaw = { slug: string; titulo: string };
@@ -11,9 +13,9 @@ type ExportStructure = { id: number; parent_id: number | null; nome: string };
 
 function template4() {
   return {
-    front: readFileSync(`${templateDirectory}frente-certo-errado-4.0.txt`, "utf8"),
-    back: readFileSync(`${templateDirectory}verso-certo-errado-4.0.txt`, "utf8"),
-    css: readFileSync(`${templateDirectory}estilo-certo-errado-4.0.txt`, "utf8"),
+    front: readFileSync(join(templateDirectory, "frente-certo-errado-4.0.txt"), "utf8"),
+    back: readFileSync(join(templateDirectory, "verso-certo-errado-4.0.txt"), "utf8"),
+    css: readFileSync(join(templateDirectory, "estilo-certo-errado-4.0.txt"), "utf8"),
   };
 }
 
