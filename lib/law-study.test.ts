@@ -67,6 +67,12 @@ describe("autorização e exposição segura", () => {
     for (const forbidden of ["observacao_interna", "criado_por", "compra_id", "produto_id", "email"]) expect(server).not.toContain(forbidden);
   });
 
+  it("obtém o total de flashcards a partir das questões ativas, não dos materiais", () => {
+    expect(server).toContain("activeQuestionCountBySlug(slug)");
+    expect(server).toContain("activeQuestionCountBySlug(PUBLIC_SAMPLE_LAW_SLUG)");
+    expect(server).not.toContain("materials.reduce");
+  });
+
   it("expõe somente GET privado, sem endpoint de escrita ou download improvisado", () => {
     expect(route).toContain("export async function GET");
     expect(route).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);

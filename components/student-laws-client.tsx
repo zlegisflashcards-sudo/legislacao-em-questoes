@@ -31,6 +31,7 @@ export function StudentLawsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [myExamLawIds, setMyExamLawIds] = useState<number[]>([]);
+  const [hasCustomExam, setHasCustomExam] = useState(false);
   const [examFeedback, setExamFeedback] = useState("");
   const [examSavingLawId, setExamSavingLawId] = useState<number | null>(null);
 
@@ -50,7 +51,7 @@ export function StudentLawsClient() {
         const examsResult = await examsResponse.json() as { editais?: StudentExam[] };
         if (!examsResponse.ok || !Array.isArray(examsResult.editais)) throw new Error();
         const customExam = examsResult.editais.find((exam) => exam.tipo === "personalizado");
-        if (active) setMyExamLawIds(customExam?.leis.map((law) => law.id) ?? []);
+        if (active) { setMyExamLawIds(customExam?.leis.map((law) => law.id) ?? []); setHasCustomExam(Boolean(customExam && customExam.id !== "0")); }
       } catch {
         if (active) setError("Não foi possível carregar suas leis. Tente novamente em instantes.");
       } finally {
@@ -99,7 +100,7 @@ export function StudentLawsClient() {
       {!loading && error ? <ErrorState message={error} /> : null}
       {!loading && !error && laws.length === 0 ? <EmptyState /> : null}
       {!loading && !error && laws.length > 0 && filteredLaws.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-xl font-black text-[#062a5f]">Nenhuma lei encontrada</h2><p className="mt-2 text-slate-600">Tente pesquisar por outro título, código ou nome curto.</p></div> : null}
-      {!loading && !error && filteredLaws.length > 0 ? <div className="grid gap-4" aria-label="Leis liberadas">{filteredLaws.map((law) => <StudentLawCard key={law.id} law={law} inMyExam={myExamLawIds.includes(law.id)} saving={examSavingLawId === law.id} onToggleMyExam={() => void toggleMyExamLaw(law.id)} />)}</div> : null}
+      {!loading && !error && filteredLaws.length > 0 ? <div className="grid gap-4" aria-label="Leis liberadas">{filteredLaws.map((law) => <StudentLawCard key={law.id} law={law} hasCustomExam={hasCustomExam} inMyExam={myExamLawIds.includes(law.id)} saving={examSavingLawId === law.id} onToggleMyExam={() => void toggleMyExamLaw(law.id)} />)}</div> : null}
     </section> : <section id="student-exam-panel" role="tabpanel" aria-label="Meu edital" className="rounded-3xl border border-blue-100 bg-white p-8 text-center shadow-sm sm:p-12">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Em breve</p>
       <h2 className="mt-3 text-2xl font-black text-[#062a5f]">Meu edital</h2>
@@ -110,13 +111,13 @@ export function StudentLawsClient() {
   </div>;
 }
 
-function StudentLawCard({ law, inMyExam, saving, onToggleMyExam }: { law: StudentLaw; inMyExam: boolean; saving: boolean; onToggleMyExam: () => void }) {
+function StudentLawCard({ law, hasCustomExam, inMyExam, saving, onToggleMyExam }: { law: StudentLaw; hasCustomExam: boolean; inMyExam: boolean; saving: boolean; onToggleMyExam: () => void }) {
   const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`;
   const progress = law.campaignStatus === "concluida" ? 100 : Math.max(0, Math.min(100, law.campaignProgress ?? 0));
   return <article className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f]">{law.titulo}</h2>{law.codigo ? <p className="mt-2 text-xs font-black uppercase tracking-wide text-blue-700">{law.codigo}</p> : null}</div>
     <div className="min-w-0"><div className="h-2 overflow-hidden rounded-full bg-blue-100" aria-label={`${progress}% concluído`}><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-black text-slate-700">{progress}%</p></div>
-    <div className="grid gap-3 sm:flex sm:flex-wrap"><Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 sm:w-auto">Estudar</Link><button type="button" disabled={saving} onClick={onToggleMyExam} className="min-h-12 w-full rounded-xl border border-slate-300 px-5 py-3 font-black text-slate-800 hover:bg-slate-50 disabled:opacity-50 sm:w-auto">{saving ? "Atualizando…" : inMyExam ? "Remover do edital" : "Colocar no edital"}</button></div>
+    <div className="grid gap-3 sm:flex sm:flex-wrap"><Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 sm:w-auto">Estudar</Link>{hasCustomExam ? <button type="button" disabled={saving} onClick={onToggleMyExam} className="min-h-12 w-full rounded-xl border border-slate-300 px-5 py-3 font-black text-slate-800 hover:bg-slate-50 disabled:opacity-50 sm:w-auto">{saving ? "Atualizando…" : inMyExam ? "Remover do edital" : "Colocar no edital"}</button> : <Link href="/meu-edital" className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-center font-black text-slate-800 hover:bg-slate-50 sm:w-auto">Criar meu edital</Link>}</div>
   </article>;
 }
 

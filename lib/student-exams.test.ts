@@ -59,7 +59,7 @@ describe("progresso compartilhado no Meu Edital", () => {
 
   it("deriva o progresso exclusivamente do status de campanha", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('law.campaignStatus === "concluida"'); expect(client).toContain('completed}/{total} concluídas'); expect(client).not.toContain('ProgressControl');
+    expect(client).toContain('law.campaignStatus === "concluida"'); expect(client).toContain('{completed} de {total} leis concluídas'); expect(client).toContain('{percent}%'); expect(client).not.toContain('ProgressControl');
   });
 
   it("mantém o edital do produto sincronizado pela composição viva de produto_leis", () => {
@@ -77,13 +77,40 @@ describe("progresso compartilhado no Meu Edital", () => {
     for (const old of ['Estudando', 'Revisão', 'Anki', 'streak', 'ProgressControl']) expect(client).not.toContain(old);
   });
 
-  it("seleciona o primeiro edital e mostra estado vazio", () => {
+  it("prioriza o personalizado composto, permite alternar editais e oferece a criacao unica", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('body.editais[0]?.id ?? ""'); expect(client).toContain('Monte seu edital'); expect(client).toContain('Ir para Legis Questões');
+    expect(client).toContain('function preferredExamId(editais: StudentExam[])');
+    expect(client).toContain('personalized && personalized.id !== "0" && personalized.leis.length > 0');
+    expect(client).toContain('aria-label="Selecionar edital"');
+    expect(client).toContain('Criar meu edital');
+    expect(client).toContain('await load(action === "rename")');
   });
 
-  it("usa a primeira lei não concluída como próximo estudo", () => {
+  it("mantém a edição da composição somente no personalizado", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('current?.leis.find((law) => law.campaignStatus !== "concluida")'); expect(client).toContain('Próximo estudo:'); expect(client).toContain('/estudar/lei/${encodeURIComponent(next.slug)}');
+    expect(client).toContain('availableLaws.filter((law) => !current?.leis.some');
+    expect(client).toContain('await change("add", { leiId: lawId })');
+    expect(client).toContain('change("remove", { leiId: law.id })');
+    expect(client).toContain('isPersonalized ? <span className="flex shrink-0 items-center gap-1"');
+    expect(client).toContain('current.tipo === "produto" || customExists');
+  });
+
+  it("não cria recomendação de próximo estudo na interface minimalista", () => {
+    const client = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(client).not.toContain('Próximo estudo:'); expect(client).not.toContain('const next ='); expect(client).toContain('/estudar/lei/${encodeURIComponent(law.slug)}');
+  });
+
+  it("verticaliza as leis com setas horizontais acessíveis e indicador visual no fim da linha", () => {
+    const client = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(client).toContain('grid-cols-[auto_minmax(0,1fr)_auto]');
+    expect(client).toContain('aria-label={`Mover ${label} para cima`}');
+    expect(client).toContain('aria-label={`Mover ${label} para baixo`}');
+    expect(client).toContain('flex shrink-0 items-center gap-1');
+    expect(client).toContain('items-start gap-2 border-b');
+    expect(client).toContain('shrink-0 self-start');
+    expect(client).toContain('concluded ? "⚡" : "○"');
+    expect(client).toContain('rounded-full bg-blue-700');
+    expect(client).toContain('Lei ainda não concluída');
+    expect(client).not.toContain('campaignStatus === "em_andamento" ? "Em andamento"');
   });
 });

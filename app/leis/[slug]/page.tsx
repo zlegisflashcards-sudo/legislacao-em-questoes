@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { LegisBotCommentsIndex } from "@/components/legisbot-comments-index";
 import { LegiscastPlaylistPlayer } from "@/components/legiscast-playlist-player";
 import { LegislacaoEmbed } from "@/components/legislacao-content-tabs";
-import { buscarComentariosPublicosPorSlug } from "@/lib/legisbot/comentarios-publicos";
+import { loadPublicLawRanking } from "@/lib/public-law-ranking";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 import { siteConfig } from "@/lib/site-config";
 import {
   encontrarLegislacaoPorSlug,
@@ -18,7 +18,7 @@ type CentralLegislacaoPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 function getDestaqueAlteracao(status: StatusAtualizacao) {
   return {
@@ -53,10 +53,11 @@ export default async function CentralLegislacaoPage({
   params,
 }: CentralLegislacaoPageProps) {
   const { slug } = await params;
-  const [legislacoes, comentarios] = await Promise.all([
+  const [catalogo, ranking] = await Promise.all([
     getLegislacoes(),
-    buscarComentariosPublicosPorSlug(slug),
+    loadPublicLawRanking(slug),
   ]);
+  const legislacoes = await withActiveQuestionCounts(catalogo);
   const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) notFound();
@@ -175,25 +176,26 @@ export default async function CentralLegislacaoPage({
               title={`Legislação completa: ${legislacao.nome}`}
               restrictDocumentActions
             />
-            <aside className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold leading-6 text-slate-700">
-                Quer estudar esta lei com questões? Conheça os Legis Flashcards.
-              </p>
-              <a
-                href={`/leisflashcards/${encodeURIComponent(legislacao.slug)}`}
-                className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-blue-200 px-4 py-2 text-center text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
-              >
-                Conhecer os Legis Flashcards
-              </a>
-            </aside>
           </section>
         ) : null}
 
-        <LegisBotCommentsIndex
-          comentarios={comentarios}
-          hotmartUrl={legislacao.hotmartUrl}
-          adminSlug={legislacao.slug.trim().toUpperCase()}
-        />
+        <section className="min-w-0 rounded-2xl border border-amber-100 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-7" aria-labelledby="law-ranking-title">
+          <div className="flex items-center gap-3"><span aria-hidden="true" className="text-3xl">🏆</span><div><p className="text-sm font-bold text-amber-700">Ranking Legis Questões desta Lei</p><h2 id="law-ranking-title" className="text-2xl font-black text-[#062a5f]">Ranking da Lei</h2></div></div>
+          {ranking.length ? <ol className="mt-5 grid gap-2" aria-label="Top 10 da lei">{ranking.map((entry) => <li key={entry.position} className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 sm:px-4"><span className={`w-9 shrink-0 text-center text-sm font-black ${entry.position <= 3 ? "text-amber-700" : "text-slate-500"}`}>{entry.position === 1 ? "🥇" : entry.position === 2 ? "🥈" : entry.position === 3 ? "🥉" : `${entry.position}º`}</span><span className="min-w-0 flex-1 truncate font-bold text-[#062a5f]">{entry.publicName}</span><span className="shrink-0 text-sm font-black text-blue-700">{entry.score.toLocaleString("pt-BR")} pts</span></li>)}</ol> : <p className="mt-5 text-sm leading-6 text-slate-600">Ainda não há participantes no ranking desta lei.</p>}
+        </section>
+
+        <aside className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold leading-6 text-slate-700">
+            Adquira nossos flashcards e entre no ranking.
+          </p>
+          <a
+            href={`/leisflashcards/${encodeURIComponent(legislacao.slug)}`}
+            className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-blue-200 px-4 py-2 text-center text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+          >
+            Adquirir Flashcards
+          </a>
+        </aside>
+
       </div>
     </div>
   );

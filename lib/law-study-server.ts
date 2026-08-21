@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isValidLawSlug, lawStudyShortName, type LawStudyData, type LawStudyHistoryItem, type LawStudyMaterial } from "@/lib/law-study";
 import { materialAccessReference } from "@/lib/law-material-download";
+import { activeQuestionCountBySlug } from "@/lib/question-counts-server";
 
 export class LawStudyApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -112,10 +113,11 @@ export async function authorizeLawStudy(request: Request, slug: string) {
 
 export async function loadLawStudy(request: Request, slug: string): Promise<LawStudyData> {
   const { supabase, lawId, title, law, studentId } = await authorizeLawStudy(request, slug);
-  const [materialsResult, historyResult, progressResult] = await Promise.all([
+  const [materialsResult, historyResult, progressResult, totalFlashcards] = await Promise.all([
     supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true }),
     supabase.from("historico_atualizacoes_leis").select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at").eq("lei_id", lawId).eq("visivel_aluno", true).order("data_publicacao", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }),
     supabase.from("progresso_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle(),
+    activeQuestionCountBySlug(slug),
   ]);
   if (materialsResult.error || historyResult.error || progressResult.error) throw new LawStudyApiError(503, "Não foi possível carregar os dados de estudo agora.");
 
@@ -127,7 +129,7 @@ export async function loadLawStudy(request: Request, slug: string): Promise<LawS
       title,
       shortName: lawStudyShortName(title, text(law?.nome_curto)),
       code: text(law?.codigo),
-      totalFlashcards: materials.reduce((total, material) => material.type === "flashcards" ? total + (material.itemCount ?? 0) : total, 0),
+      totalFlashcards,
     },
     materials,
     history: parseHistory(historyResult.data),
@@ -146,10 +148,10 @@ export async function loadPublicSampleLawStudy(): Promise<LawStudyData> {
   const lawId = positiveInteger(law?.id);
   const title = text(law?.titulo);
   if (lawId === null || !title) throw new LawStudyApiError(404, "Amostra não encontrada.");
-  const { data: materialsData, error: materialsError } = await supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true });
+  const [{ data: materialsData, error: materialsError }, totalFlashcards] = await Promise.all([supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true }), activeQuestionCountBySlug(PUBLIC_SAMPLE_LAW_SLUG)]);
   if (materialsError) throw new LawStudyApiError(503, "Não foi possível carregar os materiais da amostra.");
   const materials = parseLawStudyMaterials(materialsData);
-  return { law: { id: lawId, slug: PUBLIC_SAMPLE_LAW_SLUG, title, shortName: lawStudyShortName(title, text(law?.nome_curto)), code: text(law?.codigo), totalFlashcards: materials.reduce((total, material) => material.type === "flashcards" ? total + (material.itemCount ?? 0) : total, 0) }, materials, history: [], progress: { inStudy: false, questionsFinished: false } };
+  return { law: { id: lawId, slug: PUBLIC_SAMPLE_LAW_SLUG, title, shortName: lawStudyShortName(title, text(law?.nome_curto)), code: text(law?.codigo), totalFlashcards }, materials, history: [], progress: { inStudy: false, questionsFinished: false } };
 }
 
 export type LawProgressInput = { inStudy: boolean; questionsFinished: boolean };

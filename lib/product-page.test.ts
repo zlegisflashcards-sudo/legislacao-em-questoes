@@ -7,8 +7,9 @@ describe("página comercial de produto", () => {
   it("consulta produto e leis vinculadas no banco", () => {
     expect(source).toContain('from("produtos")');
     expect(source).toContain('from("produto_leis")');
-    expect(source).toContain('from("materiais_leis")');
-    expect(source).toContain('eq("tipo", "flashcards")');
+    expect(source).toContain('leis(id,slug,titulo,nome_curto)');
+    expect(source).toContain("activeQuestionCountsBySlug");
+    expect(source).not.toContain('from("materiais_leis")');
     expect(source).toContain('export const dynamic = "force-dynamic"');
   });
 
@@ -41,7 +42,7 @@ describe("página comercial de produto", () => {
 
   it("resolve produtos do banco antes do fallback de legislação", () => {
     expect(source.indexOf("const produto = await carregarProdutoCatalogo(slug)")).toBeLessThan(
-      source.lastIndexOf("const legislacoes = await getLegislacoes()"),
+      source.lastIndexOf("const legislacoes = await withActiveQuestionCounts(await getLegislacoes())"),
     );
   });
 });

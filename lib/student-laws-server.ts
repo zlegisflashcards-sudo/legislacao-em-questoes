@@ -2,6 +2,7 @@ import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
 import { parseStudentLawRows, type StudentLaw } from "@/lib/student-laws";
+import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
 
 export class StudentLawsApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -35,7 +36,9 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
 
   const { data, error } = await createSupabaseUserClient(token).rpc("obter_minhas_leis");
   if (error) throw new StudentLawsApiError(503, "Não foi possível carregar suas leis agora.");
-  const laws = parseStudentLawRows(data);
+  const parsedLaws = parseStudentLawRows(data);
+  const questionCounts = await activeQuestionCountsBySlug(parsedLaws.map((law) => law.slug));
+  const laws = parsedLaws.map((law) => ({ ...law, totalFlashcards: questionCounts.get(law.slug) ?? 0 }));
   if (!student?.id || !laws.length) return laws;
   const { data: progress, error: progressError } = await getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", laws.map((law) => law.id));
   if (progressError) throw new StudentLawsApiError(503, `Não foi possível carregar o status dos Estudos Ativos da Lei: ${progressError.message}`);

@@ -10,13 +10,15 @@ describe("cards comerciais do catálogo", () => {
   it("busca produtos ativos para pesquisa e limita destaque à vitrine", () => {
     expect(loader).toContain('from("produtos")');
     expect(loader).toContain('from("produto_leis")');
-    expect(loader).toContain('from("materiais_leis")');
+    expect(loader).toContain('leis(slug)');
+    expect(loader).toContain("activeQuestionCountsBySlug");
     expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
     expect(loader).toContain('if (destaque) productsQuery = productsQuery.eq("destaque", true)');
     expect(loader).toContain('return loadCatalogProducts();');
     expect(loader).toContain('return loadCatalogProducts(true);');
     expect(loader).toContain('eq("ativo", true)');
-    expect(loader).toContain('eq("tipo", "flashcards")');
+    expect(loader).not.toContain('from("materiais_leis")');
+    expect(loader).not.toContain("quantidade_itens");
   });
 
   it("usa a linguagem do card de estudo e mantém o CTA para o produto", () => {

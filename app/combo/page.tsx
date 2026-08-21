@@ -2,6 +2,9 @@ import {
   filtrarLegislacoesDoCombo,
   getLegislacoes,
 } from "@/lib/legislacoes";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
+
+export const revalidate = 60;
 
 const comboCheckoutUrl =
   "https://pay.hotmart.com/B105667368Q?sck=HOTMART_MEM_CA&off=8z92z2aa&bid=1781643392565";
@@ -11,7 +14,7 @@ function formatarQuantidade(quantidade: number) {
 }
 
 export default async function ComboPage() {
-  const legislacoes = await getLegislacoes();
+  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
   const legislacoesDoCombo = filtrarLegislacoesDoCombo(legislacoes);
 
   return (

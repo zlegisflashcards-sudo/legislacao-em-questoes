@@ -90,12 +90,22 @@ export async function campaignState(request: Request, slug: string) {
   const state = await getCampaign(request, slug);
   const { supabase, lawId, studentId } = await authorizeLawStudy(request, slug);
   let bestScore: number | null = null;
+  let result: { score: number; bestScore: number; errors: number; totalQuestions: number } | null = null;
   if (state.status === "concluida") {
-    const { data: history, error: historyError } = await supabase.from("campanhas_leis_alunos").select("score").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true).order("score", { ascending: false }).limit(1).maybeSingle();
-    if (historyError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
-    bestScore = typeof history?.score === "number" ? history.score : null;
+    const [best, latest] = await Promise.all([
+      supabase.from("campanhas_leis_alunos").select("score,score_ajustado").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true).order("score_ajustado", { ascending: false, nullsFirst: false }).order("score", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado,total_erros").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true).order("concluida_em", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (best.error || latest.error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
+    bestScore = typeof best.data?.score_ajustado === "number" ? best.data.score_ajustado : typeof best.data?.score === "number" ? best.data.score : null;
+    const latestScore = typeof latest.data?.score_ajustado === "number" ? latest.data.score_ajustado : latest.data?.score;
+    if (latest.data && typeof latestScore === "number" && typeof latest.data.total_erros === "number") {
+      const { data: levels, error: levelsError } = await supabase.from("campanhas_leis_niveis").select("questoes_ids").eq("campanha_id", latest.data.id);
+      if (levelsError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
+      result = { score: latestScore, bestScore: bestScore ?? latestScore, errors: latest.data.total_erros, totalQuestions: (levels ?? []).flatMap((level) => arrayOfStrings(level.questoes_ids)).length };
+    }
   }
-  if (!state.campaignId) return { ...state, bestScore, level: null, question: null, progress: 0 };
+  if (!state.campaignId) return { ...state, bestScore, result, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
   const { data: levels, error } = await supabase.from("campanhas_leis_niveis").select("id,ordem,chave_origem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,concluido").eq("campanha_id", state.campaignId).order("ordem");
   if (error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
   const parsed = (levels ?? []).map((level) => ({ ...level, questoes_ids: arrayOfStrings(level.questoes_ids), pendencias_ids: arrayOfStrings(level.pendencias_ids) })) as Level[];

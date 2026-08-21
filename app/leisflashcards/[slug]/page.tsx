@@ -10,6 +10,8 @@ import {
 } from "@/lib/legislacoes";
 import { siteConfig } from "@/lib/site-config";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 
 // As quantidades comerciais dos materiais podem ser atualizadas pelo painel.
 // A página deve consultar o estado atual, em vez do snapshot do build.
@@ -55,35 +57,26 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
 
     const vinculos = await supabase
       .from("produto_leis")
-      .select("lei_id,ordem,leis(id,titulo,nome_curto)")
+      .select("lei_id,ordem,leis(id,slug,titulo,nome_curto)")
       .eq("produto_id", produto.data.id)
       .order("ordem");
     if (vinculos.error) return null;
-    const leiIds = (vinculos.data ?? []).map((vinculo) => Number(vinculo.lei_id));
-    const materiais = leiIds.length
-      ? await supabase.from("materiais_leis").select("lei_id,quantidade_itens").in("lei_id", leiIds).eq("tipo", "flashcards").eq("ativo", true)
-      : { data: [], error: null };
-    if (materiais.error) return null;
-
-    const quantidades = new Map<number, number>();
-    const comQuantidade = new Set<number>();
-    for (const material of materiais.data ?? []) {
-      if (typeof material.quantidade_itens === "number") {
-        const leiId = Number(material.lei_id);
-        quantidades.set(leiId, (quantidades.get(leiId) ?? 0) + material.quantidade_itens);
-        comQuantidade.add(leiId);
-      }
+    const lawSlugById = new Map<number, string>();
+    for (const vinculo of vinculos.data ?? []) {
+      const lei = Array.isArray(vinculo.leis) ? vinculo.leis[0] : vinculo.leis;
+      if (lei?.slug) lawSlugById.set(Number(vinculo.lei_id), lei.slug);
     }
+    const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
     const leis = (vinculos.data ?? []).map((vinculo) => {
       const lei = Array.isArray(vinculo.leis) ? vinculo.leis[0] : vinculo.leis;
       const leiId = Number(vinculo.lei_id);
       return {
         id: leiId,
         titulo: lei?.nome_curto || lei?.titulo || "Lei não identificada",
-        flashcards: comQuantidade.has(leiId) ? quantidades.get(leiId) ?? 0 : null,
+        flashcards: countsBySlug.get(lawSlugById.get(leiId) ?? "") ?? 0,
       };
     });
-    const totalFlashcards = leis.every((lei) => lei.flashcards !== null)
+    const totalFlashcards = leis.length
       ? leis.reduce((total, lei) => total + (lei.flashcards ?? 0), 0)
       : null;
     const videoDemoUrl =
@@ -225,7 +218,7 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
     return <PaginaProduto produto={produto} />;
   }
 
-  const legislacoes = await getLegislacoes();
+  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
   const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) {

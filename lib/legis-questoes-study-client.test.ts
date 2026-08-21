@@ -23,6 +23,23 @@ describe("player Legis Questões", () => {
     expect(player).not.toContain('href="/questoes">← Voltar');
   });
 
+  it("mostra o selo de atualização acima do card somente quando o campo real existe", () => {
+    expect(player).toContain('function UpdateSeal({ question }: { question: Question })');
+    expect(player).toContain('question.ultima_alteracao_legislativa?.trim()');
+    expect(player).toContain('<UpdateSeal question={question} /><PlayerCard mode="campaign"');
+    expect(player).toContain('<UpdateSeal question={currentQuestion} /><PlayerCard mode="free"');
+    expect(styles).toContain('.lf-update-seal{display:block;width:fit-content;max-width:100%');
+  });
+
+  it("monta o Reportar erro como mailto seguro com apenas campos disponíveis", () => {
+    expect(player).toContain('mailto:zlegisflashcards@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}');
+    expect(player).toContain('Erro no flashcard - ${order}');
+    expect(player).toContain('[["Lei", law], ["Ordem", order], ["Assunto", question.assunto?.trim()]]');
+    expect(player).toContain('<ReportError question={question} />');
+    expect(player).toContain('<ReportError question={currentQuestion} />');
+    expect(styles).toContain('.lf-report-error{display:table;margin:14px auto 0');
+  });
+
   it("renderiza HTML do Anki somente após sanitização", () => {
     expect(player).toContain("sanitizeLegisQuestoesHtml");
     expect(player).toContain("dangerouslySetInnerHTML={{ __html: safe }}");
@@ -117,18 +134,20 @@ describe("player Legis Questões", () => {
   it("mostra apenas a conclusão do nível, com erros persistidos no snapshot", () => {
     expect(player).not.toContain("Score do módulo");
     expect(player).not.toContain("lf-level-score");
-    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0), finalLevel: result.campaignConcluded === true })');
+    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0) })');
     expect(campaignServer).toContain('total_erros: levelErrors');
     expect(campaignServer).toContain('levelResult: concludesLevel ? { errors: levelErrors } : null');
     expect(campaignServer).not.toContain('score: score(levelErrors)');
     expect(campaignMigration).toContain('add column if not exists total_erros integer not null default 0');
   });
 
-  it("mostra o resumo do último nível antes do resultado final da lei", () => {
+  it("só celebra a conclusão após a confirmação final do backend", () => {
+    expect(player).toContain('if (result.campaignConcluded)');
+    expect(player).toContain('setCelebrating(true)');
     expect(player).toContain('if (result.levelConcluded)');
-    expect(player).toContain('finalLevel: result.campaignConcluded === true');
-    expect(player).toContain('levelDone.finalLevel ? "Ver resultado final" : "Continuar"');
-    expect(player).toContain('if (!levelDone.finalLevel) void load();');
+    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0) })');
+    expect(campaignServer).toContain('update({ concluida: true, concluida_em: new Date().toISOString(), score: finalScore })');
+    expect(campaignServer).toContain('update({ status_campanha: "concluida", questoes_finalizadas: true, campanha_ativa_id: null })');
   });
 
   it("oculta a questão anterior enquanto confirma e busca a próxima campanha", () => {
@@ -194,12 +213,15 @@ describe("player Legis Questões", () => {
     expect(styles).not.toContain('.legis-questoes-html *{margin:0!important}');
   });
 
-  it("resume o resultado final e retorna somente para Legis Questões", () => {
-    expect(player).toContain('Score final: {finalResult.score.toLocaleString("pt-BR")}');
-    expect(player).toContain('Melhor score: {finalResult.bestScore.toLocaleString("pt-BR")}');
-    expect(player).toContain('Ranking: {finalResult.position}º');
-    expect(player).toContain('href="/minhas-leis">Voltar para Legis Questões');
-    expect(player).not.toContain('>Estudar livremente<');
-    expect(player).not.toContain('>Voltar para a lei<');
+  it("mostra o resultado final, celebração discreta e os dois destinos pedidos", () => {
+    expect(player).toContain('⚡ LEI CONCLUÍDA!');
+    expect(player).toContain('Score final');
+    expect(player).toContain('Acertos: <b>{correct}</b>');
+    expect(player).toContain('Aproveitamento: <b>{accuracy}%</b>');
+    expect(player).toContain('href={`/questoes/${encodeURIComponent(useContext(StudyLawContext) ?? "")}/estudar?livre=1`}');
+    expect(player).toContain('href="/minhas-leis">Voltar às minhas leis');
+    expect(player).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches');
+    expect(styles).toContain('@media(prefers-reduced-motion:reduce){.lf-celebration-mark,.lf-celebration-particles i{animation:none}}');
+    expect(campaignServer).toContain('progress: state.status === "concluida" ? 100 : 0');
   });
 });

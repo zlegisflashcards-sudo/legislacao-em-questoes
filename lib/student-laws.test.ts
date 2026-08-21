@@ -103,6 +103,12 @@ describe("fronteira autenticada das leis adquiridas", () => {
     expect(client).toContain("/conta?modo=login&retorno=%2Fminhas-leis");
   });
 
+  it("substitui o contador legado da RPC pela contagem central de questões ativas", () => {
+    expect(server).toContain("activeQuestionCountsBySlug(parsedLaws.map((law) => law.slug))");
+    expect(server).toContain("totalFlashcards: questionCounts.get(law.slug) ?? 0");
+    expect(server).not.toContain("quantidade_itens");
+  });
+
   it("expõe apenas GET saneado e desabilita cache privado", () => {
     expect(route).toContain("export async function GET");
     expect(route).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);

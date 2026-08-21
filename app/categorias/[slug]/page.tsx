@@ -6,12 +6,15 @@ import {
   getCategoriaPorSlug,
   getLegislacoes,
 } from "@/lib/legislacoes";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 
 type CategoriaPageProps = {
   params: Promise<{
     slug: string;
   }>;
 };
+
+export const revalidate = 60;
 
 export function generateStaticParams() {
   return categoriasLegislacao.map((categoria) => ({
@@ -27,7 +30,7 @@ export default async function CategoriaPage({ params }: CategoriaPageProps) {
     notFound();
   }
 
-  const legislacoes = await getLegislacoes();
+  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
   const legislacoesDaCategoria = filtrarLegislacoesPorCategoria(
     legislacoes,
     categoria.nome,

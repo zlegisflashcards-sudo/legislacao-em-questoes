@@ -7,6 +7,9 @@ import {
   getLegislacoes,
   isVadeMecum,
 } from "@/lib/legislacoes";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
+
+export const revalidate = 60;
 
 type PagamentoPageProps = {
   params: Promise<{
@@ -46,7 +49,7 @@ function escaparAtributoHtml(valor: string) {
 }
 
 export async function generateStaticParams() {
-  const legislacoes = await getLegislacoes();
+  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
 
   return filtrarLegislacoesAtivas(legislacoes).map((legislacao) => ({
     slug: legislacao.slug,
@@ -55,7 +58,7 @@ export async function generateStaticParams() {
 
 export default async function PagamentoPage({ params }: PagamentoPageProps) {
   const { slug } = await params;
-  const legislacoes = await getLegislacoes();
+  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
   const legislacao = encontrarLegislacaoPorSlug(legislacoes, slug);
 
   if (!legislacao) {

@@ -4,9 +4,12 @@ import {
   filtrarLegislacoesPorCategoria,
   getLegislacoes,
 } from "@/lib/legislacoes";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
+
+export const revalidate = 60;
 
 export default async function VadeMecumPage() {
-  const legislacoes = await getLegislacoes();
+  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-10 sm:px-6 sm:py-14">

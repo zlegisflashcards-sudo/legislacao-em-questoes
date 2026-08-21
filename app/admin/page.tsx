@@ -6,6 +6,7 @@ import AdminNotificationBell from "@/components/admin/admin-notification-bell";
 export const dynamic = "force-dynamic";
 
 const panels = [
+  { href: "/admin/coach", icon: "🧭", title: "Painel de Coach", description: "Acompanhe alunos e campanhas." },
   {
     href: "/admin/alunos",
     icon: "👥",

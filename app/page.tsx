@@ -1,13 +1,17 @@
 import { HomeCategoriasVadeMecum } from "@/components/home-categorias-vade-mecum";
 import { getCatalogProducts, getHighlightedCatalogProducts } from "@/lib/catalog-products-server";
 import { filtrarLegislacoesAtivas, getLegislacoes } from "@/lib/legislacoes";
+import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
+
+export const revalidate = 60;
 
 export default async function Home() {
-  const [produtos, produtosEmDestaque, legislacoes] = await Promise.all([
+  const [produtos, produtosEmDestaque, catalogo] = await Promise.all([
     getCatalogProducts(),
     getHighlightedCatalogProducts(),
     getLegislacoes(),
   ]);
+  const legislacoes = await withActiveQuestionCounts(catalogo);
 
   return (
     <div className="bg-[#070b12]">
