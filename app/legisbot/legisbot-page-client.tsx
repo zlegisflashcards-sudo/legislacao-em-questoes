@@ -35,7 +35,10 @@ type LegisBotPageClientProps = {
   ordem: string;
   dadosIniciais: DadosLegislacao;
   initialCommunityCount: number;
+  initialTab?: LegisBotStudyTab;
   adminShortcut?: ReactNode;
+  embedded?: boolean;
+  onClose?: () => void;
 };
 
 type LegisBotApiResponse = {
@@ -95,7 +98,10 @@ export default function LegisBotPageClient({
   ordem,
   dadosIniciais,
   initialCommunityCount,
+  initialTab = "legisbot",
   adminShortcut,
+  embedded = false,
+  onClose,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
@@ -107,7 +113,7 @@ export default function LegisBotPageClient({
   const [readRevision, setReadRevision] = useState(0);
   const [returnPath, setReturnPath] = useState(`/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`);
   const [communityCount, setCommunityCount] = useState(initialCommunityCount);
-  const [activeStudyTab, setActiveStudyTab] = useState<LegisBotStudyTab>("legisbot");
+  const [activeStudyTab, setActiveStudyTab] = useState<LegisBotStudyTab>(initialTab);
   const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
   const [selectedHighlight, setSelectedHighlight] = useState<LegisBotHighlight | null>(null);
 
@@ -122,11 +128,12 @@ export default function LegisBotPageClient({
   const loginUrl = `/conta?retorno=${encodeURIComponent(returnPath)}`;
 
   useEffect(() => {
+    if (embedded) return;
     const saved = localStorage.getItem("legisbot-theme") === "dark" ? "dark" : "light";
     setTheme(saved);
     document.documentElement.dataset.legisbotTheme = saved;
     setReturnPath(`${window.location.pathname}${window.location.search}`);
-  }, []);
+  }, [embedded]);
 
   useEffect(() => {
     let active = true;
@@ -303,13 +310,10 @@ export default function LegisBotPageClient({
     <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
   </>;
 
-  return <div className="legisbot-page" data-theme={theme}>
+  return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        <div className="legisbot-topic-tools">
-          <a href={centralLegislacaoUrl} className="legislation-back-link"><span aria-hidden="true">←</span> {titulo}</a>
-          {adminShortcut}
-        </div>
+        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div> : <div className="legisbot-topic-tools"><a href={centralLegislacaoUrl} className="legislation-back-link"><span aria-hidden="true">←</span> {titulo}</a>{adminShortcut}</div>}
         <h1>{assunto}</h1>
       </header>
 
@@ -318,6 +322,7 @@ export default function LegisBotPageClient({
         slug={slugNormalizado}
         ordem={ordemNormalizada}
         communityCount={communityCount}
+        initialTab={initialTab}
         onActiveTabChange={changeStudyTab}
         legisBotContent={legisBotContent}
         communityContent={

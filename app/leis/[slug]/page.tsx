@@ -122,7 +122,7 @@ export default async function CentralLegislacaoPage({
                       href="/minhas-leis"
                       className="font-bold text-blue-700 underline decoration-blue-300 underline-offset-2 transition hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
                     >
-                      Minhas Leis Adquiridas
+                      Legis Questões
                     </a>
                     , baixe a versão mais recente dos flashcards e importe novamente o
                     deck atualizado.

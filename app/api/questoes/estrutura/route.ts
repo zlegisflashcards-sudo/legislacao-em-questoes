@@ -1,12 +1,19 @@
 import { loadStudentLaws, studentLawsErrorResponse } from "@/lib/student-laws-server";
 import { supabaseQuestoes } from "@/lib/supabase-questoes-server";
+import { unifiedLawBySlug, unifiedQuestions, unifiedStructure, usesUnifiedStagingQuestions } from "@/lib/unified-questions-staging-server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
     // Leis que o aluno realmente possui no banco principal.
-    const studentLaws = await loadStudentLaws(request);
+    const requestedSlug = new URL(request.url).searchParams.get("slug")?.trim();
+    const allStudentLaws = await loadStudentLaws(request);
+    // A central da lei reutiliza esta mesma fonte, mas não precisa transportar
+    // as árvores das demais leis liberadas ao aluno.
+    const studentLaws = requestedSlug
+      ? allStudentLaws.filter((law) => law.slug === requestedSlug)
+      : allStudentLaws;
 
     if (studentLaws.length === 0) {
       return Response.json(
@@ -21,7 +28,35 @@ export async function GET(request: Request) {
       );
     }
 
-    const allowedSlugs = studentLaws.map((law) => law.slug);
+    const unifiedLaws = studentLaws.filter((law) => usesUnifiedStagingQuestions(law.slug));
+    const legacyLaws = studentLaws.filter((law) => !usesUnifiedStagingQuestions(law.slug));
+    const allowedSlugs = legacyLaws.map((law) => law.slug);
+
+    const unifiedBySlug = new Map(
+      await Promise.all(
+        unifiedLaws.map(async (law) => {
+          const unifiedLaw = await unifiedLawBySlug(law.slug);
+          if (!unifiedLaw) throw new Error(`Lei unificada não encontrada para o slug ${law.slug}.`);
+          const [questions, structure] = await Promise.all([
+            unifiedQuestions(Number(unifiedLaw.id)),
+            unifiedStructure(Number(unifiedLaw.id)),
+          ]);
+          console.info("questoes_source=main", { slug: law.slug });
+          return [law.slug, { questions, structure }] as const;
+        })
+      )
+    );
+
+    if (allowedSlugs.length === 0) {
+      return Response.json({
+        laws: studentLaws.map((law) => ({
+          ...law,
+          questionsAvailable: true,
+          questions: unifiedBySlug.get(law.slug)?.questions ?? [],
+          structure: unifiedBySlug.get(law.slug)?.structure ?? [],
+        })),
+      }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    }
 
     // Identifica essas mesmas leis no banco de questões.
     const { data: questionLaws, error: lawsError } =
@@ -87,6 +122,10 @@ export async function GET(request: Request) {
     );
 
     const response = studentLaws.map((law) => {
+      const unified = unifiedBySlug.get(law.slug);
+      if (unified) {
+        return { ...law, questionsAvailable: true, questions: unified.questions, structure: unified.structure };
+      }
       const questionLawId = questionLawBySlug.get(law.slug);
 
       const lawQuestions = questionLawId

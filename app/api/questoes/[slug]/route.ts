@@ -1,4 +1,5 @@
 import { supabaseQuestoes } from "@/lib/supabase-questoes-server";
+import { unifiedLawBySlug, unifiedQuestions, usesUnifiedStagingQuestions } from "@/lib/unified-questions-staging-server";
 import {
   authorizeLawStudy,
   lawStudyErrorResponse,
@@ -22,6 +23,14 @@ export async function GET(
     // 1. Autoriza no banco principal.
     // Confirma sessão, aluno e liberação ativa da lei.
     await authorizeLawStudy(request, slug);
+
+    if (usesUnifiedStagingQuestions(slug)) {
+      const law = await unifiedLawBySlug(slug);
+      if (!law) return Response.json({ success: false, message: "Esta lei ainda não possui questões disponíveis." }, { status: 404 });
+      const questions = await unifiedQuestions(Number(law.id));
+      console.info("questoes_source=main", { slug });
+      return Response.json({ success: true, law, questions, total: questions.length }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    }
 
     // 2. Só depois consulta o banco separado de questões.
     const { data: law, error: lawError } = await supabaseQuestoes

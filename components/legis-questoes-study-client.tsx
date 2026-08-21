@@ -1,149 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { sanitizeLegisQuestoesHtml } from "@/lib/legis-questoes-html";
+import LegisBotPageClient from "@/app/legisbot/legisbot-page-client";
+import type { LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 
-type StudyQuestion = { id: string; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: number; titulo: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null };
-type StudyLaw = { id: number; slug: string; titulo: string; nome_curto: string | null };
-type StudyResponse = { success?: boolean; law?: StudyLaw; questions?: StudyQuestion[]; total?: number; message?: string };
-type AnswerChoice = "certo" | "errado";
+type Choice = "certo" | "errado";
+type Question = { id: string; pergunta: string; resposta: string; justificativa: string | null; titulo?: string | null; assunto?: string | null; legislacao?: string | null; ordem?: string; [key: string]: unknown };
+type Campaign = { status: "nao_iniciada" | "em_andamento" | "concluida"; level: { nome: string; position: number; firstPassProgress: number; reviewing: boolean; questions: Question[] } | null; question: Question | null; progress: number };
+type CampaignResult = { score: number; bestScore: number; position: number; participants: number; errors: number; totalQuestions: number; newBest: boolean };
+type LevelResult = { name: string; errors: number; finalLevel: boolean };
 
-function PlayerState({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">{children}</main>;
+const correctAnswer = (value: string): Choice | null => {
+  const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  return ["certo", "certa", "correto", "correta"].includes(normalized) ? "certo" : ["errado", "errada", "incorreto", "incorreta"].includes(normalized) ? "errado" : null;
+};
+function Html({ value, className = "" }: { value: string; className?: string }) { const safe = useMemo(() => sanitizeLegisQuestoesHtml(value), [value]); return <div className={`legis-questoes-html ${className}`} dangerouslySetInnerHTML={{ __html: safe }} />; }
+const StudyLawContext = createContext<string | null>(null);
+function Page({ children }: { children: React.ReactNode }) { const slug = useContext(StudyLawContext); return <main className="lf-study-shell"><div className="lf-study-frame">{slug ? <Link className="lf-back-to-decks" href={`/estudar/lei/${encodeURIComponent(slug)}`}>← Voltar</Link> : null}{children}</div></main>; }
+function PlayerCard({ mode, progress, level, reviewing = false, children }: { mode: "campaign" | "free"; progress: number; level: string; reviewing?: boolean; children: React.ReactNode }) { return <section className="lf-card"><header className="lf-card-header"><span className="lf-brand-mark">ϟ</span><span>Legislação em Questões</span><small>{mode === "campaign" ? "Estudo Ativo da Lei" : "Estudo livre"}</small></header><div className="lf-card-body">{!reviewing ? <div className="lf-progress-row"><div className="lf-progress-track"><span style={{ width: `${progress}%` }} /><b>Seu progresso</b></div><strong>{progress}%</strong></div> : null}<p className="lf-level-name">⌖ {level}{reviewing ? <span className="lf-reviewing-label">Revisando questões erradas</span> : null}</p>{children}</div></section>; }
+function QuestionContent({ question }: { question: Question }) { const title = question.titulo?.trim(); return <section className="lf-question">{title ? <p className="lf-question-context">Conforme o(a) <strong>{title}</strong>, julgue o item que se segue.</p> : null}<div className="lf-statement"><Html value={question.pergunta} /></div></section>; }
+function QuestionLoading() { return <section className="lf-question lf-question-loading" role="status" aria-live="polite">Carregando próxima questão…</section>; }
+function AnswerButtons({ answer, disabled = false, onChoose }: { answer: Choice | null; disabled?: boolean; onChoose: (choice: Choice) => void }) { return <div className="lf-answer-grid">{(["certo", "errado"] as Choice[]).map((value) => <button key={value} disabled={disabled || answer !== null} onClick={() => onChoose(value)} className={`lf-answer-button ${answer === value ? "is-selected" : ""}`}>{value === "certo" ? "Certo" : "Errado"}<kbd className="lf-key-hint" aria-hidden="true">{value === "certo" ? "C" : "E"}</kbd></button>)}</div>; }
+function LawStudyTools({ onOpen }: { onOpen: (tab: LegisBotStudyTab) => void }) { return <nav className="lf-law-tools" aria-label="Recursos sobre a legislação"><button type="button" className="lf-law-tool" onClick={() => onOpen("legisbot")}>🤖 LegisBot</button><button type="button" className="lf-law-tool" onClick={() => onOpen("community")}>💬 Comunidade</button><button type="button" className="lf-law-tool" onClick={() => onOpen("highlights")}>🖍️ Destaques</button></nav>; }
+function AnswerFeedback({ question, correct, onOpenLegisBot }: { question: Question; correct: boolean; onOpenLegisBot: (tab: LegisBotStudyTab) => void }) { const [commentOpen, setCommentOpen] = useState(true); const ordem = question.ordem?.trim(); const assunto = question.assunto?.trim() || "Legislação"; return <><section className={`lf-feedback ${correct ? "is-correct" : "is-wrong"}`}><p className="lf-feedback-title"><span>{correct ? "✓" : "×"}</span>{correct ? "Parabéns! Você acertou." : "Você errou. Esta questão voltará neste nível."}</p><p className="lf-gabarito">Gabarito: <strong>{correctAnswer(question.resposta) === "certo" ? "Certo" : "Errado"}</strong></p></section>{question.justificativa || question.legislacao ? <section className="lf-feedback-details">{question.justificativa ? <><button className="lf-professor-toggle" type="button" onClick={() => setCommentOpen((open) => !open)}>Comentário do professor <span>{commentOpen ? "⌃" : "⌄"}</span></button>{commentOpen ? <Html value={question.justificativa} className="lf-comment" /> : null}</> : null}{question.legislacao ? <><section className="lf-law-block"><h2>📜 {assunto}</h2><Html value={question.legislacao} /></section>{ordem ? <LawStudyTools onOpen={onOpenLegisBot} /> : null}</> : null}</section> : null}</>; }
+function LegisBotOverlay({ slug, question, initialTab, onClose }: { slug: string; question: Question; initialTab: LegisBotStudyTab; onClose: () => void }) { const panelRef = useRef<HTMLElement | null>(null); useEffect(() => { const previousOverflow = document.body.style.overflow; document.body.style.overflow = "hidden"; const focusTimer = window.setTimeout(() => panelRef.current?.querySelector<HTMLButtonElement>(".legisbot-overlay-back")?.focus(), 0); const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } }; window.addEventListener("keydown", onKeyDown); return () => { window.clearTimeout(focusTimer); window.removeEventListener("keydown", onKeyDown); document.body.style.overflow = previousOverflow; }; }, [onClose]); function trapFocus(event: React.KeyboardEvent<HTMLElement>) { if (event.key !== "Tab" || !panelRef.current) return; const focusable = [...panelRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((item) => item.offsetParent !== null); if (!focusable.length) return; const first = focusable[0]; const last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } } return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={question.ordem ?? ""} dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded onClose={onClose} /></aside></div>; }
+function isPlayerFormTarget(target: EventTarget | null) { if (!(target instanceof HTMLElement)) return false; return target.isContentEditable || Boolean(target.closest("input, textarea, select, [contenteditable], [role='dialog'], .lf-editor-drawer")); }
+type PlayerKeyboardState = { answered: boolean; canAnswer: boolean; canNext: boolean; canPrevious: boolean; onCorrect: () => void; onWrong: () => void; onNext: () => void; onPrevious: () => void };
+function usePlayerKeyboard({ questionId, answered, canAnswer = true, canNext, canPrevious, onCorrect, onWrong, onNext, onPrevious }: { questionId: string; answered: boolean; canAnswer?: boolean; canNext: boolean; canPrevious: boolean; onCorrect: () => void; onWrong: () => void; onNext: () => void; onPrevious: () => void }) { const actionLock = useRef(false); const stateRef = useRef<PlayerKeyboardState>({ answered, canAnswer, canNext, canPrevious, onCorrect, onWrong, onNext, onPrevious }); stateRef.current = { answered, canAnswer, canNext, canPrevious, onCorrect, onWrong, onNext, onPrevious }; useEffect(() => { actionLock.current = false; }, [questionId, answered]); useEffect(() => { const onKeyDown = (event: KeyboardEvent) => { if (event.defaultPrevented || event.repeat || event.ctrlKey || event.altKey || event.metaKey || isPlayerFormTarget(event.target)) return; const state = stateRef.current; const key = event.key.toLowerCase(); if (!state.answered) { if (key !== "c" && key !== "e") return; if (!state.canAnswer || actionLock.current) return; actionLock.current = true; event.preventDefault(); if (key === "c") state.onCorrect(); else state.onWrong(); return; } if (key === "arrowleft") { if (!state.canPrevious || actionLock.current) return; actionLock.current = true; event.preventDefault(); state.onPrevious(); return; } if (key !== "enter" && key !== " " && key !== "arrowright") return; if (!state.canNext || actionLock.current) return; actionLock.current = true; event.preventDefault(); state.onNext(); }; window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown); }, []); }
+function useAdminPermission() { const [allowed, setAllowed] = useState(false); useEffect(() => { let live = true; void fetch("/api/admin/session", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => { if (live) setAllowed(data?.authenticated === true); }).catch(() => { if (live) setAllowed(false); }); return () => { live = false; }; }, []); return allowed; }
+function QuestionAdminTools({ question, slug, onSaved }: { question: Question; slug: string; onSaved: (question: Question) => void }) { const [open, setOpen] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(""), [saved, setSaved] = useState(false); const [form, setForm] = useState({ pergunta: question.pergunta, resposta: question.resposta, justificativa: question.justificativa ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "", ordem: question.ordem ?? "" }); useEffect(() => { setForm({ pergunta: question.pergunta, resposta: question.resposta, justificativa: question.justificativa ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "", ordem: question.ordem ?? "" }); setSaved(false); }, [question]); async function save(event: React.FormEvent) { event.preventDefault(); setSaving(true); setError(""); try { const response = await fetch("/api/admin/questoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "atualizar_rapido", law_slug: slug, id: question.id, data: form }) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Não foi possível salvar a questão."); onSaved(data as Question); setSaved(true); } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível salvar a questão."); } finally { setSaving(false); } } return <><button type="button" className="lf-edit-trigger" onClick={() => { setOpen(true); setError(""); setSaved(false); }}>✏️ Editar questão</button>{open ? <div className="lf-editor-backdrop" role="presentation"><section className="lf-editor-drawer" role="dialog" aria-modal="true" aria-labelledby="lf-editor-title"><header><div><p>Administração</p><h2 id="lf-editor-title">Editar questão</h2></div><button type="button" aria-label="Fechar" onClick={() => setOpen(false)}>×</button></header><form className="lf-editor-form" onSubmit={save}><p className="lf-editor-description">Edite o conteúdo sem alterar lei, nível ou estrutura.</p><Link className="lf-editor-panel-link" href={`/admin/questoes?law_slug=${encodeURIComponent(slug)}&question_id=${encodeURIComponent(question.id)}`}>Abrir no painel administrativo ↗</Link><label>Pergunta<textarea required value={form.pergunta} onChange={(event) => setForm({ ...form, pergunta: event.target.value })} /></label><label>Resposta<select value={form.resposta} onChange={(event) => setForm({ ...form, resposta: event.target.value })}><option value="Certo">Certo</option><option value="Errado">Errado</option></select></label><label>Ordem<input required inputMode="decimal" value={form.ordem} onChange={(event) => setForm({ ...form, ordem: event.target.value })} /></label><label>Justificativa<textarea value={form.justificativa} onChange={(event) => setForm({ ...form, justificativa: event.target.value })} /></label><label>Assunto<textarea value={form.assunto} onChange={(event) => setForm({ ...form, assunto: event.target.value })} /></label><label>Legislação<textarea value={form.legislacao} onChange={(event) => setForm({ ...form, legislacao: event.target.value })} /></label>{saved ? <p className="lf-editor-success">Alterações salvas e aplicadas ao player.</p> : null}{error ? <p className="lf-editor-error" role="alert">{error}</p> : null}<footer><button type="button" className="lf-secondary" disabled={saving} onClick={() => setOpen(false)}>Cancelar</button><button className="lf-primary" disabled={saving}>{saving ? "Salvando…" : "Salvar alterações"}</button></footer></form></section></div> : null}</>; }
+
+export function LegisQuestoesStudyClient({ slug }: { slug: string }) { const searchParams = useSearchParams(); return <StudyLawContext.Provider value={slug}>{searchParams.get("livre") === "1" ? <FreeStudy slug={slug} structureId={searchParams.get("structure_id")} /> : <CampaignStudy slug={slug} />}</StudyLawContext.Provider>; }
+
+function CampaignStudy({ slug }: { slug: string }) {
+  const [campaign, setCampaign] = useState<Campaign | null>(null), [answer, setAnswer] = useState<Choice | null>(null), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [transitioning, setTransitioning] = useState(false), [error, setError] = useState(""), [levelDone, setLevelDone] = useState<LevelResult | null>(null), [finalResult, setFinalResult] = useState<CampaignResult | null>(null), [legisBot, setLegisBot] = useState<{ question: Question; tab: LegisBotStudyTab } | null>(null);
+  const canEdit = useAdminPermission();
+  async function api(method: "GET" | "POST" | "PATCH", body?: unknown) { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) { window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/questoes/${slug}/estudar`)}`); return null; } const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha`, { method, cache: "no-store", headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined }); const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.message || "Não foi possível carregar seu Estudo Ativo da Lei."); return result; }
+  async function load(start = false) { setLoading(true); setError(""); try { const initial = await api(start ? "POST" : "GET"); if (!initial) return; if (initial.status === "concluida") setCampaign({ status: "concluida", level: null, question: null, progress: 100 }); else { const state = await api("GET"); if (state) setCampaign(state); } } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar seu Estudo Ativo da Lei."); } finally { setLoading(false); } }
+  useEffect(() => { void load(true); }, [slug]);
+  async function advance() { if (!campaign?.question || !answer) return; const answerToSave = answer; const current = campaign; const currentQuestion = campaign.question; const currentLevel = current.level; const nextQuestion = currentLevel && !currentLevel.reviewing ? currentLevel.questions[currentLevel.position + 1] : null; setAnswer(null); setSaving(true); setTransitioning(!nextQuestion); if (nextQuestion && currentLevel) setCampaign({ ...current, question: nextQuestion, level: { ...currentLevel, position: currentLevel.position + 1, firstPassProgress: Math.round((currentLevel.position + 1) / currentLevel.questions.length * 100) } }); try { const result = await api("PATCH", { questionId: currentQuestion.id, answer: answerToSave }); if (!result) return; if (result.levelConcluded) { setCampaign(result.campaignConcluded ? { status: "concluida", level: null, question: null, progress: 100 } : { ...current, progress: result.progress ?? current.progress }); if (result.campaignConcluded) setFinalResult(result.result ?? null); setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0), finalLevel: result.campaignConcluded === true }); return; } if (result.campaignConcluded) { setCampaign({ status: "concluida", level: null, question: null, progress: 100 }); setFinalResult(result.result ?? null); return; } setCampaign((currentState) => currentState ? { ...currentState, progress: result.progress ?? currentState.progress } : currentState); const state = await api("GET"); if (state) setCampaign(state); } catch (caught) { setCampaign(current); setError(caught instanceof Error ? caught.message : "Não foi possível salvar sua resposta."); } finally { setSaving(false); setTransitioning(false); } }
+  const activeQuestion = campaign?.question;
+  usePlayerKeyboard({ questionId: activeQuestion?.id ?? "", answered: answer !== null, canAnswer: !saving, canNext: Boolean(activeQuestion) && answer !== null && !saving, canPrevious: false, onCorrect: () => setAnswer("certo"), onWrong: () => setAnswer("errado"), onNext: () => void advance(), onPrevious: () => undefined });
+  if (loading) return <Page><p className="lf-state-card">Carregando Estudo Ativo da Lei…</p></Page>;
+  if (error) return <Page><p className="lf-state-card is-error">{error}</p></Page>;
+  if (levelDone) return <Page><section className="lf-state-card lf-completion"><p>Nível concluído</p><h1>{levelDone.name}</h1><span>{levelDone.errors} {levelDone.errors === 1 ? "erro" : "erros"}</span><button className="lf-primary" onClick={() => { setLevelDone(null); if (!levelDone.finalLevel) void load(); }}>{levelDone.finalLevel ? "Ver resultado final" : "Continuar"}</button></section></Page>;
+  if (campaign?.status === "concluida") return <Page><section className="lf-state-card lf-completion"><p>Lei concluída!</p>{finalResult ? <><h1>Score final: {finalResult.score.toLocaleString("pt-BR")}</h1><span>{finalResult.errors} {finalResult.errors === 1 ? "erro" : "erros"}</span>{Number.isFinite(finalResult.bestScore) ? <span>Melhor score: {finalResult.bestScore.toLocaleString("pt-BR")}</span> : null}{Number.isFinite(finalResult.position) ? <span>Ranking: {finalResult.position}º</span> : null}</> : <span>Resultado final indisponível nesta sessão.</span>}<Link className="lf-primary" href="/minhas-leis">Voltar para Legis Questões</Link></section></Page>;
+  const question = campaign?.question; if (!question) return <Page><p className="lf-state-card">Nenhuma questão disponível neste Estudo Ativo da Lei.</p></Page>; const correct = answer !== null && answer === correctAnswer(question.resposta);
+  return <Page><PlayerCard mode="campaign" progress={campaign?.progress ?? 0} level={campaign?.level?.nome ?? ""} reviewing={campaign?.level?.reviewing ?? false}>{transitioning ? <QuestionLoading /> : <div key={question.id} className="lf-question-stage"><QuestionContent question={question} />{canEdit ? <QuestionAdminTools question={question} slug={slug} onSaved={(updated) => setCampaign((current) => current?.question ? { ...current, question: { ...current.question, ...updated } } : current)} /> : null}<AnswerButtons answer={answer} disabled={saving} onChoose={setAnswer} />{answer ? <AnswerFeedback question={question} correct={correct} onOpenLegisBot={(tab) => setLegisBot({ question, tab })} /> : null}<nav className="lf-navigation"><button disabled className="lf-secondary">← Anterior</button><button disabled={!answer || saving} onClick={() => void advance()} className="lf-primary">Próxima questão →<kbd className="lf-key-hint" aria-hidden="true">↵</kbd></button></nav></div>}</PlayerCard>{legisBot ? <LegisBotOverlay slug={slug} question={legisBot.question} initialTab={legisBot.tab} onClose={() => setLegisBot(null)} /> : null}</Page>;
 }
 
-export function LegisQuestoesStudyClient({ slug }: { slug: string }) {
-  const searchParams = useSearchParams();
-  const [law, setLaw] = useState<StudyLaw | null>(null);
-  const [questions, setQuestions] = useState<StudyQuestion[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<AnswerChoice | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const queryString = searchParams.toString();
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true); setError(""); setLaw(null); setQuestions([]); setCurrentIndex(0); setSelectedAnswer(null);
-    async function load() {
-      try {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
-        if (!token) {
-          const retorno = encodeURIComponent(`/questoes/${slug}/estudar${queryString ? `?${queryString}` : ""}`);
-          window.location.replace(`/conta?modo=login&retorno=${retorno}`);
-          return;
-        }
-        const endpoint = `/api/questoes/${encodeURIComponent(slug)}/estudar${queryString ? `?${queryString}` : ""}`;
-        const response = await fetch(endpoint, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
-        const result = await response.json().catch(() => ({})) as StudyResponse;
-        if (!response.ok || !result.law || !Array.isArray(result.questions)) throw new Error(result.message || "Não foi possível carregar as questões.");
-        if (!active) return;
-        setLaw(result.law); setQuestions(result.questions);
-      } catch (loadError) {
-        if (active) setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar as questões.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void load();
-    return () => { active = false; };
-  }, [slug, queryString]);
-
-  const currentQuestion = questions[currentIndex] ?? null;
-  const progress = useMemo(() => questions.length ? Math.round(((currentIndex + 1) / questions.length) * 100) : 0, [currentIndex, questions.length]);
-  const answered = selectedAnswer !== null;
-  const correctAnswer = normalizeAnswer(currentQuestion?.resposta ?? "");
-  const userWasCorrect = answered && correctAnswer !== null && selectedAnswer === correctAnswer;
-  function answer(value: AnswerChoice) { if (!answered) setSelectedAnswer(value); }
-  function nextQuestion() { if (currentIndex >= questions.length - 1) return; setCurrentIndex((index) => index + 1); setSelectedAnswer(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
-
-  if (loading) return <PlayerState><div className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Carregando questões...</div></PlayerState>;
-  if (error) return <PlayerState><div role="alert" className="rounded-2xl border border-red-200 bg-white p-8 text-red-700 shadow-sm"><p>{error}</p><BackToDecks /></div></PlayerState>;
-  if (!law || !currentQuestion) return <PlayerState><div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h1 className="text-2xl font-black text-[#062a5f]">Nenhuma questão neste baralho</h1><p className="mt-2 text-slate-600">Escolha outro capítulo, seção ou legislação.</p><BackToDecks /></div></PlayerState>;
-
-  const isLastQuestion = currentIndex === questions.length - 1;
-  const breadcrumbs = [law.titulo, currentQuestion.titulo, currentQuestion.capitulo, currentQuestion.secao, currentQuestion.subsecao].filter(Boolean);
-
-  return <main className="min-h-screen bg-white px-1 py-2 sm:px-4 sm:py-4">
-    <section className="mx-auto w-full max-w-6xl overflow-hidden rounded-[22px] border border-blue-500 bg-white shadow-[0_0_18px_rgba(37,99,235,0.12)]">
-      <header className="flex min-h-[52px] items-center justify-between bg-[#0c2f5c] px-5 text-white"><div className="flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-400 text-sm text-cyan-300">⚡</span><span className="text-sm font-black">Legislação em Questões</span></div><span className="text-[11px] font-bold text-slate-200">4.0</span></header>
-      <div className="px-5 py-5 sm:px-9 sm:py-6">
-        <section><div className="flex items-center gap-3"><div className="relative h-[22px] flex-1 overflow-hidden rounded-full border border-blue-200 bg-[#f5f7fa]"><div className="absolute inset-y-0 left-0 rounded-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} /><span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-white">Seu progresso</span></div><div className="flex h-[38px] min-w-[56px] items-center justify-center rounded-full border border-blue-600 px-3 text-sm font-black text-blue-600">{progress}%</div></div><div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] text-slate-500"><span>♙</span>{breadcrumbs.map((item, index) => <span key={`${item}-${index}`}>{index ? <>› </> : null}{item}</span>)}</div></section>
-        <section className="mt-6 rounded-2xl border border-blue-200 bg-white px-5 py-5 sm:px-6 sm:py-6"><p className="text-[18px] leading-[1.55] text-slate-600 sm:text-[20px]">Conforme o(a) <strong className="font-black text-blue-600">{law.titulo}</strong>, julgue o item que se segue.</p><p className="mt-4 whitespace-pre-wrap text-[20px] leading-[1.55] text-black sm:text-[22px]">{currentQuestion.pergunta}</p></section>
-        <section className="mt-7 grid grid-cols-2 gap-5"><AnswerButton
-  label="Certo"
-  value="certo"
-  selectedAnswer={selectedAnswer}
-  onClick={() => answer("certo")}
-/>
-<AnswerButton label="Errado" value="errado" selectedAnswer={selectedAnswer} onClick={() => answer("errado")} /></section>
-        {answered ? <><div className="my-7 border-t border-slate-200" /><section
-  className={`rounded-xl border px-4 py-4 ${
-    userWasCorrect
-      ? "border-emerald-300 bg-emerald-50"
-      : "border-red-300 bg-red-50"
-  }`}
->
-  <p
-    className={`text-[10px] font-semibold ${
-      userWasCorrect
-        ? "text-emerald-700"
-        : "text-red-700"
-    }`}
-  >
-    {userWasCorrect
-      ? "Resposta correta."
-      : "Resposta diferente do gabarito."}
-  </p>
-
-  <p className="mt-3 pl-9 text-[11px] font-semibold text-slate-900">
-    Gabarito •{" "}
-    <strong>
-      {correctAnswer === "certo"
-        ? "Certo"
-        : correctAnswer === "errado"
-        ? "Errado"
-        : currentQuestion.resposta}
-    </strong>
-  </p>
-</section>{currentQuestion.justificativa ? <section className="mt-8"><h2 className="text-[21px] font-black text-slate-900 sm:text-[23px]"><span className="mr-1 text-blue-600">▼</span>Comentário do professor</h2><div className="mt-6 whitespace-pre-wrap text-[13px] leading-6 text-slate-700">{currentQuestion.justificativa}</div></section> : null}{currentQuestion.legislacao ? <section className="mt-5"><p className="text-[13px] font-black text-blue-700">📜 {currentQuestion.assunto || currentQuestion.artigo || "Trecho da Legislação"}</p><div className="mt-3 border-l-2 border-blue-600 pl-4"><div className="whitespace-pre-wrap text-[12px] leading-6 text-slate-700">{currentQuestion.legislacao}</div></div></section> : null}<section className="mt-6 grid grid-cols-3 gap-2"><InactiveAction label="🤖 LegisBot" /><InactiveAction label="♡ Comunidade" /><InactiveAction label="🖍 Destaques" /></section><section className="mt-6 flex items-center justify-between border-t border-slate-200 pt-5"><span className="text-[11px] font-semibold text-slate-400">Questão {currentIndex + 1} de {questions.length}</span>{isLastQuestion ? <Link href="/questoes" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-5 text-xs font-black text-white">Concluir</Link> : <button type="button" onClick={nextQuestion} className="min-h-10 rounded-lg bg-blue-700 px-5 text-xs font-black text-white transition hover:bg-blue-600">Próxima questão →</button>}</section></> : <p className="mt-5 text-center text-[11px] font-semibold text-slate-400">Questão {currentIndex + 1} de {questions.length}</p>}
-      </div>
-    </section>
-  </main>;
+function FreeStudy({ slug, structureId }: { slug: string; structureId: string | null }) {
+  const [questions, setQuestions] = useState<Question[]>([]), [index, setIndex] = useState(0), [answer, setAnswer] = useState<Choice | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [legisBot, setLegisBot] = useState<{ question: Question; tab: LegisBotStudyTab } | null>(null);
+  const canEdit = useAdminPermission();
+  useEffect(() => { let live = true; void (async () => { try { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) throw new Error("Entre na sua conta para estudar."); const query = structureId && /^\\d+$/.test(structureId) ? `?structure_id=${encodeURIComponent(structureId)}` : ""; const response = await fetch(`/api/questoes/${encodeURIComponent(slug)}/estudar${query}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); const result = await response.json(); if (!response.ok || !Array.isArray(result.questions)) throw new Error(result.message || "Não foi possível carregar as questões."); if (live) setQuestions(result.questions); } catch (caught) { if (live) setError(caught instanceof Error ? caught.message : "Não foi possível carregar as questões."); } finally { if (live) setLoading(false); } })(); return () => { live = false; }; }, [slug, structureId]);
+  const currentQuestion = questions[index];
+  function moveTo(nextIndex: number) { setAnswer(null); setIndex(nextIndex); }
+  usePlayerKeyboard({ questionId: currentQuestion?.id ?? "", answered: answer !== null, canNext: index < questions.length - 1, canPrevious: index > 0, onCorrect: () => setAnswer("certo"), onWrong: () => setAnswer("errado"), onNext: () => moveTo(Math.min(index + 1, questions.length - 1)), onPrevious: () => moveTo(Math.max(index - 1, 0)) });
+  if (loading) return <Page><p className="lf-state-card">Carregando estudo livre…</p></Page>; if (error || !currentQuestion) return <Page><p className="lf-state-card is-error">{error || "Nenhuma questão disponível."}</p></Page>;
+  const correct = answer !== null && answer === correctAnswer(currentQuestion.resposta); return <Page><PlayerCard mode="free" progress={100} level={`Questão ${index + 1} de ${questions.length}`}><div key={currentQuestion.id} className="lf-question-stage"><QuestionContent question={currentQuestion} />{canEdit ? <QuestionAdminTools question={currentQuestion} slug={slug} onSaved={(updated) => setQuestions((current) => current.map((item) => item.id === currentQuestion.id ? { ...item, ...updated } : item))} /> : null}<AnswerButtons answer={answer} onChoose={setAnswer} />{answer ? <AnswerFeedback question={currentQuestion} correct={correct} onOpenLegisBot={(tab) => setLegisBot({ question: currentQuestion, tab })} /> : null}<nav className="lf-navigation"><button disabled={index === 0} onClick={() => moveTo(index - 1)} className="lf-secondary">← Anterior</button><button disabled={index === questions.length - 1} onClick={() => moveTo(index + 1)} className="lf-primary">Próxima →<kbd className="lf-key-hint" aria-hidden="true">→</kbd></button></nav></div></PlayerCard>{legisBot ? <LegisBotOverlay slug={slug} question={legisBot.question} initialTab={legisBot.tab} onClose={() => setLegisBot(null)} /> : null}</Page>;
 }
-
-function BackToDecks() { return <Link href="/questoes" className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Voltar aos baralhos</Link>; }
-function InactiveAction({ label }: { label: string }) { return <button type="button" disabled className="min-h-[32px] rounded-md border border-blue-200 bg-white px-3 text-[10px] font-bold text-slate-600">{label}</button>; }
-function AnswerButton({
-  label,
-  value,
-  selectedAnswer,
-  onClick,
-}: {
-  label: string;
-  value: AnswerChoice;
-  selectedAnswer: AnswerChoice | null;
-  onClick: () => void;
-}) {
-  const selected = selectedAnswer === value;
-  const hasAnswered = selectedAnswer !== null;
-
-  return (
-    <button
-      type="button"
-      disabled={hasAnswered}
-      onClick={onClick}
-      className={
-        selected
-          ? "min-h-12 rounded-xl border-2 border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white"
-          : "min-h-12 rounded-xl border-2 border-blue-600 bg-white px-5 py-3 text-sm font-black text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
-      }
-    >
-      {label}
-    </button>
-  );
-}
-function normalizeAnswer(value: string): AnswerChoice | null { const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(); if (["certo", "certa", "correto", "correta"].includes(normalized)) return "certo"; if (["errado", "errada", "incorreto", "incorreta"].includes(normalized)) return "errado"; return null; }

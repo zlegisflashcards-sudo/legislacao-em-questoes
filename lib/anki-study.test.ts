@@ -108,17 +108,17 @@ describe("página autenticada do Anki", () => {
 
   it("reutiliza as abas sem botão Voltar e direciona para Meu edital", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
-    expect(tabs).toContain("Minhas leis");
+    expect(tabs).toContain("Legis Questões");
     expect(tabs).toContain("Meu edital");
     expect(tabs).toContain('href="/meu-edital"');
     expect(client).not.toContain("Voltar");
   });
 
   it("exibe cabeçalho, plataformas e instruções acessíveis", () => {
-    for (const expected of ["/icons/anki.png", "Passo obrigatório", "Baixando e configurando o Anki", "Nesta mini aula, vamos apenas baixar e instalar o aplicativo. Na próxima aula, você vai baixar as questões.", "Não sabe qual escolher?", "Ver qual opção é ideal para mim", "Celular ou tablet:", "Navegador:", "aguarde novidades."]) expect(client).toContain(expected);
+    for (const expected of ["/icons/anki.png", "Material complementar", "Estudar no Anki", "Nesta mini aula, vamos apenas baixar e instalar o aplicativo. Na próxima aula, você vai baixar as questões.", "Não sabe qual escolher?", "Ver qual opção é ideal para mim", "Celular ou tablet:", "Navegador:", "aguarde novidades."]) expect(client).toContain(expected);
     expect(client).not.toContain("Neste tutorial, você aprenderá a:");
-    for (const expected of ["Agora que você instalou e configurou o Anki:", "Sua conta está pronta;", "A sincronização está configurada;", "O aplicativo está preparado para receber seus materiais.", "Próximo passo: escolha uma legislação para baixar, importar e começar a estudar.", "Escolher uma lei para estudar", 'href="/minhas-leis"']) expect(client).toContain(expected);
-    expect(client).not.toContain("A obrigatoriedade é pedagógica e não bloqueia outras áreas da sua conta.");
+    for (const expected of ["Agora que você instalou e configurou o Anki:", "Sua conta está pronta;", "A sincronização está configurada;", "O aplicativo está preparado para receber seus materiais.", "Próximo passo: acesse Legis Questões para escolher uma legislação e começar a estudar.", "Ir para Legis Questões", 'href="/minhas-leis"']) expect(client).toContain(expected);
+    expect(client).not.toContain("Passo obrigatório");
     expect(client).toContain("aria-pressed={selected}");
     expect(client).toContain("grid-cols-2");
     expect(client).toContain("sm:grid-cols-4");

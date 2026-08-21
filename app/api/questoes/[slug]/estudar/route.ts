@@ -1,5 +1,6 @@
 import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
 import { supabaseQuestoes } from "@/lib/supabase-questoes-server";
+import { unifiedLawBySlug, unifiedQuestions, unifiedStructure, usesUnifiedStagingQuestions } from "@/lib/unified-questions-staging-server";
 
 type RouteContext = {
   params: Promise<{
@@ -34,6 +35,17 @@ export async function GET(
 
     // Autoriza o acesso usando o banco principal.
     await authorizeLawStudy(request, slug);
+    if (usesUnifiedStagingQuestions(slug)) {
+      const law = await unifiedLawBySlug(slug);
+      if (!law) return Response.json({ success: false, message: "Esta lei ainda não possui questões disponíveis." }, { status: 404 });
+      const url = new URL(request.url); const structure = await unifiedStructure(Number(law.id));
+      const root = Number(url.searchParams.get("structure_id")); let ids: number[] | undefined;
+      if (Number.isSafeInteger(root) && root > 0) { const set = new Set<number>([root]); let changed = true; while (changed) { changed = false; for (const node of structure) if (node.parent_id && set.has(node.parent_id) && !set.has(node.id)) { set.add(node.id); changed = true; } } ids = [...set]; }
+      const values = Object.fromEntries(ALLOWED_FILTERS.flatMap((field) => { const value = url.searchParams.get(field)?.trim(); return value ? [[field, value]] : []; }));
+      const questions = await unifiedQuestions(Number(law.id), { structureIds: ids, values });
+      console.info("questoes_source=staging", { slug });
+      return Response.json({ success: true, law, filters: values, questions, total: questions.length }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    }
 
     const { data: law, error: lawError } = await supabaseQuestoes
       .from("laws")
@@ -78,7 +90,8 @@ export async function GET(
         secao,
         subsecao,
         artigo,
-        structure_id
+        structure_id,
+        ultima_alteracao_legislativa
       `)
       .eq("law_id", law.id)
       .eq("ativo", true);

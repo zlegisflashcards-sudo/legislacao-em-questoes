@@ -29,13 +29,22 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
     throw new StudentLawsApiError(401, "Sua sessão expirou. Entre novamente.");
   }
 
-  const { data: student, error: studentError } = await getSupabaseServerClient().from("alunos").select("deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle();
+  const { data: student, error: studentError } = await getSupabaseServerClient().from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle();
   if (studentError) throw new StudentLawsApiError(503, "Não foi possível verificar seu acesso agora.");
   if (student?.deve_trocar_senha === true) throw new StudentLawsApiError(403, "Crie sua nova senha antes de acessar suas leis.");
 
   const { data, error } = await createSupabaseUserClient(token).rpc("obter_minhas_leis");
   if (error) throw new StudentLawsApiError(503, "Não foi possível carregar suas leis agora.");
-  return parseStudentLawRows(data);
+  const laws = parseStudentLawRows(data);
+  if (!student?.id || !laws.length) return laws;
+  const { data: progress, error: progressError } = await getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", laws.map((law) => law.id));
+  if (progressError) throw new StudentLawsApiError(503, `Não foi possível carregar o status dos Estudos Ativos da Lei: ${progressError.message}`);
+  const map = new Map((progress ?? []).map((item) => [item.lei_id, item]));
+  const activeIds = (progress ?? []).flatMap((item) => typeof item.campanha_ativa_id === "string" ? [item.campanha_ativa_id] : []);
+  const { data: levels } = activeIds.length ? await getSupabaseServerClient().from("campanhas_leis_niveis").select("campanha_id,questoes_ids,concluido").in("campanha_id", activeIds) : { data: [] };
+  const totals = new Map<string, { all: number; done: number }>();
+  for (const level of levels ?? []) { const state = totals.get(level.campanha_id) ?? { all: 0, done: 0 }; const count = Array.isArray(level.questoes_ids) ? level.questoes_ids.length : 0; state.all += count; if (level.concluido) state.done += count; totals.set(level.campanha_id, state); }
+  return laws.map((law) => { const item = map.get(law.id); const total = typeof item?.campanha_ativa_id === "string" ? totals.get(item.campanha_ativa_id) : null; return { ...law, campaignStatus: (item?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: total?.all ? Math.round(total.done / total.all * 100) : 0 }; });
 }
 
 export function studentLawsErrorResponse(error: unknown) {

@@ -64,7 +64,7 @@ export function nextLawStudyProgress(current: LawStudyProgress, field: "inStudy"
 
 export function lawStudyProgressMessage(progress: LawStudyProgress) {
   if (progress.questionsFinished) {
-    return "Primeiro ciclo concluído! Agora mantenha em dia as revisões programadas que aparecerão no seu App de Questões.";
+    return "Estudo Ativo da Lei concluído! Você pode continuar revisando as questões online quando quiser.";
   }
   if (progress.inStudy) {
     return "Continue avançando nas questões desta lei até concluir o primeiro ciclo de estudo.";

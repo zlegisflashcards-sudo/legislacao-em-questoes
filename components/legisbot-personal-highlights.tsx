@@ -318,7 +318,7 @@ export default function LegisBotPersonalHighlights({
       <textarea ref={selectionArea} readOnly value={legislationText} rows={14} onSelect={captureSelectorSelection} onTouchEnd={() => window.setTimeout(captureSelectorSelection, 80)} />
       {selectorSelection ? <p className="highlight-selector-selection"><strong>Trecho selecionado:</strong> “{selectorSelection.text}”</p> : <p className="highlight-selector-hint">Selecione o texto com o mouse ou toque e segure no celular.</p>}
       <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do destaque" />
-      <div className="community-modal-actions"><button type="button" onClick={closeSelector}>Cancelar</button><button type="button" disabled={!selectorSelection || saving} onClick={() => { if (selectorSelection) void createOrReplaceHighlight(selectorSelection); }}>{saving ? "Salvando…" : "Salvar destaque"}</button></div>
+      <div className="community-modal-actions"><button type="button" onClick={closeSelector}>Cancelar</button><button type="button" disabled={!selectorSelection || saving} onClick={() => { if (selectorSelection) void createOrReplaceHighlight(selectorSelection); }}>{saving ? "Carregando…" : "Salvar destaque"}</button></div>
     </div></div> : null}
   </section>;
 }

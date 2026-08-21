@@ -23,7 +23,8 @@ const offlineEnvironment = {
   RESEND_API_KEY: "",
   RESEND_FROM_EMAIL: "",
   HOTMART_HOTTOK: "",
-  NEXT_PUBLIC_SITE_URL: "",
+  // Valor válido apenas para a coleta estática offline; não altera nenhum ambiente implantado.
+  NEXT_PUBLIC_SITE_URL: "https://offline.invalid",
   VERCEL_URL: "",
   VERCEL_PROJECT_PRODUCTION_URL: "",
 };

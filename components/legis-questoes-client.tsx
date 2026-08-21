@@ -8,6 +8,7 @@ import {
   type StudentLaw,
 } from "@/lib/student-laws";
 import { supabase } from "@/lib/supabase";
+import { compareQuestionStructureNames } from "@/lib/questoes-structure";
 
 type StructureQuestion = {
   id: string;
@@ -399,9 +400,9 @@ function buildStoredTree(nodes: StoredStructureNode[], questions: StructureQuest
   const descendants = (node: StoredStructureNode): number[] => [node.id, ...(byParent.get(node.id) ?? []).flatMap(descendants)];
   const toTreeNode = (node: StoredStructureNode): TreeNode => {
     const ids = new Set(descendants(node));
-    return { level: node.tipo, label: node.nome, count: questions.filter((question) => question.structure_id !== null && ids.has(question.structure_id)).length, children: (byParent.get(node.id) ?? []).map(toTreeNode), filters: {}, structureId: node.id };
+    return { level: node.tipo, label: node.nome, count: questions.filter((question) => question.structure_id !== null && ids.has(question.structure_id)).length, children: [...(byParent.get(node.id) ?? [])].sort(compareQuestionStructureNames).map(toTreeNode), filters: {}, structureId: node.id };
   };
-  return (byParent.get(null) ?? []).map(toTreeNode);
+  return [...(byParent.get(null) ?? [])].sort(compareQuestionStructureNames).map(toTreeNode);
 }
 
 function buildLevel(
@@ -464,5 +465,5 @@ function buildLevel(
     );
   }
 
-  return nodes;
+  return nodes.sort((left, right) => compareQuestionStructureNames({ nome: left.label }, { nome: right.label }));
 }

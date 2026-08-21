@@ -18,7 +18,7 @@ export default function ObrigadoPage() {
             </h2>
             <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
               <li>
-                1. Clique em “🔐 Minhas leis adquiridas” no cabeçalho do site.
+                1. Clique em “Legis Questões” no cabeçalho do site.
               </li>
               <li>
                 2. Faça login na Hotmart com o mesmo e-mail utilizado na compra.

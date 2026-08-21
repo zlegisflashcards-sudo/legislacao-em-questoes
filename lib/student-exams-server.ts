@@ -17,10 +17,16 @@ async function context(request: Request) {
 }
 
 export async function loadStudentExams(request: Request): Promise<StudentExam[]> {
-  const { client } = await context(request);
+  const { client, studentId } = await context(request);
   const { data, error } = await client.rpc("obter_meus_editais");
   if (error) throw new StudentExamError(503, "Não foi possível carregar seus editais agora.");
-  return parseStudentExams(data);
+  const exams = parseStudentExams(data);
+  const lawIds = [...new Set(exams.flatMap((exam) => exam.leis.map((law) => law.id)))];
+  if (!lawIds.length) return exams;
+  const { data: progress, error: progressError } = await getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha").eq("aluno_id", studentId).in("lei_id", lawIds);
+  if (progressError) throw new StudentExamError(503, "Não foi possível carregar o progresso do edital agora.");
+  const states = new Map((progress ?? []).map((item) => [item.lei_id, item.status_campanha]));
+  return exams.map((exam) => ({ ...exam, leis: exam.leis.map((law) => ({ ...law, campaignStatus: states.get(law.id) === "concluida" || states.get(law.id) === "em_andamento" ? states.get(law.id)! : "nao_iniciada" })) }));
 }
 
 export async function loadStudentExamSelection(request: Request) {

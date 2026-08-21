@@ -57,13 +57,9 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(nextExamLawProgress({ emEstudo: true, revisao: true }, "study")).toBeNull();
   });
 
-  it("reutiliza a rota segura de progresso para editais personalizados e de produto", () => {
+  it("deriva o progresso exclusivamente do status de campanha", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('/api/aluno/estudar/lei/${encodeURIComponent(law.slug)}/progresso');
-    expect(client).toContain("nextExamLawProgress(law, control)");
-    expect(client).toContain("setEditais((items) => items.map");
-    expect(client).toContain("ProgressControl");
-    expect(client).not.toContain("current.tipo === \"personalizado\" ? <ProgressControl");
+    expect(client).toContain('law.campaignStatus === "concluida"'); expect(client).toContain('completed}/{total} concluídas'); expect(client).not.toContain('ProgressControl');
   });
 
   it("mantém o edital do produto sincronizado pela composição viva de produto_leis", () => {
@@ -76,39 +72,18 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(migration).not.toContain("materialized");
   });
 
-  it("usa checkbox visual responsivo e preserva o respiro mobile", () => {
+  it("não oferece controles manuais de estudo ou revisão", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('aria-label={`${label} ${checked ? "concluído" : "não concluído"}`');
-    expect(client).toContain('className={`inline-flex min-h-11 min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold');
-    expect(client).toContain('className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2');
-    expect(client).toContain('"border-blue-200 bg-blue-50 text-slate-700"');
-    expect(client).toContain('"border-slate-200 bg-white text-slate-500 hover:bg-slate-50"');
-    expect(client).toContain('text-blue-800">✓</span>');
-    expect(client).toContain('text-balance text-xl font-black leading-tight');
-    expect(client).toContain('flex flex-wrap items-center gap-2 pt-2 sm:contents sm:pt-0');
-    expect(client).toContain('hidden font-black text-slate-500 sm:block');
-    expect(client).not.toContain('text-emerald-700');
-    expect(client).not.toContain('}✓');
-    expect(client).not.toContain('}☐');
-    expect(client).not.toContain('whitespace-nowrap');
+    for (const old of ['Estudando', 'Revisão', 'Anki', 'streak', 'ProgressControl']) expect(client).not.toContain(old);
   });
 
-  it("inicia sem edital selecionado e oferece pesquisa local", () => {
+  it("seleciona o primeiro edital e mostra estado vazio", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('Meus editais');
-    expect(client).toContain('Pesquisar editais');
-    expect(client).toContain('Pesquisar meus editais...');
-    expect(client).toContain('Escolha um edital para visualizar suas leis.');
-    expect(client).toContain('Nenhum edital encontrado.');
-    expect(client).toContain('Trocar edital');
-    expect(client).toContain('setSelected("")');
+    expect(client).toContain('body.editais[0]?.id ?? ""'); expect(client).toContain('Monte seu edital'); expect(client).toContain('Ir para Legis Questões');
   });
 
-  it("oculta pesquisa e lista quando um edital está selecionado", () => {
+  it("usa a primeira lei não concluída como próximo estudo", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('!loading && editais.length > 0 && !current ? <section');
-    expect(client).toContain('!loading && editais.length > 0 && !current ? <nav');
-    expect(client).toContain('!loading && current ? <section');
-    expect(client).toContain('Edital selecionado: <span className="font-black text-[#062a5f]">{current.nome}</span>');
+    expect(client).toContain('current?.leis.find((law) => law.campaignStatus !== "concluida")'); expect(client).toContain('Próximo estudo:'); expect(client).toContain('/estudar/lei/${encodeURIComponent(next.slug)}');
   });
 });

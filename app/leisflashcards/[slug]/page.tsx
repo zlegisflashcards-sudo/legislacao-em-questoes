@@ -380,7 +380,7 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
               <ol className="list-decimal space-y-3 pl-6 leading-7 text-slate-700 marker:font-bold marker:text-[#062a5f]">
                 <li>Exclua o deck desatualizado do Anki.</li>
                 <li>
-                  Acesse &quot;🔐 Minhas Leis Adquiridas&quot; no site da
+                  Acesse &quot;Legis Questões&quot; no site da
                   LegisFlashcards.
                 </li>
                 <li>Baixe a versão mais recente dos flashcards.</li>
@@ -406,7 +406,7 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
               rel="noreferrer"
               className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#062a5f] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#041d42] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 sm:w-auto"
             >
-              🔐 Acessar Minhas Leis Adquiridas
+              Acessar Legis Questões
             </a>
             </div>
           </details>

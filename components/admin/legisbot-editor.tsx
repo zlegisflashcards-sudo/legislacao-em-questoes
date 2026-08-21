@@ -137,10 +137,10 @@ export default function LegisBotEditor({ record }: { record?: LegisBotComentario
         <div className="admin-save-actions">
           {canOpenPublic ? <Link className="admin-button secondary" href={publicUrl} target="_blank">Abrir página pública</Link> : null}
           <button name="intent" value="draft" type="submit" className="admin-button secondary" disabled={pending}>
-            {pending ? "Salvando…" : "Salvar como rascunho"}
+            {pending ? "Carregando…" : "Salvar como rascunho"}
           </button>
           {savedRecord ? <button name="intent" value="save" type="submit" className="admin-button primary" disabled={pending || !dirty}>
-            {pending ? "Salvando…" : "Salvar alterações"}
+            {pending ? "Carregando…" : "Salvar alterações"}
           </button> : null}
           <button name="intent" value="publish" type="submit" className="admin-button primary" disabled={pending}>
             {pending ? "Publicando…" : "Publicar"}

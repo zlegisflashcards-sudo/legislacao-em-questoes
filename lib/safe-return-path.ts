@@ -1,4 +1,4 @@
-export const DEFAULT_AUTHENTICATED_PATH = "/dashboard";
+export const DEFAULT_AUTHENTICATED_PATH = "/minhas-leis";
 
 export function safeReturnPath(value: string | null | undefined) {
   if (!value) return DEFAULT_AUTHENTICATED_PATH;

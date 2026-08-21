@@ -41,7 +41,7 @@ describe("mensagem dinâmica do progresso", () => {
 
   it("prioriza a conclusão quando ambas as marcações estão ativas", () => {
     expect(lawStudyProgressMessage({ inStudy: true, questionsFinished: true })).toBe(
-      "Primeiro ciclo concluído! Agora mantenha em dia as revisões programadas que aparecerão no seu App de Questões.",
+      "Estudo Ativo da Lei concluído! Você pode continuar revisando as questões online quando quiser.",
     );
   });
 });
@@ -99,13 +99,8 @@ describe("persistência privada aluno × lei", () => {
 });
 
 describe("checkboxes da lei", () => {
-  it("renderiza as duas marcações e persiste por PATCH autenticado", () => {
-    expect(client).toContain("Progresso nesta lei");
-    expect(client).toContain("Lei em estudo");
-    expect(client).toContain("Finalizei todas as questões da lei");
-    expect(client).toContain('method: "PATCH"');
-    expect(client).toContain("nextLawStudyProgress");
-    expect(client).toContain("Authorization: `Bearer ${token}`");
-    expect(client).not.toContain("localStorage");
+  it("exibe o status de campanha como fonte de progresso", () => {
+    expect(client).toContain('campaign.status === "concluida"'); expect(client).toContain('campaign.status === "em_andamento"'); expect(client).toContain('const progress = completed ? 100 : campaign.progress');
+    expect(client).not.toContain("Progresso nesta lei"); expect(client).not.toContain("Lei em estudo"); expect(client).not.toContain("Finalizei todas as questões da lei");
   });
 });

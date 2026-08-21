@@ -16,6 +16,8 @@ export type StudentLaw = {
   houveAlteracaoLegislativa: boolean;
   referenciaNormativaAtual: string | null;
   tipoReferenciaNormativa: StudentLawReferenceType;
+  campaignStatus?: "nao_iniciada" | "em_andamento" | "concluida";
+  campaignProgress?: number;
 };
 
 export type StudentLawUpdateStatus = "atualizado" | "revisao_pendente" | "desatualizado" | "em_revisao";

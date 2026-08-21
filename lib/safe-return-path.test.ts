@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_AUTHENTICATED_PATH, safeReturnPath } from "./safe-return-path";
 
 describe("redirecionamento após autenticação", () => {
-  it("envia login direto para o dashboard", () => {
-    expect(safeReturnPath(null)).toBe("/dashboard");
-    expect(DEFAULT_AUTHENTICATED_PATH).toBe("/dashboard");
+  it("envia login direto para Legis Questões", () => {
+    expect(safeReturnPath(null)).toBe("/minhas-leis");
+    expect(DEFAULT_AUTHENTICATED_PATH).toBe("/minhas-leis");
   });
 
   it("preserva caminhos internos e query strings", () => {
@@ -17,6 +17,6 @@ describe("redirecionamento após autenticação", () => {
     "/\\example.com",
     "javascript:alert(1)",
   ])("rejeita retorno externo ou ambíguo: %s", (value) => {
-    expect(safeReturnPath(value)).toBe("/dashboard");
+    expect(safeReturnPath(value)).toBe("/minhas-leis");
   });
 });

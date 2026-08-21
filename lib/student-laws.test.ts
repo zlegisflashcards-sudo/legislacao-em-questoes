@@ -6,9 +6,7 @@ const migration = readFileSync("supabase/migrations/20260806103510_create_studen
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/minhas-leis/route.ts", "utf8");
 const client = readFileSync("components/student-laws-client.tsx", "utf8");
-const ankiModule = client.slice(client.indexOf("function AnkiModule"), client.indexOf("function StudentLawCard"));
-const card = client.slice(client.indexOf("function StudentLawCard"), client.indexOf("function AnkiRequiredModal"));
-const ankiPrompt = client.slice(client.indexOf("function AnkiRequiredModal"), client.indexOf("function EmptyState"));
+const card = client.slice(client.indexOf("function StudentLawCard"), client.indexOf("function EmptyState"));
 const page = readFileSync("app/minhas-leis/page.tsx", "utf8");
 
 const laws: StudentLaw[] = [
@@ -116,94 +114,43 @@ describe("fronteira autenticada das leis adquiridas", () => {
 });
 
 describe("interface das leis adquiridas", () => {
-  it("integra cada card ao Meu Edital sem alterar a rota de estudo", () => {
-    expect(client).toContain('fetch("/api/aluno/editais"');
-    expect(client).toContain('action: included ? "remove" : "add"');
-    expect(client).toContain('leiId: lawId');
-    expect(client).toContain('"Adicionar ao edital"');
-    expect(client).toContain(">✓ Meu Edital<");
-    expect(client).toContain('aria-label="Remover do Meu Edital"');
-    expect(client).toContain('title="Remover do Meu Edital"');
-    expect(client).toContain(">×</button>");
-    expect(client).toContain('setMyExamLawIds');
-    expect(client).toContain('flex w-full flex-wrap');
+  it("abre a página interna da lei, sem iniciar o jogador", () => {
+    expect(card).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    expect(card).toContain('href={lawHref}'); expect(card).toContain('>Estudar</Link>');
+    expect(card).not.toContain('/questoes/${encodeURIComponent(law.slug)}/estudar');
   });
 
   it("cria a rota oficial e as duas abas", () => {
     expect(page).toContain("<StudentLawsClient />");
-    expect(client).toContain("Minhas leis adquiridas");
+    expect(client).toContain("Legis Questões");
     expect(client).toContain('<StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} meuEditalHref="/meu-edital" />');
   });
 
-  it("mantém o card obrigatório do Anki em primeiro lugar e com a estrutura dos cards de lei", () => {
-    expect(client.indexOf("<AnkiModule status={ankiStatus} />")).toBeLessThan(client.indexOf('id="student-laws-search"'));
-    const sharedCardClass = "grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex sm:flex-row sm:items-center sm:gap-5";
-    expect(ankiModule).toContain(sharedCardClass);
-    expect(card).toContain(sharedCardClass);
-    expect(ankiModule).toContain("Passo obrigatório");
-    expect(ankiModule).toContain("Baixando e configurando o App de questões");
-    expect(ankiModule).toContain("O Anki é o aplicativo de questões utilizado no nosso método de estudo. Nele, você responde às questões em formato de flashcards e informa o nível de dificuldade de cada resposta. Com base no seu desempenho, o próprio aplicativo organiza as revisões e reapresenta cada questão no momento adequado.");
-    expect(ankiModule).toContain("<AnkiIcon />");
-    expect(client).toContain('import Image from "next/image"');
-    expect(ankiModule).toContain('src="/icons/anki.png"');
-    expect(ankiModule).toContain('alt="Ícone do Anki"');
-    expect(ankiModule).toContain("width={80}");
-    expect(ankiModule).toContain("height={80}");
-    expect(ankiModule).toContain('sizes="(max-width: 639px) 64px, 80px"');
-    expect(ankiModule).toContain("flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50 sm:h-20 sm:w-20");
-    expect(card).toContain("flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-2xl sm:h-20 sm:w-20 sm:text-3xl");
-    expect(ankiModule.match(/\/icons\/anki\.png/g)).toHaveLength(1);
-    expect(ankiModule).not.toContain("⚖️");
+  it("não exibe onboarding obrigatório do Anki em Legis Questões", () => {
+    for (const forbidden of ["AnkiModule", "AnkiRequiredModal", "Passo obrigatório", "Configurar o App de Questões", "Baixando e configurando o App de questões"]) expect(client).not.toContain(forbidden);
+    expect(client).not.toContain("/estudar/anki");
   });
 
-  it("organiza ícone e título lado a lado apenas no mobile", () => {
-    for (const section of [ankiModule, card]) {
-      expect(section).toContain("grid-cols-[4rem_minmax(0,1fr)]");
-      expect(section).toContain("items-start");
-      expect(section).toContain("contents sm:block sm:min-w-0 sm:flex-1");
-      expect(section).toContain("col-span-2");
-      expect(section).toContain("w-full");
-      expect(section).toContain("sm:w-auto");
-      expect(section).toContain("sm:flex sm:flex-row sm:items-center");
-    }
-    expect(card).toContain("break-words text-xl");
-    expect(card).toContain("h-16 w-16");
-    expect(card).toContain("sm:h-28 sm:w-40 sm:bg-cover");
+  it("mantém os cards de lei responsivos no mobile", () => {
+    expect(card).toContain("grid min-w-0 gap-4");
+    expect(card).toContain("w-full");
+    expect(card).toContain("sm:w-auto");
+    expect(card).toContain("break-words text-xl font-black leading-6");
+    expect(card).toContain("grid gap-3 sm:flex sm:flex-wrap");
   });
 
-  it("lê o estado existente sem permitir que o card marque o Anki como configurado", () => {
-    expect(client).toContain('type AnkiSetupStatus = "loading" | "pending" | "configured"');
-    expect(client).toContain("readAnkiConfigured(window.localStorage, userId)");
-    expect(ankiModule).toContain("Pendente");
-    expect(ankiModule).toContain("Anki configurado");
-    expect(ankiModule).not.toContain("window.localStorage.setItem");
-    expect(ankiModule).not.toContain("markConfigured");
-    expect(ankiModule).not.toContain("tutorialOpen");
-    expect(ankiModule).not.toContain("Marcar como configurado");
-  });
-
-  it("abre o tutorial sem marcar configuração nem alterar liberações", () => {
-    expect(ankiModule).toContain('href="/estudar/anki"');
-    expect(ankiModule).toContain("Configurar o App de Questões");
-    expect(ankiModule).toContain("Reabrir tutorial");
-    expect(ankiModule).not.toContain("Em breve");
-    expect(ankiModule).not.toContain("disabled");
-    expect(ankiModule).not.toContain("data-future-href");
-    expect(ankiModule).not.toContain("onClick");
-    for (const forbidden of ["StudentLawCard", "filteredLaws", "window.location", "router.", "fetch(", ".rpc(", "setProgress", "updateProgress"]) {
-      expect(ankiModule).not.toContain(forbidden);
-    }
+  it("lista somente as leis liberadas, sem estado local de configuração do Anki", () => {
+    for (const forbidden of ["readAnkiConfigured", "markAnkiConfigured", "window.localStorage", "setProgress", "updateProgress"]) expect(client).not.toContain(forbidden);
     expect(client).toContain("filteredLaws.map((law) => <StudentLawCard");
     expect(client).toContain("{laws.length} {laws.length === 1");
     expect(client).not.toContain("laws.length + 1");
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "law.codigo", "studentLawShortNameForDisplay", "shortName", "law.totalFlashcards > 0", "Baixar questões"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "law.codigo", "campaignStatus", "campaignProgress", "Colocar no edital", "Remover do edital"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
     expect(card).toContain("href={lawHref}");
-    expect(card.indexOf("law.titulo")).toBeLessThan(card.indexOf("{shortName}"));
-    for (const forbidden of ["law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado"]) {
+    for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
       expect(card).not.toContain(forbidden);
     }
     expect(card).not.toContain("0 flashcards");
@@ -213,34 +160,11 @@ describe("interface das leis adquiridas", () => {
     expect(card).not.toContain("historico_atualizacoes_leis");
   });
 
-  it("abre o aviso com Anki pendente e navega direto quando concluído", () => {
-    expect(card).toContain("shouldPromptBeforeLawStudy(ankiConfigured)");
-    expect(card).toContain("if (!shouldPromptBeforeLawStudy(ankiConfigured)) return");
-    expect(card).toContain("event.preventDefault()");
-    expect(card).toContain("onAnkiRequired(lawHref)");
-    expect(client).toContain('ankiConfigured={ankiStatus === "configured"}');
-    expect(client).toContain("pendingLawHref ? <AnkiRequiredModal");
-  });
-
-  it("preserva os destinos de configuração e da lei escolhida sem escrever no estado do Anki", () => {
-    expect(ankiPrompt).toContain('href="/estudar/anki"');
-    expect(ankiPrompt).toContain("Configurar o App de Questões");
-    expect(ankiPrompt).toContain("href={lawHref}");
-    expect(ankiPrompt).toContain("Continuar para esta lei");
-    expect(client).not.toContain("markAnkiConfigured");
-    expect(client).not.toContain("window.localStorage.setItem");
-  });
-
-  it("permite fechar sem navegar e mantém o foco preso no aviso", () => {
-    expect(ankiPrompt).toContain('role="dialog"');
-    expect(ankiPrompt).toContain('aria-modal="true"');
-    expect(ankiPrompt).toContain('aria-label="Fechar aviso"');
-    expect(ankiPrompt).toContain('event.key === "Escape"');
-    expect(ankiPrompt).toContain('event.key !== "Tab"');
-    expect(ankiPrompt).toContain("primaryActionRef.current?.focus()");
-    expect(ankiPrompt).toContain("previousFocus?.focus()");
-    expect(ankiPrompt).toContain("onMouseDown={onClose}");
-    expect(client).toContain("const closeAnkiPrompt = useCallback(() => setPendingLawHref(null), [])");
+  it("exibe apenas barra e percentual real de progresso, sem score", () => {
+    expect(card).toContain("const progress = law.campaignStatus === \"concluida\" ? 100");
+    expect(card).toContain('aria-label={`${progress}% concluído`}');
+    expect(card).toContain('>{progress}%</p>');
+    expect(card).not.toContain('score');
   });
 
   it("oferece carregamento, erro, vazio, resultado e busca sem resultado", () => {
@@ -249,10 +173,11 @@ describe("interface das leis adquiridas", () => {
     }
   });
 
-  it("ativa somente a rota segura de estudo e não simula edital, progresso ou métricas", () => {
+  it("ativa a rota segura de estudo e permite controlar o Meu Edital sem duplicidade", () => {
     expect(client).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
-    expect(client).toContain("Montar meu edital — em breve");
-    expect(client.match(/disabled/g)?.length).toBeGreaterThanOrEqual(1);
+    expect(client).toContain("inMyExam={myExamLawIds.includes(law.id)}");
+    expect(client).toContain("onToggleMyExam={() => void toggleMyExamLaw(law.id)}");
+    expect(client).toContain('action: included ? "remove" : "add"');
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
       expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }

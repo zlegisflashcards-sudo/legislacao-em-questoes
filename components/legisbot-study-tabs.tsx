@@ -11,6 +11,7 @@ type LegisBotStudyTabsProps = {
   communityContent: ReactNode;
   highlightsContent: ReactNode;
   communityCount: number;
+  initialTab?: LegisBotStudyTab;
   onActiveTabChange?: (tab: LegisBotStudyTab) => void;
 };
 
@@ -21,10 +22,11 @@ export default function LegisBotStudyTabs({
   communityContent,
   highlightsContent,
   communityCount,
+  initialTab = "legisbot",
   onActiveTabChange,
 }: LegisBotStudyTabsProps) {
-  const [activeTab, setActiveTab] = useState<LegisBotStudyTab>("legisbot");
-  const [openedTabs, setOpenedTabs] = useState<Set<LegisBotStudyTab>>(() => new Set(["legisbot"]));
+  const [activeTab, setActiveTab] = useState<LegisBotStudyTab>(initialTab);
+  const [openedTabs, setOpenedTabs] = useState<Set<LegisBotStudyTab>>(() => new Set([initialTab]));
   const id = useId().replace(/:/g, "");
 
   const tabs: Array<{ key: LegisBotStudyTab; icon: string; label: string; content: ReactNode }> = [

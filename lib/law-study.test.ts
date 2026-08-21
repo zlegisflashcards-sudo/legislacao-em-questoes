@@ -31,16 +31,22 @@ describe("contrato da página de estudo da lei", () => {
     expect(lawStudyShortName("Constituição Federal", " CONSTITUIÇÃO FEDERAL ")).toBeNull();
   });
 
-  it("prioriza o link e informa a previsão apenas quando o material ainda não está disponível", () => {
+  it("mantém materiais secundários e o Anki disponível", () => {
     expect(lawMaterialActionLabel({ type: "flashcards", action: "baixar" })).toBe("Baixar flashcards");
     expect(lawMaterialActionLabel({ type: "pdf", action: "baixar" })).toBe("Baixar PDF");
     expect(lawMaterialAvailabilityLabel({ accessAvailable: true, availableAt: "2026-08-25" })).toBeNull();
     expect(lawMaterialAvailabilityLabel({ accessAvailable: false, availableAt: null })).toBe("Em breve");
     expect(lawMaterialAvailabilityLabel({ accessAvailable: false, availableAt: "2026-08-25" })).toBe("Disponível em 25/08/2026");
-    expect(client).toContain("material.accessAvailable");
-    expect(client).toContain("lawMaterialAvailabilityLabel(material)");
-    expect(client).toContain("break-words");
-    expect(client).toContain('window.open(material.accessUrl, "_blank", "noopener,noreferrer")');
+    expect(client).toContain('function Materials'); expect(client).toContain('>Materiais<'); expect(client).toContain('>Estudar no Anki<'); expect(client).toContain('"Baixar PDF"'); expect(client).toContain('"Baixar deck (.apkg)"'); expect(client).toContain('"Gerando arquivo…"');
+  });
+
+  it("mantém a central utilizável em telas estreitas", () => {
+    expect(client).toContain("overflow-x-hidden");
+    expect(client).toContain("min-h-12 w-full items-center justify-center");
+    expect(client).toContain("sm:w-auto");
+    expect(client).toContain("break-words font-bold leading-5");
+    expect(client).toContain("grid-cols-1 gap-2 sm:grid-cols-4");
+    expect(client).not.toContain("block truncate font-bold text-slate-800");
   });
 });
 
@@ -70,15 +76,14 @@ describe("autorização e exposição segura", () => {
 });
 
 describe("interface de estudo", () => {
-  it("cria a rota autenticada e ativa Baixar questões nos cards", () => {
+  it("cria a rota autenticada e faz o card abrir a página interna", () => {
     expect(page).toContain("getAnkiTutorialSettings");
     expect(page).toContain("<LawStudyPageClient slug={slug} ankiTutorialSettings={settings} />");
     expect(client).toContain("supabase.auth.getSession()");
     expect(client).toContain("/conta?modo=login&retorno=");
     expect(cards).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
     expect(cards).toContain("href={lawHref}");
-    expect(cards).toContain(">Baixar questões</Link>");
-    expect(cards).not.toContain("Baixar questões — em breve");
+    expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Estudar</Link>');
   });
 
   it("reutiliza as abas e não adiciona botão Voltar", () => {
@@ -86,33 +91,66 @@ describe("interface de estudo", () => {
     expect(client).not.toContain(">Voltar<");
   });
 
-  it("mostra somente o tutorial de estudo por plataforma na página da lei", () => {
-    for (const expected of ["study.law.title", "study.law.shortName", "study.law.totalFlashcards > 0", "aspect-video w-full", "Como estudar esta lei", "resolveLawStudyPlatformTutorials", "Plataformas do tutorial da página de estudo", "Mantenha suas revisões em dia antes de avançar para novos cartões."]) expect(client).toContain(expected);
-    expect(client).not.toContain("Como usar o Anki");
-    expect(client).not.toContain("Tutorial em preparação");
+  it("prioriza a central de estudo, estado de campanha e reset", () => {
+    for (const expected of ['"Começar estudo"', '"Continuar estudo"', '"Concluída"', '"Em andamento"', '"Não iniciada"', 'Estudo Ativo da Lei', 'Estudo Livre', 'Resetar Estudo Ativo da Lei', 'campaign.progress']) expect(client).toContain(expected);
     for (const platform of ["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]) expect(contract).toContain(`label: "${platform}"`);
   });
 
-  it("renderiza materiais dinâmicos e o estado vazio", () => {
-    expect(client).toContain("study.materials.map");
-    expect(client).toContain("Nenhum material disponível no momento.");
-    expect(client).toContain("lawMaterialIcon(material.type)");
+  it("libera estudo livre e capítulos somente após a campanha concluída", () => {
+    expect(client).toContain('completed && tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1`');
+    expect(client).toContain('structure_id=${node.id}');
   });
 
-  it("persiste as duas marcações de progresso sem localStorage", () => {
-    expect(client).toContain("Progresso nesta lei");
-    expect(client).toContain("Lei em estudo");
-    expect(client).toContain("Finalizei todas as questões da lei");
+  it("representa uma lei sem subbaralhos pelo deck raiz, sem ação duplicada", () => {
+    expect(client).toContain('function RootDeck');
+    expect(client).toContain('count={sourceLaw?.questions.length ?? 0}');
+    expect(client).toContain('completed && tree.length > 0 ? <Link');
+    expect(client).toContain('const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1`;');
+  });
+
+  it("reserva + e − somente para níveis que podem ser expandidos", () => {
+    expect(client).toContain('node.children.length ? <button type="button"');
+    expect(client).toContain('{open ? "−" : "+"}');
+    expect(client).toContain('function progressionPhase');
+    expect(client).toContain('levels.find((item) => !item.concluido)');
+    expect(client).toContain('phase === "concluida"');
+    expect(client).toContain('phase === "atual"');
+    expect(client).toContain('icon: "✓"');
+    expect(client).toContain('icon: "▶"');
+    expect(client).toContain('icon: "🔒"');
+    expect(client).not.toContain('const state = isDone ? "Concluído" : isCurrent ? "Em andamento" : "Bloqueado"');
+    expect(client).not.toContain('>{state}</span>');
+  });
+
+  it("mantém a árvore do Estudo Ativo apenas informativa", () => {
+    const tree = client.slice(client.indexOf('function StructureTreeNode'), client.indexOf('function RootDeck'));
+    expect(tree).toContain('completed ? <Link href={href}');
+    expect(tree).toContain(': <div className="flex min-w-0 flex-1 items-start gap-2 py-1 sm:items-center sm:gap-3">{label}</div>');
+    expect(tree).not.toContain('href={href} className="flex min-w-0 flex-1 items-start gap-2 rounded-lg py-1 hover:bg-blue-50 sm:items-center sm:gap-3">{label}</Link> : <Link');
+  });
+
+  it("apresenta o Estudo Livre como menu de decks disponível", () => {
+    const tree = client.slice(client.indexOf('function FreeStudyLabel'), client.indexOf('function RootDeck'));
+    expect(tree).toContain('function FreeStudyLabel');
+    expect(tree).toContain('border border-blue-100 bg-white');
+    expect(tree).toContain('group-hover:border-blue-300 group-hover:bg-blue-50');
+    expect(tree).toContain('completed ? <FreeStudyLabel name={node.nome} count={node.count} />');
+    expect(tree).toContain('completed ? <Link href={href} className="group flex min-w-0 flex-1');
+    expect(tree).not.toContain('FreeStudyLabel name={node.nome} count={node.count} phase=');
+  });
+
+  it("oferece materiais de Anki como seção secundária", () => {
+    expect(client).toContain('study.materials.find'); expect(client).toContain('flashcards'); expect(client).toContain('AnkiModal');
+  });
+
+  it("reseta somente a campanha sem localStorage", () => {
+    expect(client).toContain('}/campanha`, "DELETE"'); expect(client).toContain('setCampaign({ status: "nao_iniciada", progress: 0, levels: [] })');
     expect(client).not.toContain("localStorage");
-    expect(client).toContain('method: "PATCH"');
+    expect(client).toContain('Resetar Estudo Ativo da Lei');
   });
 
-  it("mantém o histórico recolhido, recente primeiro e limitado a campos seguros", () => {
-    expect(client).toContain("<details");
-    expect(client).not.toContain("<details open");
-    expect(client).toContain("history.slice(0, 3)");
-    expect(client).toContain("Ver atualizações anteriores");
-    for (const field of ["publishedAt", "version", "type", "importance", "summary", "legalReference"]) expect(client).toContain(`item.${field}`);
+  it("mantém materiais sem expor dados administrativos", () => {
     for (const forbidden of ["observacao_interna", "criado_por", "url_externa"]) expect(client).not.toContain(forbidden);
+    expect(client).toContain('download');
   });
 });

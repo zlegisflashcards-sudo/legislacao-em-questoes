@@ -2,21 +2,204 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const player = readFileSync("components/legis-questoes-study-client.tsx", "utf8");
+const sanitizer = readFileSync("lib/legis-questoes-html.ts", "utf8");
+const campaignServer = readFileSync("lib/law-campaign-server.ts", "utf8");
+const campaignMigration = readFileSync("supabase/migrations/20260820100000_add_law_campaign_level_errors.sql", "utf8");
+const styles = readFileSync("app/globals.css", "utf8");
+const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
 
 describe("player Legis Questões", () => {
-  it("mantém estados de carregamento, erro e baralho vazio antes do layout principal", () => {
-    expect(player).toContain('const [loading, setLoading] = useState(true)');
-    expect(player).toContain('const [error, setError] = useState("")');
-    expect(player.indexOf("if (loading)")).toBeLessThan(player.indexOf("if (!law || !currentQuestion)"));
-    expect(player.indexOf("if (!law || !currentQuestion)")).toBeLessThan(player.indexOf('return <main className="min-h-screen bg-white'));
+  it("mantém estados de carregamento e erro do Estudo Ativo da Lei antes do cartão", () => {
+    expect(player).toContain('Carregando Estudo Ativo da Lei…'); expect(player).toContain('if (error)'); expect(player).toContain('Nenhuma questão disponível neste Estudo Ativo da Lei.');
   });
 
-  it("declara o estado calculado apenas uma vez e não acessa a lei fora da guarda", () => {
-    expect(player.match(/const currentQuestion =/g)).toHaveLength(1);
-    expect(player.match(/const progress =/g)).toHaveLength(1);
-    expect(player.match(/const answered =/g)).toHaveLength(1);
-    expect(player.match(/const isLastQuestion =/g)).toHaveLength(1);
-    expect(player.indexOf("const isLastQuestion")).toBeGreaterThan(player.indexOf("if (!law || !currentQuestion)"));
-    expect(player).toContain("{law.titulo}");
+  it("separa explicitamente campanha e estudo livre", () => {
+    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} />');
+  });
+
+  it("retorna do player para a central da lei atual em qualquer modo", () => {
+    expect(player).toContain('StudyLawContext.Provider value={slug}');
+    expect(player).toContain('href={`/estudar/lei/${encodeURIComponent(slug)}`}');
+    expect(player).not.toContain('href="/questoes">← Voltar');
+  });
+
+  it("renderiza HTML do Anki somente após sanitização", () => {
+    expect(player).toContain("sanitizeLegisQuestoesHtml");
+    expect(player).toContain("dangerouslySetInnerHTML={{ __html: safe }}");
+    expect(sanitizer).toContain('"span"');
+    expect(sanitizer).toContain('"background-color"');
+    expect(sanitizer).toContain('"script"');
+    expect(sanitizer).toContain("normalizeLegacyAnkiHtml");
+  });
+
+  it("mostra justificativa somente após responder e reencaminha erros ao nível", () => {
+    expect(player).toContain('answer ? <AnswerFeedback'); expect(player).toContain('Esta questão voltará neste nível.'); expect(player).toContain('question.justificativa ?');
+  });
+
+  it("limita a caixa colorida ao resultado e deixa comentário e legislação fora dela", () => {
+    const feedback = player.slice(player.indexOf("function AnswerFeedback"), player.indexOf("function isPlayerFormTarget"));
+    expect(feedback).toContain('<section className={`lf-feedback ${correct ? "is-correct" : "is-wrong"}`}>');
+    expect(feedback).toContain('<p className="lf-gabarito">');
+    expect(feedback).toContain('<section className="lf-feedback-details">');
+    expect(feedback.indexOf('lf-gabarito')).toBeLessThan(feedback.indexOf('lf-feedback-details'));
+    expect(styles).toContain('.lf-feedback-details{display:grid;gap:14px;margin-top:18px}');
+    expect(styles).toContain('.lf-feedback-details .lf-professor-toggle{border-top:0;padding:0}');
+  });
+
+  it("vincula LegisBot, Comunidade e Destaques ao bloco de legislação", () => {
+    const feedback = player.slice(player.indexOf("function LawStudyTools"), player.indexOf("function isPlayerFormTarget"));
+    expect(feedback).toContain('className="lf-law-tools"');
+    expect(feedback).toContain('onOpen("legisbot")');
+    expect(feedback).toContain('onOpen("community")');
+    expect(feedback).toContain('onOpen("highlights")');
+    expect(feedback.indexOf('lf-law-block')).toBeLessThan(feedback.indexOf('LawStudyTools onOpen={onOpenLegisBot}'));
+    expect(styles).toContain('.lf-law-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))');
+    expect(styles).toContain('@media(max-width:520px){.lf-law-tools{grid-template-columns:1fr}');
+  });
+
+  it("abre o LegisBot sobre o jogador sem navegação e mantém as abas no mesmo painel", () => {
+    const overlay = player.slice(player.indexOf("function LegisBotOverlay"), player.indexOf("function isPlayerFormTarget"));
+    expect(overlay).toContain('<LegisBotPageClient slug={slug} ordem={question.ordem ?? ""}');
+    expect(overlay).toContain('initialTab={initialTab} embedded onClose={onClose}');
+    expect(overlay).toContain('document.body.style.overflow = "hidden"');
+    expect(overlay).toContain('event.key === "Escape"');
+    expect(overlay).toContain('role="dialog" aria-modal="true"');
+    expect(overlay).toContain('function trapFocus');
+    expect(player).not.toContain('QuestionLegisBotTrigger');
+    expect(styles).toContain('.lf-legisbot-overlay{position:fixed;z-index:100;inset:0');
+    expect(styles).toContain('.lf-legisbot-panel{width:min(50vw,780px);height:100%;overflow-y:auto');
+    expect(styles).toContain('@media(max-width:768px){.lf-legisbot-overlay{align-items:flex-end}');
+  });
+
+  it("mantém a rota direta do LegisBot e apenas adiciona o modo embutido", () => {
+    expect(legisBotPage).toContain('embedded?: boolean;');
+    expect(legisBotPage).toContain('onClose?: () => void;');
+    expect(legisBotPage).toContain('embedded ? <div className="legisbot-topic-tools">');
+    expect(legisBotPage).toContain('<a href={centralLegislacaoUrl} className="legislation-back-link">');
+  });
+
+  it("usa assunto como título do trecho legal e reserva Legislação para o fallback", () => {
+    const feedback = player.slice(player.indexOf("function AnswerFeedback"), player.indexOf("function isPlayerFormTarget"));
+    expect(feedback).toContain('const assunto = question.assunto?.trim() || "Legislação";');
+    expect(feedback).toContain('<h2>📜 {assunto}</h2>');
+    expect(styles).toContain('.lf-law-block h2{margin:0 0 8px;color:#0b4f9f;font-size:13px;font-weight:850}');
+    expect(styles).not.toContain('.lf-law-block h2{margin:0 0 8px;color:#0b4f9f;font-size:13px;text-transform:uppercase}');
+  });
+
+  it("desabilita Anterior na campanha e libera navegação no estudo livre", () => {
+    expect(player).toContain('<button disabled className="lf-secondary"'); expect(player).toContain('disabled={index === 0}'); expect(player).toContain('disabled={index === questions.length - 1}');
+  });
+
+  it("oferece atalhos sem interceptar edição, modificadores ou teclas repetidas", () => {
+    expect(player).toContain('function usePlayerKeyboard');
+    expect(player).toContain('event.repeat || event.ctrlKey || event.altKey || event.metaKey || isPlayerFormTarget(event.target)');
+    expect(player).toContain('target.closest("input, textarea, select, [contenteditable], [role=\'dialog\'], .lf-editor-drawer")');
+    expect(player).toContain('if (key === "c") state.onCorrect(); else state.onWrong();');
+    expect(player).toContain('key !== "enter" && key !== " " && key !== "arrowright"');
+    expect(player).toContain('if (!state.canPrevious || actionLock.current) return;');
+    expect(player).toContain('canPrevious: false');
+    expect(player).toContain('canPrevious: index > 0');
+  });
+
+  it("mantém um único listener estável com estado atual e libera Enter após responder", () => {
+    expect(player).toContain('const stateRef = useRef<PlayerKeyboardState>');
+    expect(player).toContain('stateRef.current = { answered, canAnswer, canNext, canPrevious, onCorrect, onWrong, onNext, onPrevious }');
+    expect(player).toContain('}, [questionId, answered]);');
+    expect(player).toContain('}, []); }');
+    expect(player).not.toContain('input, textarea, select, button, [contenteditable]');
+  });
+
+  it("mostra o avanço global do Estudo Ativo da Lei e oculta a barra na revisão", () => {
+    expect(player).toContain('progress={campaign?.progress ?? 0}'); expect(player).toContain('reviewing={campaign?.level?.reviewing ?? false}'); expect(player).toContain('{!reviewing ? <div className="lf-progress-row">'); expect(player).toContain('Revisando questões erradas'); expect(player).toContain('{progress}%'); expect(player).not.toContain('progress={campaign?.level?.firstPassProgress ?? 0}'); expect(player).toContain('setCampaign((currentState) => currentState ? { ...currentState, progress: result.progress ?? currentState.progress } : currentState)');
+    expect(campaignServer).toContain('const completedBeforeCurrentLevel = levels.filter((item) => item.id !== level.id && item.concluido).flatMap((item) => item.questoes_ids).length;'); expect(campaignServer).toContain('const currentLevelFirstPassCompleted = Math.min(nextPosition, level.questoes_ids.length);'); expect(campaignServer).toContain('const globalCompletedQuestions = completedBeforeCurrentLevel + currentLevelFirstPassCompleted;');
+  });
+
+  it("mostra apenas a conclusão do nível, com erros persistidos no snapshot", () => {
+    expect(player).not.toContain("Score do módulo");
+    expect(player).not.toContain("lf-level-score");
+    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0), finalLevel: result.campaignConcluded === true })');
+    expect(campaignServer).toContain('total_erros: levelErrors');
+    expect(campaignServer).toContain('levelResult: concludesLevel ? { errors: levelErrors } : null');
+    expect(campaignServer).not.toContain('score: score(levelErrors)');
+    expect(campaignMigration).toContain('add column if not exists total_erros integer not null default 0');
+  });
+
+  it("mostra o resumo do último nível antes do resultado final da lei", () => {
+    expect(player).toContain('if (result.levelConcluded)');
+    expect(player).toContain('finalLevel: result.campaignConcluded === true');
+    expect(player).toContain('levelDone.finalLevel ? "Ver resultado final" : "Continuar"');
+    expect(player).toContain('if (!levelDone.finalLevel) void load();');
+  });
+
+  it("oculta a questão anterior enquanto confirma e busca a próxima campanha", () => {
+    expect(player).toContain('const answerToSave = answer; const current = campaign; const currentQuestion = campaign.question;');
+    expect(player).toContain('answer: answerToSave');
+    expect(player).toContain('function QuestionLoading()');
+    expect(player).toContain('{transitioning ? <QuestionLoading /> : <div key={question.id} className="lf-question-stage">');
+    expect(player).toContain('<QuestionContent question={question} />');
+  });
+
+  it("antecipa somente a próxima questão inédita já carregada e preserva skeleton nas transições especiais", () => {
+    expect(player).toContain('const nextQuestion = currentLevel && !currentLevel.reviewing ? currentLevel.questions[currentLevel.position + 1] : null;');
+    expect(player).toContain('setTransitioning(!nextQuestion);');
+    expect(player).toContain('if (nextQuestion && currentLevel) setCampaign');
+    expect(player).toContain('{transitioning ? <QuestionLoading /> : <div key={question.id}');
+    expect(player).toContain('<AnswerButtons answer={answer} disabled={saving} onChoose={setAnswer} />');
+    expect(player).toContain('canAnswer: !saving');
+  });
+
+  it("mantém respostas e feedback locais no estudo livre sem chamar a campanha", () => {
+    expect(player).toContain('function FreeStudy');
+    expect(player).toContain('[answer, setAnswer] = useState<Choice | null>(null)');
+    expect(player).toContain('usePlayerKeyboard({ questionId: currentQuestion?.id ?? "", answered: answer !== null');
+    expect(player).toContain('onCorrect: () => setAnswer("certo"), onWrong: () => setAnswer("errado")');
+    expect(player).toContain('<AnswerButtons answer={answer} onChoose={setAnswer} />');
+    expect(player).toContain('{answer ? <AnswerFeedback question={currentQuestion} correct={correct} onOpenLegisBot={(tab) => setLegisBot({ question: currentQuestion, tab })} /> : null}');
+    expect(player).toContain('function moveTo(nextIndex: number) { setAnswer(null); setIndex(nextIndex); }');
+    const freeStudy = player.slice(player.indexOf('function FreeStudy'));
+    expect(freeStudy).not.toContain('/campanha');
+  });
+
+  it("mantém o Estudo Livre visualmente concluído mesmo em sessão filtrada", () => {
+    const freeStudy = player.slice(player.indexOf('function FreeStudy'));
+    expect(freeStudy).toContain('progress={100}');
+    expect(freeStudy).not.toContain('totalLawQuestions');
+    expect(freeStudy).not.toContain('globalPosition');
+    expect(freeStudy).not.toContain('progress={Math.round((index + 1) / questions.length * 100)}');
+  });
+
+  it("renderiza somente a questão atual no estudo livre", () => {
+    const freeStudy = player.slice(player.indexOf('function FreeStudy'));
+    expect(freeStudy).toContain('const currentQuestion = questions[index];');
+    expect(freeStudy).toContain('<div key={currentQuestion.id} className="lf-question-stage"><QuestionContent question={currentQuestion} />');
+    expect(freeStudy.match(/<QuestionContent/g)).toHaveLength(1);
+    expect(freeStudy).not.toContain('questions.map(');
+  });
+
+  it("usa uma única key para o estágio dinâmico de cada questão", () => {
+    expect(player).not.toContain('<QuestionContent key=');
+    expect(player).not.toContain('<AnswerFeedback key=');
+    expect(player.match(/className="lf-question-stage"/g)).toHaveLength(2);
+    expect(player.match(/key=\{(?:currentQuestion|question)\.id\}/g)).toHaveLength(2);
+  });
+
+  it("restaura o contexto da lei e mantém HTML rico dentro de uma única moldura", () => {
+    expect(player).toContain('Conforme o(a) <strong>{title}</strong>, julgue o item que se segue.');
+    expect(player).toContain('<div className="lf-statement"><Html value={question.pergunta} /></div>');
+    for (const selector of ['.lf-question{box-sizing:border-box;min-width:0;max-width:100%;overflow:hidden}', '.lf-statement .legis-questoes-html>div,.lf-statement .legis-questoes-html>p{border:0;background:transparent;padding:0;border-radius:0}', '.lf-statement .legis-questoes-html table{display:block;max-width:100%;overflow-x:auto']) expect(styles).toContain(selector);
+  });
+
+  it("normaliza somente o espaçamento do HTML pedagógico, preservando quebras do Anki", () => {
+    for (const selector of ['.legis-questoes-html{max-width:100%;overflow-wrap:anywhere;white-space:normal}', '.legis-questoes-html p{margin:0 0 .65em}', '.legis-questoes-html div+div{margin-top:.25em}', '.legis-questoes-html ul,.legis-questoes-html ol{margin:.5em 0', '.legis-questoes-html li{margin:.2em 0', '.legis-questoes-html pre{max-width:100%;overflow:auto']) expect(styles).toContain(selector);
+    expect(styles).not.toContain('.legis-questoes-html *{margin:0!important}');
+  });
+
+  it("resume o resultado final e retorna somente para Legis Questões", () => {
+    expect(player).toContain('Score final: {finalResult.score.toLocaleString("pt-BR")}');
+    expect(player).toContain('Melhor score: {finalResult.bestScore.toLocaleString("pt-BR")}');
+    expect(player).toContain('Ranking: {finalResult.position}º');
+    expect(player).toContain('href="/minhas-leis">Voltar para Legis Questões');
+    expect(player).not.toContain('>Estudar livremente<');
+    expect(player).not.toContain('>Voltar para a lei<');
   });
 });

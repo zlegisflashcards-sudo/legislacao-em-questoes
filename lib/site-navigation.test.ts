@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { headerActions, headerNavigation } from "./site-navigation";
+import { headerNavigation, legisQuestionsNavigation } from "./site-navigation";
 
 describe("cabeçalho único", () => {
-  const publicLabels = ["Catálogo", "LegisCast TV", "Liga das Leis", "Minhas leis adquiridas"];
+  const publicLabels = ["Catálogo", "LegisCast TV", "Liga"];
 
   it("mantém os links públicos e oculta o perfil sem autenticação", () => {
     expect(headerNavigation(null).map((item) => item.label)).toEqual(publicLabels);
@@ -12,37 +12,32 @@ describe("cabeçalho único", () => {
       "/",
       "/legiscast",
       "/ranking-legis",
-      "/conta?modo=login&retorno=%2Fminhas-leis",
     ]);
   });
 
-  it("mostra perfil e painel somente para usuário autenticado", () => {
-    expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Meu perfil"]);
-    expect(headerNavigation(true).find((item) => item.label === "Minhas leis adquiridas")).toEqual({
-      label: "Minhas leis adquiridas",
-      href: "/minhas-leis",
-    });
+  it("preserva os acessos secundários do aluno sem expor Dashboard", () => {
+    expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Meu Edital", "Meu perfil"]);
+    expect(legisQuestionsNavigation(true)).toEqual({ label: "Fazer questões", href: "/minhas-leis" });
+    expect(legisQuestionsNavigation(false)).toEqual({ label: "Fazer questões", href: "/conta?modo=login&retorno=%2Fminhas-leis" });
     expect(headerNavigation(true).at(-1)).toEqual({ label: "Meu perfil", href: "/conta" });
-    expect(headerActions(true)).toEqual([{ label: "Meu painel", href: "/dashboard" }]);
-    expect(headerActions(true).some((item) => item.label === "Entrar")).toBe(false);
+    expect(headerNavigation(true).some((item) => item.href === "/dashboard")).toBe(false);
   });
 
-  it("mostra Entrar para visitante com retorno seguro ao dashboard", () => {
-    expect(headerActions(null)).toEqual([]);
-    expect(headerActions(false)).toEqual([
-      { label: "Entrar", href: "/conta?modo=login&retorno=%2Fdashboard" },
-    ]);
+  it("deixa o CTA Fazer questões responsável pelo login do visitante", () => {
     expect(headerNavigation(false).some((item) => item.label === "Meu perfil")).toBe(false);
-    expect(headerActions(false).some((item) => item.label === "Meu painel")).toBe(false);
+    expect(headerNavigation(false).some((item) => item.label === "Meu Edital")).toBe(false);
   });
 
   it("renderiza desktop e mobile a partir das mesmas fontes", () => {
     const source = readFileSync("components/site-header.tsx", "utf8");
     expect(source.match(/navigation\.map/g)).toHaveLength(2);
-    expect(source.match(/actions\.map/g)).toHaveLength(2);
     expect(source).toContain('aria-label="Navegação principal no celular"');
     expect(source).toContain("onSelect={closeMenu}");
     expect(source).toContain('event.key === "Escape"');
+    expect(source).toContain("const legisQuestions = legisQuestionsNavigation(authenticated)");
+    expect(source).toContain('href={legisQuestions.href}');
+    expect(source).toContain(">Fazer questões</Link>");
+    expect(source).toContain('<WhatsAppIcon /><span className="hidden xl:inline">WhatsApp</span>');
   });
 
   it("mantém o ambiente administrativo fora do SiteHeader", () => {

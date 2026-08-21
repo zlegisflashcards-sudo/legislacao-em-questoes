@@ -9,7 +9,7 @@ export type QuestionDraft = {
   justificativa: string | null;
   assunto: string | null;
   legislacao: string | null;
-  ordem: number;
+  ordem: string;
   titulo: string | null;
   total_artigos: number | null;
   capitulo: string | null;
@@ -42,14 +42,19 @@ function optionalInteger(value: unknown, field: string) {
   return number;
 }
 
+function order(value: unknown) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return String(value);
+  if (typeof value !== "string" || !/^\d+(?:\.\d+)*$/.test(value.trim())) throw new Error("Ordem inválido.");
+  return value.trim();
+}
+
 export function parseQuestionDraft(input: DraftInput): QuestionDraft {
   const resposta = text(input.resposta, "Resposta", true, 20);
   if (!QUESTION_ANSWERS.includes(resposta as QuestionAnswer)) {
     throw new Error("Resposta deve ser Certo ou Errado.");
   }
 
-  const ordem = optionalInteger(input.ordem, "Ordem");
-  if (ordem === null) throw new Error("Ordem é obrigatória.");
+  const ordem = order(input.ordem);
 
   return {
     structure_id: optionalInteger(input.structure_id, "Estrutura"),

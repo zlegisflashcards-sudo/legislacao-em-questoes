@@ -96,18 +96,15 @@ describe("fronteira autenticada de download", () => {
 });
 
 describe("interface de download", () => {
-  it("inclui somente URL validada para abertura direta", () => {
+  it("mantém o download APKG dentro do modal secundário de Materiais", () => {
     expect(pageServer).toContain("accessAvailable:");
     expect(pageServer).toContain("accessUrl: access.directUrl");
-    expect(client).toContain('window.open(material.accessUrl, "_blank", "noopener,noreferrer")');
+    expect(client).toContain('function Materials'); expect(client).toContain('>Materiais<'); expect(client).toContain('AnkiModal'); expect(client).toContain('materiais/${material.id}/download');
   });
 
-  it("habilita somente materiais disponíveis e trata carregamento e falha", () => {
-    expect(client).toContain("material.accessAvailable");
-    expect(client).toContain("lawMaterialActionLabel(material)");
-    expect(client).toContain("Material temporariamente indisponível");
-    expect(client).toContain("Preparando download…");
+  it("mantém tutorial e download autenticado do Anki", () => {
+    expect(client).toContain('resolveLawStudyPlatformTutorials'); expect(client).toContain('Baixar para o Anki');
     expect(client).toContain("Authorization: `Bearer ${token}`");
-    expect(client).toContain("originalFileNameFromDisposition(disposition)");
+    expect(client).toContain('material.type === "pdf" ? "material.pdf" : "flashcards.apkg"');
   });
 });

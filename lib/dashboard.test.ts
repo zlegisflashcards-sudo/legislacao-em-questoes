@@ -33,11 +33,11 @@ describe("painel e edital ativo", () => {
     expect(route).not.toContain("PATCH");
   });
 
-  it("mantém a seleção em Meu Edital e deriva a barra sem persistência nova", () => {
+  it("deriva o edital do status atual da campanha sem persistência extra", () => {
     const examClient = readFileSync("components/student-exam-client.tsx", "utf8");
     const server = readFileSync("lib/dashboard-server.ts", "utf8");
-    expect(examClient).toContain("Escolha um edital para visualizar suas leis.");
-    expect(examClient).toContain('change("set-active"');
+    expect(examClient).toContain('law.campaignStatus === "concluida"');
+    expect(examClient).toContain('current?.leis.find((law) => law.campaignStatus !== "concluida")');
     expect(server).toContain("const estados = examStates(exam.leis)");
     expect(server).toContain("loadStudentExamSelection(request)");
     expect(server).not.toContain("setDashboardExam");

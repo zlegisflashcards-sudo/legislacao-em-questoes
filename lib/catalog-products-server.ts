@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { isOfflineBuild } from "@/lib/build-mode";
 
 export type CatalogProduct = {
   id: string;
@@ -11,6 +12,8 @@ export type CatalogProduct = {
 };
 
 async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> {
+  // A home é pré-renderizada. No build offline não há catálogo remoto disponível.
+  if (isOfflineBuild()) return [];
   try {
     const supabase = getSupabaseServerClient();
     let productsQuery = supabase

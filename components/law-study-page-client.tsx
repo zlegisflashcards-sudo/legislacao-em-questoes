@@ -1,266 +1,99 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
-import {
-  DEFAULT_LAW_STUDY_PLATFORM,
-  LAW_STUDY_PLATFORM_IDS,
-  LAW_STUDY_PLATFORMS,
-  lawHistoryDate,
-  lawMaterialActionLabel,
-  lawMaterialAvailabilityLabel,
-  lawMaterialIcon,
-  lawStudyProgressMessage,
-  nextLawStudyProgress,
-  type LawStudyData,
-  type LawStudyHistoryItem,
-  type LawStudyPlatformId,
-} from "@/lib/law-study";
 import { getAnkiYoutubeEmbedUrl } from "@/lib/anki-study";
 import { resolveLawStudyPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
+import { LAW_STUDY_PLATFORMS, type LawStudyData, type LawStudyMaterial } from "@/lib/law-study";
+import { compareQuestionStructureNames } from "@/lib/questoes-structure";
 import { supabase } from "@/lib/supabase";
-import { originalFileNameFromDisposition } from "@/lib/law-material-download";
 
-type LoadStatus = "loading" | "ready" | "error";
-type LawStudyResponse = { success?: boolean; study?: LawStudyData; message?: string };
+type CampaignLevel = { chave: string; concluido: boolean };
+type Campaign = { status: "nao_iniciada" | "em_andamento" | "concluida"; progress: number; bestScore?: number | null; levels?: CampaignLevel[] };
+type StructureQuestion = { id: string; structure_id: number | null };
+type StructureNode = { id: number; parent_id: number | null; nome: string; ordem: number };
+type QuestionSourceLaw = { slug: string; questions: StructureQuestion[]; structure?: StructureNode[] };
 
 export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null; publicStudy?: LawStudyData }) {
-  const [status, setStatus] = useState<LoadStatus>(publicStudy ? "ready" : "loading");
   const [study, setStudy] = useState<LawStudyData | null>(publicStudy ?? null);
-  const [message, setMessage] = useState("");
-  const [activeStudyPlatform, setActiveStudyPlatform] = useState<LawStudyPlatformId>(DEFAULT_LAW_STUDY_PLATFORM);
-  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [campaign, setCampaign] = useState<Campaign | null>(publicStudy ? { status: "nao_iniciada", progress: 0 } : null);
+  const [sourceLaw, setSourceLaw] = useState<QuestionSourceLaw | null>(null);
+  const [error, setError] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  async function request(path: string, method = "GET") {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) { window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}`)}`); return null; }
+    const response = await fetch(path, { method, headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message || "Não foi possível carregar esta lei.");
+    return result;
+  }
 
   useEffect(() => {
     if (publicStudy) return;
-    let active = true;
-    async function load() {
+    void (async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        const token = data.session?.access_token;
-        if (!token) {
-          window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}`)}`);
-          return;
-        }
-        const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}`, {
-          cache: "no-store",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const result = await response.json() as LawStudyResponse;
-        if (response.status === 401) {
-          window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}`)}`);
-          return;
-        }
-        if (!response.ok || !result.study) throw new Error(result.message || "Não foi possível carregar esta lei.");
-        if (!active) return;
-        setStudy(result.study);
-        setStatus("ready");
-      } catch (error) {
-        if (!active) return;
-        setMessage(error instanceof Error ? error.message : "Não foi possível carregar esta lei.");
-        setStatus("error");
-      }
-    }
-    void load();
-    return () => { active = false; };
+        const [law, state, structure] = await Promise.all([
+          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}`),
+          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha`),
+          request(`/api/questoes/estrutura?slug=${encodeURIComponent(slug)}`),
+        ]);
+        if (law?.study) setStudy(law.study);
+        if (state) setCampaign(state);
+        const found = Array.isArray(structure?.laws) ? structure.laws.find((item: QuestionSourceLaw) => item.slug === slug) : null;
+        if (!found) throw new Error("Não foi possível carregar a estrutura desta lei.");
+        setSourceLaw(found);
+      } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta lei."); }
+    })();
   }, [slug, publicStudy]);
 
-  if (status === "loading") return <PageFrame publicMode={Boolean(publicStudy)}><div role="status" className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Verificando sua sessão e o acesso à lei…</div></PageFrame>;
-  if (status === "error" || !study) return <PageFrame publicMode={Boolean(publicStudy)}><div role="alert" className="rounded-2xl border border-red-200 bg-white p-8 text-red-700 shadow-sm"><p>{message || "Não foi possível carregar esta lei."}</p><button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Tentar novamente</button></div></PageFrame>;
-
-  return <PageFrame publicMode={Boolean(publicStudy)}>
-    <div className="grid min-w-0 gap-6">
-      <LawHeader study={study} />
-      <LawStudyTutorial activePlatform={activeStudyPlatform} onPlatformChange={setActiveStudyPlatform} settings={ankiTutorialSettings} />
-      <MaterialsSection study={study} publicMode={Boolean(publicStudy)} />
-      {!publicStudy ? <><StudyGuidance /><LawProgress slug={study.law.slug} progress={study.progress} onSaved={(progress) => setStudy((current) => current ? { ...current, progress } : current)} /><HistorySection history={study.history} showAll={showAllHistory} onShowAll={() => setShowAllHistory(true)} /></> : null}
-    </div>
-  </PageFrame>;
-}
-
-function PageFrame({ children, publicMode = false }: { children: React.ReactNode; publicMode?: boolean }) {
-  return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-    {!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}
-    {children}
-  </div>;
-}
-
-function LawHeader({ study }: { study: LawStudyData }) {
-  return <header className="rounded-3xl border border-blue-100 bg-white p-6 shadow-sm sm:p-8">
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-      <span aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-4xl sm:h-24 sm:w-24">⚖️</span>
-      <div className="min-w-0">
-        {study.law.code ? <p className="text-xs font-black uppercase tracking-wide text-blue-700">{study.law.code}</p> : null}
-        <h1 className="mt-1 break-words text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{study.law.title}</h1>
-        {study.law.shortName ? <p className="mt-2 text-sm font-semibold text-slate-500">{study.law.shortName}</p> : null}
-        {study.law.totalFlashcards > 0 ? <p className="mt-3 font-bold text-slate-700">{study.law.totalFlashcards} flashcards</p> : null}
-      </div>
-    </div>
-  </header>;
-}
-
-function LawStudyTutorial({ activePlatform, onPlatformChange, settings }: { activePlatform: LawStudyPlatformId; onPlatformChange: (platform: LawStudyPlatformId) => void; settings: AnkiTutorialSettings | null }) {
-  const tutorials = useMemo(() => resolveLawStudyPlatformTutorials(settings), [settings]);
-  const hasTutorial = LAW_STUDY_PLATFORM_IDS.some((platform) => getAnkiYoutubeEmbedUrl(tutorials[platform]));
-  const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorials[activePlatform]), [activePlatform, tutorials]);
-  if (!hasTutorial) return null;
-  return <section aria-labelledby="law-study-guidance-title" className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-    <h2 id="law-study-guidance-title" className="text-2xl font-black text-[#062a5f]">Como estudar esta lei</h2>
-    <p className="mt-2 text-slate-600">Escolha sua plataforma para ver a orientação sobre o material e as questões desta página.</p>
-    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Plataformas do tutorial da página de estudo">
-      {LAW_STUDY_PLATFORM_IDS.map((platformId) => {
-        const selected = platformId === activePlatform;
-        const unavailable = platformId === "navegador";
-        return <button key={platformId} type="button" disabled={unavailable} aria-pressed={selected} onClick={() => onPlatformChange(platformId)} className={`min-h-12 rounded-xl border px-4 py-3 font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${unavailable ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400" : selected ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"}`}>{LAW_STUDY_PLATFORMS[platformId].label}</button>;
-      })}
-    </div>
-    {embedUrl ? <iframe key={activePlatform} src={embedUrl} title={`Como estudar esta lei no ${LAW_STUDY_PLATFORMS[activePlatform].label}`} className="mt-5 aspect-video w-full" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : null}
-  </section>;
-}
-
-function MaterialsSection({ study, publicMode = false }: { study: LawStudyData; publicMode?: boolean }) {
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
-  const [downloadErrors, setDownloadErrors] = useState<Record<number, string>>({});
-
-  async function accessMaterial(material: LawStudyData["materials"][number]) {
-    if (material.accessUrl) {
-      window.open(material.accessUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    setDownloadingId(material.id);
-    setDownloadErrors((current) => ({ ...current, [material.id]: "" }));
-    try {
-      if (publicMode) {
-        const response = await fetch(`/api/tutorial/amostra/materiais/${material.id}/download`, { cache: "no-store" });
-        if (!response.ok) throw new Error("Material temporariamente indisponível.");
-        const blob = await response.blob(); const disposition = response.headers.get("content-disposition") ?? ""; const fileName = originalFileNameFromDisposition(disposition) ?? `material-${material.id}`; const objectUrl = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = objectUrl; link.download = fileName; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(objectUrl); return;
-      }
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      const token = data.session?.access_token;
-      if (!token) {
-        window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${study.law.slug}`)}`);
-        return;
-      }
-      const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(study.law.slug)}/materiais/${material.id}/download`, {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.status === 401) {
-        window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${study.law.slug}`)}`);
-        return;
-      }
-      if (!response.ok) {
-        const result = await response.json().catch(() => null) as { message?: string } | null;
-        throw new Error(result?.message || "Material temporariamente indisponível.");
-      }
-      const blob = await response.blob();
-      const disposition = response.headers.get("content-disposition") ?? "";
-      const fileName = originalFileNameFromDisposition(disposition) ?? `material-${material.id}`;
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch (error) {
-      setDownloadErrors((current) => ({ ...current, [material.id]: error instanceof Error ? error.message : "Material temporariamente indisponível." }));
-    } finally {
-      setDownloadingId(null);
-    }
+  async function reset() {
+    setResetting(true);
+    try { await request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha`, "DELETE"); setCampaign({ status: "nao_iniciada", progress: 0, levels: [] }); setResetOpen(false); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível resetar o Estudo Ativo da Lei."); }
+    finally { setResetting(false); }
   }
 
-  return <section aria-labelledby="law-materials-title" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-    <h2 id="law-materials-title" className="text-2xl font-black text-[#062a5f]">Materiais desta lei</h2>
-    {study.materials.length === 0 ? <p className="mt-4 rounded-2xl bg-slate-50 p-5 text-slate-600">Nenhum material disponível no momento.</p> : <div className="mt-5 grid gap-4">
-      {study.materials.map((material) => <article key={material.id} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-200 p-5 sm:flex-row sm:items-center">
-        <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-2xl">{lawMaterialIcon(material.type)}</span>
-        <div className="min-w-0 flex-1"><h3 className="break-words text-lg font-black text-[#062a5f]">{material.title}</h3>{material.description ? <p className="mt-1 text-sm leading-relaxed text-slate-600">{material.description}</p> : null}<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-500">{material.itemCount !== null ? <span>{material.itemCount} itens</span> : null}{material.version ? <span>Versão {material.version}</span> : null}</div></div>
-        <div className="shrink-0 sm:max-w-64">
-          {material.accessAvailable ? <button type="button" disabled={downloadingId !== null} onClick={() => void accessMaterial(material)} className="min-h-11 w-full rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 disabled:cursor-wait disabled:opacity-60">{downloadingId === material.id ? "Preparando download…" : lawMaterialActionLabel(material)}</button> : <p className="min-h-11 w-full break-words rounded-xl bg-slate-100 px-5 py-3 text-center font-black text-slate-600">{lawMaterialAvailabilityLabel(material)}</p>}
-          {downloadErrors[material.id] ? <p role="alert" className="mt-2 text-sm font-semibold text-red-700">{downloadErrors[material.id]}</p> : null}
-        </div>
-      </article>)}
-    </div>}
-  </section>;
+  if (error) return <Frame publicMode={Boolean(publicStudy)}><p className="rounded-2xl border border-red-200 bg-white p-6 text-red-700">{error}</p></Frame>;
+  if (!study || !campaign || (!publicStudy && !sourceLaw)) return <Frame publicMode={Boolean(publicStudy)}><p className="rounded-2xl border bg-white p-6 text-slate-600">Carregando sua lei…</p></Frame>;
+  const completed = campaign.status === "concluida";
+  const statusLabel = completed ? "Concluída" : campaign.status === "em_andamento" ? "Em andamento" : "Não iniciada";
+  const modeLabel = completed ? "Estudo Livre" : "Estudo Ativo da Lei";
+  const progress = completed ? 100 : campaign.progress;
+  const tree = sourceLaw ? buildTree(sourceLaw.structure ?? [], sourceLaw.questions) : [];
+  return <Frame publicMode={Boolean(publicStudy)}><div className="grid min-w-0 gap-5 sm:gap-6">
+    <header className="min-w-0 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-7">
+      {study.law.code ? <p className="text-xs font-black uppercase tracking-wide text-blue-700">{study.law.code}</p> : null}
+      <h1 className="mt-2 break-words text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{study.law.title}</h1>
+      {study.law.shortName ? <p className="mt-2 text-slate-500">{study.law.shortName}</p> : null}
+      <div className="mt-5 grid min-w-0 gap-4 rounded-2xl bg-blue-50 p-4 sm:mt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5"><div className="min-w-0"><p className="text-sm font-black text-[#062a5f]">{modeLabel}</p><p className="mt-1 text-sm text-slate-600">Status: {statusLabel}</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-blue-100"><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-bold text-slate-700">{progress}% concluído</p></div>{!completed ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar`} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white hover:bg-blue-600 sm:w-auto">{campaign.status === "em_andamento" ? "Continuar estudo" : "Começar estudo"}</Link> : null}</div>
+    </header>
+    <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7"><div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-blue-700">{modeLabel}</p><h2 className="mt-1 text-2xl font-black text-[#062a5f]">Estrutura da lei</h2><p className="mt-2 text-sm text-slate-600">{completed ? "Escolha um capítulo para estudar livremente, sem alterar seu Estudo Ativo da Lei." : "A sequência do Estudo Ativo da Lei é definida automaticamente conforme seu progresso."}</p></div>{completed && tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1`} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-blue-700 px-4 py-2 font-black text-blue-700 hover:bg-blue-50 sm:w-auto">Estudar lei inteira</Link> : null}</div><div className="mt-5 min-w-0 overflow-hidden rounded-2xl border border-slate-200"><div className="hidden items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500 sm:flex"><span className="flex-1">Nível</span><span>Questões</span></div>{tree.length ? tree.map((node) => <StructureTreeNode key={node.id} node={node} slug={slug} completed={completed} campaignLevels={campaign.levels ?? []} />) : <RootDeck study={study} slug={slug} count={sourceLaw?.questions.length ?? 0} completed={completed} campaignStatus={campaign.status} />}</div></section>
+    {(completed || campaign.status === "em_andamento") ? <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><h2 className="text-xl font-black text-[#062a5f]">Estudo Ativo da Lei</h2><p className="mt-2 text-sm text-slate-600">{completed ? "Seu Estudo Ativo da Lei foi concluído. O estudo livre não altera score, ranking ou progresso histórico." : "O score é exibido somente ao concluir a lei."}</p>{completed && typeof campaign.bestScore === "number" ? <p className="mt-3 text-sm font-black text-[#062a5f]">Melhor score: {campaign.bestScore.toLocaleString("pt-BR")}</p> : null}{!publicStudy ? <button type="button" onClick={() => setResetOpen(true)} className="mt-4 text-sm font-bold text-blue-700 underline underline-offset-4">Resetar Estudo Ativo da Lei</button> : null}</section> : null}
+    <Materials study={study} settings={ankiTutorialSettings} publicMode={Boolean(publicStudy)} />
+  </div>{resetOpen ? <ResetModal saving={resetting} onCancel={() => setResetOpen(false)} onConfirm={() => void reset()} /> : null}</Frame>;
 }
 
-function StudyGuidance() {
-  return <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-slate-800 shadow-sm sm:p-8"><p className="text-xs font-black uppercase tracking-wide text-amber-800">Orientação de estudo</p><p className="mt-2 text-lg font-black">Mantenha suas revisões em dia antes de avançar para novos cartões.</p></aside>;
+function Frame({ children, publicMode }: { children: React.ReactNode; publicMode: boolean }) { return <main className="mx-auto w-full max-w-5xl overflow-x-hidden px-3 py-6 sm:px-6 sm:py-10">{!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}{children}</main>; }
+type TreeNode = { id: number; nome: string; count: number; children: TreeNode[] };
+function buildTree(structure: StructureNode[], questions: StructureQuestion[]): TreeNode[] { const byParent = new Map<number | null, StructureNode[]>(); for (const node of structure) byParent.set(node.parent_id, [...(byParent.get(node.parent_id) ?? []), node]); const descendants = (node: StructureNode): number[] => [node.id, ...(byParent.get(node.id) ?? []).flatMap(descendants)]; const toNode = (node: StructureNode): TreeNode => { const ids = new Set(descendants(node)); return { id: node.id, nome: node.nome, count: questions.filter((question) => question.structure_id !== null && ids.has(question.structure_id)).length, children: [...(byParent.get(node.id) ?? [])].sort(compareQuestionStructureNames).map(toNode) }; }; return [...(byParent.get(null) ?? [])].sort(compareQuestionStructureNames).map(toNode); }
+type ProgressionPhase = "concluida" | "atual" | "futura";
+function progressionPhase(related: CampaignLevel[], levels: CampaignLevel[], completed: boolean): ProgressionPhase { if (completed || (related.length > 0 && related.every((item) => item.concluido))) return "concluida"; const current = levels.find((item) => !item.concluido); return current && related.some((item) => item.chave === current.chave) ? "atual" : "futura"; }
+function ProgressionLabel({ name, count, phase }: { name: string; count: number; phase: ProgressionPhase }) { const visual = phase === "concluida" ? { icon: "✓", row: "bg-emerald-50/70", iconClass: "text-emerald-700", nameClass: "text-emerald-900" } : phase === "atual" ? { icon: "▶", row: "bg-blue-50 ring-1 ring-inset ring-blue-200", iconClass: "text-blue-700", nameClass: "text-[#062a5f]" } : { icon: "🔒", row: "bg-slate-50 opacity-65", iconClass: "text-slate-400", nameClass: "text-slate-500" }; return <div className={`flex min-h-12 min-w-0 flex-1 items-start gap-2 rounded-xl px-2 py-2 sm:items-center ${visual.row}`}><span className={`mt-0.5 shrink-0 text-base font-black sm:mt-0 ${visual.iconClass}`} aria-hidden="true">{visual.icon}</span><span className={`min-w-0 flex-1 break-words font-bold leading-5 ${visual.nameClass}`}>{name}</span><span className="mt-1 shrink-0 self-start text-sm font-bold text-slate-500 sm:mt-0 sm:self-center">{count} {count === 1 ? "questão" : "questões"}</span></div>; }
+function FreeStudyLabel({ name, count }: { name: string; count: number }) { return <div className="flex min-h-12 min-w-0 flex-1 items-start gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2 transition-colors group-hover:border-blue-300 group-hover:bg-blue-50 sm:items-center"><span className="min-w-0 flex-1 break-words font-bold leading-5 text-[#075bc1] group-hover:text-[#062a5f]">{name}</span><span className="mt-1 shrink-0 self-start text-sm font-bold text-blue-700 sm:mt-0 sm:self-center">{count} {count === 1 ? "questão" : "questões"}</span></div>; }
+function StructureTreeNode({ node, slug, completed, campaignLevels, depth = 0 }: { node: TreeNode; slug: string; completed: boolean; campaignLevels: CampaignLevel[]; depth?: number }) { const [open, setOpen] = useState(depth < 1); const descendants = (item: TreeNode): number[] => [item.id, ...item.children.flatMap(descendants)]; const related = campaignLevels.filter((item) => descendants(node).some((id) => item.chave === `estrutura:${id}`)); const phase = progressionPhase(related, campaignLevels, completed); const label = completed ? <FreeStudyLabel name={node.nome} count={node.count} /> : <ProgressionLabel name={node.nome} count={node.count} phase={phase} />; const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1&structure_id=${node.id}`; return <div className="border-b border-slate-100 last:border-b-0"><div className="flex min-h-16 min-w-0 items-start gap-2 px-3 py-3 sm:items-center sm:gap-3 sm:px-4" style={{ paddingLeft: `${12 + depth * 12}px` }}>{node.children.length ? <button type="button" onClick={() => setOpen((value) => !value)} className="mt-1 h-9 w-9 shrink-0 rounded-lg text-lg font-black text-slate-600 hover:bg-slate-100 sm:mt-0" aria-label={open ? "Recolher nível" : "Expandir nível"}>{open ? "−" : "+"}</button> : null}{completed ? <Link href={href} className="group flex min-w-0 flex-1 items-start gap-2 rounded-lg py-1 sm:items-center sm:gap-3">{label}</Link> : <div className="flex min-w-0 flex-1 items-start gap-2 py-1 sm:items-center sm:gap-3">{label}</div>}</div>{open ? node.children.map((child) => <StructureTreeNode key={child.id} node={child} slug={slug} completed={completed} campaignLevels={campaignLevels} depth={depth + 1} />) : null}</div>; }
+function RootDeck({ study, slug, count, completed, campaignStatus }: { study: LawStudyData; slug: string; count: number; completed: boolean; campaignStatus: Campaign["status"] }) { const phase: ProgressionPhase = campaignStatus === "em_andamento" ? "atual" : "futura"; const label = completed ? <FreeStudyLabel name={study.law.title} count={count} /> : <ProgressionLabel name={study.law.title} count={count} phase={phase} />; const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1`; return <div className="flex min-h-16 min-w-0 items-start gap-2 px-3 py-3 sm:items-center sm:gap-3 sm:px-4">{completed ? <Link href={href} className="group flex min-w-0 flex-1 items-start gap-2 rounded-lg py-1 sm:items-center sm:gap-3">{label}</Link> : <div className="flex min-w-0 flex-1 items-start gap-2 py-1 sm:items-center sm:gap-3">{label}</div>}</div>; }
+
+function Materials({ study, settings, publicMode }: { study: LawStudyData; settings: AnkiTutorialSettings | null; publicMode: boolean }) {
+  const [open, setOpen] = useState(false); const [downloading, setDownloading] = useState<number | null>(null); const [generatingApkg, setGeneratingApkg] = useState(false); const [ankiError, setAnkiError] = useState("");
+  const flashcard = study.materials.find((item) => item.type === "flashcards" && item.accessAvailable); const pdf = study.materials.find((item) => item.type === "pdf" && item.accessAvailable);
+  async function download(material: LawStudyMaterial) { setDownloading(material.id); try { if (publicMode) { window.location.href = `/api/tutorial/amostra/materiais/${material.id}/download`; return; } const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) throw new Error("Sessão expirada."); const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(study.law.slug)}/materiais/${material.id}/download`, { headers: { Authorization: `Bearer ${token}` } }); if (!response.ok) throw new Error("Não foi possível baixar o material."); const blob = await response.blob(); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = material.type === "pdf" ? "material.pdf" : "flashcards.apkg"; link.click(); URL.revokeObjectURL(link.href); } finally { setDownloading(null); } }
+  async function downloadApkg() { setGeneratingApkg(true); setAnkiError(""); try { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) throw new Error("Sua sessão expirou. Entre novamente."); const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(study.law.slug)}/apkg`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); if (!response.ok) { const body = await response.json().catch(() => ({})); if (response.status === 401) throw new Error("Sua sessão expirou. Entre novamente."); if (response.status === 403) throw new Error("Você não possui acesso a esta lei."); throw new Error(typeof body.message === "string" ? body.message : "Não foi possível gerar o arquivo para o Anki."); } const blob = await response.blob(); const disposition = response.headers.get("content-disposition") ?? ""; const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "legis-flashcards.apkg"; const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = filename; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(link.href); } catch (error) { setAnkiError(error instanceof Error ? error.message : "Não foi possível gerar o arquivo para o Anki."); } finally { setGeneratingApkg(false); } }
+  return <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7"><h2 className="text-2xl font-black text-[#062a5f]">Materiais</h2><p className="mt-2 text-slate-600">Materiais complementares desta lei. Prefere estudar no Anki?</p><div className="mt-5 grid gap-3 sm:flex sm:flex-wrap">{flashcard ? <button type="button" onClick={() => setOpen(true)} className="min-h-12 w-full rounded-xl border border-blue-700 px-5 py-3 font-black text-blue-700 hover:bg-blue-50 sm:w-auto">Estudar no Anki</button> : null}{pdf ? <button type="button" disabled={downloading === pdf.id} onClick={() => void download(pdf)} className="min-h-12 w-full rounded-xl border border-slate-300 px-5 py-3 font-black text-slate-800 hover:bg-slate-50 disabled:opacity-50 sm:w-auto">{downloading === pdf.id ? "Baixando…" : "Baixar PDF"}</button> : null}</div>{open && flashcard ? <AnkiModal settings={settings} onClose={() => setOpen(false)} onDownload={() => void (publicMode ? download(flashcard) : downloadApkg())} downloading={publicMode ? downloading === flashcard.id : generatingApkg} error={ankiError} /> : null}</section>;
 }
-
-function LawProgress({ slug, progress, onSaved }: { slug: string; progress: LawStudyData["progress"]; onSaved: (progress: LawStudyData["progress"]) => void }) {
-  const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const progressMessage = lawStudyProgressMessage(progress);
-
-  async function save(next: LawStudyData["progress"]) {
-    setSaving(true);
-    setErrorMessage("");
-    try {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      const token = data.session?.access_token;
-      if (!token) {
-        window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}`)}`);
-        return;
-      }
-      const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/progresso`, {
-        method: "PATCH",
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(next),
-      });
-      if (response.status === 401) {
-        window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}`)}`);
-        return;
-      }
-      const result = await response.json() as { progress?: LawStudyData["progress"]; message?: string };
-      if (!response.ok || !result.progress) throw new Error(result.message || "Não foi possível salvar seu progresso.");
-      onSaved(result.progress);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Não foi possível salvar seu progresso.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return <section aria-labelledby="law-progress-title" className="rounded-3xl border border-blue-200 bg-[#eaf3ff] p-6 sm:p-8">
-    <h2 id="law-progress-title" className="text-2xl font-black text-[#062a5f]">Progresso nesta lei</h2>
-    <div className="mt-5 grid gap-3">
-      <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 font-bold text-slate-800">
-        <input type="checkbox" checked={progress.inStudy} disabled={saving} onChange={(event) => void save(nextLawStudyProgress(progress, "inStudy", event.target.checked))} className="h-5 w-5 shrink-0 accent-blue-700" />
-        <span>Lei em estudo</span>
-      </label>
-      <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 font-bold text-slate-800">
-        <input type="checkbox" checked={progress.questionsFinished} disabled={saving} onChange={(event) => void save(nextLawStudyProgress(progress, "questionsFinished", event.target.checked))} className="h-5 w-5 shrink-0 accent-blue-700" />
-        <span>Finalizei todas as questões da lei</span>
-      </label>
-    </div>
-    {progressMessage ? <p aria-live="polite" className="mt-3 text-sm font-semibold leading-6 text-blue-800">{progressMessage}</p> : null}
-    {saving ? <p role="status" className="mt-3 text-sm font-bold text-blue-700">Salvando progresso…</p> : null}
-    {errorMessage ? <p role="alert" className="mt-3 text-sm font-bold text-red-700">{errorMessage}</p> : null}
-  </section>;
-}
-
-function HistorySection({ history, showAll, onShowAll }: { history: LawStudyHistoryItem[]; showAll: boolean; onShowAll: () => void }) {
-  const visible = showAll ? history : history.slice(0, 3);
-  return <details className="group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-    <summary className="cursor-pointer list-none text-2xl font-black text-[#062a5f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700">Histórico de atualizações <span aria-hidden="true" className="ml-2 inline-block text-blue-700 transition group-open:rotate-180">⌄</span></summary>
-    <div className="mt-5 border-t border-slate-100 pt-5">
-      {history.length === 0 ? <p className="text-slate-600">Nenhuma atualização publicada para alunos no momento.</p> : <div className="grid gap-4">{visible.map((item) => <HistoryItem key={item.id} item={item} />)}{!showAll && history.length > 3 ? <button type="button" onClick={onShowAll} className="min-h-11 justify-self-start rounded-xl border border-blue-700 px-5 py-3 font-black text-blue-700 transition hover:bg-blue-50">Ver atualizações anteriores</button> : null}</div>}
-    </div>
-  </details>;
-}
-
-function HistoryItem({ item }: { item: LawStudyHistoryItem }) {
-  return <article className="rounded-2xl border border-slate-200 p-5">
-    <div className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wide"><span className="text-blue-700">{lawHistoryDate(item.publishedAt)}</span><span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-800">{item.type.replaceAll("_", " ")}</span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{item.importance}</span></div>
-    <h3 className="mt-3 text-lg font-black text-[#062a5f]">{item.title}</h3>
-    {item.summary ? <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.summary}</p> : null}
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold text-slate-500">{item.version ? <span>Versão {item.version}</span> : null}{item.legalReference ? <span>Referência: {item.legalReference}</span> : null}</div>
-  </article>;
-}
+function AnkiModal({ settings, onClose, onDownload, downloading, error }: { settings: AnkiTutorialSettings | null; onClose: () => void; onDownload: () => void; downloading: boolean; error: string }) { const tutorials = useMemo(() => resolveLawStudyPlatformTutorials(settings), [settings]); const [platform, setPlatform] = useState<keyof typeof tutorials>("computador"); const video = getAnkiYoutubeEmbedUrl(tutorials[platform]); return <div className="fixed inset-0 z-50 flex items-end bg-slate-950/60 p-3 sm:items-center sm:justify-center sm:p-4"><section role="dialog" aria-modal="true" className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 sm:p-6"><h2 className="text-2xl font-black text-[#062a5f]">Estudar no Anki</h2><p className="mt-2 text-slate-600">Escolha sua plataforma, veja a orientação e baixe o baralho quando quiser.</p><div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4">{(Object.keys(tutorials) as Array<keyof typeof tutorials>).map((item) => <button key={item} disabled={item === "navegador"} onClick={() => setPlatform(item)} className={platform === item ? "min-h-11 rounded-lg bg-blue-700 p-3 font-bold text-white" : "min-h-11 rounded-lg border p-3 font-bold disabled:opacity-50"}>{LAW_STUDY_PLATFORMS[item].label}</button>)}</div>{video ? <iframe className="mt-5 aspect-video w-full" src={video} title="Tutorial do Anki" allowFullScreen /> : null}{error ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p> : null}<div className="mt-5 grid gap-3 sm:grid-cols-2"><button disabled={downloading} onClick={onDownload} className="min-h-12 w-full rounded-xl bg-blue-700 px-5 py-3 font-black text-white disabled:opacity-50">{downloading ? "Gerando arquivo…" : "Baixar deck (.apkg)"}</button><button onClick={onClose} className="min-h-12 w-full rounded-xl border px-5 py-3 font-black">Fechar</button></div></section></div>; }
+function ResetModal({ saving, onCancel, onConfirm }: { saving: boolean; onCancel: () => void; onConfirm: () => void }) { return <div className="fixed inset-0 z-50 flex items-end bg-slate-950/60 p-4 sm:items-center sm:justify-center"><section role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl bg-white p-6"><h2 className="text-2xl font-black text-[#062a5f]">Resetar Estudo Ativo da Lei?</h2><p className="mt-3 text-slate-600">Seu progresso atual será reiniciado. Seus scores e Estudos Ativos da Lei anteriores continuarão salvos.</p><div className="mt-6 grid gap-3 sm:grid-cols-2"><button disabled={saving} onClick={onCancel} className="min-h-11 rounded-xl border px-5 py-3 font-black">Cancelar</button><button disabled={saving} onClick={onConfirm} className="min-h-11 rounded-xl bg-red-700 px-5 py-3 font-black text-white">{saving ? "Resetando…" : "Resetar Estudo Ativo da Lei"}</button></div></section></div>; }
