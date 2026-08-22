@@ -37,7 +37,7 @@ describe("contrato da página de estudo da lei", () => {
     expect(lawMaterialAvailabilityLabel({ accessAvailable: true, availableAt: "2026-08-25" })).toBeNull();
     expect(lawMaterialAvailabilityLabel({ accessAvailable: false, availableAt: null })).toBe("Em breve");
     expect(lawMaterialAvailabilityLabel({ accessAvailable: false, availableAt: "2026-08-25" })).toBe("Disponível em 25/08/2026");
-    expect(client).toContain('function Materials'); expect(client).toContain('>Materiais<'); expect(client).toContain('>Estudar no Anki<'); expect(client).toContain('"Baixar PDF"'); expect(client).toContain('"Baixar deck (.apkg)"'); expect(client).toContain('"Gerando arquivo…"');
+    expect(client).toContain('function Materials'); expect(client).toContain('>Materiais<'); expect(client).toContain('>Estudar no Anki<'); expect(client).toContain('"Baixar PDF"'); expect(client).toContain('"Baixar deck (.apkg)"'); expect(client).toContain('"Baixando arquivo…"'); expect(client).not.toContain('/apkg`');
   });
 
   it("mantém a central utilizável em telas estreitas", () => {

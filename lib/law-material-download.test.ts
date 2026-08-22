@@ -106,5 +106,7 @@ describe("interface de download", () => {
     expect(client).toContain('resolveLawStudyPlatformTutorials'); expect(client).toContain('Baixar deck (.apkg)');
     expect(client).toContain("Authorization: `Bearer ${token}`");
     expect(client).toContain('material.type === "pdf" ? "material.pdf" : "flashcards.apkg"');
+    expect(client).toContain('onDownload={() => void download(flashcard)}');
+    expect(client).not.toContain('/apkg`');
   });
 });

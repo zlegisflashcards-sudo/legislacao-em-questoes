@@ -53,7 +53,7 @@ function QuestionManagementLayout(props: { laws: Law[]; law: Law; slug: string; 
   const update = <K extends keyof Form>(key: K, value: Form[K]) => onChange((current) => ({ ...current, [key]: value }));
   return <section className="commercial-admin admin-questoes question-admin-v2">
     {error && <p className="admin-alert error">{error}</p>}
-    <article className="commercial-card question-law-picker"><h2>Banco de questões</h2><select value={slug} onChange={(event) => onSelect(event.target.value)}>{laws.map((item) => <option key={item.id} value={item.slug}>{lawDisplayName(item)}</option>)}</select></article>
+    <article className="commercial-card question-law-picker"><h2>Banco de questões</h2><select value={slug} onChange={(event) => onSelect(event.target.value)}>{laws.map((item) => <option key={item.id} value={item.slug}>{lawDisplayName(item)}</option>)}</select><a className="admin-button secondary" href={`/api/admin/questoes/exportar-apkg?slug=${encodeURIComponent(law.slug)}`}>Exportar APKG</a></article>
     <article className="commercial-card"><h2>Estrutura da legislação</h2><button className="admin-link-button" onClick={() => void onAdd("titulo", null)}>+ Título</button> <button className="admin-link-button" onClick={() => void onAdd("capitulo", null)}>+ Capítulo</button><Tree nodes={kids(null)} kids={kids} add={onAdd} onDelete={onDelete} selectNode={(node) => { update("structure_id", node.id); ref.current?.scrollIntoView({ behavior: "smooth" }); }} /></article>
     <AnkiImport key={law.slug} lawSlug={law.slug} lawName={lawDisplayName(law)} reload={async () => onSelect(slug)} />
     <ApkgImport lawSlug={law.slug} lawName={lawDisplayName(law)} />

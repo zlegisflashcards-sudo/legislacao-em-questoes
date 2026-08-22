@@ -96,6 +96,15 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("O arquivo não é armazenado.");
   });
 
+  it("oferece a exportação APKG somente pelo painel administrativo protegido", () => {
+    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const route = readFileSync("app/api/admin/questoes/exportar-apkg/route.ts", "utf8");
+    expect(panel).toContain("Exportar APKG");
+    expect(panel).toContain("/api/admin/questoes/exportar-apkg?slug=");
+    expect(route).toContain("exportLawApkg");
+    expect(route).toContain('export const runtime = "nodejs"');
+  });
+
   it("confirma APKG pela mesma persistência compartilhada do TXT", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
