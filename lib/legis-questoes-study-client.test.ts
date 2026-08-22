@@ -134,11 +134,15 @@ describe("player Legis Questões", () => {
   it("preserva erros no snapshot, mas exibe uma mensagem determinística ao concluir o nível", () => {
     expect(player).not.toContain("Score do módulo");
     expect(player).not.toContain("lf-level-score");
-    expect(player).toContain("const LEVEL_COMPLETION_MESSAGES");
-    expect(player).toContain('current.levels?.findIndex((level) => level.id === current.level?.id)');
+    expect(player).toContain("const LEVEL_COMPLETION_MESSAGE");
+    expect(player).toContain("⚡ Parabéns! Mais uma etapa concluída.");
+    expect(player).not.toContain('current.levels?.findIndex((level) => level.id === current.level?.id)');
     expect(player).toContain('<LevelCompletion level={levelDone}');
     expect(player).not.toContain('{levelDone.errors}');
-    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0), messageIndex: levelIndex })');
+    expect(player).not.toContain('const messages = current.completionMessages?.filter');
+    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "" });');
+    expect(campaignServer).toContain('const completionMessages = await getActiveLevelCompletionMessages();');
+    expect(campaignServer).toContain('completionMessages, level: { id: level.id');
     expect(campaignServer).toContain('total_erros: levelErrors');
     expect(campaignServer).toContain('levelResult: concludesLevel ? { errors: levelErrors } : null');
     expect(campaignServer).not.toContain('score: score(levelErrors)');
@@ -149,7 +153,7 @@ describe("player Legis Questões", () => {
     expect(player).toContain('if (result.campaignConcluded)');
     expect(player).toContain('setCelebrating(true)');
     expect(player).toContain('if (result.levelConcluded)');
-    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", errors: Number(result.levelResult?.errors ?? 0), messageIndex: levelIndex })');
+    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "" });');
     expect(campaignServer).toContain('update({ concluida: true, concluida_em: new Date().toISOString(), score: finalScore })');
     expect(campaignServer).toContain('update({ status_campanha: "concluida", questoes_finalizadas: true, campanha_ativa_id: null })');
   });
