@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const ids = laws.map((law) => law.id);
     const supabase = getSupabaseServerClient();
     const [questionsResult, structureResult] = await Promise.all([
-      supabase.from("questions").select("id,lei_id,ordem,titulo,capitulo,secao,subsecao,assunto,structure_id").in("lei_id", ids).eq("ativo", true).order("ordem"),
+      supabase.from("questions").select("id,lei_id,ordem,titulo,capitulo,secao,subsecao,assunto,structure_id").in("lei_id", ids).eq("ativo", true).order("ordem").order("created_at").order("id"),
       supabase.from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem").in("lei_id", ids).eq("ativo", true).order("ordem"),
     ]);
     if (questionsResult.error || structureResult.error) throw questionsResult.error ?? structureResult.error;

@@ -11,7 +11,9 @@ export async function mainLawBySlug(slug: string) {
 }
 
 export async function mainQuestions(leiId: number, filters: { structureIds?: number[]; values?: Record<string, string> } = {}) {
-  let query = getSupabaseServerClient().from("questions").select("id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo").eq("lei_id", leiId).eq("ativo", true).order("ordem");
+  // `ordem` é pedagógica e pode se repetir. created_at preserva a ordem de
+  // cadastro; id fecha qualquer empate remanescente de forma determinística.
+  let query = getSupabaseServerClient().from("questions").select("id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("created_at").order("id");
   if (filters.structureIds?.length) query = query.in("structure_id", filters.structureIds);
   for (const [field, value] of Object.entries(filters.values ?? {})) if (["titulo", "capitulo", "secao", "subsecao"].includes(field)) query = query.eq(field, value);
   const result = await query;

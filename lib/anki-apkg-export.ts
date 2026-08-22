@@ -8,7 +8,7 @@ const templateDirectory = join(process.cwd(), "public", "anki-templates");
 const fieldNames = ["pergunta", "resposta", "justificativa", "assunto", "legislação", "titulo", "TotalArtigos", "ordem", "slug", "ultimaAlteracaoLegislativa"];
 
 type ExportLaw = { slug: string; titulo: string };
-type ExportQuestion = { id: string; structure_id: number | null; pergunta: string; resposta: string; justificativa?: string | null; assunto?: string | null; legislacao?: string | null; titulo?: string | null; total_artigos?: number | null; ordem?: string | null; slug?: string | null; ultima_alteracao_legislativa?: string | null };
+type ExportQuestion = { id: string; structure_id: number | null; pergunta: string; resposta: string; justificativa?: string | null; assunto?: string | null; legislacao?: string | null; titulo?: string | null; total_artigos?: number | null; ordem?: string | null; slug?: string | null; ultima_alteracao_legislativa?: string | null; created_at?: string | null };
 type ExportStructure = { id: number; parent_id: number | null; nome: string };
 
 function template4() {
@@ -39,7 +39,7 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
     return deck;
   };
 
-  for (const question of [...questions].sort((a, b) => String(a.ordem).localeCompare(String(b.ordem)) || a.id.localeCompare(b.id))) {
+  for (const question of [...questions].sort((a, b) => String(a.ordem).localeCompare(String(b.ordem)) || String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || a.id.localeCompare(b.id))) {
     const pedagogicalFields = [question.pergunta, question.resposta, question.justificativa ?? "", question.assunto ?? "", question.legislacao ?? ""];
     if (pedagogicalFields.some((value) => /<img\b|\[sound:/i.test(value))) throw new Error(`A questão ${question.ordem ?? question.id} contém mídia. A exportação de mídia ainda não é suportada.`);
     deckFor(structurePath(structure, question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, question.total_artigos?.toString() ?? "", question.ordem ?? "", question.slug ?? law.slug, question.ultima_alteracao_legislativa ?? ""] }));

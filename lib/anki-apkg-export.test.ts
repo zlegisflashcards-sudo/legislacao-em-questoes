@@ -24,4 +24,17 @@ describe("exportação APKG", () => {
     const exported = await buildLawApkg({ slug: "l9455", titulo: "Lei nº 9.455 - Crimes de Tortura" }, [{ id: "questao-1", structure_id: null, pergunta: "Item", resposta: "Errado", ordem: "0001.0.00.00" }], []);
     expect(exported.decks).toEqual(["Lei nº 9.455 - Crimes de Tortura"]);
   });
+
+  it("preserva a ordem canônica quando a ordem pedagógica se repete", async () => {
+    const exported = await buildLawApkg(
+      { slug: "l9455", titulo: "Lei nº 9.455" },
+      [
+        { id: "z", structure_id: null, pergunta: "Primeira cadastrada", resposta: "Certo", ordem: "0001.0.00.00", created_at: "2026-01-01T00:00:00.000Z" },
+        { id: "a", structure_id: null, pergunta: "Segunda cadastrada", resposta: "Errado", ordem: "0001.0.00.00", created_at: "2026-01-02T00:00:00.000Z" },
+      ],
+      [],
+    );
+    const parsed = await parseLegisApkg(Buffer.from(exported.bytes));
+    expect(parsed.rows.map((row) => row.pergunta)).toEqual(["Primeira cadastrada", "Segunda cadastrada"]);
+  });
 });
