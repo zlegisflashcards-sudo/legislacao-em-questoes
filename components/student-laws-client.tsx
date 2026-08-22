@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs, type StudentAreaTabId } from "@/components/student-area-tabs";
 import { filterStudentLaws, type StudentLaw } from "@/lib/student-laws";
@@ -115,7 +116,7 @@ function StudentLawCard({ law, hasCustomExam, inMyExam, saving, onToggleMyExam }
   const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`;
   const progress = law.campaignStatus === "concluida" ? 100 : Math.max(0, Math.min(100, law.campaignProgress ?? 0));
   return <article className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-    <div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f]">{law.titulo}</h2>{law.codigo ? <p className="mt-2 text-xs font-black uppercase tracking-wide text-blue-700">{law.codigo}</p> : null}</div>
+    <div className="flex min-w-0 items-center gap-3"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" /><div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f]">{law.titulo}</h2><p className="mt-2 break-words text-xs font-black uppercase tracking-wide text-blue-700">{law.codigo ?? law.slug}</p></div></div>
     <div className="min-w-0"><div className="h-2 overflow-hidden rounded-full bg-blue-100" aria-label={`${progress}% concluído`}><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-black text-slate-700">{progress}%</p></div>
     <div className="grid gap-3 sm:flex sm:flex-wrap"><Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 sm:w-auto">Estudar</Link>{hasCustomExam ? <button type="button" disabled={saving} onClick={onToggleMyExam} className="min-h-12 w-full rounded-xl border border-slate-300 px-5 py-3 font-black text-slate-800 hover:bg-slate-50 disabled:opacity-50 sm:w-auto">{saving ? "Atualizando…" : inMyExam ? "Remover do edital" : "Colocar no edital"}</button> : <Link href="/meu-edital" className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-center font-black text-slate-800 hover:bg-slate-50 sm:w-auto">Criar meu edital</Link>}</div>
   </article>;
