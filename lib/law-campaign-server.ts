@@ -2,6 +2,7 @@ import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
 import { getActiveLevelCompletionMessages } from "@/lib/level-completion-messages-server";
+import { effectiveCampaignScore, personalRecordForAttempt } from "@/lib/law-campaign-personal-record";
 import { mainLawBySlug, mainQuestions, mainStructure } from "@/lib/questions-main-server";
 
 type Question = { id: string; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: string; titulo: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null; ultima_alteracao_legislativa: string | null; structure_id: number | null };
@@ -79,23 +80,25 @@ export async function campaignState(request: Request, slug: string) {
   const { supabase, lawId, studentId } = await authorizeLawStudy(request, slug);
   const completionMessages = await getActiveLevelCompletionMessages();
   let bestScore: number | null = null;
-  let result: { score: number; bestScore: number; errors: number; totalQuestions: number; position?: number } | null = null;
+  let result: { score: number; bestScore: number; errors: number; totalQuestions: number; position?: number; personalRecord: ReturnType<typeof personalRecordForAttempt> } | null = null;
   if (state.status === "concluida") {
-    const [best, latest, ranking] = await Promise.all([
-      supabase.from("campanhas_leis_alunos").select("score,score_ajustado").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true).order("score_ajustado", { ascending: false, nullsFirst: false }).order("score", { ascending: false }).limit(1).maybeSingle(),
+    const [history, latest, ranking] = await Promise.all([
+      supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true),
       supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado,total_erros").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true).order("concluida_em", { ascending: false }).limit(1).maybeSingle(),
       supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: studentId, p_lei_id: lawId }),
     ]);
-    if (best.error || latest.error || ranking.error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
-    bestScore = typeof best.data?.score_ajustado === "number" ? best.data.score_ajustado : typeof best.data?.score === "number" ? best.data.score : null;
+    if (history.error || latest.error || ranking.error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
+    bestScore = (history.data ?? []).map(effectiveCampaignScore).filter((value): value is number => typeof value === "number").reduce<number | null>((best, value) => best === null || value > best ? value : best, null);
     const rankingRow = Array.isArray(ranking.data) ? ranking.data[0] : null;
     const position = Number(rankingRow?.posicao);
     const rankingPosition = Number.isSafeInteger(position) && position > 0 ? position : null;
-    const latestScore = typeof latest.data?.score_ajustado === "number" ? latest.data.score_ajustado : latest.data?.score;
-    if (latest.data && typeof latestScore === "number" && typeof latest.data.total_erros === "number") {
-      const { data: levels, error: levelsError } = await supabase.from("campanhas_leis_niveis").select("questoes_ids").eq("campanha_id", latest.data.id);
+    const latestCampaign = latest.data;
+    const latestScore = typeof latestCampaign?.score_ajustado === "number" ? latestCampaign.score_ajustado : latestCampaign?.score;
+    if (latestCampaign && typeof latestScore === "number" && typeof latestCampaign.total_erros === "number") {
+      const { data: levels, error: levelsError } = await supabase.from("campanhas_leis_niveis").select("questoes_ids").eq("campanha_id", latestCampaign.id);
       if (levelsError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
-      result = { score: latestScore, bestScore: bestScore ?? latestScore, errors: latest.data.total_erros, totalQuestions: (levels ?? []).flatMap((level) => arrayOfStrings(level.questoes_ids)).length, position: rankingPosition ?? undefined };
+      const previousCampaigns = (history.data ?? []).filter((campaign) => campaign.id !== latestCampaign.id);
+      result = { score: latestScore, bestScore: bestScore ?? latestScore, errors: latestCampaign.total_erros, totalQuestions: (levels ?? []).flatMap((level) => arrayOfStrings(level.questoes_ids)).length, position: rankingPosition ?? undefined, personalRecord: personalRecordForAttempt(latestScore, previousCampaigns) };
     }
   }
   if (!state.campaignId) return { ...state, bestScore, result, completionMessages, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
@@ -140,9 +143,11 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
   if (!updatedLevel?.length) throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página.");
   if (!correct) { const { error: errorsError } = await supabase.rpc("increment_campaign_errors", { campaign_id: state.campaignId }); if (errorsError) throw new LawStudyApiError(503, "Não foi possível salvar sua resposta."); }
   const isFinal = concludesLevel && levels.every((item) => item.id === level.id || item.concluido);
-  let result: { score: number; bestScore: number; position: number; participants: number; errors: number; totalQuestions: number; newBest: boolean } | null = null;
+  let result: { score: number; bestScore: number; position: number; participants: number; errors: number; totalQuestions: number; personalRecord: ReturnType<typeof personalRecordForAttempt> } | null = null;
   if (isFinal) {
-    const { data: previous } = await supabase.from("campanhas_leis_alunos").select("score").eq("aluno_id", (await authorizeLawStudy(request, slug)).studentId).eq("lei_id", (await authorizeLawStudy(request, slug)).lawId).eq("concluida", true).order("score", { ascending: false }).limit(1);
+    const context = await authorizeLawStudy(request, slug);
+    const { data: previousCampaigns, error: previousError } = await supabase.from("campanhas_leis_alunos").select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("concluida", true);
+    if (previousError) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
     const { data: campaign, error: campaignError } = await supabase.from("campanhas_leis_alunos").select("total_erros").eq("id", state.campaignId).single();
     if (campaignError || !campaign) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
     const finalScore = score(campaign.total_erros);
@@ -151,11 +156,10 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
     if (!finishedCampaign?.length) throw new LawStudyApiError(409, "Este Estudo Ativo da Lei já foi concluído.");
     const { error: progressError } = await supabase.from("progresso_leis_alunos").update({ status_campanha: "concluida", questoes_finalizadas: true, campanha_ativa_id: null }).eq("campanha_ativa_id", state.campaignId);
     if (progressError) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
-    const context = await authorizeLawStudy(request, slug);
     const { data: ranking, error: rankingError } = await supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: context.studentId, p_lei_id: context.lawId });
     const row = Array.isArray(ranking) ? ranking[0] : null;
     if (rankingError || !row) throw new LawStudyApiError(503, "Não foi possível calcular seu resultado.");
-    result = { score: row.score_atual, bestScore: row.melhor_score, position: Number(row.posicao), participants: Number(row.participantes), errors: campaign.total_erros, totalQuestions: levels.flatMap((item) => item.questoes_ids).length, newBest: !previous?.length || finalScore > previous[0].score };
+    result = { score: row.score_atual, bestScore: row.melhor_score, position: Number(row.posicao), participants: Number(row.participantes), errors: campaign.total_erros, totalQuestions: levels.flatMap((item) => item.questoes_ids).length, personalRecord: personalRecordForAttempt(finalScore, previousCampaigns ?? []) };
   }
   const totalQuestions = levels.flatMap((item) => item.questoes_ids).length;
   const completedBeforeCurrentLevel = levels.filter((item) => item.id !== level.id && item.concluido).flatMap((item) => item.questoes_ids).length;

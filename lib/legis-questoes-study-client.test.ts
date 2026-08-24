@@ -230,13 +230,29 @@ describe("player Legis Questões", () => {
 
   it("mostra o resultado final, celebração discreta e os dois destinos pedidos", () => {
     expect(player).toContain('⚡ LEI CONCLUÍDA!');
-    expect(player).toContain('Score final');
-    expect(player).toContain('Acertos: <b>{correct}</b>');
-    expect(player).toContain('Aproveitamento: <b>{accuracy}%</b>');
+    expect(player).toContain('Score desta tentativa');
+    expect(player).toContain('function PersonalRecordSummary');
+    expect(player).toContain('Primeiro recorde registrado! Nas próximas tentativas');
+    expect(player).toContain('Novo recorde pessoal! Você superou sua melhor pontuação nesta lei.');
+    expect(player).toContain('Você igualou seu recorde! Mais uma tentativa nesse nível de desempenho.');
+    expect(player).toContain('Seu recorde continua sendo ${score} pontos.');
+    expect(player).toContain('<PersonalRecordSummary record={result.personalRecord} />');
+    expect(player).toContain('function AttemptDonut');
+    expect(player).toContain('campaignAttemptPerformance(result?.totalQuestions ?? 0, result?.errors ?? 0)');
+    expect(player).toContain('<AttemptDonut correct={performance.correct} errors={performance.errors} accuracy={performance.accuracy} />');
+    expect(player).toContain('Sua posição no ranking:');
+    expect(styles).toContain('.lf-attempt-donut{display:grid;width:142px;height:142px');
+    expect(styles).toContain('background:conic-gradient(#1eaa5d 0 var(--lf-correct),#e34d4d var(--lf-correct) 100%)');
     expect(player).toContain('href={`/questoes/${encodeURIComponent(useContext(StudyLawContext) ?? "")}/estudar?livre=1`}');
     expect(player).toContain('href="/minhas-leis">Voltar às minhas leis');
     expect(player).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches');
     expect(styles).toContain('@media(prefers-reduced-motion:reduce){.lf-celebration-mark,.lf-celebration-particles i{animation:none}}');
     expect(campaignServer).toContain('progress: state.status === "concluida" ? 100 : 0');
+  });
+
+  it("calcula o recorde sobre o histórico concluído sem reabrir ou apagar tentativas concluídas", () => {
+    expect(campaignServer).toContain('select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("concluida", true)');
+    expect(campaignServer).toContain('personalRecordForAttempt(finalScore, previousCampaigns ?? [])');
+    expect(campaignServer).toContain('.delete().eq("id", current.campanha_ativa_id).eq("concluida", false)');
   });
 });
