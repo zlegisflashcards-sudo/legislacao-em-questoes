@@ -11,6 +11,7 @@ import {
 } from "./law-study";
 
 const server = readFileSync("lib/law-study-server.ts", "utf8");
+const campaignServer = readFileSync("lib/law-campaign-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/estudar/lei/[slug]/route.ts", "utf8");
 const page = readFileSync("app/estudar/lei/[slug]/page.tsx", "utf8");
 const client = readFileSync("components/law-study-page-client.tsx", "utf8");
@@ -100,6 +101,13 @@ describe("interface de estudo", () => {
   it("prioriza a central de estudo, estado de campanha e reset", () => {
     for (const expected of ['"Começar estudo"', '"Continuar estudo"', '"Concluída"', '"Em andamento"', '"Não iniciada"', 'Estudo Ativo da Lei', 'Estudo Livre', 'Resetar Estudo Ativo da Lei', 'campaign.progress']) expect(client).toContain(expected);
     for (const platform of ["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]) expect(contract).toContain(`label: "${platform}"`);
+  });
+
+  it("mostra a posição atual do ranking da própria lei abaixo do melhor score", () => {
+    expect(campaignServer).toContain('supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: studentId, p_lei_id: lawId })');
+    expect(campaignServer).toContain("const rankingPosition = Number.isSafeInteger(position) && position > 0 ? position : null");
+    expect(campaignServer).toContain("position: rankingPosition ?? undefined");
+    expect(client).toContain('Posição no ranking: {typeof campaign.result?.position === "number" ? `${campaign.result.position}º lugar` : "Ainda sem posição no ranking"}');
   });
 
   it("libera estudo livre e capítulos somente após a campanha concluída", () => {
