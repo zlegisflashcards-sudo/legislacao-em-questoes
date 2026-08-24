@@ -533,7 +533,7 @@ function validateProductData(raw: unknown, update = false) {
 function validateStudentData(raw: unknown) {
   const data = asObject(raw);
   rejectUnknownKeys(data, ["nome", "email", "telefone"]);
-  const email = requiredString(data.email, "E-mail", 320).toLowerCase();
+  const email = requiredString(data.email, "E-mail", 320).trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CommercialValidationError("E-mail inválido.");
   const phoneRaw = optionalString(data.telefone, "Telefone", 80);
   const telefone = phoneRaw ? normalizeStudentPhone(phoneRaw) : null;
@@ -559,6 +559,69 @@ async function findAuthUserByEmail(email: string) {
     if (listed.data.users.length < 1000) return null;
   }
   throw new CommercialHttpError(500, "Não foi possível localizar a conta Auth pelo e-mail.");
+}
+
+type EmailChangePreflight =
+  | { status: "available"; email: string }
+  | { status: "public_conflict"; email: string; aluno: { id: string; nome: string | null; email: string; user_id: string | null }; compras: number; progresso: number; campanhas: number }
+  | { status: "auth_with_data"; email: string; user_id: string; details: Record<string, number> }
+  | { status: "empty_auth"; email: string; user_id: string };
+
+function normalizedEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+async function exactStudentByEmail(supabase: ReturnType<typeof getSupabaseServerClient>, email: string, excludedId: string) {
+  const result = await supabase.from("alunos").select("id,nome,email,user_id").ilike("email", `%${email}%`);
+  if (result.error) throw new CommercialHttpError(500, "Não foi possível validar o novo e-mail.");
+  return (result.data ?? []).find((row) => row.id !== excludedId && normalizedEmail(String(row.email ?? "")) === email) ?? null;
+}
+
+async function countByAluno(supabase: ReturnType<typeof getSupabaseServerClient>, table: "compras" | "progresso_leis_alunos" | "campanhas_leis_alunos", alunoId: string) {
+  const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq("aluno_id", alunoId);
+  if (result.error) throw new CommercialHttpError(503, "Não foi possível confirmar os vínculos do cadastro em conflito.");
+  return result.count ?? 0;
+}
+
+async function inspectAuthAccountUsage(supabase: ReturnType<typeof getSupabaseServerClient>, userId: string) {
+  const targets = [
+    ["alunos", "user_id"],
+    ["perfis_publicos", "id"],
+    ["legisbot_comentarios_comunidade", "user_id"],
+    ["legisbot_comentarios_curtidas", "user_id"],
+    ["legisbot_comentarios_denuncias", "user_id"],
+    ["legisbot_destaques_usuario", "user_id"],
+    ["auditoria_administrativa", "ator_user_id"],
+    ["notificacoes_primeiro_acesso", "auth_user_id"],
+  ] as const;
+  const results = await Promise.all(targets.map(async ([table, column]) => {
+    const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq(column, userId);
+    return { table, result };
+  }));
+  const details: Record<string, number> = {};
+  for (const { table, result } of results) {
+    if (result.error) throw new CommercialHttpError(503, "Não foi possível comprovar que a conta conflitante está vazia. A alteração foi bloqueada por segurança.");
+    details[table] = result.count ?? 0;
+  }
+  return details;
+}
+
+async function preflightStudentEmailChange(supabase: ReturnType<typeof getSupabaseServerClient>, alunoId: string, email: string): Promise<EmailChangePreflight> {
+  const publicConflict = await exactStudentByEmail(supabase, email, alunoId);
+  if (publicConflict) {
+    const [compras, progresso, campanhas] = await Promise.all([
+      countByAluno(supabase, "compras", publicConflict.id),
+      countByAluno(supabase, "progresso_leis_alunos", publicConflict.id),
+      countByAluno(supabase, "campanhas_leis_alunos", publicConflict.id),
+    ]);
+    return { status: "public_conflict", email, aluno: publicConflict, compras, progresso, campanhas };
+  }
+  const authConflict = await findAuthUserByEmail(email);
+  if (!authConflict) return { status: "available", email };
+  const details = await inspectAuthAccountUsage(supabase, authConflict.id);
+  return Object.values(details).some(Boolean)
+    ? { status: "auth_with_data", email, user_id: authConflict.id, details }
+    : { status: "empty_auth", email, user_id: authConflict.id };
 }
 
 function validateAnkiTutorialSettings(raw: unknown) {
@@ -918,7 +981,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "alunos" && action === "trocar_email_acesso") {
     const alunoId = uuid(body.id, "Aluno");
     const data = asObject(body.data);
-    rejectUnknownKeys(data, ["email", "confirmacao"]);
+    rejectUnknownKeys(data, ["email", "confirmacao", "remover_conta_vazia"]);
     if (requiredString(data.confirmacao, "Confirmação", 20) !== "ALTERAR") throw new CommercialHttpError(422, "Digite ALTERAR para confirmar a troca do e-mail de acesso.");
     const email = requiredString(data.email, "E-mail", 320).trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CommercialHttpError(422, "E-mail inválido.");
@@ -927,17 +990,27 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const current = await supabase.from("alunos").select("id,nome,email,user_id").eq("id", alunoId).single();
     if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
     if (String(current.data.email).trim().toLowerCase() === email) return current.data;
-    const duplicate = await supabase.from("alunos").select("id").ilike("email", email).neq("id", alunoId).limit(1);
-    if (duplicate.error) throw new CommercialHttpError(500, "Não foi possível validar o novo e-mail.");
-    if (duplicate.data?.length) throw new CommercialHttpError(409, "Este e-mail já está vinculado a outro aluno ou conta.");
-    const authConflict = await findAuthUserByEmail(email);
-    if (authConflict && authConflict.id !== current.data.user_id) throw new CommercialHttpError(409, "Este e-mail já está vinculado a outro aluno ou conta.");
+    const preflight = await preflightStudentEmailChange(supabase, alunoId, email);
+    if (preflight.status === "public_conflict") {
+      throw new CommercialHttpError(409, "Este e-mail pertence a outro aluno cadastrado e possui vínculos que devem ser analisados manualmente.");
+    }
+    if (preflight.status === "auth_with_data") {
+      throw new CommercialHttpError(409, "Este e-mail pertence a outra conta que possui dados vinculados. A alteração não foi realizada.");
+    }
+    const removeEmptyAuth = booleanValue(data.remover_conta_vazia ?? false, "Remover conta vazia") ?? false;
+    if (preflight.status === "empty_auth" && !removeEmptyAuth) {
+      throw new CommercialHttpError(409, "Já existe uma conta sem dados utilizando este e-mail. Confirme sua remoção para continuar.");
+    }
+    if (preflight.status === "empty_auth") {
+      const removed = await supabase.auth.admin.deleteUser(preflight.user_id);
+      if (removed.error) throw new CommercialHttpError(502, "Não foi possível remover a conta vazia conflitante.");
+    }
     let authChanged = false;
     if (current.data.user_id) {
       const authCurrent = await supabase.auth.admin.getUserById(current.data.user_id);
       if (authCurrent.error || !authCurrent.data.user) throw new CommercialHttpError(404, "A conta Auth vinculada ao aluno não foi encontrada.");
       if (String(authCurrent.data.user.email ?? "").trim().toLowerCase() !== String(current.data.email).trim().toLowerCase()) throw new CommercialHttpError(409, "O e-mail do cadastro e da conta Auth estão divergentes; corrija a divergência antes de alterar.");
-      const authUpdated = await supabase.auth.admin.updateUserById(current.data.user_id, { email });
+      const authUpdated = await supabase.auth.admin.updateUserById(current.data.user_id, { email, email_confirm: true });
       if (authUpdated.error) throw new CommercialHttpError(502, "Não foi possível atualizar o e-mail da conta Auth.");
       authChanged = true;
       console.info("Troca administrativa de e-mail", { alunoId, actor, etapa: "auth_atualizado" });
@@ -945,15 +1018,27 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     const updated = await supabase.from("alunos").update({ email }).eq("id", alunoId).select("id,nome,email,user_id,telefone").single();
     if (updated.error || !updated.data) {
       if (authChanged && current.data.user_id) {
-        const restored = await supabase.auth.admin.updateUserById(current.data.user_id, { email: current.data.email });
+        const restored = await supabase.auth.admin.updateUserById(current.data.user_id, { email: current.data.email, email_confirm: true });
         if (restored.error) logCommercialDbError("Falha ao compensar e-mail Auth", restored.error, { alunoId });
       }
       throw new CommercialHttpError(500, "Não foi possível sincronizar o cadastro; a conta Auth foi restaurada para o e-mail anterior quando possível.");
     }
-    const audit = await supabase.from("auditoria_administrativa").insert({ ator_user_id: actor, acao: "trocar_email_acesso", entidade: "aluno", entidade_id: alunoId, estado_anterior: { email: current.data.email, user_id: current.data.user_id }, estado_posterior: { email, user_id: current.data.user_id } });
+    const audit = await supabase.from("auditoria_administrativa").insert({ ator_user_id: actor, acao: "trocar_email_acesso", entidade: "aluno", entidade_id: alunoId, estado_anterior: { email: current.data.email, user_id: current.data.user_id }, estado_posterior: { email, user_id: current.data.user_id }, detalhes: { conta_vazia_removida: preflight.status === "empty_auth", conta_conflitante_id: preflight.status === "empty_auth" ? preflight.user_id : null } });
     if (audit.error) logCommercialDbError("Falha ao auditar troca de e-mail", audit.error, { alunoId });
     console.info("Troca administrativa de e-mail", { alunoId, actor, etapa: "concluida", auth_alterado: authChanged });
     return updated.data;
+  }
+  if (resource === "alunos" && action === "prever_troca_email_acesso") {
+    const alunoId = uuid(body.id, "Aluno");
+    const data = asObject(body.data);
+    rejectUnknownKeys(data, ["email"]);
+    const email = requiredString(data.email, "E-mail", 320).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CommercialHttpError(422, "E-mail inválido.");
+    const supabase = getSupabaseServerClient();
+    const current = await supabase.from("alunos").select("id,email").eq("id", alunoId).single();
+    if (current.error || !current.data) throw new CommercialHttpError(404, "Aluno não encontrado.");
+    if (normalizedEmail(String(current.data.email)) === email) throw new CommercialHttpError(422, "Informe um e-mail diferente do atual.");
+    return preflightStudentEmailChange(supabase, alunoId, email);
   }
 
   if (resource === "anki_tutoriais" && action === "atualizar") {

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { obterAdministrador } from "@/lib/admin-auth";
+import { invalidateLevelCompletionMessagesCache } from "@/lib/level-completion-messages-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export class CoachAdminError extends Error {
@@ -15,6 +16,78 @@ async function requireAdmin() {
   const admin = await obterAdministrador();
   if (!admin) throw new CoachAdminError(401, "Autenticação administrativa obrigatória.");
   return admin;
+}
+
+type CompletionMessageInput = { texto: string; ativo: boolean; ordem: number };
+
+function completionMessageInput(input: unknown, partial = false): Partial<CompletionMessageInput> {
+  const body = typeof input === "object" && input !== null && !Array.isArray(input) ? input as Record<string, unknown> : {};
+  const allowed = ["texto", "ativo", "ordem"];
+  if (Object.keys(body).some((key) => !allowed.includes(key))) throw new CoachAdminError(400, "Campos da mensagem de conclusão inválidos.");
+  const next: Partial<CompletionMessageInput> = {};
+  if ("texto" in body) {
+    const texto = text(body.texto);
+    if (!texto) throw new CoachAdminError(400, "Informe o texto da mensagem de conclusão.");
+    next.texto = texto;
+  }
+  if ("ativo" in body) {
+    if (typeof body.ativo !== "boolean") throw new CoachAdminError(400, "Informe se a mensagem está ativa.");
+    next.ativo = body.ativo;
+  }
+  if ("ordem" in body) {
+    if (typeof body.ordem !== "number" || !Number.isInteger(body.ordem) || body.ordem < 0) throw new CoachAdminError(400, "Informe uma ordem válida para a mensagem.");
+    next.ordem = body.ordem;
+  }
+  if (!partial && (next.texto === undefined || next.ativo === undefined || next.ordem === undefined)) throw new CoachAdminError(400, "Preencha texto, estado e ordem da mensagem.");
+  if (partial && !Object.keys(next).length) throw new CoachAdminError(400, "Informe ao menos um campo para atualizar.");
+  return next;
+}
+
+function messageId(value: unknown) {
+  const id = typeof value === "string" ? Number(value) : typeof value === "number" ? value : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0) throw new CoachAdminError(400, "Mensagem de conclusão inválida.");
+  return id;
+}
+
+function messageRpcError(error: { code?: string | null; message?: string | null }) {
+  if (["22023", "P0002"].includes(String(error.code))) return new CoachAdminError(422, error.message || "A mensagem de conclusão não pode ser alterada.");
+  if (String(error.code) === "42501") return new CoachAdminError(403, "Operação administrativa não autorizada.");
+  return new CoachAdminError(503, "Não foi possível salvar a mensagem de conclusão agora.");
+}
+
+export async function coachCompletionMessages() {
+  await requireAdmin();
+  const { data, error } = await getSupabaseServerClient().from("mensagens_conclusao_niveis").select("id,texto,ativo,ordem,created_at,updated_at").order("ordem", { ascending: true }).order("id", { ascending: true });
+  if (error) throw new CoachAdminError(503, "Não foi possível carregar as mensagens de conclusão.");
+  return { items: data ?? [] };
+}
+
+export async function createCompletionMessage(input: unknown) {
+  const admin = await requireAdmin();
+  const data = completionMessageInput(input) as CompletionMessageInput;
+  const { data: saved, error } = await getSupabaseServerClient().rpc("admin_criar_mensagem_conclusao_nivel", { p_ator_user_id: admin.id, p_texto: data.texto, p_ativo: data.ativo, p_ordem: data.ordem });
+  if (error) throw messageRpcError(error);
+  invalidateLevelCompletionMessagesCache();
+  return saved;
+}
+
+export async function updateCompletionMessage(idValue: unknown, input: unknown) {
+  const admin = await requireAdmin();
+  const id = messageId(idValue);
+  const data = completionMessageInput(input, true);
+  const { data: saved, error } = await getSupabaseServerClient().rpc("admin_atualizar_mensagem_conclusao_nivel", { p_ator_user_id: admin.id, p_mensagem_id: id, p_dados: data });
+  if (error) throw messageRpcError(error);
+  invalidateLevelCompletionMessagesCache();
+  return saved;
+}
+
+export async function deleteCompletionMessage(idValue: unknown) {
+  const admin = await requireAdmin();
+  const id = messageId(idValue);
+  const { data, error } = await getSupabaseServerClient().rpc("admin_excluir_mensagem_conclusao_nivel", { p_ator_user_id: admin.id, p_mensagem_id: id });
+  if (error) throw messageRpcError(error);
+  invalidateLevelCompletionMessagesCache();
+  return data;
 }
 
 export async function coachStudents(url: URL) {

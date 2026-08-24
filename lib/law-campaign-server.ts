@@ -1,6 +1,7 @@
 import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
+import { getActiveLevelCompletionMessages } from "@/lib/level-completion-messages-server";
 import { mainLawBySlug, mainQuestions, mainStructure } from "@/lib/questions-main-server";
 
 type Question = { id: string; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: string; titulo: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null; ultima_alteracao_legislativa: string | null; structure_id: number | null };
@@ -76,6 +77,7 @@ export async function startCampaign(request: Request, slug: string) {
 export async function campaignState(request: Request, slug: string) {
   const state = await getCampaign(request, slug);
   const { supabase, lawId, studentId } = await authorizeLawStudy(request, slug);
+  const completionMessages = await getActiveLevelCompletionMessages();
   let bestScore: number | null = null;
   let result: { score: number; bestScore: number; errors: number; totalQuestions: number; position?: number } | null = null;
   if (state.status === "concluida") {
@@ -96,21 +98,21 @@ export async function campaignState(request: Request, slug: string) {
       result = { score: latestScore, bestScore: bestScore ?? latestScore, errors: latest.data.total_erros, totalQuestions: (levels ?? []).flatMap((level) => arrayOfStrings(level.questoes_ids)).length, position: rankingPosition ?? undefined };
     }
   }
-  if (!state.campaignId) return { ...state, bestScore, result, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
+  if (!state.campaignId) return { ...state, bestScore, result, completionMessages, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
   const { data: levels, error } = await supabase.from("campanhas_leis_niveis").select("id,ordem,chave_origem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,concluido").eq("campanha_id", state.campaignId).order("ordem");
   if (error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
   const parsed = (levels ?? []).map((level) => ({ ...level, questoes_ids: arrayOfStrings(level.questoes_ids), pendencias_ids: arrayOfStrings(level.pendencias_ids) })) as Level[];
   const level = parsed.find((item) => !item.concluido) ?? null;
   const all = parsed.flatMap((item) => item.questoes_ids); const completed = parsed.filter((item) => item.concluido).flatMap((item) => item.questoes_ids).length;
   const levelSummary = parsed.map((item) => ({ id: item.id, chave: item.chave_origem ?? "", nome: item.nome, concluido: item.concluido, posicao: item.proxima_posicao, totalQuestoes: item.questoes_ids.length, revisando: item.proxima_posicao >= item.questoes_ids.length && item.pendencias_ids.length > 0 }));
-  if (!level) return { ...state, bestScore, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
+  if (!level) return { ...state, bestScore, completionMessages, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
   const questionId = level.proxima_posicao < level.questoes_ids.length ? level.questoes_ids[level.proxima_posicao] : level.pendencias_ids[0];
   const questions = await questionsByIds(slug, level.questoes_ids);
   const question = questionId ? questions.find((item) => item.id === questionId) ?? null : null;
   const reviewing = level.proxima_posicao >= level.questoes_ids.length;
   const firstPassProgress = level.questoes_ids.length ? Math.round(Math.min(level.proxima_posicao, level.questoes_ids.length) / level.questoes_ids.length * 100) : 0;
   const activeDone = reviewing ? level.questoes_ids.length : Math.min(level.proxima_posicao, level.questoes_ids.length);
-  return { ...state, bestScore, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
+  return { ...state, bestScore, completionMessages, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
 }
 
 export async function answerCampaign(request: Request, slug: string, value: unknown) {

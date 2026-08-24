@@ -4,6 +4,7 @@ export type StudentEmailChangePayload = {
   data: {
     email: string;
     confirmacao: string;
+    remover_conta_vazia?: boolean;
   };
 };
 
@@ -15,10 +16,11 @@ export function createStudentEmailChangePayload(
   alunoId: string,
   email: string,
   confirmacao: string,
+  removerContaVazia = false,
 ): StudentEmailChangePayload {
   return {
     action: "trocar_email_acesso",
     id: alunoId,
-    data: { email, confirmacao },
+    data: { email, confirmacao, remover_conta_vazia: removerContaVazia },
   };
 }
