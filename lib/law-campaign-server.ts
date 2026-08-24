@@ -2,6 +2,7 @@ import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
 import { effectiveCampaignScore, personalRecordForAttempt } from "@/lib/law-campaign-personal-record";
+import { buildCampaignSnapshot } from "@/lib/law-campaign-snapshot";
 import { mainQuestionById, mainQuestions, mainQuestionsByIds, mainStructure } from "@/lib/questions-main-server";
 
 type Question = { id: string; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: string; titulo: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null; ultima_alteracao_legislativa: string | null; structure_id: number | null };
@@ -16,21 +17,7 @@ async function loadQuestionSnapshot(lawId: number, title: string) {
   let questions: Question[]; let structures: Array<{ id: number; parent_id: number | null; nome: string }>;
   try { [questions, structures] = await Promise.all([mainQuestions(lawId), mainStructure(lawId)]); } catch { throw new LawStudyApiError(503, "Não foi possível carregar as questões agora."); }
   if (!questions.length) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
-  return snapshotFromRows(title, questions, structures);
-}
-
-function snapshotFromRows(title: string, questions: Question[], structures: Array<{ id: number; parent_id: number | null; nome: string }>) {
-  const children = new Map<number, number[]>();
-  for (const item of structures) if (item.parent_id) children.set(item.parent_id, [...(children.get(item.parent_id) ?? []), item.id]);
-  const descendants = (id: number): number[] => [id, ...(children.get(id) ?? []).flatMap(descendants)];
-  const levels = structures.flatMap((item) => {
-    const ids = new Set(descendants(item.id)); const selected = questions.filter((question) => question.structure_id !== null && ids.has(question.structure_id));
-    const hasChildWithQuestions = (children.get(item.id) ?? []).some((child) => questions.some((question) => question.structure_id !== null && descendants(child).includes(question.structure_id)));
-    return selected.length && !hasChildWithQuestions ? [{ nome: item.nome, chave: `estrutura:${item.id}`, ids: selected.map((question) => question.id) }] : [];
-  });
-  const unstructured = questions.filter((question) => question.structure_id === null);
-  if (unstructured.length) levels.unshift({ nome: title, chave: "sem-estrutura", ids: unstructured.map((question) => question.id) });
-  return { questions, levels };
+  return buildCampaignSnapshot(title, questions, structures);
 }
 
 type StudyContext = Awaited<ReturnType<typeof authorizeLawStudy>>;
@@ -108,11 +95,21 @@ async function campaignStateFor(context: StudyContext) {
   if (!level) return { ...state, bestScore, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
   const questionId = level.proxima_posicao < level.questoes_ids.length ? level.questoes_ids[level.proxima_posicao] : level.pendencias_ids[0];
   const questions = await mainQuestionsByIds(lawId, level.questoes_ids);
-  const question = questionId ? questions.find((item) => item.id === questionId) ?? null : null;
+  let question = questionId ? questions.find((item) => item.id === questionId) ?? null : null;
+  // O snapshot da campanha é a autoridade para a ordem. Se a consulta em lote
+  // não devolver justamente a questão atual, confirme-a pelo seu ID na mesma
+  // fonte principal; não deixe uma campanha válida parecer vazia no player.
+  if (!question && questionId) {
+    const recoveredQuestion = await mainQuestionById(lawId, questionId);
+    question = recoveredQuestion;
+    if (recoveredQuestion && !questions.some((item) => item.id === recoveredQuestion.id)) questions.push(recoveredQuestion);
+  }
+  const questionsById = new Map(questions.map((item) => [item.id, item]));
+  const orderedQuestions = level.questoes_ids.flatMap((id) => questionsById.get(id) ? [questionsById.get(id)!] : []);
   const reviewing = level.proxima_posicao >= level.questoes_ids.length;
   const firstPassProgress = level.questoes_ids.length ? Math.round(Math.min(level.proxima_posicao, level.questoes_ids.length) / level.questoes_ids.length * 100) : 0;
   const activeDone = reviewing ? level.questoes_ids.length : Math.min(level.proxima_posicao, level.questoes_ids.length);
-  return { ...state, bestScore, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
+  return { ...state, bestScore, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions: orderedQuestions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
 }
 
 export async function campaignState(request: Request, slug: string) {

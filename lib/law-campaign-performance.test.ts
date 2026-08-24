@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const campaign = readFileSync("lib/law-campaign-server.ts", "utf8");
 const questions = readFileSync("lib/questions-main-server.ts", "utf8");
 const lawStudy = readFileSync("lib/law-study-server.ts", "utf8");
+const snapshot = readFileSync("lib/law-campaign-snapshot.ts", "utf8");
 
 describe("performance do Estudo Ativo da Lei", () => {
   it("não reautoriza o mesmo request ao carregar ou responder", () => {
@@ -26,7 +27,15 @@ describe("performance do Estudo Ativo da Lei", () => {
     expect(questions).toContain("export async function mainQuestionsByIds");
     expect(campaign).toContain("const snapshotQuestion = await mainQuestionById(context.lawId, questionId);");
     expect(campaign).toContain("const questions = await mainQuestionsByIds(lawId, level.questoes_ids);");
+    expect(campaign).toContain("const recoveredQuestion = await mainQuestionById(lawId, questionId);");
+    expect(campaign).toContain("const orderedQuestions = level.questoes_ids.flatMap");
     expect(campaign).not.toContain("async function questionsByIds");
+  });
+
+  it("mantém a montagem do snapshot baseada no slug canônico e em descendentes", () => {
+    expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(lawId, context.title);");
+    expect(snapshot).toContain("const descendants = (id: number): number[] => [id, ...(children.get(id) ?? []).flatMap(descendants)];");
+    expect(snapshot).toContain("ids.has(question.structure_id)");
   });
 
   it("mantém histórico, ranking e recorde fora das respostas intermediárias", () => {
