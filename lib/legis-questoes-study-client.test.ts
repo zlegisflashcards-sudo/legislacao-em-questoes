@@ -13,6 +13,12 @@ describe("player Legis Questões", () => {
     expect(player).toContain('Carregando Estudo Ativo da Lei…'); expect(player).toContain('if (error)'); expect(player).toContain('Nenhuma questão disponível neste Estudo Ativo da Lei.');
   });
 
+  it("usa o estado retornado pelo POST inicial e não faz GET duplicado", () => {
+    const campaignStudy = player.slice(player.indexOf("function CampaignStudy"), player.indexOf("function FreeStudy"));
+    expect(campaignStudy).toContain('const state = await api(start ? "POST" : "GET");');
+    expect(campaignStudy).not.toContain('const state = initial.status === "concluida"');
+  });
+
   it("separa explicitamente campanha e estudo livre", () => {
     expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} />');
   });
@@ -127,7 +133,7 @@ describe("player Legis Questões", () => {
   });
 
   it("mostra o avanço global do Estudo Ativo da Lei e oculta a barra na revisão", () => {
-    expect(player).toContain('progress={campaign?.progress ?? 0}'); expect(player).toContain('reviewing={campaign?.level?.reviewing ?? false}'); expect(player).toContain('{!reviewing ? <div className="lf-progress-row">'); expect(player).toContain('Revisando questões erradas'); expect(player).toContain('{progress}%'); expect(player).not.toContain('progress={campaign?.level?.firstPassProgress ?? 0}'); expect(player).toContain('setCampaign((currentState) => currentState ? { ...currentState, progress: result.progress ?? currentState.progress } : currentState)');
+    expect(player).toContain('progress={campaign?.progress ?? 0}'); expect(player).toContain('reviewing={campaign?.level?.reviewing ?? false}'); expect(player).toContain('{!reviewing ? <div className="lf-progress-row">'); expect(player).toContain('Revisando questões erradas'); expect(player).toContain('{progress}%'); expect(player).not.toContain('progress={campaign?.level?.firstPassProgress ?? 0}'); expect(player).toContain('progress: result.progress ?? current.progress');
     expect(campaignServer).toContain('const completedBeforeCurrentLevel = levels.filter((item) => item.id !== level.id && item.concluido).flatMap((item) => item.questoes_ids).length;'); expect(campaignServer).toContain('const currentLevelFirstPassCompleted = Math.min(nextPosition, level.questoes_ids.length);'); expect(campaignServer).toContain('const globalCompletedQuestions = completedBeforeCurrentLevel + currentLevelFirstPassCompleted;');
   });
 
@@ -141,8 +147,8 @@ describe("player Legis Questões", () => {
     expect(player).not.toContain('{levelDone.errors}');
     expect(player).not.toContain('const messages = current.completionMessages?.filter');
     expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "" });');
-    expect(campaignServer).toContain('const completionMessages = await getActiveLevelCompletionMessages();');
-    expect(campaignServer).toContain('completionMessages, level: { id: level.id');
+    expect(campaignServer).not.toContain('getActiveLevelCompletionMessages');
+    expect(campaignServer).not.toContain('completionMessages, level: { id: level.id');
     expect(campaignServer).toContain('total_erros: levelErrors');
     expect(campaignServer).toContain('levelResult: concludesLevel ? { errors: levelErrors } : null');
     expect(campaignServer).not.toContain('score: score(levelErrors)');
@@ -173,6 +179,13 @@ describe("player Legis Questões", () => {
     expect(player).toContain('{transitioning ? <QuestionLoading /> : <div key={question.id}');
     expect(player).toContain('<AnswerButtons answer={answer} disabled={saving} onChoose={setAnswer} />');
     expect(player).toContain('canAnswer: !saving');
+  });
+
+  it("reconcilia a próxima questão confirmada pelo PATCH sem novo GET no fluxo normal", () => {
+    expect(player).toContain('const persistedNext = result.next;');
+    expect(player).toContain('currentLevel?.questions.find((question) => question.id === persistedNext.questionId)');
+    expect(player).toContain('position: persistedNext.position, reviewing: persistedNext.reviewing');
+    expect(campaignServer).toContain('next: nextQuestionId ? { questionId: nextQuestionId, position: nextPosition, reviewing:');
   });
 
   it("mantém respostas e feedback locais no estudo livre sem chamar a campanha", () => {

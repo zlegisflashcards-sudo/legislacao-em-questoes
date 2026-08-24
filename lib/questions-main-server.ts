@@ -21,6 +21,22 @@ export async function mainQuestions(leiId: number, filters: { structureIds?: num
   return (result.data ?? []) as MainQuestion[];
 }
 
+export async function mainQuestionById(leiId: number, questionId: string) {
+  const result = await getSupabaseServerClient().from("questions").select("id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo").eq("lei_id", leiId).eq("id", questionId).eq("ativo", true).maybeSingle();
+  if (result.error) throw new Error(`Não foi possível carregar a questão: ${result.error.message}`);
+  return result.data as MainQuestion | null;
+}
+
+/** Carrega somente o snapshot de questões solicitado, preservando a ordem da campanha. */
+export async function mainQuestionsByIds(leiId: number, questionIds: string[]) {
+  const uniqueIds = [...new Set(questionIds)];
+  if (!uniqueIds.length) return [] as MainQuestion[];
+  const result = await getSupabaseServerClient().from("questions").select("id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo").eq("lei_id", leiId).eq("ativo", true).in("id", uniqueIds);
+  if (result.error) throw new Error(`Não foi possível carregar as questões: ${result.error.message}`);
+  const byId = new Map((result.data ?? []).map((question) => [question.id, question as MainQuestion]));
+  return uniqueIds.flatMap((id) => byId.get(id) ? [byId.get(id)!] : []);
+}
+
 export async function mainStructure(leiId: number) {
   const result = await getSupabaseServerClient().from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,ativo,created_at,updated_at").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("id");
   if (result.error) throw new Error(`Não foi possível carregar a estrutura: ${result.error.message}`);
