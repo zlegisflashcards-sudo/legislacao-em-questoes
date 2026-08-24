@@ -187,6 +187,13 @@ describe("player Legis Questões", () => {
     expect(freeStudy).not.toContain('/campanha');
   });
 
+  it("preserva o structure_id numérico da árvore e reinicia no início do recorte selecionado", () => {
+    const freeStudy = player.slice(player.indexOf('function FreeStudy'));
+    expect(freeStudy).toContain('structureId && /^\\d+$/.test(structureId)');
+    expect(freeStudy).toContain('`?structure_id=${encodeURIComponent(structureId)}`');
+    expect(freeStudy).toContain('setQuestions(result.questions); setIndex(0); setAnswer(null);');
+  });
+
   it("mantém o Estudo Livre visualmente concluído mesmo em sessão filtrada", () => {
     const freeStudy = player.slice(player.indexOf('function FreeStudy'));
     expect(freeStudy).toContain('progress={100}');
