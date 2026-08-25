@@ -45,6 +45,10 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 .question-block { margin-bottom: 18px; }
 .question-label { display: block; margin: 0 0 9px 4px; color: var(--lb-muted); font-size: 13px; font-weight: 700; }
 .question-card { width: 100%; padding: 18px 20px; border: 1px solid #bfdbfe; border-radius: 16px; background: color-mix(in srgb,#dbeafe 48%,var(--lb-surface)); color: var(--lb-text); font-size: 17px; font-weight: 650; line-height: 1.45; box-shadow: 0 8px 24px #2563eb0c; }
+.legisbot-question-action { display: block; box-sizing: border-box; text-align: left; font-family: inherit; cursor: pointer; transition: border-color .2s,background .2s,box-shadow .2s; }
+.legisbot-question-action:hover { border-color: var(--lb-blue); background: color-mix(in srgb,#dbeafe 70%,var(--lb-surface)); box-shadow: 0 10px 26px #2563eb1f; }
+.legisbot-question-action:focus-visible { outline: 3px solid color-mix(in srgb,var(--lb-blue) 35%,transparent); outline-offset: 3px; }
+.legisbot-question-action:disabled { cursor: wait; opacity: .78; }
 .bot-answer { border: 1px solid color-mix(in srgb,var(--lb-border) 75%,transparent); border-radius: 22px; padding: 30px 38px 38px; background: var(--lb-surface); box-shadow: 0 18px 50px #0f172a12; }
 .answer-header { display: flex; align-items: center; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid var(--lb-border); }
 .answer-header h2 { margin: 0; color: var(--lb-blue-dark); font-size: 23px; }
@@ -52,10 +56,6 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 .answer-content.answer-freeform { padding: 28px 0 0; }
 .answer-status { margin: 0; color: var(--lb-muted); font-size: 16px; line-height: 1.7; }
 .answer-error { color: #b91c1c; }
-.answer-action { display: grid; justify-items: start; gap: 16px; }
-.legisbot-generate-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 0; border-radius: 12px; padding: 11px 18px; background: #075fc4; color: #fff; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
-.legisbot-generate-button:hover { background: #064f9f; }
-.legisbot-generate-button:disabled { cursor: wait; opacity: .65; }
 .markdown-content { min-width: 0; overflow-wrap: anywhere; color: var(--lb-text); font-size: 17px; line-height: 1.78; }
 .markdown-content > :first-child { margin-top: 0; }
 .markdown-content > :last-child { margin-bottom: 0; }

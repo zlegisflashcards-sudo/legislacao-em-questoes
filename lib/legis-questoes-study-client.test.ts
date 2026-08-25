@@ -101,6 +101,16 @@ describe("player Legis Questões", () => {
     expect(legisBotPage).toContain('<a href={centralLegislacaoUrl} className="legislation-back-link">');
   });
 
+  it("usa a pergunta do LegisBot como a única ação para gerar comentários ausentes", () => {
+    expect(legisBotPage).toContain('className="question-card legisbot-question-action"');
+    expect(legisBotPage).toContain('onClick={() => void gerarComentario()}');
+    expect(legisBotPage).toContain('disabled={answerState !== "not_found" || authenticated !== true}');
+    expect(legisBotPage).toContain('"🤖 LegisBot está preparando a explicação…"');
+    expect(legisBotPage).not.toContain('Gerar comentário com o LegisBot');
+    expect(legisBotPage).not.toContain('Este comentário ainda não foi gerado.');
+    expect(styles).toContain('.legisbot-question-action { display: block;');
+  });
+
   it("usa assunto como título do trecho legal e reserva Legislação para o fallback", () => {
     const feedback = player.slice(player.indexOf("function AnswerFeedback"), player.indexOf("function isPlayerFormTarget"));
     expect(feedback).toContain('const assunto = question.assunto?.trim() || "Legislação";');

@@ -126,6 +126,10 @@ export default function LegisBotPageClient({
   const apiUrl = `/api/legisbot/${encodeURIComponent(slugNormalizado)}/${encodeURIComponent(ordemNormalizada)}`;
   const centralLegislacaoUrl = `/leis/${encodeURIComponent(slug.trim().toLowerCase())}`;
   const loginUrl = `/conta?retorno=${encodeURIComponent(returnPath)}`;
+  const isCommentGenerationPending = answerState === "generating" || answerState === "processing";
+  const questionPrompt = isCommentGenerationPending
+    ? "🤖 LegisBot está preparando a explicação…"
+    : "🤖 LegisBot, pode me explicar este artigo?";
 
   useEffect(() => {
     if (embedded) return;
@@ -286,7 +290,18 @@ export default function LegisBotPageClient({
   const legisBotContent = <>
     <section className="question-block" aria-label="Pergunta feita ao LegisBot">
       <span className="question-label">👤 Você perguntou:</span>
-      <div className="question-card">🤖 LegisBot, pode me explicar este artigo?</div>
+      {answerState === "not_found" && authenticated === false ? (
+        <a className="question-card legisbot-question-action" href={loginUrl}>{questionPrompt}</a>
+      ) : answerState === "not_found" || isCommentGenerationPending ? (
+        <button
+          className="question-card legisbot-question-action"
+          type="button"
+          onClick={() => void gerarComentario()}
+          disabled={answerState !== "not_found" || authenticated !== true}
+        >
+          {questionPrompt}
+        </button>
+      ) : <div className="question-card">{questionPrompt}</div>}
     </section>
 
     <article className="bot-answer" aria-labelledby="legisbot-answer-title">
@@ -294,10 +309,7 @@ export default function LegisBotPageClient({
       <div className="answer-content answer-freeform" aria-live="polite">
         {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
         {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
-        {answerState === "processing" || answerState === "generating" ? <p className="answer-status">Estou preparando a explicação deste artigo…</p> : null}
         {answerState === "not_found" && authenticated === null ? <p className="answer-status">Verificando sua conta…</p> : null}
-        {answerState === "not_found" && authenticated === false ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado. Entre na sua conta para solicitar a explicação.</p><a className="legisbot-generate-button" href={loginUrl}>Entrar para gerar comentário</a></div> : null}
-        {answerState === "not_found" && authenticated === true ? <div className="answer-action"><p className="answer-status">Este comentário ainda não foi gerado.</p><button className="legisbot-generate-button" type="button" onClick={() => void gerarComentario()}>Gerar comentário com o LegisBot</button></div> : null}
         {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
         {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
         {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Tente novamente mais tarde.</p> : null}
