@@ -7,6 +7,8 @@ const campaignServer = readFileSync("lib/law-campaign-server.ts", "utf8");
 const campaignMigration = readFileSync("supabase/migrations/20260820100000_add_law_campaign_level_errors.sql", "utf8");
 const styles = readFileSync("app/globals.css", "utf8");
 const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
+const legisBotAdminShortcut = readFileSync("components/admin/admin-edit-comment-shortcut.tsx", "utf8");
+const legisBotInlineEditor = readFileSync("components/admin/admin-edit-comment-inline-shortcut.tsx", "utf8");
 
 describe("player Legis Questões", () => {
   it("mantém estados de carregamento e erro do Estudo Ativo da Lei antes do cartão", () => {
@@ -99,6 +101,15 @@ describe("player Legis Questões", () => {
     expect(legisBotPage).toContain('onClose?: () => void;');
     expect(legisBotPage).toContain('embedded ? <div className="legisbot-topic-tools">');
     expect(legisBotPage).toContain('<a href={centralLegislacaoUrl} className="legislation-back-link">');
+  });
+
+  it("abre a edição administrativa do LegisBot no próprio contexto do artigo", () => {
+    expect(legisBotAdminShortcut).toContain('AdminEditCommentInlineShortcut');
+    expect(legisBotAdminShortcut).not.toContain('href={`/admin/legisbot/${data.id}`}');
+    expect(legisBotInlineEditor).toContain('<LegisBotEditor record={record} />');
+    expect(legisBotInlineEditor).toContain('role="dialog" aria-modal="true"');
+    expect(legisBotInlineEditor).toContain('event.key === "Escape"');
+    expect(styles).toContain('.legisbot-inline-editor-backdrop{position:fixed;z-index:130');
   });
 
   it("usa a pergunta do LegisBot como a única ação para gerar comentários ausentes", () => {
