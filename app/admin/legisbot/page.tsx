@@ -35,7 +35,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
   if (status && LEGISBOT_COMENTARIO_STATUS.includes(status as (typeof LEGISBOT_COMENTARIO_STATUS)[number])) {
     request = request.eq("status", status);
   }
-  const { data, error, count } = await request.order("updated_at", { ascending: false }).range(start, start + PAGE_SIZE - 1);
+  const { data, error, count } = await request.order("ordem", { ascending: true }).order("id", { ascending: true }).range(start, start + PAGE_SIZE - 1);
   if (error) throw new Error(error.message);
   const records = (data ?? []) as LegisBotComentario[];
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
@@ -46,7 +46,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
       <div>
         <div className="admin-eyebrow">Administração</div>
         <h1>Comentários do LegisBot</h1>
-        <p>{count ?? 0} registro(s), ordenados pela atualização mais recente.</p>
+        <p>{count ?? 0} registro(s), ordenados pela ordem crescente da legislação.</p>
       </div>
       <div className="admin-header-actions">
         <Link className="admin-button primary" href="/admin/legisbot/novo">+ Adicionar comentário</Link>
