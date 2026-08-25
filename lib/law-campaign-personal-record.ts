@@ -11,6 +11,20 @@ export function effectiveCampaignScore(campaign: CampaignScore) {
   return typeof campaign.score_ajustado === "number" ? campaign.score_ajustado : campaign.score;
 }
 
+export type CompletedCampaignForRecord = CampaignScore & { id: string; concluida_em: string | null; total_erros: number };
+
+/** A mesma prioridade do recorde/ranking: score efetivo, conclusão mais antiga e ID estável. */
+export function bestCompletedCampaignForRecord(campaigns: CompletedCampaignForRecord[]) {
+  return campaigns
+    .filter((campaign): campaign is CompletedCampaignForRecord & { score: number } => typeof effectiveCampaignScore(campaign) === "number")
+    .sort((left, right) => {
+      const scoreDifference = effectiveCampaignScore(right)! - effectiveCampaignScore(left)!;
+      if (scoreDifference) return scoreDifference;
+      const completedDifference = (left.concluida_em ?? "").localeCompare(right.concluida_em ?? "");
+      return completedDifference || left.id.localeCompare(right.id);
+    })[0] ?? null;
+}
+
 /** Compara uma tentativa concluída com o histórico anterior da mesma lei. */
 export function personalRecordForAttempt(currentScore: number, previousCampaigns: CampaignScore[]): PersonalRecord {
   const previousScores = previousCampaigns.map(effectiveCampaignScore).filter((score): score is number => typeof score === "number");

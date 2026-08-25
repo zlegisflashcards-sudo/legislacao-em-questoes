@@ -250,9 +250,9 @@ describe("player Legis Questões", () => {
     expect(player).toContain('Você igualou seu recorde! Mais uma tentativa nesse nível de desempenho.');
     expect(player).toContain('Seu recorde continua sendo ${score} pontos.');
     expect(player).toContain('<PersonalRecordSummary record={result.personalRecord} />');
-    expect(player).toContain('function AttemptDonut');
+    expect(player).toContain('import { CampaignPerformanceDonut } from "@/components/campaign-performance-donut"');
     expect(player).toContain('campaignAttemptPerformance(result?.totalQuestions ?? 0, result?.errors ?? 0)');
-    expect(player).toContain('<AttemptDonut correct={performance.correct} errors={performance.errors} accuracy={performance.accuracy} />');
+    expect(player).toContain('<CampaignPerformanceDonut correct={performance.correct} errors={performance.errors} accuracy={performance.accuracy} />');
     expect(player).toContain('Sua posição no ranking:');
     expect(styles).toContain('.lf-attempt-donut{display:grid;width:142px;height:142px');
     expect(styles).toContain('background:conic-gradient(#1eaa5d 0 var(--lf-correct),#e34d4d var(--lf-correct) 100%)');

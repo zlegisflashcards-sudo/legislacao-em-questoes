@@ -1,7 +1,8 @@
 import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
-import { effectiveCampaignScore, personalRecordForAttempt } from "@/lib/law-campaign-personal-record";
+import { bestCompletedCampaignForRecord, effectiveCampaignScore, personalRecordForAttempt } from "@/lib/law-campaign-personal-record";
+import { campaignScore } from "@/lib/law-campaign-score";
 import { buildCampaignSnapshot } from "@/lib/law-campaign-snapshot";
 import { mainQuestionById, mainQuestions, mainQuestionsByIds, mainStructure } from "@/lib/questions-main-server";
 
@@ -10,7 +11,6 @@ type Level = { id: number; ordem: number; chave_origem?: string; nome: string; q
 const cacheHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
 function arrayOfStrings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
-function score(errors: number) { return Math.max(0, 10000 - errors * 100); }
 function normalizedAnswer(value: string) { const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(); return ["certo", "certa", "correto", "correta"].includes(normalized) ? "certo" : ["errado", "errada", "incorreto", "incorreta"].includes(normalized) ? "errado" : null; }
 
 async function loadQuestionSnapshot(lawId: number, title: string) {
@@ -64,15 +64,24 @@ async function campaignStateFor(context: StudyContext) {
   const { supabase, lawId, studentId } = context;
   const state = await getCampaignFor(context);
   let bestScore: number | null = null;
+  let record: { score: number; errors: number; totalQuestions: number } | null = null;
   let result: { score: number; bestScore: number; errors: number; totalQuestions: number; position?: number; personalRecord: ReturnType<typeof personalRecordForAttempt> } | null = null;
+  const { data: historyData, error: historyError } = await supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado,total_erros,concluida_em").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true);
+  if (historyError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
+  const history = historyData ?? [];
+  const winningCampaign = bestCompletedCampaignForRecord(history);
+  bestScore = winningCampaign ? effectiveCampaignScore(winningCampaign) : null;
+  if (winningCampaign && bestScore !== null) {
+    const { data: winningLevels, error: winningLevelsError } = await supabase.from("campanhas_leis_niveis").select("questoes_ids").eq("campanha_id", winningCampaign.id);
+    if (winningLevelsError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
+    record = { score: bestScore, errors: winningCampaign.total_erros, totalQuestions: (winningLevels ?? []).flatMap((level) => arrayOfStrings(level.questoes_ids)).length };
+  }
   if (state.status === "concluida") {
-    const [history, latest, ranking] = await Promise.all([
-      supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true),
+    const [latest, ranking] = await Promise.all([
       supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado,total_erros").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true).order("concluida_em", { ascending: false }).limit(1).maybeSingle(),
       supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: studentId, p_lei_id: lawId }),
     ]);
-    if (history.error || latest.error || ranking.error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
-    bestScore = (history.data ?? []).map(effectiveCampaignScore).filter((value): value is number => typeof value === "number").reduce<number | null>((best, value) => best === null || value > best ? value : best, null);
+    if (latest.error || ranking.error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
     const rankingRow = Array.isArray(ranking.data) ? ranking.data[0] : null;
     const position = Number(rankingRow?.posicao);
     const rankingPosition = Number.isSafeInteger(position) && position > 0 ? position : null;
@@ -81,18 +90,18 @@ async function campaignStateFor(context: StudyContext) {
     if (latestCampaign && typeof latestScore === "number" && typeof latestCampaign.total_erros === "number") {
       const { data: levels, error: levelsError } = await supabase.from("campanhas_leis_niveis").select("questoes_ids").eq("campanha_id", latestCampaign.id);
       if (levelsError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
-      const previousCampaigns = (history.data ?? []).filter((campaign) => campaign.id !== latestCampaign.id);
+      const previousCampaigns = history.filter((campaign) => campaign.id !== latestCampaign.id);
       result = { score: latestScore, bestScore: bestScore ?? latestScore, errors: latestCampaign.total_erros, totalQuestions: (levels ?? []).flatMap((level) => arrayOfStrings(level.questoes_ids)).length, position: rankingPosition ?? undefined, personalRecord: personalRecordForAttempt(latestScore, previousCampaigns) };
     }
   }
-  if (!state.campaignId) return { ...state, bestScore, result, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
+  if (!state.campaignId) return { ...state, bestScore, record, result, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
   const { data: levels, error } = await supabase.from("campanhas_leis_niveis").select("id,ordem,chave_origem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,concluido").eq("campanha_id", state.campaignId).order("ordem");
   if (error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
   const parsed = (levels ?? []).map((level) => ({ ...level, questoes_ids: arrayOfStrings(level.questoes_ids), pendencias_ids: arrayOfStrings(level.pendencias_ids) })) as Level[];
   const level = parsed.find((item) => !item.concluido) ?? null;
   const all = parsed.flatMap((item) => item.questoes_ids); const completed = parsed.filter((item) => item.concluido).flatMap((item) => item.questoes_ids).length;
   const levelSummary = parsed.map((item) => ({ id: item.id, chave: item.chave_origem ?? "", nome: item.nome, concluido: item.concluido, posicao: item.proxima_posicao, totalQuestoes: item.questoes_ids.length, revisando: item.proxima_posicao >= item.questoes_ids.length && item.pendencias_ids.length > 0 }));
-  if (!level) return { ...state, bestScore, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
+  if (!level) return { ...state, bestScore, record, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
   const questionId = level.proxima_posicao < level.questoes_ids.length ? level.questoes_ids[level.proxima_posicao] : level.pendencias_ids[0];
   const questions = await mainQuestionsByIds(lawId, level.questoes_ids);
   let question = questionId ? questions.find((item) => item.id === questionId) ?? null : null;
@@ -109,7 +118,7 @@ async function campaignStateFor(context: StudyContext) {
   const reviewing = level.proxima_posicao >= level.questoes_ids.length;
   const firstPassProgress = level.questoes_ids.length ? Math.round(Math.min(level.proxima_posicao, level.questoes_ids.length) / level.questoes_ids.length * 100) : 0;
   const activeDone = reviewing ? level.questoes_ids.length : Math.min(level.proxima_posicao, level.questoes_ids.length);
-  return { ...state, bestScore, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions: orderedQuestions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
+  return { ...state, bestScore, record, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions: orderedQuestions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
 }
 
 export async function campaignState(request: Request, slug: string) {
@@ -148,7 +157,8 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
     if (previousError) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
     const { data: campaign, error: campaignError } = await supabase.from("campanhas_leis_alunos").select("total_erros").eq("id", state.campaignId).single();
     if (campaignError || !campaign) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
-    const finalScore = score(campaign.total_erros);
+    const totalSnapshotQuestions = levels.flatMap((item) => item.questoes_ids).length;
+    const finalScore = campaignScore(totalSnapshotQuestions, campaign.total_erros);
     const { data: finishedCampaign, error: finishError } = await supabase.from("campanhas_leis_alunos").update({ concluida: true, concluida_em: new Date().toISOString(), score: finalScore }).eq("id", state.campaignId).eq("concluida", false).select("id");
     if (finishError) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
     if (!finishedCampaign?.length) throw new LawStudyApiError(409, "Este Estudo Ativo da Lei já foi concluído.");

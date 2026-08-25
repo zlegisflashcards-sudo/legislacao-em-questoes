@@ -15,6 +15,7 @@ const campaignServer = readFileSync("lib/law-campaign-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/estudar/lei/[slug]/route.ts", "utf8");
 const page = readFileSync("app/estudar/lei/[slug]/page.tsx", "utf8");
 const client = readFileSync("components/law-study-page-client.tsx", "utf8");
+const donut = readFileSync("components/campaign-performance-donut.tsx", "utf8");
 const cards = readFileSync("components/student-laws-client.tsx", "utf8");
 const contract = readFileSync("lib/law-study.ts", "utf8");
 
@@ -110,6 +111,17 @@ describe("interface de estudo", () => {
     expect(client).toContain('Posição no ranking: {typeof campaign.result?.position === "number" ? `${campaign.result.position}º lugar` : "Ainda sem posição no ranking"}');
   });
 
+  it("mostra o gráfico do recorde histórico, inclusive após reset, sem usar a campanha ativa", () => {
+    expect(campaignServer).toContain("bestCompletedCampaignForRecord(history)");
+    expect(campaignServer).toContain('select("id,score,score_ajustado,total_erros,concluida_em")');
+    expect(campaignServer).toContain('eq("campanha_id", winningCampaign.id)');
+    expect(client).toContain("campaign.record ?");
+    expect(client).toContain("<CampaignPerformanceDonut compact {...campaignAttemptPerformance(campaign.record.totalQuestions, campaign.record.errors)} />");
+    expect(client).toContain('completed || campaign.status === "em_andamento" || campaign.record');
+    expect(donut).toContain("lf-attempt-donut");
+    expect(donut).toContain("is-compact");
+  });
+
   it("libera estudo livre e capítulos somente após a campanha concluída", () => {
     expect(client).toContain('completed && tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1`');
     expect(client).toContain('structure_id=${node.id}');
@@ -158,7 +170,7 @@ describe("interface de estudo", () => {
   });
 
   it("reseta somente a campanha sem localStorage", () => {
-    expect(client).toContain('}/campanha`, "DELETE"'); expect(client).toContain('setCampaign({ status: "nao_iniciada", progress: 0, levels: [] })');
+    expect(client).toContain('}/campanha`, "DELETE"'); expect(client).toContain('record: current?.record');
     expect(client).not.toContain("localStorage");
     expect(client).toContain('Resetar Estudo Ativo da Lei');
   });
