@@ -156,3 +156,5 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 
 /* Conclusão de nível: superfície interna alinhada aos blocos do Player 4.0. */
 .lf-level-completion-message{width:min(100%,610px);margin:6px auto 2px;border:1px solid #cfe0f1;border-radius:16px;background:#f7fbff;padding:16px 18px;color:#31506d;font-size:15px;font-weight:700;line-height:1.55;text-align:left;white-space:pre-line}.lf-level-completion .lf-primary{margin-top:12px}@media(max-width:640px){.lf-level-completion-message{padding:14px 15px;font-size:14px}}
+
+.lf-structure-path{display:grid;gap:2px;margin:12px 2px 18px;min-width:0;color:#52708f;font-size:13px;font-weight:400;line-height:1.35}.lf-structure-path p{min-width:0;margin:0;overflow-wrap:anywhere}.lf-structure-path p.is-current{color:#38516b;font-weight:600}.lf-structure-path .lf-reviewing-label{margin:4px 0 0}@media(max-width:640px){.lf-structure-path{margin:10px 1px 15px;font-size:12px;line-height:1.42}}

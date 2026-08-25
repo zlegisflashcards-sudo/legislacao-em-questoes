@@ -225,7 +225,7 @@ describe("player Legis Questões", () => {
     const freeStudy = player.slice(player.indexOf('function FreeStudy'));
     expect(freeStudy).toContain('structureId && /^\\d+$/.test(structureId)');
     expect(freeStudy).toContain('`?structure_id=${encodeURIComponent(structureId)}`');
-    expect(freeStudy).toContain('setQuestions(result.questions); setIndex(0); setAnswer(null);');
+    expect(freeStudy).toContain('setQuestions(result.questions); setStructure(Array.isArray(result.structure) ? result.structure : []); setIndex(0); setAnswer(null);');
   });
 
   it("mantém o Estudo Livre visualmente concluído mesmo em sessão filtrada", () => {
@@ -234,6 +234,16 @@ describe("player Legis Questões", () => {
     expect(freeStudy).not.toContain('totalLawQuestions');
     expect(freeStudy).not.toContain('globalPosition');
     expect(freeStudy).not.toContain('progress={Math.round((index + 1) / questions.length * 100)}');
+  });
+
+  it("reconstrói e exibe o caminho estrutural da questão sem usar a lei como raiz", () => {
+    expect(player).toContain('import { legacyQuestionStructurePath, questionStructurePath');
+    expect(player).toContain('function StructurePath({ path, fallback, reviewing = false }');
+    expect(player).toContain('└─ ');
+    expect(player).toContain('questionStructurePath(campaign?.structure ?? [], question.structure_id)');
+    expect(player).toContain('questionStructurePath(structure, currentQuestion.structure_id)');
+    expect(styles).toContain('.lf-structure-path{display:grid;gap:2px');
+    expect(styles).toContain('overflow-wrap:anywhere');
   });
 
   it("renderiza somente a questão atual no estudo livre", () => {

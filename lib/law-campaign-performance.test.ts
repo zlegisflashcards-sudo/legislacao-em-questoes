@@ -27,7 +27,7 @@ describe("performance do Estudo Ativo da Lei", () => {
     expect(questions).toContain("export async function mainQuestionById");
     expect(questions).toContain("export async function mainQuestionsByIds");
     expect(campaign).toContain("const snapshotQuestion = await mainQuestionById(context.lawId, questionId);");
-    expect(campaign).toContain("const questions = await mainQuestionsByIds(lawId, level.questoes_ids);");
+    expect(campaign).toContain("const [questions, structure] = await Promise.all([mainQuestionsByIds(lawId, level.questoes_ids), mainStructure(lawId)]);");
     expect(campaign).toContain("const recoveredQuestion = await mainQuestionById(lawId, questionId);");
     expect(campaign).toContain("const orderedQuestions = level.questoes_ids.flatMap");
     expect(campaign).not.toContain("async function questionsByIds");

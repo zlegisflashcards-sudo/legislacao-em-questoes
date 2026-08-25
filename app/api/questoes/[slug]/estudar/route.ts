@@ -62,13 +62,14 @@ export async function GET(
       const value = url.searchParams.get(filter)?.trim();
       if (value) filters[filter] = value;
     }
-    const questions = await mainQuestions(law.id, { structureIds: ids, values: filters });
+    const [questions, structure] = await Promise.all([mainQuestions(law.id, { structureIds: ids, values: filters }), mainStructure(law.id)]);
 
     return Response.json(
       {
         success: true,
         law,
         filters,
+        structure,
         questions,
         total: questions.length,
       },
