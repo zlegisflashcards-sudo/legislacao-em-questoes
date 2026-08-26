@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { safeReturnPath } from "@/lib/safe-return-path";
 import { normalizeStudentPhone } from "@/lib/student-phone";
+import { StudentLawUpdateNotices } from "@/components/student-law-update-notices";
 
 type PublicProfile = { id: string; nome_publico: string };
 type Mode = "login" | "signup" | "forgot" | "profile" | "recover" | "firstAccess";
@@ -268,6 +269,7 @@ export function StudentAccount() {
       </form> : null}
       {message ? <Status>{message}</Status> : null}
     </AccountCard>
+    <StudentLawUpdateNotices />
   </div>;
 
   if (mode === "forgot") return <AccountCard title="Recuperar senha" description="Enviaremos um link seguro para o e-mail cadastrado."><form action={sendRecovery} className="space-y-4"><Field label="E-mail" name="email" type="email" /><PrimaryButton pending={pending}>Enviar link de recuperação</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="mt-5 font-bold text-blue-700 hover:underline">← Voltar ao login</button></AccountCard>;

@@ -1053,7 +1053,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       const data = validateLawData(body.data);
       return rpc("admin_criar_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
-    if (action === "atualizar") return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: positiveIntegerId(body.id, "Lei"), p_dados: validateLawData(body.data, true) });
+    if (action === "atualizar") { const lawId=positiveIntegerId(body.id,"Lei"); const data=validateLawData(body.data,true); return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: lawId, p_dados: data }); }
   }
 
   if (resource === "materiais") {
@@ -1061,7 +1061,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       const data = validateMaterialData(body.data);
       return rpc("admin_criar_material_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
-    if (action === "atualizar") return rpc("admin_atualizar_material_lei", { p_ator_user_id: actor, p_material_id: positiveIntegerId(body.id, "Material"), p_dados: validateMaterialData(body.data, true) });
+    if (action === "atualizar") { const data=validateMaterialData(body.data,true); return rpc("admin_atualizar_material_lei", { p_ator_user_id: actor, p_material_id: positiveIntegerId(body.id, "Material"), p_dados: data }); }
   }
 
   if (resource === "atualizacoes") {
@@ -1083,7 +1083,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       const revisadoEm = optionalIsoDate(data.revisado_em, "Data de revisão");
       const publicadoEm = optionalIsoDate(data.publicado_em, "Data de publicação");
       if (!revisadoEm || !publicadoEm) throw new CommercialValidationError("As datas de revisão e publicação são obrigatórias.");
-      return rpc("admin_publicar_nova_versao_material", {
+      const result=await rpc("admin_publicar_nova_versao_material", {
         p_ator_user_id: actor,
         p_material_lei_id: positiveIntegerId(data.material_lei_id, "Material"),
         p_nova_url_externa: requiredString(data.nova_url_externa, "Nova URL", 4000),
@@ -1103,7 +1103,8 @@ export async function mutateCommercialResource(resource: CommercialResource, req
         p_visivel_aluno: booleanValue(data.visivel_aluno ?? true, "Visível ao aluno"),
         p_visivel_catalogo: booleanValue(data.visivel_catalogo ?? false, "Visível no catálogo"),
         p_observacao_interna: optionalString(data.observacao_interna, "Observação interna", 4000) ?? null,
-      });
+      }) as {material?:{lei_id?:number}};
+      return result;
     }
   }
 

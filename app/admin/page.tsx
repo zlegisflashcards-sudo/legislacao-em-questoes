@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sairAdministrador } from "@/app/admin/actions";
 import { exigirAdministrador } from "@/lib/admin-auth";
 import AdminNotificationBell from "@/components/admin/admin-notification-bell";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,12 @@ const panels = [
     icon: "🧾",
     title: "Gestão comercial",
     description: "Gerencie o catálogo interno, aquisições, liberações e a trilha de auditoria.",
+  },
+  {
+    href: "/admin/comunicacao",
+    icon: "📣",
+    title: "Comunicação",
+    description: "Revise avisos de atualização antes de entregá-los aos alunos.",
   },
   {
     href: "/admin/questoes",
@@ -41,6 +48,7 @@ const panels = [
 
 export default async function AdminPage() {
   const administrator = await exigirAdministrador();
+  const pending = await getSupabaseServerClient().from("law_update_notices").select("id", { count: "exact", head: true }).eq("status", "draft");
 
   return <main className="admin-shell admin-hub">
     <header className="admin-header admin-hub-header">
@@ -63,7 +71,7 @@ export default async function AdminPage() {
           <h2>{panel.title}</h2>
           <p>{panel.description}</p>
         </div>
-        <Link className="admin-button primary" href={panel.href}>Acessar painel</Link>
+        <Link className="admin-button primary" href={panel.href}>Acessar painel{panel.href === "/admin/comunicacao" && pending.count ? ` (${pending.count})` : ""}</Link>
       </article>)}
     </section>
   </main>;

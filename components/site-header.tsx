@@ -21,6 +21,7 @@ function NavigationLink({ item, onSelect }: { item: SiteNavigationItem; onSelect
 export function SiteHeader() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadNotices, setUnreadNotices] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -35,6 +36,8 @@ export function SiteHeader() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => { let active=true; void (async()=>{ const s=await supabase.auth.getSession(); if(!s.data.session?.access_token)return; const r=await fetch("/api/aluno/avisos",{headers:{Authorization:`Bearer ${s.data.session.access_token}`}}); const d=await r.json().catch(()=>({})); if(active)setUnreadNotices(Number(d.unread)||0); })(); return()=>{active=false}; }, [authenticated]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -58,7 +61,7 @@ export function SiteHeader() {
         </Link>
 
         <nav aria-label="Navegação principal" className="hidden items-center gap-1 lg:flex">
-          {navigation.map((item) => <NavigationLink key={item.label} item={item} />)}
+          {navigation.map((item) => item.href==="/conta" ? <Link key={item.label} href={item.href} className="rounded-lg px-3 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/10 hover:text-white">{item.label}{unreadNotices? <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">{unreadNotices}</span>:null}</Link> : <NavigationLink key={item.label} item={item} />)}
           <AdminPublicShortcut variant="panel" />
         </nav>
 
@@ -70,7 +73,7 @@ export function SiteHeader() {
       </div>
 
       {menuOpen ? <nav id="mobile-site-navigation" aria-label="Navegação principal no celular" className="grid gap-1 border-t border-white/10 py-4 lg:hidden">
-        {navigation.map((item) => <NavigationLink key={item.label} item={item} onSelect={closeMenu} />)}
+        {navigation.map((item) => item.href==="/conta" ? <Link key={item.label} href={item.href} onClick={closeMenu} className="rounded-lg px-3 py-2 text-sm font-bold text-slate-200">{item.label}{unreadNotices? <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">{unreadNotices}</span>:null}</Link> : <NavigationLink key={item.label} item={item} onSelect={closeMenu} />)}
         <AdminPublicShortcut variant="panel" />
         <a href={siteConfig.links.whatsapp} target="_blank" rel="noreferrer" onClick={closeMenu} aria-label="Falar com a LegisFlashcards pelo WhatsApp" className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-200"><WhatsAppIcon />WhatsApp</a>
       </nav> : null}
