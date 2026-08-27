@@ -2,19 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { campaignScore } from "@/lib/law-campaign-score";
 
-describe("score da campanha pelo snapshot", () => {
+describe("score canônico da campanha", () => {
   it.each([
-    [90, 9, 9000],
-    [250, 25, 9000],
-    [90, 1, 9889],
-    [178, 1, 9944],
-    [90, 0, 10000],
-    [90, 90, 0],
-  ])("calcula %i questões e %i erros como %i", (total, errors, expected) => {
-    expect(campaignScore(total, errors)).toBe(expected);
+    [1, 0, 5], [2, 0, 10], [2, 1, 9], [0, 1, 0], [10, 5, 45], [250, 50, 1200],
+  ])("calcula %i acertos e %i erros como %i", (correct, errors, expected) => {
+    expect(campaignScore(correct, errors)).toBe(expected);
   });
 
-  it("normaliza o mesmo aproveitamento em snapshots de tamanhos diferentes", () => {
-    expect(campaignScore(90, 9)).toBe(campaignScore(250, 25));
+  it("nunca fica negativo", () => {
+    expect(campaignScore(0, 100)).toBe(0);
   });
 });

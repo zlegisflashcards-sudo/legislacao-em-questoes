@@ -1,7 +1,7 @@
 import { isOfflineBuild } from "./build-mode";
 import { getSupabaseServerClient } from "./supabase-server";
 
-type CompletedCampaign = { aluno_id: string; score: number | null; score_ajustado?: number | null; concluida_em: string | null };
+type CompetitiveCampaign = { aluno_id: string; score: number | null; score_ajustado?: number | null; score_version: number; score_competitivo_atualizado_em: string | null };
 
 export type PublicLawRankingEntry = {
   position: number;
@@ -9,24 +9,24 @@ export type PublicLawRankingEntry = {
   score: number;
 };
 
-type RankedCampaign = { studentId: string; score: number; completedAt: string | null };
+type RankedCampaign = { studentId: string; score: number; reachedAt: string | null };
 
 function compareRankedCampaigns(a: RankedCampaign, b: RankedCampaign) {
   if (b.score !== a.score) return b.score - a.score;
-  const dateA = a.completedAt ? Date.parse(a.completedAt) : Number.MAX_SAFE_INTEGER;
-  const dateB = b.completedAt ? Date.parse(b.completedAt) : Number.MAX_SAFE_INTEGER;
+  const dateA = a.reachedAt ? Date.parse(a.reachedAt) : Number.MAX_SAFE_INTEGER;
+  const dateB = b.reachedAt ? Date.parse(b.reachedAt) : Number.MAX_SAFE_INTEGER;
   if (dateA !== dateB) return dateA - dateB;
   return a.studentId.localeCompare(b.studentId);
 }
 
-/** Mantém o mesmo critério da RPC de resultado: melhor score, depois data do melhor score. */
-export function rankCompletedLawCampaigns(campaigns: CompletedCampaign[]) {
+/** Ranking competitivo: V2, maior score e momento em que ele foi confirmado. */
+export function rankCompletedLawCampaigns(campaigns: CompetitiveCampaign[]) {
   const bestByStudent = new Map<string, RankedCampaign>();
 
   for (const campaign of campaigns) {
     const effectiveScore = typeof campaign.score_ajustado === "number" ? campaign.score_ajustado : campaign.score;
-    if (!campaign.aluno_id || typeof effectiveScore !== "number") continue;
-    const candidate = { studentId: campaign.aluno_id, score: effectiveScore, completedAt: campaign.concluida_em };
+    if (campaign.score_version !== 2 || !campaign.aluno_id || typeof effectiveScore !== "number") continue;
+    const candidate = { studentId: campaign.aluno_id, score: effectiveScore, reachedAt: campaign.score_competitivo_atualizado_em };
     const current = bestByStudent.get(candidate.studentId);
     if (!current || compareRankedCampaigns(candidate, current) < 0) bestByStudent.set(candidate.studentId, candidate);
   }
@@ -44,13 +44,13 @@ export async function loadPublicLawRanking(slug: string): Promise<PublicLawRanki
 
     const { data: campaigns, error: campaignsError } = await supabase
       .from("campanhas_leis_alunos")
-      .select("aluno_id,score,score_ajustado,concluida_em")
+      .select("aluno_id,score,score_ajustado,score_version,score_competitivo_atualizado_em")
       .eq("lei_id", law.id)
-      .eq("concluida", true)
+      .eq("score_version", 2)
       .limit(5000);
     if (campaignsError) return [];
 
-    const ranked = rankCompletedLawCampaigns((campaigns ?? []) as CompletedCampaign[]).slice(0, 10);
+    const ranked = rankCompletedLawCampaigns((campaigns ?? []) as CompetitiveCampaign[]).slice(0, 10);
     if (!ranked.length) return [];
 
     const studentIds = ranked.map((entry) => entry.studentId);

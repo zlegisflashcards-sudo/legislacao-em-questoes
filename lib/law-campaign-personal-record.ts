@@ -1,4 +1,4 @@
-export type CampaignScore = { score: number | null; score_ajustado?: number | null };
+export type CampaignScore = { score: number | null; score_ajustado?: number | null; score_version?: number };
 export type PersonalRecordStatus = "first_record" | "new_record" | "matched_record" | "record_remains";
 
 export type PersonalRecord = {
@@ -8,6 +8,7 @@ export type PersonalRecord = {
 };
 
 export function effectiveCampaignScore(campaign: CampaignScore) {
+  if (campaign.score_version !== undefined && campaign.score_version !== 2) return null;
   return typeof campaign.score_ajustado === "number" ? campaign.score_ajustado : campaign.score;
 }
 

@@ -1,16 +1,12 @@
 /**
  * Pontuação canônica de uma tentativa de Estudo Ativo.
  *
- * A campanha persiste o total de erros, enquanto cada questão do snapshot só
- * conclui depois de ser acertada. Por isso, os acertos pontuáveis são o total
- * do snapshot menos as tentativas erradas, nunca a quantidade atual de
- * questões cadastradas para a lei.
+ * Cada resposta confirmada persiste seus dados brutos: acertos e erros.
+ * Esta função é deliberadamente pequena para que a mesma regra seja usada no
+ * banco, no fechamento e nos testes de recálculo.
  */
-export function campaignScore(totalSnapshotQuestions: number, totalErrors: number) {
-  const total = Math.max(0, Math.trunc(totalSnapshotQuestions));
-  if (!total) return 0;
-
+export function campaignScore(totalCorrect: number, totalErrors: number) {
+  const correct = Math.max(0, Math.trunc(totalCorrect));
   const errors = Math.max(0, Math.trunc(totalErrors));
-  const correct = Math.max(0, total - errors);
-  return Math.min(10000, Math.max(0, Math.round(correct / total * 10000)));
+  return Math.max(0, correct * 5 - errors);
 }

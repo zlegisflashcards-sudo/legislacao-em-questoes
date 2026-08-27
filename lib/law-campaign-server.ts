@@ -41,7 +41,8 @@ export async function startCampaign(request: Request, slug: string) {
   if (!current.campaignId) {
     const snapshot = await loadQuestionSnapshot(lawId, context.title);
     let created = true;
-    let { data: campaign, error } = await supabase.from("campanhas_leis_alunos").insert({ aluno_id: studentId, lei_id: lawId }).select("id").single();
+    const competitiveStartedAt = new Date().toISOString();
+    let { data: campaign, error } = await supabase.from("campanhas_leis_alunos").insert({ aluno_id: studentId, lei_id: lawId, score_version: 2, score: 0, score_competitivo_acertos: 0, score_competitivo_erros: 0, score_competitivo_iniciado_em: competitiveStartedAt, score_competitivo_atualizado_em: competitiveStartedAt }).select("id").single();
     if (error?.code === "23505") {
       created = false;
       const existing = await supabase.from("campanhas_leis_alunos").select("id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", false).maybeSingle();
@@ -66,7 +67,7 @@ async function campaignStateFor(context: StudyContext) {
   let bestScore: number | null = null;
   let record: { score: number; errors: number; totalQuestions: number } | null = null;
   let result: { score: number; bestScore: number; errors: number; totalQuestions: number; position?: number; personalRecord: ReturnType<typeof personalRecordForAttempt> } | null = null;
-  const { data: historyData, error: historyError } = await supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado,total_erros,concluida_em").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", true);
+  const { data: historyData, error: historyError } = await supabase.from("campanhas_leis_alunos").select("id,score,score_ajustado,total_erros,concluida_em,score_version").eq("aluno_id", studentId).eq("lei_id", lawId).eq("score_version", 2);
   if (historyError) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
   const history = historyData ?? [];
   const winningCampaign = bestCompletedCampaignForRecord(history);
@@ -95,13 +96,17 @@ async function campaignStateFor(context: StudyContext) {
     }
   }
   if (!state.campaignId) return { ...state, bestScore, record, result, level: null, question: null, progress: state.status === "concluida" ? 100 : 0 };
-  const { data: levels, error } = await supabase.from("campanhas_leis_niveis").select("id,ordem,chave_origem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,concluido").eq("campanha_id", state.campaignId).order("ordem");
+  const [{ data: levels, error }, { data: activeCampaign, error: activeCampaignError }] = await Promise.all([
+    supabase.from("campanhas_leis_niveis").select("id,ordem,chave_origem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,concluido").eq("campanha_id", state.campaignId).order("ordem"),
+    supabase.from("campanhas_leis_alunos").select("score_competitivo_acertos,score_competitivo_erros,score").eq("id", state.campaignId).single(),
+  ]);
   if (error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
+  if (activeCampaignError || !activeCampaign) throw new LawStudyApiError(503, "Não foi possível carregar seu score atual.");
   const parsed = (levels ?? []).map((level) => ({ ...level, questoes_ids: arrayOfStrings(level.questoes_ids), pendencias_ids: arrayOfStrings(level.pendencias_ids) })) as Level[];
   const level = parsed.find((item) => !item.concluido) ?? null;
   const all = parsed.flatMap((item) => item.questoes_ids); const completed = parsed.filter((item) => item.concluido).flatMap((item) => item.questoes_ids).length;
   const levelSummary = parsed.map((item) => ({ id: item.id, chave: item.chave_origem ?? "", nome: item.nome, concluido: item.concluido, posicao: item.proxima_posicao, totalQuestoes: item.questoes_ids.length, revisando: item.proxima_posicao >= item.questoes_ids.length && item.pendencias_ids.length > 0 }));
-  if (!level) return { ...state, bestScore, record, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
+  if (!level) return { ...state, bestScore, record, score: activeCampaign.score ?? 0, correct: activeCampaign.score_competitivo_acertos, errors: activeCampaign.score_competitivo_erros, level: null, levels: levelSummary, question: null, progress: all.length ? Math.round(completed / all.length * 100) : 100 };
   const questionId = level.proxima_posicao < level.questoes_ids.length ? level.questoes_ids[level.proxima_posicao] : level.pendencias_ids[0];
   const [questions, structure] = await Promise.all([mainQuestionsByIds(lawId, level.questoes_ids), mainStructure(lawId)]);
   let question = questionId ? questions.find((item) => item.id === questionId) ?? null : null;
@@ -118,7 +123,7 @@ async function campaignStateFor(context: StudyContext) {
   const reviewing = level.proxima_posicao >= level.questoes_ids.length;
   const firstPassProgress = level.questoes_ids.length ? Math.round(Math.min(level.proxima_posicao, level.questoes_ids.length) / level.questoes_ids.length * 100) : 0;
   const activeDone = reviewing ? level.questoes_ids.length : Math.min(level.proxima_posicao, level.questoes_ids.length);
-  return { ...state, bestScore, record, structure, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions: orderedQuestions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
+  return { ...state, bestScore, record, score: activeCampaign.score ?? 0, correct: activeCampaign.score_competitivo_acertos, errors: activeCampaign.score_competitivo_erros, structure, level: { id: level.id, nome: level.nome, concluded: false, position: level.proxima_posicao, firstPassProgress, reviewing, questions: orderedQuestions }, levels: levelSummary, question, progress: all.length ? Math.round((completed + activeDone) / all.length * 100) : 0 };
 }
 
 export async function campaignState(request: Request, slug: string) {
@@ -145,20 +150,18 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
   const nextPending = level.proxima_posicao < level.questoes_ids.length ? [...level.pendencias_ids, ...(correct ? [] : [questionId])] : correct ? level.pendencias_ids.slice(1) : [...level.pendencias_ids.slice(1), questionId];
   const concludesLevel = nextPosition >= level.questoes_ids.length && nextPending.length === 0;
   const levelErrors = level.total_erros + (correct ? 0 : 1);
-  const { data: updatedLevel, error: updateError } = await supabase.from("campanhas_leis_niveis").update({ proxima_posicao: nextPosition, pendencias_ids: nextPending, total_erros: levelErrors, concluido: concludesLevel }).eq("id", level.id).eq("concluido", false).select("id");
-  if (updateError) throw new LawStudyApiError(503, "Não foi possível salvar sua resposta.");
-  if (!updatedLevel?.length) throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página.");
-  if (!correct) { const { error: errorsError } = await supabase.rpc("increment_campaign_errors", { campaign_id: state.campaignId }); if (errorsError) throw new LawStudyApiError(503, "Não foi possível salvar sua resposta."); }
+  // total_erros: levelErrors é confirmado na mesma transação do score.
+  const { data: persistedRows, error: persistError } = await supabase.rpc("registrar_resposta_campanha", { p_campanha_id: state.campaignId, p_nivel_id: level.id, p_questao_id: questionId, p_correta: correct, p_proxima_posicao: nextPosition, p_proximas_pendencias: nextPending, p_total_erros_nivel: levelErrors, p_conclui_nivel: concludesLevel });
+  if (persistError) throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página.");
+  const persisted = Array.isArray(persistedRows) ? persistedRows[0] : null;
+  if (!persisted) throw new LawStudyApiError(503, "Não foi possível salvar sua resposta.");
   const isFinal = concludesLevel && levels.every((item) => item.id === level.id || item.concluido);
   let result: { score: number; bestScore: number; position: number; participants: number; errors: number; totalQuestions: number; personalRecord: ReturnType<typeof personalRecordForAttempt> } | null = null;
   if (isFinal) {
     const context = await authorizeLawStudy(request, slug);
-    const { data: previousCampaigns, error: previousError } = await supabase.from("campanhas_leis_alunos").select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("concluida", true);
+    const { data: previousCampaigns, error: previousError } = await supabase.from("campanhas_leis_alunos").select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("score_version", 2);
     if (previousError) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
-    const { data: campaign, error: campaignError } = await supabase.from("campanhas_leis_alunos").select("total_erros").eq("id", state.campaignId).single();
-    if (campaignError || !campaign) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
-    const totalSnapshotQuestions = levels.flatMap((item) => item.questoes_ids).length;
-    const finalScore = campaignScore(totalSnapshotQuestions, campaign.total_erros);
+    const finalScore = campaignScore(Number(persisted.score_competitivo_acertos), Number(persisted.score_competitivo_erros));
     const { data: finishedCampaign, error: finishError } = await supabase.from("campanhas_leis_alunos").update({ concluida: true, concluida_em: new Date().toISOString(), score: finalScore }).eq("id", state.campaignId).eq("concluida", false).select("id");
     if (finishError) throw new LawStudyApiError(503, "Não foi possível concluir seu Estudo Ativo da Lei.");
     if (!finishedCampaign?.length) throw new LawStudyApiError(409, "Este Estudo Ativo da Lei já foi concluído.");
@@ -167,14 +170,14 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
     const { data: ranking, error: rankingError } = await supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: context.studentId, p_lei_id: context.lawId });
     const row = Array.isArray(ranking) ? ranking[0] : null;
     if (rankingError || !row) throw new LawStudyApiError(503, "Não foi possível calcular seu resultado.");
-    result = { score: row.score_atual, bestScore: row.melhor_score, position: Number(row.posicao), participants: Number(row.participantes), errors: campaign.total_erros, totalQuestions: levels.flatMap((item) => item.questoes_ids).length, personalRecord: personalRecordForAttempt(finalScore, previousCampaigns ?? []) };
+    result = { score: row.score_atual, bestScore: row.melhor_score, position: Number(row.posicao), participants: Number(row.participantes), errors: Number(persisted.score_competitivo_erros), totalQuestions: levels.flatMap((item) => item.questoes_ids).length, personalRecord: personalRecordForAttempt(finalScore, previousCampaigns ?? []) };
   }
   const totalQuestions = levels.flatMap((item) => item.questoes_ids).length;
   const completedBeforeCurrentLevel = levels.filter((item) => item.id !== level.id && item.concluido).flatMap((item) => item.questoes_ids).length;
   const currentLevelFirstPassCompleted = Math.min(nextPosition, level.questoes_ids.length);
   const globalCompletedQuestions = completedBeforeCurrentLevel + currentLevelFirstPassCompleted;
   const nextQuestionId = !isFinal && !concludesLevel ? nextPosition < level.questoes_ids.length ? level.questoes_ids[nextPosition] : nextPending[0] ?? null : null;
-  return { levelConcluded: concludesLevel, campaignConcluded: isFinal, progress: totalQuestions ? Math.round(globalCompletedQuestions / totalQuestions * 100) : 100, next: nextQuestionId ? { questionId: nextQuestionId, position: nextPosition, reviewing: nextPosition >= level.questoes_ids.length && nextPending.length > 0 } : null, levelResult: concludesLevel ? { errors: levelErrors } : null, result };
+  return { levelConcluded: concludesLevel, campaignConcluded: isFinal, score: Number(persisted.score), correct: Number(persisted.score_competitivo_acertos), errors: Number(persisted.score_competitivo_erros), progress: totalQuestions ? Math.round(globalCompletedQuestions / totalQuestions * 100) : 100, next: nextQuestionId ? { questionId: nextQuestionId, position: nextPosition, reviewing: nextPosition >= level.questoes_ids.length && nextPending.length > 0 } : null, levelResult: concludesLevel ? { errors: levelErrors } : null, result };
 }
 
 /** Backend preparado para o futuro botão de reset; preserva o histórico concluído. */
