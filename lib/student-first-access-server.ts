@@ -4,6 +4,7 @@ import { createStudentActivationLink } from "@/lib/student-activation-server";
 import { findAuthUserByEmail } from "@/lib/student-activation-server";
 import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 import { normalizeStudentAccessEmail } from "@/lib/student-access-email";
+import { renderAccessEmail, type AccessEmailEditorial, type AccessEmailSnapshot } from "@/lib/crm-access-email-content";
 
 export type FirstAccessOrigin = "hotmart" | "administrativo" | "cortesia" | "amostra" | "premiacao" | "migracao";
 type AccessInput = { studentId: string; origin: FirstAccessOrigin; idempotencyKey: string; accessLabel: string; kind?: "acquisition" | "release"; notificationOrigin?: "hotmart" | "aquisicao_manual" | "liberacao_manual" };
@@ -18,15 +19,16 @@ async function audit(supabase: SupabaseClient, action: string, studentId: string
 
 function resendDiagnosticBody(body: string) {
   try {
-    const parsed = JSON.parse(body) as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+    const parsed = JSON.parse(body) as { id?: unknown; code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
     return {
+      id: typeof parsed.id === "string" ? parsed.id : null,
       code: typeof parsed.code === "string" ? parsed.code : null,
       message: typeof parsed.message === "string" ? parsed.message : null,
       details: typeof parsed.details === "string" ? parsed.details : null,
       hint: typeof parsed.hint === "string" ? parsed.hint : null,
     };
   } catch {
-    return { code: null, message: body.slice(0, 500) || null, details: null, hint: null };
+    return { id: null, code: null, message: body.slice(0, 500) || null, details: null, hint: null };
   }
 }
 
@@ -42,7 +44,7 @@ function accessNotificationText(name: string | null, label: string, hasAuth: boo
 async function deliverStudentAccessEmail(
   supabase: SupabaseClient,
   student: StudentEmail,
-  input: { accessLabel: string; idempotencyKey: string; origin: string; eventId: string },
+  input: { accessLabel: string; idempotencyKey: string; origin: string; eventId: string; editorial?: AccessEmailEditorial; onPrepared?: (snapshot: AccessEmailSnapshot) => Promise<void> },
 ) {
   const hasAuth = Boolean(student.user_id);
   const type = hasAuth ? "acessar_conta" : "ativar_conta";
@@ -53,15 +55,17 @@ async function deliverStudentAccessEmail(
     const from = process.env.RESEND_FROM_EMAIL;
     if (!apiKey || !from) throw new Error("Configuracao do e-mail de acesso indisponivel.");
     const activationUrl = hasAuth ? undefined : await createStudentActivationLink(supabase, student.id);
+    const rendered = renderAccessEmail({ flow: hasAuth ? "existing_account" : "first_access", name: student.nome, product: input.accessLabel, email, editorial: input.editorial, secureUrl: activationUrl ?? "https://www.legisflashcards.com.br/conta" });
+    await input.onPrepared?.(rendered.snapshot);
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
-      body: JSON.stringify({ from, to: [email], subject: "Acesso disponivel na Legislacao em Questoes", text: accessNotificationText(student.nome, input.accessLabel, hasAuth, activationUrl) }),
+      body: JSON.stringify({ from, to: [email], subject: rendered.subject, text: rendered.text, html: rendered.html }),
     });
     const diagnostic = resendDiagnosticBody(await response.text());
     console.info("[student-access-email]", { stage: response.ok ? "resend_sent" : "resend_failed", origem: input.origin, event_id: input.eventId, aluno_id: student.id, email, possui_auth: hasAuth, tipo: type, status_http: response.status, ...diagnostic });
     if (!response.ok) throw new Error(`Falha do servico de e-mail (HTTP ${response.status}).`);
-    return { type, statusHttp: response.status, resendCode: diagnostic.code };
+    return { type, statusHttp: response.status, resendCode: diagnostic.code, resendMessageId: diagnostic.id, snapshot: rendered.snapshot };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Falha desconhecida";
     console.error("[student-access-email]", { stage: "resend_failed", origem: input.origin, event_id: input.eventId, aluno_id: student.id, email, possui_auth: hasAuth, tipo: type, message });
@@ -91,7 +95,7 @@ export async function validateStudentAccessIdentity(supabase: SupabaseClient, st
   return { ok: true as const, hasAuth: Boolean(student.user_id), authUserId: authUser?.id ?? null };
 }
 
-export async function deliverReservedStudentAccessEmail(supabase: SupabaseClient, studentId: string, input: { accessLabel: string; idempotencyKey: string; origin: string; eventId: string; identityReserved?: boolean }) {
+export async function deliverReservedStudentAccessEmail(supabase: SupabaseClient, studentId: string, input: { accessLabel: string; idempotencyKey: string; origin: string; eventId: string; identityReserved?: boolean; editorial?: AccessEmailEditorial; onPrepared?: (snapshot: AccessEmailSnapshot) => Promise<void> }) {
   const result = await supabase.from("alunos").select("id,user_id,nome,email").eq("id", studentId).single();
   if (result.error || !result.data) throw new Error("Aluno não encontrado para o envio de e-mail.");
   const student = { ...result.data, email: normalizeStudentAccessEmail(String(result.data.email)) };
@@ -100,7 +104,7 @@ export async function deliverReservedStudentAccessEmail(supabase: SupabaseClient
     if (!identity.ok) return { sent: false as const, reason: identity.reason };
   }
   const delivery = await deliverStudentAccessEmail(supabase, student, input);
-  return { sent: true as const, type: delivery.type, statusHttp: delivery.statusHttp, resendCode: delivery.resendCode };
+  return { sent: true as const, type: delivery.type, statusHttp: delivery.statusHttp, resendCode: delivery.resendCode, resendMessageId: delivery.resendMessageId };
 }
 
 async function sendNewAccessNotification(

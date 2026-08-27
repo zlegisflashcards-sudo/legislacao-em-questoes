@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { deliverReservedStudentAccessEmail, notifyStudentAccess, sendManualStudentAccessEmail, type FirstAccessOrigin } from "@/lib/student-first-access-server";
+import { defaultAccessEmailEditorial, validateAccessEmailEditorial, type AccessEmailEditorial, type AccessEmailFlow } from "@/lib/crm-access-email-content";
 import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import { normalizeStudentPhone } from "@/lib/student-phone";
@@ -114,6 +115,7 @@ type CentralPurchase = {
   e3Diagnosis: E3Diagnosis | null;
   notificationStatus: string | null;
   failureMessage: string | null;
+  hasAuth: boolean;
 };
 
 async function loadPostSaleCentral(supabase = getSupabaseServerClient(), purchaseIds?: string[]) {
@@ -147,14 +149,14 @@ async function loadPostSaleCentral(supabase = getSupabaseServerClient(), purchas
     const stages = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent: automaticEmailSent, firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overridesByPurchase.get(String(purchase.id)) ?? [] }).etapas;
     const etapaAtual = stages.findIndex((done) => !done) + 1;
     const e3Diagnosis = etapaAtual === 3 ? getE3Diagnosis({ email: student?.email, hasAuth: Boolean(student?.user_id), notificationStatus: notification?.status }) : null;
-    return { compraId: String(purchase.id), alunoId: purchase.aluno_id ? String(purchase.aluno_id) : null, nome: student?.nome ? String(student.nome) : null, email: student?.email ? String(student.email) : null, telefone: student?.telefone ? String(student.telefone) : null, produto: productById.get(String(purchase.produto_id)) ?? "Produto", etapaAtual, etapaTitulo: etapaAtual ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Enviar mensagem pelo WhatsApp", "Retorno final do cliente"][etapaAtual - 1] : null, accessActive: purchase.status_acesso === "ativo", firstAccessAt: student?.primeiro_acesso_em ? String(student.primeiro_acesso_em) : null, e3Diagnosis, notificationStatus: notification?.status ? String(notification.status) : null, failureMessage: notification?.status === "falhou" ? safeE3FailureMessage() : null };
+    return { compraId: String(purchase.id), alunoId: purchase.aluno_id ? String(purchase.aluno_id) : null, nome: student?.nome ? String(student.nome) : null, email: student?.email ? String(student.email) : null, telefone: student?.telefone ? String(student.telefone) : null, produto: productById.get(String(purchase.produto_id)) ?? "Produto", etapaAtual, etapaTitulo: etapaAtual ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Enviar mensagem pelo WhatsApp", "Retorno final do cliente"][etapaAtual - 1] : null, accessActive: purchase.status_acesso === "ativo", firstAccessAt: student?.primeiro_acesso_em ? String(student.primeiro_acesso_em) : null, e3Diagnosis, notificationStatus: notification?.status ? String(notification.status) : null, failureMessage: notification?.status === "falhou" ? safeE3FailureMessage() : null, hasAuth: Boolean(student?.user_id) };
   });
   const pending = items.filter((item) => item.accessActive && item.etapaAtual > 0);
   const counts = [1, 2, 3, 4, 5, 6].map((stage) => pending.filter((item) => item.etapaAtual === stage).length);
   return { items, pending, counts };
 }
 
-async function previewPostSaleAccessEmail(purchaseIds: string[]) {
+async function previewPostSaleAccessEmail(purchaseIds: string[], editorial?: unknown) {
   const { items } = await loadPostSaleCentral(getSupabaseServerClient(), purchaseIds);
   const byId = new Map(items.map((item) => [item.compraId, item]));
   const reasons: Record<string, number> = { invalid_email: 0, access_inactive: 0, e3_completed: 0, inconsistent: 0 };
@@ -165,10 +167,13 @@ async function previewPostSaleAccessEmail(purchaseIds: string[]) {
     if (decision === "eligible") eligible += 1;
     else reasons[decision] += 1;
   }
-  return { selected: purchaseIds.length, eligible, ignored: purchaseIds.length - eligible, reasons };
+  const eligibleItems = purchaseIds.map((id) => byId.get(id)).filter((item): item is CentralPurchase => Boolean(item && getE3PreviewDecision({ exists: true, hasStudent: Boolean(item.alunoId), accessActive: item.accessActive, currentStage: item.etapaAtual, email: item.email }) === "eligible"));
+  const flows = { existing_account: eligibleItems.filter((item) => item.hasAuth).length, first_access: eligibleItems.filter((item) => !item.hasAuth).length };
+  const flow: AccessEmailFlow = flows.existing_account ? "existing_account" : "first_access";
+  return { selected: purchaseIds.length, eligible, ignored: purchaseIds.length - eligible, reasons, flows, editorial: validateAccessEmailEditorial(editorial ?? defaultAccessEmailEditorial(flow), flow), sample: eligibleItems.slice(0, 2).map((item) => ({ compraId: item.compraId, destinatario: item.email, tipoFluxo: item.hasAuth ? "Conta existente" : "Primeiro acesso", destinoBotao: item.hasAuth ? "Área do aluno" : "Link de ativação seguro" })) };
 }
 
-async function sendPostSaleAccessEmails(purchaseIds: string[], actorUserId: string) {
+async function sendPostSaleAccessEmails(purchaseIds: string[], actorUserId: string, editorial?: unknown) {
   const { items } = await loadPostSaleCentral(getSupabaseServerClient(), purchaseIds);
   const byId = new Map(items.map((item) => [item.compraId, item]));
   const supabase = getSupabaseServerClient();
@@ -181,23 +186,39 @@ async function sendPostSaleAccessEmails(purchaseIds: string[], actorUserId: stri
     if (claimed.error) { results.push({ compraId, status: "failed", reason: "Não foi possível reservar o envio" }); continue; }
     const reservation = claimed.data as { status?: string; idempotency_key?: string } | null;
     if (reservation?.status !== "claimed" || !reservation.idempotency_key) { results.push({ compraId, status: reservation?.status === "processing" || reservation?.status === "email_conflict" ? "blocked" : "ignored", reason: reservation?.status === "processing" ? "Já está sendo processado" : reservation?.status === "email_conflict" ? "E-mail vinculado a outra conta" : reservation?.status === "already_sent" ? "Já enviado anteriormente" : reservation?.status === "access_inactive" ? "Acesso não está mais ativo" : reservation?.status === "e3_completed" ? "Aluno não está mais na E3" : reservation?.status === "invalid_email" ? "E-mail inválido" : "Dados inconsistentes" }); continue; }
+    let attemptId: string | null = null;
     try {
-      const delivery = await deliverReservedStudentAccessEmail(supabase, item!.alunoId!, { accessLabel: item!.produto, idempotencyKey: reservation.idempotency_key, origin: "crm_lote", eventId: reservation.idempotency_key, identityReserved: true });
+      const flow: AccessEmailFlow = item!.hasAuth ? "existing_account" : "first_access";
+      const safeEditorial: AccessEmailEditorial = validateAccessEmailEditorial(editorial ?? defaultAccessEmailEditorial(flow), flow);
+      const delivery = await deliverReservedStudentAccessEmail(supabase, item!.alunoId!, { accessLabel: item!.produto, idempotencyKey: reservation.idempotency_key, origin: "crm_lote", eventId: reservation.idempotency_key, identityReserved: true, editorial: safeEditorial, onPrepared: async (snapshot) => {
+        const attempt = await supabase.from("crm_access_email_attempts").insert({ compra_id: compraId, aluno_id: item!.alunoId!, idempotency_key: reservation.idempotency_key, destinatario: snapshot.recipient, tipo_acesso: snapshot.flow, template: snapshot.template, assunto: snapshot.subject, html_snapshot: snapshot.html, text_snapshot: snapshot.text, botao_texto: snapshot.buttonText, destino_botao: snapshot.buttonDestination, status: "reserved" }).select("id").single();
+        if (attempt.error || !attempt.data) throw new Error("Não foi possível registrar a tentativa de e-mail.");
+        attemptId = String(attempt.data.id);
+      } });
       if (!delivery.sent) {
         await supabase.rpc("finish_crm_access_email", { p_idempotency_key: reservation.idempotency_key, p_success: false, p_error: "E-mail vinculado a outra conta" });
         results.push({ compraId, status: "blocked", reason: "E-mail vinculado a outra conta" }); continue;
       }
       const finished = await supabase.rpc("finish_crm_access_email", { p_idempotency_key: reservation.idempotency_key, p_success: true, p_error: null });
       if (finished.error || finished.data !== true) { results.push({ compraId, status: "failed", reason: "Envio confirmado, mas não foi possível concluir o registro" }); continue; }
+      if (attemptId) await supabase.from("crm_access_email_attempts").update({ status: "sent", enviado_em: new Date().toISOString(), resend_message_id: delivery.resendMessageId ?? null, erro: null }).eq("id", attemptId);
       await supabase.from("auditoria_administrativa").insert({ ator_user_id: actorUserId, acao: "email_acesso_lote_enviado", entidade: "aluno", entidade_id: item!.alunoId!, detalhes: { compra_id: compraId, idempotency_key: reservation.idempotency_key, canal: "email" } });
       results.push({ compraId, status: "sent", reason: "Enviado com sucesso" });
     } catch {
+      // The snapshot callback runs before Resend. Record a failed attempt only when its immutable snapshot was persisted.
+      if (attemptId) await supabase.from("crm_access_email_attempts").update({ status: "failed", erro: "Falha ao enviar e-mail" }).eq("id", attemptId);
       await supabase.rpc("finish_crm_access_email", { p_idempotency_key: reservation.idempotency_key, p_success: false, p_error: "Falha ao enviar e-mail" });
       results.push({ compraId, status: "failed", reason: "Falha ao enviar e-mail" });
     }
   }
   const summary = { sent: results.filter((item) => item.status === "sent").length, ignored: results.filter((item) => item.status === "ignored").length, blocked: results.filter((item) => item.status === "blocked").length, failed: results.filter((item) => item.status === "failed").length };
   return { summary, results };
+}
+
+async function loadPostSaleEmailHistory(purchaseId: string) {
+  const result = await getSupabaseServerClient().from("crm_access_email_attempts").select("id,destinatario,tipo_acesso,template,assunto,html_snapshot,text_snapshot,botao_texto,destino_botao,status,resend_message_id,erro,criado_em,enviado_em").eq("compra_id", purchaseId).order("criado_em", { ascending: false });
+  if (result.error) throw new CommercialHttpError(500, "Não foi possível carregar o histórico de e-mails.");
+  return { attempts: result.data ?? [] };
 }
 
 function logCommercialDbError(context: string, error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined, extra: Record<string, unknown> = {}) {
@@ -886,12 +907,15 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "alunos" && action === "crm_previa_email_acesso") {
     if (!Array.isArray(body.compra_ids) || !body.compra_ids.length || body.compra_ids.length > 500) throw new CommercialValidationError("Selecione entre 1 e 500 compras para a prévia.");
     const purchaseIds = [...new Set(body.compra_ids.map((value) => uuid(value, "Compra")))];
-    return previewPostSaleAccessEmail(purchaseIds);
+    return previewPostSaleAccessEmail(purchaseIds, body.editorial);
   }
   if (resource === "alunos" && action === "crm_enviar_email_acesso_lote") {
     if (!Array.isArray(body.compra_ids) || !body.compra_ids.length || body.compra_ids.length > 500) throw new CommercialValidationError("Selecione entre 1 e 500 compras para o envio.");
     const purchaseIds = [...new Set(body.compra_ids.map((value) => uuid(value, "Compra")))];
-    return sendPostSaleAccessEmails(purchaseIds, actor);
+    return sendPostSaleAccessEmails(purchaseIds, actor, body.editorial);
+  }
+  if (resource === "alunos" && action === "crm_historico_email_acesso") {
+    return loadPostSaleEmailHistory(uuid(body.compra_id, "Compra"));
   }
   if (resource === "alunos" && action === "crm_compra_atualizar") {
     const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "acao", "observacao"]);
