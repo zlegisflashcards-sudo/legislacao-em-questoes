@@ -23,4 +23,12 @@ describe("reserva transacional de e-mail CRM", () => {
     expect(batch).toContain('p_success: true');
     expect(batch).toContain('p_success: false');
   });
+
+  it("mantém o contrato E3 explícito: editorial e histórico não ampliam outras actions", () => {
+    expect(server).toContain('action === "crm_previa_email_acesso" || action === "crm_enviar_email_acesso_lote"');
+    expect(server).toContain('"editorial"');
+    expect(server).toContain('action === "crm_historico_email_acesso"');
+    expect(server).toContain('"compra_id"');
+    expect(server).toContain("rejectUnknownKeys(body, allowedBodyKeys)");
+  });
 });

@@ -833,7 +833,14 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const actor = uuid(admin.id, "Administrador");
   const body = await readCommercialBody(request);
   const action = requiredString(body.action, "Ação", 40);
-  rejectUnknownKeys(body, ["action", "id", "data", "lei_ids", "compra_ids"]);
+  const mutationKeys = ["action", "id", "data", "lei_ids", "compra_ids"] as const;
+  // Editorial fields are accepted only by the two E3 operations that validate them server-side.
+  const allowedBodyKeys = action === "crm_previa_email_acesso" || action === "crm_enviar_email_acesso_lote"
+    ? [...mutationKeys, "editorial"]
+    : action === "crm_historico_email_acesso"
+      ? [...mutationKeys, "compra_id"]
+      : mutationKeys;
+  rejectUnknownKeys(body, allowedBodyKeys);
 
   if (resource === "alunos" && action === "crm_compras") {
     const alunoId = uuid(body.id, "Aluno"); const supabase = getSupabaseServerClient();
