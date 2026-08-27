@@ -30,7 +30,7 @@ async function audit(supabase: SupabaseClient, action: string, studentId: string
   await supabase.from("auditoria_administrativa").insert({ acao: action, entidade: "aluno", entidade_id: studentId, detalhes: details });
 }
 
-async function findAuthUserByEmail(supabase: SupabaseClient, email: string): Promise<User | null> {
+export async function findAuthUserByEmail(supabase: SupabaseClient, email: string): Promise<User | null> {
   for (let page = 1; page <= 100; page += 1) {
     const users = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
     if (users.error) throw new Error("Nao foi possivel localizar a conta Auth.");

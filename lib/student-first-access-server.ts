@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createStudentActivationLink } from "@/lib/student-activation-server";
+import { findAuthUserByEmail } from "@/lib/student-activation-server";
 import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
+import { normalizeStudentAccessEmail } from "@/lib/student-access-email";
 
 export type FirstAccessOrigin = "hotmart" | "administrativo" | "cortesia" | "amostra" | "premiacao" | "migracao";
 type AccessInput = { studentId: string; origin: FirstAccessOrigin; idempotencyKey: string; accessLabel: string; kind?: "acquisition" | "release"; notificationOrigin?: "hotmart" | "aquisicao_manual" | "liberacao_manual" };
 type StudentEmail = { id: string; nome: string | null; email: string; user_id: string | null };
 
-function normalizedEmail(value: string) { return value.trim().toLowerCase(); }
 function diagnostic(stage: string, details: Record<string, unknown>) { console.info("[student-access-notification]", { stage, ...details }); }
 
 async function audit(supabase: SupabaseClient, action: string, studentId: string, details: Record<string, unknown>, actorUserId?: string) {
@@ -45,7 +46,7 @@ async function deliverStudentAccessEmail(
 ) {
   const hasAuth = Boolean(student.user_id);
   const type = hasAuth ? "acessar_conta" : "ativar_conta";
-  const email = normalizedEmail(student.email);
+  const email = normalizeStudentAccessEmail(student.email);
   console.info("[student-access-email]", { stage: "resend_started", origem: input.origin, event_id: input.eventId, aluno_id: student.id, email, possui_auth: hasAuth, tipo: type });
   try {
     const apiKey = process.env.RESEND_API_KEY;
@@ -72,6 +73,34 @@ async function deliverStudentAccessEmail(
     });
     throw error;
   }
+}
+
+export async function validateStudentAccessIdentity(supabase: SupabaseClient, student: StudentEmail) {
+  const email = normalizeStudentAccessEmail(student.email);
+  const candidates = await supabase.from("alunos").select("id,email,user_id").ilike("email", `%${email}%`);
+  if (candidates.error) throw new Error("Não foi possível validar a identidade do aluno.");
+  const matchingStudents = (candidates.data ?? []).filter((item) => normalizeStudentAccessEmail(String(item.email)) === email);
+  if (matchingStudents.length !== 1 || matchingStudents[0].id !== student.id) return { ok: false as const, reason: "email_linked_to_other_account" as const };
+  const authUser = await findAuthUserByEmail(supabase, email);
+  if (authUser && student.user_id && authUser.id !== student.user_id) return { ok: false as const, reason: "email_linked_to_other_account" as const };
+  if (authUser) {
+    const linked = await supabase.from("alunos").select("id").eq("user_id", authUser.id).neq("id", student.id).maybeSingle();
+    if (linked.error) throw new Error("Não foi possível validar a identidade do aluno.");
+    if (linked.data) return { ok: false as const, reason: "email_linked_to_other_account" as const };
+  }
+  return { ok: true as const, hasAuth: Boolean(student.user_id), authUserId: authUser?.id ?? null };
+}
+
+export async function deliverReservedStudentAccessEmail(supabase: SupabaseClient, studentId: string, input: { accessLabel: string; idempotencyKey: string; origin: string; eventId: string; identityReserved?: boolean }) {
+  const result = await supabase.from("alunos").select("id,user_id,nome,email").eq("id", studentId).single();
+  if (result.error || !result.data) throw new Error("Aluno não encontrado para o envio de e-mail.");
+  const student = { ...result.data, email: normalizeStudentAccessEmail(String(result.data.email)) };
+  if (!input.identityReserved) {
+    const identity = await validateStudentAccessIdentity(supabase, student);
+    if (!identity.ok) return { sent: false as const, reason: identity.reason };
+  }
+  const delivery = await deliverStudentAccessEmail(supabase, student, input);
+  return { sent: true as const, type: delivery.type, statusHttp: delivery.statusHttp, resendCode: delivery.resendCode };
 }
 
 async function sendNewAccessNotification(
@@ -102,10 +131,9 @@ export async function notifyStudentAccess(supabase: SupabaseClient, input: Acces
   const studentResult = await supabase.from("alunos").select("id,user_id,nome,email").eq("id", input.studentId).single();
   if (studentResult.error || !studentResult.data) throw new Error("Aluno nao encontrado para a notificacao de acesso.");
   const student = studentResult.data;
-  const email = normalizedEmail(String(student.email));
-  const candidates = await supabase.from("alunos").select("id,email").ilike("email", `%${email}%`);
-  if (candidates.error) throw new Error("Nao foi possivel validar a identidade do aluno.");
-  if ((candidates.data ?? []).filter((item) => normalizedEmail(String(item.email)) === email).length !== 1) {
+  const email = normalizeStudentAccessEmail(String(student.email));
+  const identity = await validateStudentAccessIdentity(supabase, { ...student, email });
+  if (!identity.ok) {
     await audit(supabase, "notificacao_novo_acesso_bloqueada", student.id, { origem: input.origin, motivo: "duplicidade_email" });
     throw new Error("Notificacao bloqueada: existe duplicidade historica para este e-mail.");
   }
@@ -120,7 +148,7 @@ export async function sendManualStudentAccessEmail(supabase: SupabaseClient, stu
   const purchaseId = context?.purchaseId;
   const idempotencyKey = purchaseId ? `administrativo:${purchaseId}` : `administrativo-email-acesso:${randomUUID()}`;
   try {
-    const delivery = await deliverStudentAccessEmail(supabase, { ...student, email: normalizedEmail(String(student.email)) }, { accessLabel: context?.accessLabel ?? "seus acessos", idempotencyKey, origin: "manual_admin", eventId: idempotencyKey });
+    const delivery = await deliverStudentAccessEmail(supabase, { ...student, email: normalizeStudentAccessEmail(String(student.email)) }, { accessLabel: context?.accessLabel ?? "seus acessos", idempotencyKey, origin: "manual_admin", eventId: idempotencyKey });
     if (purchaseId) {
       const saved = await supabase.from("alunos_notificacoes_acesso").upsert({ aluno_id: student.id, idempotency_key: idempotencyKey, tipo: "nova_aquisicao", origem: "administrativo", descricao: context?.accessLabel ?? "seus acessos", status: "enviado", enviado_em: new Date().toISOString(), erro: null }, { onConflict: "idempotency_key" });
       if (saved.error) throw new Error("Nao foi possivel registrar o e-mail enviado para esta compra.");

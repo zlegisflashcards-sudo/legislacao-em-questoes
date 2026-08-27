@@ -4,10 +4,11 @@ import { randomBytes } from "node:crypto";
 import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { notifyStudentAccess, sendManualStudentAccessEmail, type FirstAccessOrigin } from "@/lib/student-first-access-server";
+import { deliverReservedStudentAccessEmail, notifyStudentAccess, sendManualStudentAccessEmail, type FirstAccessOrigin } from "@/lib/student-first-access-server";
 import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import { normalizeStudentPhone } from "@/lib/student-phone";
+import { getE3Diagnosis, getE3PreviewDecision, safeE3FailureMessage, type E3Diagnosis } from "@/lib/crm-postsale-diagnosis";
 import {
   COMMERCIAL_ORIGINS,
   EDITORIAL_IMPORTANCE,
@@ -88,6 +89,115 @@ function accessEmailForPurchase(notices: Record<string, unknown>[], purchase: Re
   return notices
     .filter((notice) => notice.status === "enviado" && keys.has(String(notice.idempotency_key ?? "")))
     .sort((left, right) => String(right.criado_em ?? "").localeCompare(String(left.criado_em ?? "")))[0] ?? null;
+}
+
+function accessNotificationForPurchase(notices: Record<string, unknown>[], purchase: Record<string, unknown>) {
+  const purchaseId = String(purchase.id ?? "");
+  const externalId = String(purchase.identificador_externo ?? "");
+  const keys = new Set([purchaseId && `administrativo:${purchaseId}`, externalId && `hotmart:${externalId}`].filter(Boolean));
+  return notices
+    .filter((notice) => keys.has(String(notice.idempotency_key ?? "")))
+    .sort((left, right) => String(right.criado_em ?? "").localeCompare(String(left.criado_em ?? "")))[0] ?? null;
+}
+
+type CentralPurchase = {
+  compraId: string;
+  alunoId: string | null;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  produto: string;
+  etapaAtual: number;
+  etapaTitulo: string | null;
+  accessActive: boolean;
+  firstAccessAt: string | null;
+  e3Diagnosis: E3Diagnosis | null;
+  notificationStatus: string | null;
+  failureMessage: string | null;
+};
+
+async function loadPostSaleCentral(supabase = getSupabaseServerClient(), purchaseIds?: string[]) {
+  let purchaseQuery = supabase.from("compras").select("id,aluno_id,produto_id,adquirida_em,status_acesso,identificador_externo").not("aluno_id", "is", null);
+  if (purchaseIds?.length) purchaseQuery = purchaseQuery.in("id", purchaseIds);
+  else purchaseQuery = purchaseQuery.eq("status_acesso", "ativo");
+  const purchases = await purchaseQuery.order("adquirida_em", { ascending: true }).order("id", { ascending: true });
+  if (purchases.error) throw new CommercialHttpError(500, "Não foi possível carregar as pendências de pós-venda.");
+  const rows = purchases.data ?? [];
+  const ids = rows.map((row) => String(row.id));
+  const studentIds = [...new Set(rows.map((row) => String(row.aluno_id ?? "")).filter(Boolean))];
+  const productIds = [...new Set(rows.map((row) => String(row.produto_id ?? "")).filter(Boolean))];
+  const [manual, overrides, notifications, students, products] = ids.length ? await Promise.all([
+    supabase.from("compras_pos_venda").select("*").in("compra_id", ids),
+    supabase.from("compras_pos_venda_overrides").select("compra_id,etapa").in("compra_id", ids),
+    supabase.from("alunos_notificacoes_acesso").select("aluno_id,idempotency_key,status,erro,criado_em").in("aluno_id", studentIds),
+    supabase.from("alunos").select("id,user_id,nome,email,telefone,primeiro_acesso_em").in("id", studentIds),
+    productIds.length ? supabase.from("produtos").select("id,nome").in("id", productIds) : Promise.resolve({ data: [], error: null }),
+  ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  if (manual.error || overrides.error || notifications.error || students.error || products.error) throw new CommercialHttpError(500, "Não foi possível carregar os diagnósticos de pós-venda.");
+  const manualBy = new Map((manual.data ?? []).map((row) => [String(row.compra_id), row]));
+  const overridesByPurchase = new Map<string, number[]>();
+  for (const row of overrides.data ?? []) overridesByPurchase.set(String(row.compra_id), [...(overridesByPurchase.get(String(row.compra_id)) ?? []), Number(row.etapa)]);
+  const studentById = new Map((students.data ?? []).map((row) => [String(row.id), row]));
+  const productById = new Map((products.data ?? []).map((row) => [String(row.id), String(row.nome ?? "Produto")]));
+  const items: CentralPurchase[] = rows.map((purchase) => {
+    const student = studentById.get(String(purchase.aluno_id));
+    const notification = accessNotificationForPurchase(notifications.data ?? [], purchase as Record<string, unknown>);
+    const automaticEmailSent = notification?.status === "enviado";
+    const state = manualBy.get(String(purchase.id));
+    const stages = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent: automaticEmailSent, firstAccessAt: student?.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overridesByPurchase.get(String(purchase.id)) ?? [] }).etapas;
+    const etapaAtual = stages.findIndex((done) => !done) + 1;
+    const e3Diagnosis = etapaAtual === 3 ? getE3Diagnosis({ email: student?.email, hasAuth: Boolean(student?.user_id), notificationStatus: notification?.status }) : null;
+    return { compraId: String(purchase.id), alunoId: purchase.aluno_id ? String(purchase.aluno_id) : null, nome: student?.nome ? String(student.nome) : null, email: student?.email ? String(student.email) : null, telefone: student?.telefone ? String(student.telefone) : null, produto: productById.get(String(purchase.produto_id)) ?? "Produto", etapaAtual, etapaTitulo: etapaAtual ? ["Compra registrada", "Acesso liberado", "E-mail de acesso", "Primeiro acesso", "Enviar mensagem pelo WhatsApp", "Retorno final do cliente"][etapaAtual - 1] : null, accessActive: purchase.status_acesso === "ativo", firstAccessAt: student?.primeiro_acesso_em ? String(student.primeiro_acesso_em) : null, e3Diagnosis, notificationStatus: notification?.status ? String(notification.status) : null, failureMessage: notification?.status === "falhou" ? safeE3FailureMessage() : null };
+  });
+  const pending = items.filter((item) => item.accessActive && item.etapaAtual > 0);
+  const counts = [1, 2, 3, 4, 5, 6].map((stage) => pending.filter((item) => item.etapaAtual === stage).length);
+  return { items, pending, counts };
+}
+
+async function previewPostSaleAccessEmail(purchaseIds: string[]) {
+  const { items } = await loadPostSaleCentral(getSupabaseServerClient(), purchaseIds);
+  const byId = new Map(items.map((item) => [item.compraId, item]));
+  const reasons: Record<string, number> = { invalid_email: 0, access_inactive: 0, e3_completed: 0, inconsistent: 0 };
+  let eligible = 0;
+  for (const purchaseId of purchaseIds) {
+    const item = byId.get(purchaseId);
+    const decision = getE3PreviewDecision({ exists: Boolean(item), hasStudent: Boolean(item?.alunoId), accessActive: Boolean(item?.accessActive), currentStage: item?.etapaAtual ?? 0, email: item?.email });
+    if (decision === "eligible") eligible += 1;
+    else reasons[decision] += 1;
+  }
+  return { selected: purchaseIds.length, eligible, ignored: purchaseIds.length - eligible, reasons };
+}
+
+async function sendPostSaleAccessEmails(purchaseIds: string[], actorUserId: string) {
+  const { items } = await loadPostSaleCentral(getSupabaseServerClient(), purchaseIds);
+  const byId = new Map(items.map((item) => [item.compraId, item]));
+  const supabase = getSupabaseServerClient();
+  const results: { compraId: string; status: "sent" | "ignored" | "blocked" | "failed"; reason: string }[] = [];
+  for (const compraId of purchaseIds) {
+    const item = byId.get(compraId);
+    const decision = getE3PreviewDecision({ exists: Boolean(item), hasStudent: Boolean(item?.alunoId), accessActive: Boolean(item?.accessActive), currentStage: item?.etapaAtual ?? 0, email: item?.email });
+    if (decision !== "eligible") { results.push({ compraId, status: "ignored", reason: decision === "access_inactive" ? "Acesso não está mais ativo" : decision === "e3_completed" ? "Aluno não está mais na E3" : decision === "invalid_email" ? "E-mail inválido" : "Dados inconsistentes" }); continue; }
+    const claimed = await supabase.rpc("claim_crm_access_email", { p_compra_id: compraId, p_aluno_id: item!.alunoId!, p_descricao: item!.produto });
+    if (claimed.error) { results.push({ compraId, status: "failed", reason: "Não foi possível reservar o envio" }); continue; }
+    const reservation = claimed.data as { status?: string; idempotency_key?: string } | null;
+    if (reservation?.status !== "claimed" || !reservation.idempotency_key) { results.push({ compraId, status: reservation?.status === "processing" || reservation?.status === "email_conflict" ? "blocked" : "ignored", reason: reservation?.status === "processing" ? "Já está sendo processado" : reservation?.status === "email_conflict" ? "E-mail vinculado a outra conta" : reservation?.status === "already_sent" ? "Já enviado anteriormente" : reservation?.status === "access_inactive" ? "Acesso não está mais ativo" : reservation?.status === "e3_completed" ? "Aluno não está mais na E3" : reservation?.status === "invalid_email" ? "E-mail inválido" : "Dados inconsistentes" }); continue; }
+    try {
+      const delivery = await deliverReservedStudentAccessEmail(supabase, item!.alunoId!, { accessLabel: item!.produto, idempotencyKey: reservation.idempotency_key, origin: "crm_lote", eventId: reservation.idempotency_key, identityReserved: true });
+      if (!delivery.sent) {
+        await supabase.rpc("finish_crm_access_email", { p_idempotency_key: reservation.idempotency_key, p_success: false, p_error: "E-mail vinculado a outra conta" });
+        results.push({ compraId, status: "blocked", reason: "E-mail vinculado a outra conta" }); continue;
+      }
+      const finished = await supabase.rpc("finish_crm_access_email", { p_idempotency_key: reservation.idempotency_key, p_success: true, p_error: null });
+      if (finished.error || finished.data !== true) { results.push({ compraId, status: "failed", reason: "Envio confirmado, mas não foi possível concluir o registro" }); continue; }
+      await supabase.from("auditoria_administrativa").insert({ ator_user_id: actorUserId, acao: "email_acesso_lote_enviado", entidade: "aluno", entidade_id: item!.alunoId!, detalhes: { compra_id: compraId, idempotency_key: reservation.idempotency_key, canal: "email" } });
+      results.push({ compraId, status: "sent", reason: "Enviado com sucesso" });
+    } catch {
+      await supabase.rpc("finish_crm_access_email", { p_idempotency_key: reservation.idempotency_key, p_success: false, p_error: "Falha ao enviar e-mail" });
+      results.push({ compraId, status: "failed", reason: "Falha ao enviar e-mail" });
+    }
+  }
+  const summary = { sent: results.filter((item) => item.status === "sent").length, ignored: results.filter((item) => item.status === "ignored").length, blocked: results.filter((item) => item.status === "blocked").length, failed: results.filter((item) => item.status === "failed").length };
+  return { summary, results };
 }
 
 function logCommercialDbError(context: string, error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined, extra: Record<string, unknown> = {}) {
@@ -702,7 +812,7 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const actor = uuid(admin.id, "Administrador");
   const body = await readCommercialBody(request);
   const action = requiredString(body.action, "Ação", 40);
-  rejectUnknownKeys(body, ["action", "id", "data", "lei_ids"]);
+  rejectUnknownKeys(body, ["action", "id", "data", "lei_ids", "compra_ids"]);
 
   if (resource === "alunos" && action === "crm_compras") {
     const alunoId = uuid(body.id, "Aluno"); const supabase = getSupabaseServerClient();
@@ -768,6 +878,20 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "alunos" && action === "crm_pendencias") {
     const crm = await loadPostSalePending();
     return { unavailable: crm.unavailable, message: crm.message, items_exibidos: crm.visibleItems, counts: crm.counts, resumo: crm.resumo, avisos: crm.warnings };
+  }
+  if (resource === "alunos" && action === "crm_central_pendencias") {
+    const crm = await loadPostSaleCentral();
+    return { items: crm.pending, resumo: { total: crm.pending.length, etapa_1: crm.counts[0], etapa_2: crm.counts[1], etapa_3: crm.counts[2], etapa_4: crm.counts[3], etapa_5: crm.counts[4], etapa_6: crm.counts[5] } };
+  }
+  if (resource === "alunos" && action === "crm_previa_email_acesso") {
+    if (!Array.isArray(body.compra_ids) || !body.compra_ids.length || body.compra_ids.length > 500) throw new CommercialValidationError("Selecione entre 1 e 500 compras para a prévia.");
+    const purchaseIds = [...new Set(body.compra_ids.map((value) => uuid(value, "Compra")))];
+    return previewPostSaleAccessEmail(purchaseIds);
+  }
+  if (resource === "alunos" && action === "crm_enviar_email_acesso_lote") {
+    if (!Array.isArray(body.compra_ids) || !body.compra_ids.length || body.compra_ids.length > 500) throw new CommercialValidationError("Selecione entre 1 e 500 compras para o envio.");
+    const purchaseIds = [...new Set(body.compra_ids.map((value) => uuid(value, "Compra")))];
+    return sendPostSaleAccessEmails(purchaseIds, actor);
   }
   if (resource === "alunos" && action === "crm_compra_atualizar") {
     const compraId = uuid(body.id, "Compra"); const data = asObject(body.data); rejectUnknownKeys(data, ["etapa", "acao", "observacao"]);
