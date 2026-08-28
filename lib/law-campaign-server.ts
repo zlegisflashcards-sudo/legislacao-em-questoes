@@ -152,7 +152,11 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
   const levelErrors = level.total_erros + (correct ? 0 : 1);
   // total_erros: levelErrors é confirmado na mesma transação do score.
   const { data: persistedRows, error: persistError } = await supabase.rpc("registrar_resposta_campanha", { p_campanha_id: state.campaignId, p_nivel_id: level.id, p_questao_id: questionId, p_correta: correct, p_proxima_posicao: nextPosition, p_proximas_pendencias: nextPending, p_total_erros_nivel: levelErrors, p_conclui_nivel: concludesLevel });
-  if (persistError) throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página.");
+  if (persistError) {
+    if (persistError.code === "P0001") throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página para continuar.");
+    console.error("Falha ao registrar resposta da campanha", { code: persistError.code, message: persistError.message, campaignId: state.campaignId, levelId: level.id });
+    throw new LawStudyApiError(503, "Não foi possível registrar a resposta. Tente novamente.");
+  }
   const persisted = Array.isArray(persistedRows) ? persistedRows[0] : null;
   if (!persisted) throw new LawStudyApiError(503, "Não foi possível salvar sua resposta.");
   const isFinal = concludesLevel && levels.every((item) => item.id === level.id || item.concluido);
