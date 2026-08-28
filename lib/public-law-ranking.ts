@@ -1,5 +1,6 @@
 import { isOfflineBuild } from "./build-mode";
 import { getSupabaseServerClient } from "./supabase-server";
+import { publicStudentName } from "./public-student-name";
 
 type CompetitiveCampaign = { aluno_id: string; score: number | null; score_ajustado?: number | null; score_version: number; score_competitivo_atualizado_em: string | null };
 
@@ -54,8 +55,9 @@ export async function loadPublicLawRanking(slug: string): Promise<PublicLawRanki
     if (!ranked.length) return [];
 
     const studentIds = ranked.map((entry) => entry.studentId);
-    const { data: students, error: studentsError } = await supabase.from("alunos").select("id,user_id").in("id", studentIds);
+    const { data: students, error: studentsError } = await supabase.from("alunos").select("id,user_id,nome").in("id", studentIds);
     if (studentsError) return [];
+    const studentById = new Map((students ?? []).flatMap((student) => typeof student.id === "string" ? [[student.id, student] as const] : []));
     const userIdByStudentId = new Map((students ?? []).flatMap((student) => typeof student.id === "string" && typeof student.user_id === "string" ? [[student.id, student.user_id] as const] : []));
     const userIds = [...new Set([...userIdByStudentId.values()])];
     const { data: profiles, error: profilesError } = userIds.length ? await supabase.from("perfis_publicos").select("id,nome_publico").in("id", userIds) : { data: [], error: null };
@@ -63,8 +65,8 @@ export async function loadPublicLawRanking(slug: string): Promise<PublicLawRanki
     const publicNameByUserId = new Map((profiles ?? []).flatMap((profile) => typeof profile.id === "string" && typeof profile.nome_publico === "string" && profile.nome_publico.trim() ? [[profile.id, profile.nome_publico.trim()] as const] : []));
 
     return ranked.flatMap((entry, index) => {
-      const name = publicNameByUserId.get(userIdByStudentId.get(entry.studentId) ?? "");
-      return name ? [{ position: index + 1, publicName: name, score: entry.score }] : [];
+      const student = studentById.get(entry.studentId);
+      return [{ position: index + 1, publicName: publicStudentName({ nome_publico: publicNameByUserId.get(userIdByStudentId.get(entry.studentId) ?? ""), nome: student?.nome }), score: entry.score }];
     });
   } catch {
     return [];

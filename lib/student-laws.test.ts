@@ -153,7 +153,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "law.codigo", "campaignStatus", "campaignProgress", "Colocar no edital", "Remover do edital"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "law.codigo", "campaignStatus", "campaignProgress", "+ Adicionar ao edital", "✓ No edital", "Remover do edital"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {

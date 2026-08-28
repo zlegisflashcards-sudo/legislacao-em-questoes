@@ -59,7 +59,7 @@ describe("player Legis Questões", () => {
   });
 
   it("mostra justificativa somente após responder e reencaminha erros ao nível", () => {
-    expect(player).toContain('answer ? <AnswerFeedback'); expect(player).toContain('Esta questão voltará neste nível.'); expect(player).toContain('question.justificativa ?');
+    expect(player).toContain('answer ? <AnswerFeedback'); expect(player).toContain('Você errou. Revise o comentário do professor e use as ferramentas de estudo abaixo.'); expect(player).toContain('question.justificativa ?');
   });
 
   it("limita a caixa colorida ao resultado e deixa comentário e legislação fora dela", () => {
@@ -80,7 +80,7 @@ describe("player Legis Questões", () => {
     expect(feedback).toContain('onOpen("highlights")');
     expect(feedback.indexOf('lf-law-block')).toBeLessThan(feedback.indexOf('LawStudyTools onOpen={onOpenLegisBot}'));
     expect(styles).toContain('.lf-law-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))');
-    expect(styles).toContain('@media(max-width:520px){.lf-law-tools{grid-template-columns:1fr}');
+    expect(styles).toContain('@media(max-width:520px){.lf-law-tools{grid-template-columns:repeat(3,minmax(0,1fr))');
   });
 
   it("abre o LegisBot sobre o jogador sem navegação e mantém as abas no mesmo painel", () => {
@@ -155,7 +155,7 @@ describe("player Legis Questões", () => {
   });
 
   it("mostra o avanço global do Estudo Ativo da Lei e oculta a barra na revisão", () => {
-    expect(player).toContain('progress={campaign?.progress ?? 0}'); expect(player).toContain('reviewing={campaign?.level?.reviewing ?? false}'); expect(player).toContain('{!reviewing ? <div className="lf-progress-row">'); expect(player).toContain('Revisando questões erradas'); expect(player).toContain('{progress}%'); expect(player).not.toContain('progress={campaign?.level?.firstPassProgress ?? 0}'); expect(player).toContain('progress: result.progress ?? current.progress');
+    expect(player).toContain('progress={campaign?.progress ?? 0}'); expect(player).toContain('reviewing={campaign?.level?.reviewing ?? false}'); expect(player).toContain('{!reviewing ? <div className="lf-progress-row">'); expect(player).toContain('Revisando...'); expect(player).toContain('{progress}%'); expect(player).not.toContain('progress={campaign?.level?.firstPassProgress ?? 0}'); expect(player).toContain('progress: result.progress ?? current.progress');
     expect(campaignServer).toContain('const completedBeforeCurrentLevel = levels.filter((item) => item.id !== level.id && item.concluido).flatMap((item) => item.questoes_ids).length;'); expect(campaignServer).toContain('const currentLevelFirstPassCompleted = Math.min(nextPosition, level.questoes_ids.length);'); expect(campaignServer).toContain('const globalCompletedQuestions = completedBeforeCurrentLevel + currentLevelFirstPassCompleted;');
   });
 

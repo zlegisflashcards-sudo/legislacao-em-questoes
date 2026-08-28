@@ -193,7 +193,7 @@ export default async function CentralLegislacaoPage({
             href={`/leisflashcards/${encodeURIComponent(legislacao.slug)}`}
             className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-blue-200 px-4 py-2 text-center text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
           >
-            Adquirir Flashcards
+            Adquirir (garantia Hotmart)
           </a>
         </aside>
 

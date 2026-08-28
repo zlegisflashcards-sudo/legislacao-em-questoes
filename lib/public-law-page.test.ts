@@ -22,8 +22,8 @@ describe("página pública da lei", () => {
   });
 
   it("deixa o ranking no fim, imediatamente antes do CTA comercial", () => {
-    expect(page.lastIndexOf('aria-labelledby="law-ranking-title"')).toBeLessThan(page.lastIndexOf("Adquirir Flashcards"));
-    expect(page.lastIndexOf("Adquirir Flashcards")).toBeGreaterThan(page.lastIndexOf("LegislacaoEmbed"));
+    expect(page.lastIndexOf('aria-labelledby="law-ranking-title"')).toBeLessThan(page.lastIndexOf("Adquirir (garantia Hotmart)"));
+    expect(page.lastIndexOf("Adquirir (garantia Hotmart)")).toBeGreaterThan(page.lastIndexOf("LegislacaoEmbed"));
     expect(page).toContain("Adquira nossos flashcards e entre no ranking.");
   });
 });

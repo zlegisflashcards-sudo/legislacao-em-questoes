@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { publicStudentName } from "@/lib/public-student-name";
 
 type RankingRow = { posicao: number | string; aluno_id: string; score_total: number | string };
 type RankedLeagueEntry = { position: number; studentId: string; score: number };
@@ -30,14 +31,15 @@ export async function loadLeagueRanking(slug: string, studentId: string | null =
     return position && typeof row.aluno_id === "string" && score !== null ? [{ position, studentId: row.aluno_id, score }] : [];
   });
   const studentIds = [...new Set(ranked.map((entry) => entry.studentId))];
-  const { data: students, error: studentsError } = studentIds.length ? await supabase.from("alunos").select("id,user_id").in("id", studentIds) : { data: [], error: null };
+  const { data: students, error: studentsError } = studentIds.length ? await supabase.from("alunos").select("id,user_id,nome").in("id", studentIds) : { data: [], error: null };
   if (studentsError) throw new Error(`Não foi possível carregar os jogadores: ${studentsError.message}`);
+  const studentById = new Map((students ?? []).flatMap((student) => typeof student.id === "string" ? [[student.id, student] as const] : []));
   const userByStudent = new Map((students ?? []).flatMap((student) => typeof student.id === "string" && typeof student.user_id === "string" ? [[student.id, student.user_id] as const] : []));
   const userIds = [...new Set([...userByStudent.values()])];
   const { data: profiles, error: profilesError } = userIds.length ? await supabase.from("perfis_publicos").select("id,nome_publico").in("id", userIds) : { data: [], error: null };
   if (profilesError) throw new Error(`Não foi possível carregar os nomes públicos: ${profilesError.message}`);
   const nameByUser = new Map((profiles ?? []).flatMap((profile) => typeof profile.id === "string" && typeof profile.nome_publico === "string" && profile.nome_publico.trim() ? [[profile.id, profile.nome_publico.trim()] as const] : []));
-  const ranking = ranked.filter((entry) => entry.position <= 10).map((entry) => ({ position: entry.position, publicName: nameByUser.get(userByStudent.get(entry.studentId) ?? "") ?? "Jogador Legis", score: entry.score }));
+  const ranking = ranked.filter((entry) => entry.position <= 10).map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(userByStudent.get(entry.studentId) ?? ""), nome: studentById.get(entry.studentId)?.nome }), score: entry.score }));
   const self = studentId ? ranked.find((entry) => entry.studentId === studentId) ?? null : null;
   return { league: { slug: league.slug, name: league.nome, title: league.titulo }, ranking, personal: self ? { position: self.position, score: self.score } : null };
 }

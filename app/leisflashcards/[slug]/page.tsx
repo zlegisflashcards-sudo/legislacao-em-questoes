@@ -301,7 +301,7 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
             href={legislacao.hotmartUrl}
             className="inline-flex w-fit items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] hover:from-[#041d42] hover:to-blue-500 hover:shadow-[0_22px_50px_rgba(37,99,235,0.52)] sm:px-10 sm:text-lg"
           >
-            Adquirir Flashcards
+            Adquirir (garantia Hotmart)
           </a>
           <p className="mt-3 text-xs font-semibold text-blue-100">
             ✓ Pagamento seguro via Hotmart
@@ -425,7 +425,7 @@ function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
           <h1 className="text-4xl font-bold leading-tight sm:text-5xl">{produto.nome}</h1>
           {produto.descricao ? <p className="max-w-2xl text-lg leading-8 text-slate-200">{produto.descricao}</p> : null}
           {video ? <div className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]"><iframe className="aspect-video w-full" src={video} title={`Vídeo do produto: ${produto.nome}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div> : null}
-          {produto.hotmartUrl ? <a href={produto.hotmartUrl} className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-center text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] sm:text-lg">Adquirir acesso</a> : <p className="text-sm font-semibold text-slate-300">Link de aquisição indisponível no momento.</p>}
+          {produto.hotmartUrl ? <a href={produto.hotmartUrl} className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-center text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] sm:text-lg">Adquirir (garantia Hotmart)</a> : <p className="text-sm font-semibold text-slate-300">Link de aquisição indisponível no momento.</p>}
           <div className="grid gap-4 sm:grid-cols-3">{["Acesso vitalício", "Acesso ilimitado", "Material atualizado"].map((beneficio) => <div key={beneficio} className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 font-bold shadow-[0_16px_40px_rgba(0,0,0,0.22)]">{beneficio}</div>)}</div>
         </div>
       </section>
