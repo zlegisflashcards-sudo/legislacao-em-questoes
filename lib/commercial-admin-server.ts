@@ -458,7 +458,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
     const productRows = [...uniqueProducts.values()];
     const ids = productRows.map((row) => String(row.id));
     const links = ids.length
-      ? await supabase.from("produto_leis").select("produto_id,lei_id,ordem,leis(id,slug,titulo)").in("produto_id", ids).order("ordem")
+      ? await supabase.from("produto_leis").select("produto_id,lei_id,ordem,recorte_id,recortes_leis(id,nome,ativo),leis(id,slug,titulo)").in("produto_id", ids).order("ordem")
       : { data: [], error: null };
     assertQuery(links);
     const byProduct = new Map<string, unknown[]>();
@@ -1269,7 +1269,8 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       return rpc("admin_criar_produto", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
     if (action === "atualizar") return rpc("admin_atualizar_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_dados: validateProductData(body.data, true) });
-    if (action === "definir_leis") return rpc("admin_definir_leis_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_lei_ids: idList(body.lei_ids, "Lista de leis") });
+    // Substitui a antiga rpc("admin_definir_leis_produto") preservando o contrato legado de lei completa.
+    if (action === "definir_leis") return rpc("admin_definir_leis_produto_recortes", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_vinculos: Array.isArray(body.vinculos) ? body.vinculos : idList(body.lei_ids, "Lista de leis").map((lei_id) => ({ lei_id, recorte_id: null })) });
     if (action === "sincronizar_liberacoes_editais") return rpc("admin_sincronizar_composicao_edital_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto") });
   }
 

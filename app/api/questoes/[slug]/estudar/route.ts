@@ -1,5 +1,7 @@
-import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
-import { mainLawBySlug, mainQuestions, mainStructure } from "@/lib/questions-main-server";
+import { lawStudyErrorResponse } from "@/lib/law-study-server";
+import { authorizeLawQuestionScope } from "@/lib/law-question-scope-auth";
+import { mainLawBySlug, mainStructure } from "@/lib/questions-main-server";
+import { resolveQuestionsForLawScope } from "@/lib/law-question-scopes";
 
 type RouteContext = {
   params: Promise<{
@@ -32,7 +34,6 @@ export async function GET(
     const { slug } = await context.params;
 
     // Autoriza o acesso usando o banco principal.
-    await authorizeLawStudy(request, slug);
     const law = await mainLawBySlug(slug);
 
     if (!law) {
@@ -53,6 +54,11 @@ export async function GET(
     const url = new URL(request.url);
 
     const structureId = Number(url.searchParams.get("structure_id"));
+    const recorteId = url.searchParams.get("recorte_id");
+    if (recorteId !== null && !/^[0-9a-f-]{36}$/i.test(recorteId)) {
+      return Response.json({ success: false, message: "Recorte de lei inválido." }, { status: 400, headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    }
+    const authorization = await authorizeLawQuestionScope(request, slug, recorteId);
     let ids: number[] | undefined;
     if (Number.isSafeInteger(structureId) && structureId > 0) {
       ids = await descendantStructureIds(law.id, structureId);
@@ -62,12 +68,17 @@ export async function GET(
       const value = url.searchParams.get(filter)?.trim();
       if (value) filters[filter] = value;
     }
-    const [questions, structure] = await Promise.all([mainQuestions(law.id, { structureIds: ids, values: filters }), mainStructure(law.id)]);
+    // Um recorte é sempre um subconjunto estrutural da mesma lei autorizada.
+    // Filtros livres continuam sendo aplicados sem criar uma segunda fonte.
+    const [scopeQuestions, structure] = await Promise.all([resolveQuestionsForLawScope(law.id, recorteId), mainStructure(law.id)]);
+    const questions = (ids?.length ? scopeQuestions.filter((question) => question.structure_id !== null && ids!.includes(question.structure_id)) : scopeQuestions)
+      .filter((question) => Object.entries(filters).every(([field, value]) => question[field as keyof typeof question] === value));
 
     return Response.json(
       {
         success: true,
         law,
+        recorte: authorization.recorte,
         filters,
         structure,
         questions,

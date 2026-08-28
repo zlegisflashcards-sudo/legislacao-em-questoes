@@ -441,6 +441,9 @@ function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws
   const initial = Array.isArray(product.leis) ? product.leis.map((item) => text(object(item).lei_id)) : [];
   const [selected, setSelected] = useState(initial);
   const [candidate, setCandidate] = useState("");
+  const [scopes, setScopes] = useState<Record<string, Array<{ id: string; nome: string }>>>({});
+  const [scopeByLaw, setScopeByLaw] = useState<Record<string, string>>(() => Object.fromEntries((Array.isArray(product.leis) ? product.leis : []).map((item) => { const row = object(item); return [text(row.lei_id), text(object(row.recortes_leis).id)]; })));
+  useEffect(() => { void Promise.all(selected.map(async (lawId) => { const law = laws.find((item) => text(item.id) === lawId); if (!law?.slug) return [lawId, []] as const; const response = await fetch(`/api/admin/questoes?law_slug=${encodeURIComponent(text(law.slug))}&recortes=1`); const body = await response.json().catch(() => ({})); return [lawId, response.ok ? (body.recortes ?? []).filter((item: { ativo?: boolean }) => item.ativo).map((item: { id: string; nome: string }) => ({ id: item.id, nome: item.nome })) : []] as const; } )).then((entries) => setScopes(Object.fromEntries(entries))).catch(() => undefined); }, [selected, laws]);
   const title = (id: string) => text(laws.find((law) => text(law.id) === id)?.titulo) || `Lei ${id}`;
   function move(index: number, direction: -1 | 1) {
     const target = index + direction;
@@ -449,7 +452,7 @@ function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    await mutate("produtos", { action: "definir_leis", id: product.id, lei_ids: selected.map(Number) }, "Composição ordenada atualizada.");
+    await mutate("produtos", { action: "definir_leis", id: product.id, vinculos: selected.map((lei_id) => ({ lei_id: Number(lei_id), recorte_id: scopeByLaw[lei_id] || null })) }, "Composição ordenada atualizada.");
   }
   async function reconcile() {
     if (!window.confirm("Sincronizar as liberações das compras ativas deste edital com a composição atual?")) return;
@@ -458,7 +461,7 @@ function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws
   return <form className="commercial-composition" onSubmit={save}>
     <h3>Leis do produto</h3><p>Ordene com as setas. Em produtos do tipo edital, novas leis são sincronizadas para compras ativas.</p>
     <div className="commercial-composition-add"><select value={candidate} onChange={(event) => setCandidate(event.target.value)}><option value="">Adicionar lei…</option>{laws.filter((law) => !selected.includes(text(law.id))).map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select><button type="button" className="admin-button secondary" disabled={!candidate} onClick={() => { setSelected([...selected, candidate]); setCandidate(""); }}>Adicionar</button></div>
-    <ol>{selected.map((id, index) => <li key={id}><span>{title(id)}</span><div><button type="button" disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Mover ${title(id)} para cima`}>↑</button><button type="button" disabled={index === selected.length - 1} onClick={() => move(index, 1)} aria-label={`Mover ${title(id)} para baixo`}>↓</button><button type="button" onClick={() => setSelected(selected.filter((item) => item !== id))}>Remover</button></div></li>)}</ol>
+    <ol>{selected.map((id, index) => <li key={id}><span>{title(id)}<label>Escopo das questões<select value={scopeByLaw[id] || ""} onChange={(event) => setScopeByLaw((current) => ({ ...current, [id]: event.target.value }))}><option value="">Lei completa</option>{(scopes[id] ?? []).map((scope) => <option key={scope.id} value={scope.id}>{scope.nome}</option>)}</select></label></span><div><button type="button" disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Mover ${title(id)} para cima`}>↑</button><button type="button" disabled={index === selected.length - 1} onClick={() => move(index, 1)} aria-label={`Mover ${title(id)} para baixo`}>↓</button><button type="button" onClick={() => { setSelected(selected.filter((item) => item !== id)); setScopeByLaw((current) => { const next = { ...current }; delete next[id]; return next; }); }}>Remover</button></div></li>)}</ol>
     <div className="commercial-form-actions"><button className="admin-button primary" disabled={busy}>Salvar composição</button>{text(product.tipo_produto) === "edital" ? <button type="button" className="admin-button secondary" disabled={busy} onClick={() => void reconcile()}>Sincronizar compras ativas</button> : null}</div>
   </form>;
 }
