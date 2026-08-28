@@ -18,6 +18,7 @@ export type StudentLaw = {
   tipoReferenciaNormativa: StudentLawReferenceType;
   campaignStatus?: "nao_iniciada" | "em_andamento" | "concluida";
   campaignProgress?: number;
+  studyContextCount?: number;
 };
 
 export type StudentLawUpdateStatus = "atualizado" | "revisao_pendente" | "desatualizado" | "em_revisao";

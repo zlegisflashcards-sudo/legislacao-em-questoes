@@ -123,15 +123,15 @@ describe("interface de estudo", () => {
   });
 
   it("libera estudo livre e capítulos somente após a campanha concluída", () => {
-    expect(client).toContain('completed && tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1`');
+    expect(client).toContain('completed && tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1${contextQuery}`}');
     expect(client).toContain('structure_id=${node.id}');
   });
 
   it("representa uma lei sem subbaralhos pelo deck raiz, sem ação duplicada", () => {
     expect(client).toContain('function RootDeck');
-    expect(client).toContain('count={sourceLaw?.questions.length ?? 0}');
+    expect(client).toContain('count={selectedContext?.questionCount ?? sourceLaw?.questions.length ?? 0}');
     expect(client).toContain('completed && tree.length > 0 ? <Link');
-    expect(client).toContain('const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1`;');
+    expect(client).toContain('const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1${recorteId ?');
   });
 
   it("reserva + e − somente para níveis que podem ser expandidos", () => {
