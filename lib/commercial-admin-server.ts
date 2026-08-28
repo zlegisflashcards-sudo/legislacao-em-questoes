@@ -34,6 +34,7 @@ import {
   optionalTimestamp,
   pageFrom,
   positiveIntegerId,
+  productLawLinks,
   rejectUnknownKeys,
   requiredString,
   safeSearch,
@@ -835,7 +836,9 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   const action = requiredString(body.action, "Ação", 40);
   const mutationKeys = ["action", "id", "data", "lei_ids", "compra_ids"] as const;
   // Editorial fields are accepted only by the two E3 operations that validate them server-side.
-  const allowedBodyKeys = action === "crm_previa_email_acesso" || action === "crm_enviar_email_acesso_lote"
+  const allowedBodyKeys = resource === "produtos" && action === "definir_leis"
+    ? [...mutationKeys, "vinculos"]
+    : action === "crm_previa_email_acesso" || action === "crm_enviar_email_acesso_lote"
     ? [...mutationKeys, "editorial"]
     : action === "crm_historico_email_acesso"
       ? [...mutationKeys, "compra_id"]
@@ -1270,7 +1273,12 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     }
     if (action === "atualizar") return rpc("admin_atualizar_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_dados: validateProductData(body.data, true) });
     // Substitui a antiga rpc("admin_definir_leis_produto") preservando o contrato legado de lei completa.
-    if (action === "definir_leis") return rpc("admin_definir_leis_produto_recortes", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_vinculos: Array.isArray(body.vinculos) ? body.vinculos : idList(body.lei_ids, "Lista de leis").map((lei_id) => ({ lei_id, recorte_id: null })) });
+    if (action === "definir_leis") {
+      const vinculos = "vinculos" in body
+        ? productLawLinks(body.vinculos)
+        : idList(body.lei_ids, "Lista de leis").map((lei_id) => ({ lei_id, recorte_id: null, recorte_lei_id: null }));
+      return rpc("admin_definir_leis_produto_recortes", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_vinculos: vinculos });
+    }
     if (action === "sincronizar_liberacoes_editais") return rpc("admin_sincronizar_composicao_edital_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto") });
   }
 

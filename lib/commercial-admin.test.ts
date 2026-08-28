@@ -10,6 +10,7 @@ import {
   optionalIsoDate,
   optionalNonNegativeInteger,
   optionalProductDemoVideoUrl,
+  productLawLinks,
   safeSearch,
   slug,
   uuid,
@@ -61,6 +62,15 @@ describe("validação da administração comercial", () => {
     ]) expect(optionalProductDemoVideoUrl(url, "Vídeo")).toBe("https://www.youtube.com/embed/LDa1zANCIQY");
     expect(() => optionalProductDemoVideoUrl("ftp://youtube.com/watch?v=LDa1zANCIQY", "Vídeo")).toThrow(CommercialValidationError);
     expect(() => optionalProductDemoVideoUrl("https://www.youtube.com/watch?v=invalido", "Vídeo")).toThrow(CommercialValidationError);
+  });
+
+  it("aceita somente o contrato explícito de lei completa ou recorte coerente", () => {
+    const scopeId = "00000000-0000-4000-8000-000000000004";
+    expect(productLawLinks([{ lei_id: 7, recorte_id: null, recorte_lei_id: null }])).toEqual([{ lei_id: 7, recorte_id: null, recorte_lei_id: null }]);
+    expect(productLawLinks([{ lei_id: 7, recorte_id: scopeId, recorte_lei_id: 7 }])).toEqual([{ lei_id: 7, recorte_id: scopeId, recorte_lei_id: 7 }]);
+    expect(() => productLawLinks([{ lei_id: 7, recorte_id: scopeId, recorte_lei_id: 8 }])).toThrow("mesma lei");
+    expect(() => productLawLinks([{ lei_id: 7, recorte_id: null, recorte_lei_id: 7 }])).toThrow("exige um recorte");
+    expect(() => productLawLinks([{ lei_id: 7, recorte_id: null, recorte_lei_id: null, inesperado: true }])).toThrow("campos não permitidos");
   });
 });
 
@@ -237,7 +247,10 @@ describe("operações comerciais auditáveis", () => {
     expect(migration).not.toContain("hotmart_eventos");
   });
 
-  it("salva a composição do produto por RPC centralizada", () => {
-    expect(server).toContain('rpc("admin_definir_leis_produto"');
+  it("salva a composição do produto por RPC de recortes e mantém whitelist estrita", () => {
+    expect(server).toContain('resource === "produtos" && action === "definir_leis"');
+    expect(server).toContain('productLawLinks(body.vinculos)');
+    expect(server).toContain('rpc("admin_definir_leis_produto_recortes"');
+    expect(client).toContain("recorte_lei_id: scopeByLaw[lei_id] ? Number(lei_id) : null");
   });
 });

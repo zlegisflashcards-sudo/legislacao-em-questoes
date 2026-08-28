@@ -452,7 +452,7 @@ function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    await mutate("produtos", { action: "definir_leis", id: product.id, vinculos: selected.map((lei_id) => ({ lei_id: Number(lei_id), recorte_id: scopeByLaw[lei_id] || null })) }, "Composição ordenada atualizada.");
+    await mutate("produtos", { action: "definir_leis", id: product.id, vinculos: selected.map((lei_id) => ({ lei_id: Number(lei_id), recorte_id: scopeByLaw[lei_id] || null, recorte_lei_id: scopeByLaw[lei_id] ? Number(lei_id) : null })) }, "Composição ordenada atualizada.");
   }
   async function reconcile() {
     if (!window.confirm("Sincronizar as liberações das compras ativas deste edital com a composição atual?")) return;

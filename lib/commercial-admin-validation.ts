@@ -177,6 +177,29 @@ export function idList(value: unknown, label: string): number[] {
   return ids;
 }
 
+export type ProductLawLink = {
+  lei_id: number;
+  recorte_id: string | null;
+  recorte_lei_id: number | null;
+};
+
+/** Valida somente o formato público da composição; a RPC confirma lei/recorte ativo no banco. */
+export function productLawLinks(value: unknown): ProductLawLink[] {
+  if (!Array.isArray(value) || value.length > 500) throw new CommercialValidationError("Composição de leis é inválida.");
+  const links = value.map((item) => {
+    const link = asObject(item);
+    rejectUnknownKeys(link, ["lei_id", "recorte_id", "recorte_lei_id"]);
+    const lei_id = positiveIntegerId(link.lei_id, "Lei");
+    const recorte_id = link.recorte_id == null || link.recorte_id === "" ? null : uuid(link.recorte_id, "Recorte");
+    const recorte_lei_id = link.recorte_lei_id == null || link.recorte_lei_id === "" ? null : positiveIntegerId(link.recorte_lei_id, "Lei do recorte");
+    if (recorte_id === null && recorte_lei_id !== null) throw new CommercialValidationError("Lei do recorte exige um recorte.");
+    if (recorte_id !== null && recorte_lei_id !== lei_id) throw new CommercialValidationError("O recorte deve pertencer à mesma lei.");
+    return { lei_id, recorte_id, recorte_lei_id };
+  });
+  if (new Set(links.map((link) => link.lei_id)).size !== links.length) throw new CommercialValidationError("Composição contém leis duplicadas.");
+  return links;
+}
+
 export function pageFrom(value: string | null): number {
   const parsed = Number(value ?? "1");
   return Number.isSafeInteger(parsed) && parsed > 0 ? Math.min(parsed, 10000) : 1;
