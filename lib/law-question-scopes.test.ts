@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { descendantsForScope, questionsInScope } from "./law-question-scope-resolution";
+import { descendantsForScope, questionsInScope, summarizeLawQuestionScopes } from "./law-question-scope-resolution";
 
 const nodes = [
   { id: 1, parent_id: null }, { id: 2, parent_id: 1 }, { id: 3, parent_id: 2 }, { id: 4, parent_id: null }, { id: 5, parent_id: null },
@@ -25,5 +25,18 @@ describe("recortes de questões canônicas", () => {
   });
   it("mantém a lei completa, inclusive questões sem structure_id", () => {
     expect(questionsInScope(questions, null).map((item) => item.id)).toEqual(["q1", "q2", "q3", "q4", "q5"]);
+  });
+  it("lista recortes ativos e inativos por consultas explícitas, sem embed ambíguo", () => {
+    const scopes = summarizeLawQuestionScopes([
+      { id: "ativo", ativo: true, nome: "Ativo" },
+      { id: "inativo", ativo: false, nome: "Inativo" },
+    ], [{ recorte_id: "ativo", structure_id: 4 }, { recorte_id: "inativo", structure_id: 1 }], nodes, questions);
+    expect(scopes).toEqual([
+      expect.objectContaining({ id: "ativo", ativo: true, structure_ids: [4], question_count: 1 }),
+      expect.objectContaining({ id: "inativo", ativo: false, structure_ids: [1], question_count: 3 }),
+    ]);
+  });
+  it("retorna lista vazia para lei sem recortes", () => {
+    expect(summarizeLawQuestionScopes([], [], nodes, questions)).toEqual([]);
   });
 });

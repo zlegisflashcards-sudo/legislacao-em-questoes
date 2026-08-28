@@ -36,6 +36,9 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain('.from("leis")');
     expect(server).toContain('.from("questions")');
     expect(server).toContain('.from("law_structure")');
+    expect(server).toContain('.from("recortes_leis")');
+    expect(server).toContain('.from("recortes_leis_estrutura")');
+    expect(server).not.toContain('recortes_leis_estrutura(structure_id)');
     expect(server).toContain('.eq("lei_id", current.id)');
     expect(server).not.toContain("getSupabaseQuestoesClient");
     expect(server).toContain("update({ ativo: false })");
