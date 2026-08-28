@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { descendantsForScope, questionsInScope, summarizeLawQuestionScopes } from "./law-question-scope-resolution";
+import { buildScopeTree, descendantsForScope, normalizeScopeSelection, questionsInScope, summarizeLawQuestionScopes } from "./law-question-scope-resolution";
 
 const nodes = [
   { id: 1, parent_id: null }, { id: 2, parent_id: 1 }, { id: 3, parent_id: 2 }, { id: 4, parent_id: null }, { id: 5, parent_id: null },
@@ -38,5 +38,23 @@ describe("recortes de questões canônicas", () => {
   });
   it("retorna lista vazia para lei sem recortes", () => {
     expect(summarizeLawQuestionScopes([], [], nodes, questions)).toEqual([]);
+  });
+  it("preserva títulos sem questões diretas como pais de capítulos da CF", () => {
+    const cf = [
+      { id: 20, parent_id: null, nome: "Título 02" }, { id: 21, parent_id: 20, nome: "Capítulo 01" },
+      { id: 30, parent_id: null, nome: "Título 03" }, { id: 31, parent_id: 30, nome: "Capítulo 07" },
+      { id: 40, parent_id: null, nome: "Título 04" }, { id: 41, parent_id: 40, nome: "Capítulo 03" }, { id: 42, parent_id: 41, nome: "Seção 08" },
+      { id: 50, parent_id: null, nome: "Título 05" }, { id: 51, parent_id: 50, nome: "Capítulo 03" },
+    ];
+    const tree = buildScopeTree(cf);
+    expect(tree.map((node) => node.id)).toEqual([20, 30, 40, 50]);
+    expect(tree[0].children.map((node) => node.id)).toEqual([21]);
+    expect(tree[1].children.map((node) => node.id)).toEqual([31]);
+    expect(tree[2].children[0].children.map((node) => node.id)).toEqual([42]);
+    expect(tree[3].children.map((node) => node.id)).toEqual([51]);
+  });
+  it("marca filhos como incluídos pelo pai e não persiste seleção redundante", () => {
+    expect(normalizeScopeSelection(nodes, [1, 2, 3])).toEqual([1]);
+    expect(descendantsForScope(nodes, normalizeScopeSelection(nodes, [1, 2, 3])).sort()).toEqual([1, 2, 3]);
   });
 });
