@@ -5,6 +5,7 @@ const player = readFileSync("components/legis-questoes-study-client.tsx", "utf8"
 const sanitizer = readFileSync("lib/legis-questoes-html.ts", "utf8");
 const campaignServer = readFileSync("lib/law-campaign-server.ts", "utf8");
 const campaignMigration = readFileSync("supabase/migrations/20260820100000_add_law_campaign_level_errors.sql", "utf8");
+const levelScoreMigration = readFileSync("supabase/migrations/20260827130000_add_campaign_level_competitive_score.sql", "utf8");
 const styles = readFileSync("app/globals.css", "utf8");
 const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
 const legisBotAdminShortcut = readFileSync("components/admin/admin-edit-comment-shortcut.tsx", "utf8");
@@ -158,29 +159,31 @@ describe("player Legis Questões", () => {
     expect(campaignServer).toContain('const completedBeforeCurrentLevel = levels.filter((item) => item.id !== level.id && item.concluido).flatMap((item) => item.questoes_ids).length;'); expect(campaignServer).toContain('const currentLevelFirstPassCompleted = Math.min(nextPosition, level.questoes_ids.length);'); expect(campaignServer).toContain('const globalCompletedQuestions = completedBeforeCurrentLevel + currentLevelFirstPassCompleted;');
   });
 
-  it("preserva erros no snapshot, mas exibe uma mensagem determinística ao concluir o nível", () => {
-    expect(player).not.toContain("Score do módulo");
-    expect(player).not.toContain("lf-level-score");
+  it("preserva erros no snapshot e exibe a parcial competitiva ao concluir o nível", () => {
     expect(player).toContain("const LEVEL_COMPLETION_MESSAGE");
     expect(player).toContain("⚡ Parabéns! Mais uma etapa concluída.");
     expect(player).not.toContain('current.levels?.findIndex((level) => level.id === current.level?.id)');
     expect(player).toContain('<LevelCompletion level={levelDone}');
-    expect(player).not.toContain('{levelDone.errors}');
+    expect(player).toContain('Desempenho do nível:');
+    expect(player).toContain('Score do nível:');
+    expect(player).toContain('Score acumulado:');
     expect(player).not.toContain('const messages = current.completionMessages?.filter');
-    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "" });');
+    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "", correct: Number(levelResult?.correct ?? 0), errors: Number(levelResult?.errors ?? 0), score: Number(levelResult?.score ?? 0), accumulatedScore: Number(confirmedScore ?? 0) });');
     expect(campaignServer).not.toContain('getActiveLevelCompletionMessages');
     expect(campaignServer).not.toContain('completionMessages, level: { id: level.id');
     expect(campaignServer).toContain('total_erros: levelErrors');
-    expect(campaignServer).toContain('levelResult: concludesLevel ? { errors: levelErrors } : null');
-    expect(campaignServer).not.toContain('score: score(levelErrors)');
+    expect(campaignServer).toContain('levelResult: concludesLevel ? { correct: levelCompetitiveCorrect, errors: levelCompetitiveErrors, score: levelCompetitiveScore } : null');
+    expect(campaignServer).toContain('const levelCompetitiveScore = campaignScore(levelCompetitiveCorrect, levelCompetitiveErrors);');
     expect(campaignMigration).toContain('add column if not exists total_erros integer not null default 0');
+    expect(levelScoreMigration).toContain('score_competitivo_acertos=n.score_competitivo_acertos+case when p_correta then 1 else 0 end');
+    expect(levelScoreMigration).toContain('score_competitivo_erros=n.score_competitivo_erros+case when p_correta then 0 else 1 end');
   });
 
   it("só celebra a conclusão após a confirmação final do backend", () => {
     expect(player).toContain('if (result.campaignConcluded)');
     expect(player).toContain('setCelebrating(true)');
     expect(player).toContain('if (result.levelConcluded)');
-    expect(player).toContain('setLevelDone({ name: current.level?.nome ?? "" });');
+    expect(player).toContain('const levelResult = result.levelResult; setLevelDone({ name: current.level?.nome ?? ""');
     expect(campaignServer).toContain('update({ concluida: true, concluida_em: new Date().toISOString(), score: finalScore })');
     expect(campaignServer).toContain('update({ status_campanha: "concluida", questoes_finalizadas: true, campanha_ativa_id: null })');
   });
@@ -282,8 +285,11 @@ describe("player Legis Questões", () => {
     expect(player).toContain('Seu recorde continua sendo ${score} pontos.');
     expect(player).toContain('<PersonalRecordSummary record={result.personalRecord} />');
     expect(player).toContain('import { CampaignPerformanceDonut } from "@/components/campaign-performance-donut"');
-    expect(player).toContain('campaignAttemptPerformance(result?.totalQuestions ?? 0, result?.errors ?? 0)');
+    expect(player).toContain('competitiveCampaignPerformance(result?.correct ?? 0, result?.errors ?? 0)');
     expect(player).toContain('<CampaignPerformanceDonut correct={performance.correct} errors={performance.errors} accuracy={performance.accuracy} />');
+    expect(player).toContain('scoreVersion === 2 ? `Estudo Ativo da Lei · Score: ${(score ?? 0).toLocaleString("pt-BR")} · Desempenho: ${performance.accuracy}%`');
+    expect(player).toContain('correct: typeof result.correct === "number" ? result.correct : current.correct');
+    expect(player).toContain('errors: typeof result.errors === "number" ? result.errors : current.errors');
     expect(player).toContain('Sua posição no ranking:');
     expect(styles).toContain('.lf-attempt-donut{display:grid;width:142px;height:142px');
     expect(styles).toContain('background:conic-gradient(#1eaa5d 0 var(--lf-correct),#e34d4d var(--lf-correct) 100%)');
@@ -294,8 +300,8 @@ describe("player Legis Questões", () => {
     expect(campaignServer).toContain('progress: state.status === "concluida" ? 100 : 0');
   });
 
-  it("calcula o recorde sobre o histórico concluído sem reabrir ou apagar tentativas concluídas", () => {
-    expect(campaignServer).toContain('select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("concluida", true)');
+  it("calcula o recorde competitivo V2 sem reabrir ou apagar tentativas concluídas", () => {
+    expect(campaignServer).toContain('select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("score_version", 2)');
     expect(campaignServer).toContain('personalRecordForAttempt(finalScore, previousCampaigns ?? [])');
     expect(campaignServer).toContain('.delete().eq("id", current.campanha_ativa_id).eq("concluida", false)');
   });

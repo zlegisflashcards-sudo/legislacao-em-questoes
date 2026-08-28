@@ -113,7 +113,7 @@ export async function coachStudents(url: URL) {
   if (error) throw new CoachAdminError(503, "Não foi possível carregar os alunos.");
   const selected = students ?? [];
   const ids = selected.map((student) => student.id);
-  const { data: campaigns, error: campaignsError } = ids.length ? await supabase.from("campanhas_leis_alunos").select("id,aluno_id,lei_id,total_erros,score,score_ajustado,concluida,concluida_em,updated_at,leis(titulo,slug)").in("aluno_id", ids) : { data: [], error: null };
+  const { data: campaigns, error: campaignsError } = ids.length ? await supabase.from("campanhas_leis_alunos").select("id,aluno_id,lei_id,total_erros,score,score_ajustado,score_version,concluida,concluida_em,updated_at,leis(titulo,slug)").in("aluno_id", ids).eq("score_version", 2) : { data: [], error: null };
   if (campaignsError) throw new CoachAdminError(503, "Não foi possível carregar as campanhas.");
   const threeDaysAgo = Date.now() - 3 * 86400000;
   const items = selected.map((student) => {
@@ -141,7 +141,7 @@ export async function coachStudent(studentId: string) {
   const supabase = getSupabaseServerClient();
   const { data: student, error } = await supabase.from("alunos").select("id,nome,email").eq("id", studentId).maybeSingle();
   if (error || !student) throw new CoachAdminError(404, "Aluno não encontrado.");
-  const { data: campaigns, error: campaignsError } = await supabase.from("campanhas_leis_alunos").select("id,aluno_id,lei_id,total_erros,score,score_ajustado,concluida,concluida_em,updated_at,leis(titulo,slug)").eq("aluno_id", studentId).order("updated_at", { ascending: false });
+  const { data: campaigns, error: campaignsError } = await supabase.from("campanhas_leis_alunos").select("id,aluno_id,lei_id,total_erros,score,score_ajustado,score_version,concluida,concluida_em,updated_at,leis(titulo,slug)").eq("aluno_id", studentId).eq("score_version", 2).order("updated_at", { ascending: false });
   if (campaignsError) throw new CoachAdminError(503, "Não foi possível carregar as campanhas.");
   return { student, campaigns: (campaigns ?? []).map((campaign) => ({ ...campaign, score_efetivo: effectiveScore(campaign) })) };
 }

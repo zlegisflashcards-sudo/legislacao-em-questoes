@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { campaignAttemptPerformance } from "@/lib/law-campaign-attempt-performance";
+import { campaignAttemptPerformance, competitiveCampaignPerformance } from "@/lib/law-campaign-attempt-performance";
 
 describe("aproveitamento da tentativa concluída", () => {
   it("calcula 80 acertos e 20 erros como 80%", () => {
@@ -17,5 +17,23 @@ describe("aproveitamento da tentativa concluída", () => {
 
   it("evita divisão por zero", () => {
     expect(campaignAttemptPerformance(0, 0)).toEqual({ correct: 0, errors: 0, totalAnswered: 0, accuracy: 0 });
+  });
+});
+
+describe("aproveitamento competitivo da campanha V2", () => {
+  it("usa estado neutro antes da primeira resposta competitiva", () => {
+    expect(competitiveCampaignPerformance(0, 0)).toEqual({ correct: 0, errors: 0, totalAnswered: 0, accuracy: 0 });
+  });
+
+  it("mostra 100% com um acerto competitivo", () => {
+    expect(competitiveCampaignPerformance(1, 0)).toEqual({ correct: 1, errors: 0, totalAnswered: 1, accuracy: 100 });
+  });
+
+  it("mostra 50% com um acerto e um erro competitivos", () => {
+    expect(competitiveCampaignPerformance(1, 1)).toEqual({ correct: 1, errors: 1, totalAnswered: 2, accuracy: 50 });
+  });
+
+  it("arredonda dois acertos e um erro competitivos para 67%", () => {
+    expect(competitiveCampaignPerformance(2, 1)).toEqual({ correct: 2, errors: 1, totalAnswered: 3, accuracy: 67 });
   });
 });

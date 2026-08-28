@@ -7,7 +7,7 @@ export type SiteNavigationItem = {
 const publicNavigation: readonly SiteNavigationItem[] = [
   { label: "Catálogo", href: "/" },
   { label: "LegisCast TV", href: "/legiscast" },
-  { label: "Liga", href: "/ranking-legis" },
+  { label: "Liga", href: "/liga/pmma" },
 ] as const;
 
 const profileNavigation: SiteNavigationItem = { label: "Meu perfil", href: "/conta" };

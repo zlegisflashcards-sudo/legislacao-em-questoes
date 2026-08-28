@@ -113,10 +113,10 @@ describe("interface de estudo", () => {
 
   it("mostra o gráfico do recorde histórico, inclusive após reset, sem usar a campanha ativa", () => {
     expect(campaignServer).toContain("bestCompletedCampaignForRecord(history)");
-    expect(campaignServer).toContain('select("id,score,score_ajustado,total_erros,concluida_em")');
-    expect(campaignServer).toContain('eq("campanha_id", winningCampaign.id)');
+    expect(campaignServer).toContain('score_competitivo_acertos,score_competitivo_erros');
+    expect(campaignServer).toContain('eq("score_version", 2)');
     expect(client).toContain("campaign.record ?");
-    expect(client).toContain("<CampaignPerformanceDonut compact {...campaignAttemptPerformance(campaign.record.totalQuestions, campaign.record.errors)} />");
+    expect(client).toContain("<CampaignPerformanceDonut compact {...competitiveCampaignPerformance(campaign.record.correct, campaign.record.errors)} />");
     expect(client).toContain('completed || campaign.status === "em_andamento" || campaign.record');
     expect(donut).toContain("lf-attempt-donut");
     expect(donut).toContain("is-compact");

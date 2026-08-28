@@ -11,7 +11,7 @@ describe("cabeçalho único", () => {
     expect(headerNavigation(false).map((item) => item.href)).toEqual([
       "/",
       "/legiscast",
-      "/ranking-legis",
+      "/liga/pmma",
     ]);
   });
 

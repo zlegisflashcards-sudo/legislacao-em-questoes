@@ -47,6 +47,15 @@ describe("performance do Estudo Ativo da Lei", () => {
     expect(campaign).toContain('status_campanha: "nao_iniciada", campanha_ativa_id: null');
     expect(campaign).toContain("if (!current.campaignId) {");
     expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(lawId, context.title);");
+    expect(campaign).toContain("score_competitivo_acertos: 0, score_competitivo_erros: 0");
+    expect(campaign).toContain("score_competitivo_iniciado_em: competitiveStartedAt");
+  });
+
+  it("mantém a janela competitiva V2 separada do histórico pedagógico no estado recarregado", () => {
+    expect(campaign).toContain('select("score_version,score_competitivo_acertos,score_competitivo_erros,score")');
+    expect(campaign).toContain("scoreVersion: activeCampaign.score_version");
+    expect(campaign).toContain("activeCampaign.score_version === 2 ? activeCampaign.score_competitivo_acertos : undefined");
+    expect(campaign).toContain("activeCampaign.score_version === 2 ? activeCampaign.score_competitivo_erros : undefined");
   });
 
   it("não reordena no cliente a questão canônica recebida da campanha", () => {

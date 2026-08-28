@@ -12,7 +12,13 @@ export function effectiveCampaignScore(campaign: CampaignScore) {
   return typeof campaign.score_ajustado === "number" ? campaign.score_ajustado : campaign.score;
 }
 
-export type CompletedCampaignForRecord = CampaignScore & { id: string; concluida_em: string | null; total_erros: number };
+export type CompletedCampaignForRecord = CampaignScore & {
+  id: string;
+  concluida_em: string | null;
+  total_erros: number;
+  score_competitivo_acertos?: number | null;
+  score_competitivo_erros?: number | null;
+};
 
 /** A mesma prioridade do recorde/ranking: score efetivo, conclusão mais antiga e ID estável. */
 export function bestCompletedCampaignForRecord(campaigns: CompletedCampaignForRecord[]) {
