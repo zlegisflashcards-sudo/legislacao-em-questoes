@@ -22,4 +22,13 @@ describe("conteúdo editorial do e-mail CRM", () => {
     expect(first.text).toContain("token=secreto");
     expect(first.snapshot.text).not.toContain("secreto");
   });
+
+  it("mantém o texto comum do Legis Questões sem produto específico", () => {
+    const first = defaultAccessEmailEditorial("first_access");
+    const existing = defaultAccessEmailEditorial("existing_account");
+    expect(first.message).not.toContain("{{produto}}");
+    expect(existing.message).not.toContain("{{produto}}");
+    expect(first.buttonText).toContain("Ativar");
+    expect(existing.buttonText).toContain("Acessar");
+  });
 });

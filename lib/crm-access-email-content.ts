@@ -20,18 +20,18 @@ export type AccessEmailSnapshot = AccessEmailEditorial & {
 const allowedVariables = new Set(["nome", "produto", "email"]);
 const defaults: Record<AccessEmailFlow, AccessEmailEditorial> = {
   existing_account: {
-    subject: "Seu acesso ao Legis Flashcards está disponível",
-    title: "Seu acesso está liberado",
-    message: "Olá, {{nome}}. Seu acesso a {{produto}} já está liberado. Use o botão abaixo para entrar na sua conta.",
-    buttonText: "Acessar minha conta",
-    footer: "Se não lembrar sua senha, use a recuperação de acesso na área do aluno.",
+    subject: "Seu acesso ao Legis Questões está disponível ⚡",
+    title: "Agora você também pode estudar pelo Legis Questões",
+    message: "Olá, {{nome}}.\n\nVocê já é nosso aluno e agora também recebeu acesso ao Legis Questões, nossa plataforma de estudo online para praticar questões de legislação diretamente pelo site.\n\nPor lá, você poderá acompanhar seu desempenho, acumular score e participar dos rankings disponíveis.\n\nEsse acesso foi liberado para você sem necessidade de uma nova compra.\n\nSua conta já está ativa. Basta acessar normalmente pelo botão abaixo.",
+    buttonText: "Acessar o Legis Questões",
+    footer: "Se não lembrar sua senha, utilize a opção “Esqueci minha senha” na tela de acesso.",
   },
   first_access: {
-    subject: "Ative seu acesso ao Legis Flashcards",
-    title: "Ative seu acesso",
-    message: "Olá, {{nome}}. Seu acesso a {{produto}} já foi liberado. Use o botão abaixo para ativar sua conta e começar seus estudos.",
-    buttonText: "Ativar meu acesso",
-    footer: "Este é um link seguro e pessoal para ativação do seu acesso.",
+    subject: "Seu acesso ao Legis Questões está disponível ⚡",
+    title: "Agora você também pode estudar pelo Legis Questões",
+    message: "Olá, {{nome}}.\n\nVocê já é nosso aluno e agora também recebeu acesso ao Legis Questões, nossa plataforma de estudo online para praticar questões de legislação diretamente pelo site.\n\nPor lá, você poderá acompanhar seu desempenho, acumular score e participar dos rankings disponíveis.\n\nEsse acesso foi liberado para você sem necessidade de uma nova compra.\n\nPara começar, clique no botão abaixo para ativar sua conta e criar sua senha.",
+    buttonText: "Ativar meu acesso ao Legis Questões",
+    footer: "Após a ativação, sua conta ficará pronta para acessar normalmente sua área de estudos.",
   },
 };
 
