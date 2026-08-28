@@ -23,12 +23,12 @@ describe("player Legis Questões", () => {
   });
 
   it("separa explicitamente campanha e estudo livre", () => {
-    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} />');
+    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={searchParams.get("recorte_id")} />');
   });
 
   it("retorna do player para a central da lei atual em qualquer modo", () => {
     expect(player).toContain('StudyLawContext.Provider value={slug}');
-    expect(player).toContain('href={`/estudar/lei/${encodeURIComponent(slug)}`}');
+    expect(player).toContain('const backHref = slug ? `/estudar/lei/${encodeURIComponent(slug)}${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}` : "";');
     expect(player).not.toContain('href="/questoes">← Voltar');
   });
 
@@ -227,8 +227,9 @@ describe("player Legis Questões", () => {
   it("preserva o structure_id numérico da árvore e reinicia no início do recorte selecionado", () => {
     const freeStudy = player.slice(player.indexOf('function FreeStudy'));
     expect(freeStudy).toContain('structureId && /^\\d+$/.test(structureId)');
-    expect(freeStudy).toContain('`?structure_id=${encodeURIComponent(structureId)}`');
-    expect(freeStudy).toContain('setQuestions(result.questions); setStructure(Array.isArray(result.structure) ? result.structure : []); setIndex(0); setAnswer(null);');
+    expect(freeStudy).toContain('const params = new URLSearchParams();');
+    expect(freeStudy).toContain('params.set("structure_id", structureId);');
+    expect(freeStudy).toContain('setQuestions(result.questions); setStructure(Array.isArray(result.structure) ? result.structure : []); setScopeName(typeof result.recorte?.nome === "string" ? result.recorte.nome : null); setIndex(0); setAnswer(null);');
   });
 
   it("mantém o Estudo Livre visualmente concluído mesmo em sessão filtrada", () => {
@@ -303,6 +304,6 @@ describe("player Legis Questões", () => {
   it("calcula o recorde competitivo V2 sem reabrir ou apagar tentativas concluídas", () => {
     expect(campaignServer).toContain('select("score,score_ajustado").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("score_version", 2)');
     expect(campaignServer).toContain('personalRecordForAttempt(finalScore, previousCampaigns ?? [])');
-    expect(campaignServer).toContain('.delete().eq("id", current.campanha_ativa_id).eq("concluida", false)');
+    expect(campaignServer).toContain('update({ abandonada: true }).eq("id", current.campanha_ativa_id).eq("concluida", false).eq("abandonada", false)');
   });
 });

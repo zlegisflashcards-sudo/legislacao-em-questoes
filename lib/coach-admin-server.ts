@@ -12,6 +12,15 @@ function text(value: unknown) { return typeof value === "string" ? value.trim() 
 function effectiveScore(row: { score: number | null; score_ajustado?: number | null }) {
   return typeof row.score_ajustado === "number" ? row.score_ajustado : row.score;
 }
+type AnswerActivity = { campanha_id: string; questao_id: string; correta: boolean; respondido_em: string | null };
+function newestAnswerByCampaign(rows: AnswerActivity[]) {
+  const latest = new Map<string, string | null>();
+  for (const row of rows) {
+    const current = latest.get(row.campanha_id);
+    if (!current || (row.respondido_em && Date.parse(row.respondido_em) > Date.parse(current))) latest.set(row.campanha_id, row.respondido_em);
+  }
+  return latest;
+}
 async function requireAdmin() {
   const admin = await obterAdministrador();
   if (!admin) throw new CoachAdminError(401, "Autenticação administrativa obrigatória.");
@@ -115,11 +124,15 @@ export async function coachStudents(url: URL) {
   const ids = selected.map((student) => student.id);
   const { data: campaigns, error: campaignsError } = ids.length ? await supabase.from("campanhas_leis_alunos").select("id,aluno_id,lei_id,total_erros,score,score_ajustado,score_version,concluida,concluida_em,updated_at,leis(titulo,slug)").in("aluno_id", ids).eq("score_version", 2) : { data: [], error: null };
   if (campaignsError) throw new CoachAdminError(503, "Não foi possível carregar as campanhas.");
+  const campaignIds = (campaigns ?? []).map((campaign) => campaign.id);
+  const { data: answerRows, error: answersError } = campaignIds.length ? await supabase.from("campanhas_leis_respostas").select("campanha_id,questao_id,correta,respondido_em").in("campanha_id", campaignIds).order("respondido_em", { ascending: false }) : { data: [], error: null };
+  if (answersError) throw new CoachAdminError(503, "Não foi possível carregar a atividade dos alunos.");
+  const answeredAtByCampaign = newestAnswerByCampaign((answerRows ?? []) as AnswerActivity[]);
   const threeDaysAgo = Date.now() - 3 * 86400000;
   const items = selected.map((student) => {
     const own = (campaigns ?? []).filter((campaign) => campaign.aluno_id === student.id);
     const active = own.filter((campaign) => !campaign.concluida).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0] ?? null;
-    const last = own.map((campaign) => String(campaign.updated_at ?? campaign.concluida_em ?? "")).sort().at(-1) || null;
+    const last = own.map((campaign) => answeredAtByCampaign.get(campaign.id) ?? null).filter((value): value is string => Boolean(value)).sort().at(-1) || null;
     const completed = own.filter((campaign) => campaign.concluida).length;
     const activeAt = last ? Date.parse(last) : NaN;
     const state = !last ? "nunca_iniciou" : activeAt >= threeDaysAgo ? "ativo" : "parado";
@@ -143,7 +156,19 @@ export async function coachStudent(studentId: string) {
   if (error || !student) throw new CoachAdminError(404, "Aluno não encontrado.");
   const { data: campaigns, error: campaignsError } = await supabase.from("campanhas_leis_alunos").select("id,aluno_id,lei_id,total_erros,score,score_ajustado,score_version,concluida,concluida_em,updated_at,leis(titulo,slug)").eq("aluno_id", studentId).eq("score_version", 2).order("updated_at", { ascending: false });
   if (campaignsError) throw new CoachAdminError(503, "Não foi possível carregar as campanhas.");
-  return { student, campaigns: (campaigns ?? []).map((campaign) => ({ ...campaign, score_efetivo: effectiveScore(campaign) })) };
+  const campaignIds = (campaigns ?? []).map((campaign) => campaign.id);
+  const { data: answerRows, error: answersError } = campaignIds.length ? await supabase.from("campanhas_leis_respostas").select("campanha_id,questao_id,correta,respondido_em").in("campanha_id", campaignIds).order("respondido_em", { ascending: false }).limit(100) : { data: [], error: null };
+  if (answersError) throw new CoachAdminError(503, "Não foi possível carregar as atividades do aluno.");
+  const activities = (answerRows ?? []) as AnswerActivity[];
+  const questionIds = [...new Set(activities.map((item) => item.questao_id))];
+  const { data: questions, error: questionsError } = questionIds.length ? await supabase.from("questions").select("id,ordem").in("id", questionIds) : { data: [], error: null };
+  if (questionsError) throw new CoachAdminError(503, "Não foi possível carregar as questões respondidas.");
+  const questionOrder = new Map((questions ?? []).map((question) => [question.id, question.ordem]));
+  return {
+    student,
+    campaigns: (campaigns ?? []).map((campaign) => ({ ...campaign, score_efetivo: effectiveScore(campaign) })),
+    activities: activities.map((activity) => ({ campaignId: activity.campanha_id, questionId: activity.questao_id, questionOrder: questionOrder.get(activity.questao_id) ?? null, correct: activity.correta, answeredAt: activity.respondido_em })),
+  };
 }
 
 export async function adjustCampaignScore(input: unknown) {

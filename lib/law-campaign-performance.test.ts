@@ -6,6 +6,7 @@ const questions = readFileSync("lib/questions-main-server.ts", "utf8");
 const lawStudy = readFileSync("lib/law-study-server.ts", "utf8");
 const snapshot = readFileSync("lib/law-campaign-snapshot.ts", "utf8");
 const player = readFileSync("components/legis-questoes-study-client.tsx", "utf8");
+const answerActivityMigration = readFileSync("supabase/migrations/20260828170000_create_campaign_answer_activity.sql", "utf8");
 
 describe("performance do Estudo Ativo da Lei", () => {
   it("não reautoriza o mesmo request ao carregar ou responder", () => {
@@ -43,7 +44,7 @@ describe("performance do Estudo Ativo da Lei", () => {
 
   it("retoma somente a posição persistida e recria o snapshot a partir do início após reset", () => {
     expect(campaign).toContain("const questionId = level.proxima_posicao < level.questoes_ids.length ? level.questoes_ids[level.proxima_posicao]");
-    expect(campaign).toContain("delete().eq(\"id\", current.campanha_ativa_id).eq(\"concluida\", false)");
+    expect(campaign).toContain('update({ abandonada: true }).eq("id", current.campanha_ativa_id).eq("concluida", false).eq("abandonada", false)');
     expect(campaign).toContain('status_campanha: "nao_iniciada", campanha_ativa_id: null');
     expect(campaign).toContain("if (!current.campaignId) {");
     expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(lawId, context.title);");
@@ -68,5 +69,36 @@ describe("performance do Estudo Ativo da Lei", () => {
     const answer = campaign.slice(campaign.indexOf("export async function answerCampaign"), campaign.indexOf("export async function resetCampaign"));
     expect(answer.indexOf('supabase.rpc("obter_resultado_campanha_lei"')).toBeGreaterThan(answer.indexOf("if (isFinal)"));
     expect(answer.lastIndexOf("personalRecordForAttempt")).toBeGreaterThan(answer.indexOf("if (isFinal)"));
+  });
+
+  it("registra cada resposta do Estudo Ativo pela RPC canônica, nunca pelo navegador", () => {
+    const answer = campaign.slice(campaign.indexOf("export async function answerCampaign"), campaign.indexOf("export async function resetCampaign"));
+    expect(player).toContain('api("PATCH", { questionId: currentQuestion.id, answer: answerToSave, idempotencyKey })');
+    expect(player).toContain("const answerRequestKeys = useRef");
+    expect(answer).toContain('supabase.rpc("registrar_resposta_campanha"');
+    expect(answer).not.toContain('from("campanhas_leis_respostas").insert');
+    expect(answerActivityMigration).toContain("insert into public.campanhas_leis_respostas(campanha_id,nivel_id,questao_id,correta,chave_idempotencia)");
+    expect(answerActivityMigration).toContain("respondido_em timestamptz not null default now()");
+    expect(answer).toContain("const correct = selectedAnswer === answer;");
+    expect(answer).toContain("p_correta: correct");
+    expect(answerActivityMigration).toContain("correta boolean not null");
+  });
+
+  it("serializa retry concorrente antes de criar atividade e permite a mesma questão em outra campanha", () => {
+    expect(answerActivityMigration).toContain("unique (campanha_id, chave_idempotencia)");
+    expect(answerActivityMigration).toContain("drop function if exists public.registrar_resposta_campanha(uuid,bigint,text,boolean,integer,jsonb,integer,boolean)");
+    expect(answerActivityMigration).toContain("for update;");
+    expect(answerActivityMigration).toContain("if exists (select 1 from public.campanhas_leis_respostas");
+    expect(answerActivityMigration).toContain("if v_esperada is distinct from p_questao_id then raise exception");
+    expect(answerActivityMigration).not.toContain("unique (campanha_id, questao_id)");
+    expect(answerActivityMigration).not.toContain("unique(campanha_id,questao_id)");
+  });
+
+  it("mantém eventos quando o reset arquiva a tentativa aberta", () => {
+    const reset = campaign.slice(campaign.indexOf("export async function resetCampaign"));
+    expect(reset).toContain('update({ abandonada: true }).eq("id", current.campanha_ativa_id).eq("concluida", false).eq("abandonada", false)');
+    expect(answerActivityMigration).toContain("references public.campanhas_leis_alunos(id) on delete cascade");
+    expect(answerActivityMigration).toContain("add column if not exists abandonada boolean not null default false");
+    expect(answerActivityMigration).toContain("where not concluida and not abandonada");
   });
 });

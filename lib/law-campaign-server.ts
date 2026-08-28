@@ -45,7 +45,7 @@ export async function startCampaign(request: Request, slug: string) {
     let { data: campaign, error } = await supabase.from("campanhas_leis_alunos").insert({ aluno_id: studentId, lei_id: lawId, score_version: 2, score: 0, score_competitivo_acertos: 0, score_competitivo_erros: 0, score_competitivo_iniciado_em: competitiveStartedAt, score_competitivo_atualizado_em: competitiveStartedAt }).select("id").single();
     if (error?.code === "23505") {
       created = false;
-      const existing = await supabase.from("campanhas_leis_alunos").select("id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", false).maybeSingle();
+      const existing = await supabase.from("campanhas_leis_alunos").select("id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("concluida", false).eq("abandonada", false).maybeSingle();
       campaign = existing.data;
       error = existing.error;
     }
@@ -128,8 +128,8 @@ export async function campaignState(request: Request, slug: string) {
 
 export async function answerCampaign(request: Request, slug: string, value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new LawStudyApiError(400, "Resposta inválida.");
-  const body = value as Record<string, unknown>; const questionId = typeof body.questionId === "string" ? body.questionId : null; const selectedAnswer = body.answer === "certo" || body.answer === "errado" ? body.answer : null;
-  if (!questionId || !selectedAnswer) throw new LawStudyApiError(400, "Resposta inválida.");
+  const body = value as Record<string, unknown>; const questionId = typeof body.questionId === "string" ? body.questionId : null; const selectedAnswer = body.answer === "certo" || body.answer === "errado" ? body.answer : null; const idempotencyKey = typeof body.idempotencyKey === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.idempotencyKey) ? body.idempotencyKey : null;
+  if (!questionId || !selectedAnswer || !idempotencyKey) throw new LawStudyApiError(400, "Resposta inválida.");
   const context = await authorizeLawStudy(request, slug); const { supabase } = context; const state = await getCampaignFor(context);
   if (state.status !== "em_andamento" || !state.campaignId) throw new LawStudyApiError(409, "Não há Estudo Ativo da Lei em andamento para responder.");
   const { data: rawLevels, error } = await supabase.from("campanhas_leis_niveis").select("id,ordem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,score_competitivo_acertos,score_competitivo_erros,concluido").eq("campanha_id", state.campaignId).order("ordem");
@@ -147,7 +147,7 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
   const concludesLevel = nextPosition >= level.questoes_ids.length && nextPending.length === 0;
   const levelErrors = level.total_erros + (correct ? 0 : 1);
   // total_erros: levelErrors é confirmado na mesma transação do score.
-  const { data: persistedRows, error: persistError } = await supabase.rpc("registrar_resposta_campanha", { p_campanha_id: state.campaignId, p_nivel_id: level.id, p_questao_id: questionId, p_correta: correct, p_proxima_posicao: nextPosition, p_proximas_pendencias: nextPending, p_total_erros_nivel: levelErrors, p_conclui_nivel: concludesLevel });
+  const { data: persistedRows, error: persistError } = await supabase.rpc("registrar_resposta_campanha", { p_campanha_id: state.campaignId, p_nivel_id: level.id, p_questao_id: questionId, p_correta: correct, p_chave_idempotencia: idempotencyKey, p_proxima_posicao: nextPosition, p_proximas_pendencias: nextPending, p_total_erros_nivel: levelErrors, p_conclui_nivel: concludesLevel });
   if (persistError) {
     if (persistError.code === "P0001") throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página para continuar.");
     console.error("Falha ao registrar resposta da campanha", { code: persistError.code, message: persistError.message, campaignId: state.campaignId, levelId: level.id });
@@ -183,14 +183,14 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
   return { levelConcluded: concludesLevel, campaignConcluded: isFinal, score: Number(persisted.score), correct: Number(persisted.score_competitivo_acertos), errors: Number(persisted.score_competitivo_erros), progress: totalQuestions ? Math.round(globalCompletedQuestions / totalQuestions * 100) : 100, next: nextQuestionId ? { questionId: nextQuestionId, position: nextPosition, reviewing: nextPosition >= level.questoes_ids.length && nextPending.length > 0 } : null, levelResult: concludesLevel ? { correct: levelCompetitiveCorrect, errors: levelCompetitiveErrors, score: levelCompetitiveScore } : null, result };
 }
 
-/** Backend preparado para o futuro botão de reset; preserva o histórico concluído. */
+/** O reset arquiva a tentativa aberta e preserva todo o histórico de respostas. */
 export async function resetCampaign(request: Request, slug: string) {
   const { supabase, lawId, studentId } = await authorizeLawStudy(request, slug);
   const { data: current, error: currentError } = await supabase.from("progresso_leis_alunos").select("campanha_ativa_id").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle();
   if (currentError) throw new LawStudyApiError(503, "Não foi possível resetar seu Estudo Ativo da Lei.");
   if (typeof current?.campanha_ativa_id === "string") {
-    const { error: deleteError } = await supabase.from("campanhas_leis_alunos").delete().eq("id", current.campanha_ativa_id).eq("concluida", false);
-    if (deleteError) throw new LawStudyApiError(503, "Não foi possível resetar seu Estudo Ativo da Lei.");
+    const { data: archivedCampaign, error: archiveError } = await supabase.from("campanhas_leis_alunos").update({ abandonada: true }).eq("id", current.campanha_ativa_id).eq("concluida", false).eq("abandonada", false).select("id");
+    if (archiveError || !archivedCampaign?.length) throw new LawStudyApiError(503, "Não foi possível resetar seu Estudo Ativo da Lei.");
   }
   const { error } = await supabase.from("progresso_leis_alunos").upsert({ aluno_id: studentId, lei_id: lawId, em_estudo: false, questoes_finalizadas: false, status_campanha: "nao_iniciada", campanha_ativa_id: null }, { onConflict: "aluno_id,lei_id" });
   if (error) throw new LawStudyApiError(503, "Não foi possível resetar seu Estudo Ativo da Lei.");
