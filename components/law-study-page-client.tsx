@@ -10,6 +10,7 @@ import { resolveLawStudyPlatformTutorials, type AnkiTutorialSettings } from "@/l
 import { LAW_STUDY_PLATFORMS, type LawStudyData, type LawStudyMaterial } from "@/lib/law-study";
 import { compareQuestionStructureNames } from "@/lib/questoes-structure";
 import { competitiveCampaignPerformance } from "@/lib/law-campaign-attempt-performance";
+import { mustChooseLawStudyContext, selectLawStudyContext } from "@/lib/law-study-context-selection";
 import { supabase } from "@/lib/supabase";
 
 type CampaignLevel = { chave: string; concluido: boolean };
@@ -76,8 +77,9 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
   const modeLabel = completed ? "Estudo Livre" : "Estudo Ativo da Lei";
   const progress = completed ? 100 : campaign.progress;
   const requestedScopeId = searchParams.get("recorte_id");
-  const selectedContext = contexts.length === 1 ? contexts[0] : contexts.find((item) => item.recorteId === requestedScopeId) ?? null;
-  const mustChooseContext = contexts.length > 1 && !selectedContext;
+  const requestedFullContext = searchParams.get("contexto") === "completo";
+  const selectedContext = selectLawStudyContext(contexts, requestedScopeId, requestedFullContext);
+  const mustChooseContext = mustChooseLawStudyContext(contexts, requestedScopeId, requestedFullContext);
   const contextQuery = selectedContext?.recorteId ? `&recorte_id=${encodeURIComponent(selectedContext.recorteId)}` : "";
   const visibleQuestions = sourceLaw && selectedContext?.structureIds ? sourceLaw.questions.filter((question) => question.structure_id !== null && selectedContext.structureIds!.includes(question.structure_id)) : sourceLaw?.questions ?? [];
   const visibleStructure = sourceLaw && selectedContext?.structureIds ? (sourceLaw.structure ?? []).filter((node) => selectedContext.structureIds!.includes(node.id)) : sourceLaw?.structure ?? [];
@@ -99,7 +101,7 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
 function Frame({ children, publicMode }: { children: React.ReactNode; publicMode: boolean }) { return <main className="mx-auto w-full max-w-5xl overflow-x-hidden px-3 py-6 sm:px-6 sm:py-10">{!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}{children}</main>; }
 type TreeNode = { id: number; nome: string; count: number; children: TreeNode[] };
 function StudyContextSelector({ slug, contexts, selected }: { slug: string; contexts: StudyContext[]; selected: StudyContext | null }) {
-  const hrefFor = (context: StudyContext) => context.recorteId ? `/estudar/lei/${encodeURIComponent(slug)}?recorte_id=${encodeURIComponent(context.recorteId)}` : `/estudar/lei/${encodeURIComponent(slug)}`;
+  const hrefFor = (context: StudyContext) => context.recorteId ? `/estudar/lei/${encodeURIComponent(slug)}?recorte_id=${encodeURIComponent(context.recorteId)}` : `/estudar/lei/${encodeURIComponent(slug)}?contexto=completo`;
   return <section className="min-w-0 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-7"><p className="text-sm font-black uppercase tracking-wide text-blue-700">Como estudar</p><h2 className="mt-1 text-2xl font-black text-[#062a5f]">{contexts.length > 1 ? "Escolha como estudar" : selected?.recorteId ? `Estudo conforme ${selected.nome}` : "Lei completa"}</h2><p className="mt-2 text-sm text-slate-600">{contexts.length > 1 ? "Escolha o conteúdo que foi liberado para sua conta." : `${selected?.questionCount ?? 0} ${(selected?.questionCount ?? 0) === 1 ? "questão disponível" : "questões disponíveis"}.`}</p>{contexts.length > 1 ? <div className="mt-5 grid gap-3">{contexts.map((context) => <div key={context.recorteId ?? "completa"} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-words font-black text-[#062a5f]">{context.nome}</p><p className="mt-1 text-sm text-slate-600">{context.questionCount} {context.questionCount === 1 ? "questão" : "questões"}</p></div><Link href={hrefFor(context)} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-blue-700 px-4 py-2 font-black text-white hover:bg-blue-600">Estudar</Link></div>)}</div> : selected ? <Link href={hrefFor(selected)} className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl border border-blue-700 px-4 py-2 font-black text-blue-700 hover:bg-blue-50">{selected.recorteId ? "Ver estrutura do recorte" : "Estudar lei completa"}</Link> : null}</section>;
 }
 function buildTree(structure: StructureNode[], questions: StructureQuestion[]): TreeNode[] { const byParent = new Map<number | null, StructureNode[]>(); for (const node of structure) byParent.set(node.parent_id, [...(byParent.get(node.parent_id) ?? []), node]); const descendants = (node: StructureNode): number[] => [node.id, ...(byParent.get(node.id) ?? []).flatMap(descendants)]; const toNode = (node: StructureNode): TreeNode => { const ids = new Set(descendants(node)); return { id: node.id, nome: node.nome, count: questions.filter((question) => question.structure_id !== null && ids.has(question.structure_id)).length, children: [...(byParent.get(node.id) ?? [])].sort(compareQuestionStructureNames).map(toNode) }; }; return [...(byParent.get(null) ?? [])].sort(compareQuestionStructureNames).map(toNode); }

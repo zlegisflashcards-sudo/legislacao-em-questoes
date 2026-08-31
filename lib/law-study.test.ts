@@ -94,6 +94,13 @@ describe("interface de estudo", () => {
     expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Estudar</Link>');
   });
 
+  it("exige escolha explícita quando a lei possui mais de um contexto", () => {
+    expect(client).toContain('selectLawStudyContext(contexts, requestedScopeId, requestedFullContext)');
+    expect(client).toContain('mustChooseLawStudyContext(contexts, requestedScopeId, requestedFullContext)');
+    expect(client).toContain('?contexto=completo');
+    expect(client).not.toContain('contexts.find((item) => item.recorteId === requestedScopeId) ?? null');
+  });
+
   it("reutiliza as abas e não adiciona botão Voltar", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
     expect(client).not.toContain(">Voltar<");
