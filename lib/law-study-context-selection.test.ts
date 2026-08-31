@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mustChooseLawStudyContext, selectLawStudyContext } from "./law-study-context-selection";
+import { mustChooseLawStudyContext, selectLawStudyContext, shouldShowLawStudyContextSelector } from "./law-study-context-selection";
 
 const full = { recorteId: null, nome: "Lei completa" };
 const pmerj = { recorteId: "3512e6c7-df4b-486a-85e6-8d16f535c3ae", nome: "PMERJ" };
@@ -30,5 +30,18 @@ describe("seleção explícita de contexto de estudo", () => {
     expect(selectLawStudyContext([full, pmerj], pmerj.recorteId)).toEqual(pmerj);
     expect(selectLawStudyContext([full, pmerj], null, true)).toEqual(full);
     expect(selectLawStudyContext([full, pmerj], "desconhecido")).toBeNull();
+  });
+
+  it("não exige nova escolha quando a URL já declara um dos contextos", () => {
+    expect(mustChooseLawStudyContext([full, pmerj], pmerj.recorteId)).toBe(false);
+    expect(mustChooseLawStudyContext([full, pmerj], null, true)).toBe(false);
+    expect(mustChooseLawStudyContext([full, pmerj], null)).toBe(true);
+  });
+
+  it("mostra o seletor somente quando a URL base ainda precisa de escolha", () => {
+    expect(shouldShowLawStudyContextSelector([full, pmerj], pmerj.recorteId)).toBe(false);
+    expect(shouldShowLawStudyContextSelector([full, pmerj], null, true)).toBe(false);
+    expect(shouldShowLawStudyContextSelector([full, pmerj], null)).toBe(true);
+    expect(shouldShowLawStudyContextSelector([pmerj], null)).toBe(false);
   });
 });

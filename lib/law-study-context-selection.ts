@@ -13,3 +13,8 @@ export function selectLawStudyContext<T extends StudyContextOption>(contexts: T[
 export function mustChooseLawStudyContext<T extends StudyContextOption>(contexts: T[], requestedScopeId: string | null, requestedFullContext = false) {
   return contexts.length > 1 && !selectLawStudyContext(contexts, requestedScopeId, requestedFullContext);
 }
+
+/** O seletor é um fallback para URLs que ainda não declaram um contexto. */
+export function shouldShowLawStudyContextSelector<T extends StudyContextOption>(contexts: T[], requestedScopeId: string | null, requestedFullContext = false) {
+  return mustChooseLawStudyContext(contexts, requestedScopeId, requestedFullContext);
+}
