@@ -1,4 +1,4 @@
-export type StudentExamLaw = { id: number; slug: string; titulo: string; ordem: number; recorteId: string | null; emEstudo: boolean; revisao: boolean; campaignStatus: "nao_iniciada" | "em_andamento" | "concluida" };
+export type StudentExamLaw = { id: number; slug: string; titulo: string; ordem: number; recorteId: string | null; recorteNome?: string | null; emEstudo: boolean; revisao: boolean; campaignStatus: "nao_iniciada" | "em_andamento" | "concluida" };
 export type StudentExam = { id: string; tipo: "personalizado" | "produto"; nome: string; leis: StudentExamLaw[] };
 export function nextExamLawProgress(law: Pick<StudentExamLaw, "emEstudo" | "revisao">, control: "study" | "review") { if (control === "study" && law.revisao) return null; return control === "review" ? { inStudy: true, questionsFinished: !law.revisao } : { inStudy: !law.emEstudo, questionsFinished: false }; }
 

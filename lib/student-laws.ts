@@ -21,7 +21,6 @@ export type StudentLaw = {
   studyContextId?: string | null;
   studyContextName?: string;
   studyContextKind?: "completa" | "recorte";
-  showExamAction?: boolean;
 };
 
 export type StudentLawStudyContext = {
@@ -52,6 +51,16 @@ export function studentLawShortNameForDisplay(law: Pick<StudentLaw, "titulo" | "
   const shortName = law.nomeCurto?.trim();
   if (!shortName) return null;
   return shortName.toLocaleLowerCase("pt-BR") === law.titulo.trim().toLocaleLowerCase("pt-BR") ? null : shortName;
+}
+
+/** Evita repetir o sufixo do contexto quando a lei já o traz no título público. */
+export function studentLawContextTitle(lawTitle: string, contextName: string | null | undefined) {
+  const title = lawTitle.trim();
+  const context = contextName?.trim();
+  if (!context) return title;
+  const normalizedTitle = title.toLocaleLowerCase("pt-BR");
+  const normalizedSuffix = ` - ${context}`.toLocaleLowerCase("pt-BR");
+  return normalizedTitle.endsWith(normalizedSuffix) ? title : `${title} - ${context}`;
 }
 
 const allowedRpcKeys = new Set([
@@ -146,15 +155,12 @@ export function filterStudentLaws(laws: StudentLaw[], search: string) {
 export function projectStudentLawContexts(laws: StudentLaw[], contextsByLaw: Map<number, StudentLawStudyContext[]>) {
   return laws.flatMap((law) => {
     const contexts = contextsByLaw.get(law.id) ?? [];
-    return contexts.map((context, index) => ({
+    return contexts.map((context) => ({
       ...law,
       totalFlashcards: context.questionCount,
       studyContextId: context.recorteId,
       studyContextName: context.nome,
       studyContextKind: context.recorteId ? "recorte" as const : "completa" as const,
-      // O Meu Edital é por lei canônica. Exibimos o controle somente uma vez
-      // quando há mais de um contexto para não repetir a mesma operação.
-      showExamAction: index === 0,
     }));
   });
 }

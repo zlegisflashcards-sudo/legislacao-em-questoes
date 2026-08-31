@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterStudentLaws, parseStudentLawRows, projectStudentLawContexts, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
+import { filterStudentLaws, parseStudentLawRows, projectStudentLawContexts, studentLawContextTitle, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
 
 const migration = readFileSync("supabase/migrations/20260806103510_create_student_acquired_laws_rpc.sql", "utf8");
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
@@ -76,7 +76,7 @@ describe("projeção de contextos em Minhas Leis", () => {
     expect(projected.map((law) => law.id)).toEqual([1, 1, 1]);
     expect(projected.map((law) => law.studyContextId)).toEqual([null, "pmerj", "pmesp"]);
     expect(projected.map((law) => law.totalFlashcards)).toEqual([845, 120, 90]);
-    expect(projected.filter((law) => law.showExamAction)).toHaveLength(1);
+    expect(projected.every((law) => law.studyContextKind === "completa" || law.studyContextKind === "recorte")).toBe(true);
   });
 
   it("mantém somente um card para vínculos completos ou recortes já deduplicados pelo resolvedor", () => {
@@ -99,6 +99,12 @@ describe("projeção de contextos em Minhas Leis", () => {
   it("permite pesquisar pelo nome amigável do recorte", () => {
     const projected = projectStudentLawContexts([laws[0]], new Map([[1, [{ recorteId: "pmerj", nome: "PMERJ", questionCount: 120 }]]]));
     expect(filterStudentLaws(projected, "pmerj")).toEqual(projected);
+  });
+
+  it("não repete o nome do recorte quando o título público já contém o sufixo", () => {
+    expect(studentLawContextTitle("Constituição Federal - PMERJ", "PMERJ")).toBe("Constituição Federal - PMERJ");
+    expect(studentLawContextTitle("Constituição Federal", "PMERJ")).toBe("Constituição Federal - PMERJ");
+    expect(studentLawContextTitle("Constituição Federal - PMERJ", "pmerj")).toBe("Constituição Federal - PMERJ");
   });
 });
 
@@ -186,13 +192,13 @@ describe("interface das leis adquiridas", () => {
 
   it("lista somente as leis liberadas, sem estado local de configuração do Anki", () => {
     for (const forbidden of ["readAnkiConfigured", "markAnkiConfigured", "window.localStorage", "setProgress", "updateProgress"]) expect(client).not.toContain(forbidden);
-    expect(client).toContain("filteredLaws.map((law) => <StudentLawCard");
+    expect(client).toContain("filteredLaws.map((law) => { const examLaw");
     expect(client).toContain("{laws.length} {laws.length === 1");
     expect(client).not.toContain("laws.length + 1");
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignStatus", "campaignProgress", "+ Adicionar ao edital", "✓ No edital", "Remover do edital"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "studentLawContextTitle", "campaignStatus", "campaignProgress", "+ Adicionar ao edital", "✓ No meu edital", "Remover do edital"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
@@ -220,9 +226,10 @@ describe("interface das leis adquiridas", () => {
 
   it("ativa a rota segura de estudo e permite controlar o Meu Edital sem duplicidade", () => {
     expect(client).toContain('const lawHref = isScope ?');
-    expect(client).toContain("inMyExam={myExamLawIds.includes(law.id)}");
-    expect(client).toContain("onToggleMyExam={() => void toggleMyExamLaw(law.id)}");
+    expect(client).toContain("examLaw={examLaw}");
+    expect(client).toContain("onToggleMyExam={() => void toggleMyExamLaw(law)}");
     expect(client).toContain('action: included ? "remove" : "add"');
+    expect(client).toContain("recorteId: requestedScopeId");
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
       expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }

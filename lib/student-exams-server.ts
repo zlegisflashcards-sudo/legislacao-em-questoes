@@ -4,6 +4,7 @@ import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabas
 import { parseStudentExams, type StudentExam } from "@/lib/student-exams";
 
 export class StudentExamError extends Error { constructor(public status: number, public publicMessage: string) { super(publicMessage); } }
+const isUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 async function context(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -23,10 +24,17 @@ export async function loadStudentExams(request: Request): Promise<StudentExam[]>
   const exams = parseStudentExams(data);
   const lawIds = [...new Set(exams.flatMap((exam) => exam.leis.map((law) => law.id)))];
   if (!lawIds.length) return exams;
-  const { data: progress, error: progressError } = await getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha").eq("aluno_id", studentId).in("lei_id", lawIds);
+  const scopeIds = [...new Set(exams.flatMap((exam) => exam.leis.flatMap((law) => law.recorteId ? [law.recorteId] : [])))];
+  const [progressResult, scopesResult] = await Promise.all([
+    getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha").eq("aluno_id", studentId).in("lei_id", lawIds),
+    scopeIds.length ? getSupabaseServerClient().from("recortes_leis").select("id,nome").in("id", scopeIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const { data: progress, error: progressError } = progressResult;
   if (progressError) throw new StudentExamError(503, "Não foi possível carregar o progresso do edital agora.");
+  if (scopesResult.error) throw new StudentExamError(503, "Não foi possível carregar os contextos do edital agora.");
   const states = new Map((progress ?? []).map((item) => [item.lei_id, item.status_campanha]));
-  return exams.map((exam) => ({ ...exam, leis: exam.leis.map((law) => ({ ...law, campaignStatus: states.get(law.id) === "concluida" || states.get(law.id) === "em_andamento" ? states.get(law.id)! : "nao_iniciada" })) }));
+  const scopeNames = new Map((scopesResult.data ?? []).map((scope) => [scope.id, scope.nome]));
+  return exams.map((exam) => ({ ...exam, leis: exam.leis.map((law) => ({ ...law, recorteNome: law.recorteId ? scopeNames.get(law.recorteId) ?? null : null, campaignStatus: states.get(law.id) === "concluida" || states.get(law.id) === "em_andamento" ? states.get(law.id)! : "nao_iniciada" })) }));
 }
 
 export async function loadStudentExamSelection(request: Request) {
@@ -51,16 +59,23 @@ async function setActiveStudentExam(request: Request, payload: Record<string, un
 export async function mutateStudentExam(request: Request, action: string, payload: Record<string, unknown>) {
   if (action === "set-active") return setActiveStudentExam(request, payload);
   const { client } = await context(request);
+  const lawId = Number(payload.leiId);
+  if (["add", "remove"].includes(action) && (!Number.isSafeInteger(lawId) || lawId < 1)) throw new StudentExamError(400, "Lei inválida.");
+  if (action === "add" && payload.recorteId != null && !isUuid(payload.recorteId)) throw new StudentExamError(400, "Recorte inválido.");
   const map: Record<string, { fn: string; args: Record<string, unknown> }> = {
     rename: { fn: "atualizar_nome_meu_edital", args: { p_nome: payload.nome } },
-    add: { fn: "adicionar_lei_meu_edital", args: { p_lei_id: payload.leiId } },
-    remove: { fn: "remover_lei_meu_edital", args: { p_lei_id: payload.leiId } },
+    add: { fn: "definir_contexto_lei_meu_edital", args: { p_lei_id: lawId, p_recorte_id: payload.recorteId ?? null, p_confirmar_substituicao: payload.confirmReplace === true } },
+    remove: { fn: "remover_lei_meu_edital", args: { p_lei_id: lawId } },
     reorder: { fn: "reordenar_meu_edital", args: { p_leis: payload.leiIds } },
   };
   const call = map[action];
   if (!call) throw new StudentExamError(400, "Ação inválida.");
   const { error } = await client.rpc(call.fn, call.args);
-  if (error) throw new StudentExamError(error.code === "42501" ? 403 : 400, error.code === "42501" ? "Você não possui acesso a esta lei." : "Não foi possível salvar o edital.");
+  if (error) {
+    if (error.code === "42501") throw new StudentExamError(403, "Você não possui acesso a este contexto de estudo.");
+    if (error.code === "22023" && error.message.includes("outro contexto")) throw new StudentExamError(409, "Esta lei já está no seu edital com outro contexto.");
+    throw new StudentExamError(400, "Não foi possível salvar o edital.");
+  }
 }
 
 export function studentExamErrorResponse(error: unknown) {

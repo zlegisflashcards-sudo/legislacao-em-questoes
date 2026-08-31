@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { nextExamLawProgress } from "./student-exams";
 
 const migration = readFileSync("supabase/migrations/20260811150000_create_student_exam_notices.sql", "utf8");
+const scopedContextMigration = readFileSync("supabase/migrations/20260831130000_add_scoped_student_exam_context.sql", "utf8");
 
 function simulateReorder(current: number[], requested: number[]) {
   if (current.length !== requested.length || new Set(requested).size !== requested.length || requested.some((law) => !current.includes(law))) throw new Error("invalid");
@@ -112,5 +113,33 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain('rounded-full bg-blue-700');
     expect(client).toContain('Lei ainda não concluída');
     expect(client).not.toContain('campaignStatus === "em_andamento" ? "Em andamento"');
+  });
+});
+
+describe("contextos autorizados no Meu Edital", () => {
+  it("mantém uma única linha por lei e troca apenas o contexto confirmado", () => {
+    expect(migration).toContain("primary key (edital_id, lei_id)");
+    expect(scopedContextMigration).toContain("create or replace function public.definir_contexto_lei_meu_edital");
+    expect(scopedContextMigration).toContain("p_confirmar_substituicao boolean default false");
+    expect(scopedContextMigration).toContain("set recorte_id = p_recorte_id");
+    expect(scopedContextMigration).toContain("recorte_lei_id = case when p_recorte_id is null then null else p_lei_id end");
+  });
+
+  it("valida no banco a liberação exata, o recorte ativo e a mesma lei", () => {
+    expect(scopedContextMigration).toContain("liberacao.aluno_id = v_aluno_id");
+    expect(scopedContextMigration).toContain("produto_lei.recorte_id = p_recorte_id");
+    expect(scopedContextMigration).toContain("recorte.lei_id = p_lei_id");
+    expect(scopedContextMigration).toContain("and recorte.ativo");
+    expect(scopedContextMigration).toContain("Contexto de estudo nao liberado.");
+  });
+
+  it("faz o cliente enviar o contexto do card e preservar o recorte na navegação", () => {
+    const laws = readFileSync("components/student-laws-client.tsx", "utf8");
+    const server = readFileSync("lib/student-exams-server.ts", "utf8");
+    const exam = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(laws).toContain("recorteId: requestedScopeId");
+    expect(laws).toContain("confirmReplace: Boolean(existing && !sameContext)");
+    expect(server).toContain('fn: "definir_contexto_lei_meu_edital"');
+    expect(exam).toContain("law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}`");
   });
 });
