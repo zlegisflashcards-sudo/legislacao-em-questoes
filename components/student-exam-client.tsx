@@ -6,7 +6,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import { LawSearchSelect } from "@/components/law-search-select";
 import type { StudentExam } from "@/lib/student-exams";
-import type { StudentLaw } from "@/lib/student-laws";
+import { uniqueStudentLawsById, type StudentLaw } from "@/lib/student-laws";
 import { supabase } from "@/lib/supabase";
 
 async function api(init?: RequestInit) {
@@ -40,7 +40,7 @@ export function StudentExamClient() {
       const [body, lawsBody] = await Promise.all([editaisResponse.json(), lawsResponse.json()]);
       if (!editaisResponse.ok || !Array.isArray(body.editais)) throw new Error(body.message);
       if (!lawsResponse.ok || !Array.isArray(lawsBody.leis)) throw new Error(lawsBody.message);
-      setEditais(body.editais); setAvailableLaws(lawsBody.leis);
+      setEditais(body.editais); setAvailableLaws(uniqueStudentLawsById(lawsBody.leis));
       setSelected((current) => {
         if (body.editais.some((exam: StudentExam) => exam.id === current)) return current;
         if (preferCustom) return body.editais.find((exam: StudentExam) => exam.tipo === "personalizado" && exam.id !== "0")?.id ?? preferredExamId(body.editais);

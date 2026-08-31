@@ -18,7 +18,16 @@ export type StudentLaw = {
   tipoReferenciaNormativa: StudentLawReferenceType;
   campaignStatus?: "nao_iniciada" | "em_andamento" | "concluida";
   campaignProgress?: number;
-  studyContextCount?: number;
+  studyContextId?: string | null;
+  studyContextName?: string;
+  studyContextKind?: "completa" | "recorte";
+  showExamAction?: boolean;
+};
+
+export type StudentLawStudyContext = {
+  recorteId: string | null;
+  nome: string;
+  questionCount: number;
 };
 
 export type StudentLawUpdateStatus = "atualizado" | "revisao_pendente" | "desatualizado" | "em_revisao";
@@ -125,5 +134,37 @@ export function filterStudentLaws(laws: StudentLaw[], search: string) {
     law.categoria,
     law.referenciaNormativaAtual,
     law.versaoMaterial,
+    law.studyContextName,
   ].filter(Boolean).join(" ")).includes(query));
+}
+
+/**
+ * Minhas Leis é uma projeção de acessos, não uma cópia de leis ou questões.
+ * Cada contexto comercial único vira um card; a lei canônica continua sendo a
+ * mesma e o recorte é identificado apenas pelo seu id existente.
+ */
+export function projectStudentLawContexts(laws: StudentLaw[], contextsByLaw: Map<number, StudentLawStudyContext[]>) {
+  return laws.flatMap((law) => {
+    const contexts = contextsByLaw.get(law.id) ?? [];
+    return contexts.map((context, index) => ({
+      ...law,
+      totalFlashcards: context.questionCount,
+      studyContextId: context.recorteId,
+      studyContextName: context.nome,
+      studyContextKind: context.recorteId ? "recorte" as const : "completa" as const,
+      // O Meu Edital é por lei canônica. Exibimos o controle somente uma vez
+      // quando há mais de um contexto para não repetir a mesma operação.
+      showExamAction: index === 0,
+    }));
+  });
+}
+
+/** Consumidores que operam por lei (e não por contexto) mantêm uma só entrada. */
+export function uniqueStudentLawsById(laws: StudentLaw[]) {
+  const byId = new Map<number, StudentLaw>();
+  for (const law of laws) {
+    const current = byId.get(law.id);
+    if (!current || (current.studyContextKind === "recorte" && law.studyContextKind === "completa")) byId.set(law.id, law);
+  }
+  return [...byId.values()];
 }

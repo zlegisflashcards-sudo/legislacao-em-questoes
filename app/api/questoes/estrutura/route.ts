@@ -1,4 +1,5 @@
 import { loadStudentLaws, studentLawsErrorResponse } from "@/lib/student-laws-server";
+import { uniqueStudentLawsById } from "@/lib/student-laws";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const requestedSlug = new URL(request.url).searchParams.get("slug")?.trim();
-    const allStudentLaws = await loadStudentLaws(request);
+    const allStudentLaws = uniqueStudentLawsById(await loadStudentLaws(request));
     const laws = requestedSlug ? allStudentLaws.filter((law) => law.slug === requestedSlug) : allStudentLaws;
     if (!laws.length) return Response.json({ laws: [] }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
     const ids = laws.map((law) => law.id);

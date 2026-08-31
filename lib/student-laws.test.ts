@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterStudentLaws, parseStudentLawRows, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, type StudentLaw } from "./student-laws";
+import { filterStudentLaws, parseStudentLawRows, projectStudentLawContexts, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
 
 const migration = readFileSync("supabase/migrations/20260806103510_create_student_acquired_laws_rpc.sql", "utf8");
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
@@ -65,6 +65,43 @@ describe("dados das leis adquiridas", () => {
   });
 });
 
+describe("projeção de contextos em Minhas Leis", () => {
+  it("cria um card por contexto único sem duplicar a lei canônica", () => {
+    const projected = projectStudentLawContexts([laws[0]], new Map([[1, [
+      { recorteId: null, nome: "Lei completa", questionCount: 845 },
+      { recorteId: "pmerj", nome: "PMERJ", questionCount: 120 },
+      { recorteId: "pmesp", nome: "PMESP", questionCount: 90 },
+    ]]]));
+    expect(projected).toHaveLength(3);
+    expect(projected.map((law) => law.id)).toEqual([1, 1, 1]);
+    expect(projected.map((law) => law.studyContextId)).toEqual([null, "pmerj", "pmesp"]);
+    expect(projected.map((law) => law.totalFlashcards)).toEqual([845, 120, 90]);
+    expect(projected.filter((law) => law.showExamAction)).toHaveLength(1);
+  });
+
+  it("mantém somente um card para vínculos completos ou recortes já deduplicados pelo resolvedor", () => {
+    const projected = projectStudentLawContexts([laws[0]], new Map([[1, [
+      { recorteId: null, nome: "Lei completa", questionCount: 845 },
+      { recorteId: "pmerj", nome: "PMERJ", questionCount: 120 },
+    ]]]));
+    expect(projected.filter((law) => law.studyContextId === null)).toHaveLength(1);
+    expect(projected.filter((law) => law.studyContextId === "pmerj")).toHaveLength(1);
+  });
+
+  it("mantém uma só lei para consumidores que operam por lei, como Meu Edital e a árvore", () => {
+    const projected = projectStudentLawContexts([laws[0]], new Map([[1, [
+      { recorteId: "pmerj", nome: "PMERJ", questionCount: 120 },
+      { recorteId: "pmesp", nome: "PMESP", questionCount: 90 },
+    ]]]));
+    expect(uniqueStudentLawsById(projected)).toHaveLength(1);
+  });
+
+  it("permite pesquisar pelo nome amigável do recorte", () => {
+    const projected = projectStudentLawContexts([laws[0]], new Map([[1, [{ recorteId: "pmerj", nome: "PMERJ", questionCount: 120 }]]]));
+    expect(filterStudentLaws(projected, "pmerj")).toEqual(projected);
+  });
+});
+
 describe("fronteira autenticada das leis adquiridas", () => {
   it("usa auth.uid e consolida somente liberações e leis ativas", () => {
     expect(migration).toContain("function public.obter_minhas_leis()");
@@ -103,9 +140,9 @@ describe("fronteira autenticada das leis adquiridas", () => {
     expect(client).toContain("/conta?modo=login&retorno=%2Fminhas-leis");
   });
 
-  it("substitui o contador legado da RPC pela contagem central de questões ativas", () => {
-    expect(server).toContain("activeQuestionCountsBySlug(parsedLaws.map((law) => law.slug))");
-    expect(server).toContain("totalFlashcards: questionCounts.get(law.slug) ?? 0");
+  it("projeta cada contexto com a contagem central de questões ativas", () => {
+    expect(server).toContain("listLawStudyContextsByLaw(student.id, laws.map((law) => law.id))");
+    expect(server).toContain("projectStudentLawContexts(lawsWithCampaign, contextsByLaw)");
     expect(server).not.toContain("quantidade_itens");
   });
 
@@ -121,7 +158,9 @@ describe("fronteira autenticada das leis adquiridas", () => {
 
 describe("interface das leis adquiridas", () => {
   it("abre a página interna da lei, sem iniciar o jogador", () => {
-    expect(card).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    expect(card).toContain('const lawHref = isScope ?');
+    expect(card).toContain('?contexto=completo');
+    expect(card).toContain('?recorte_id=');
     expect(card).toContain('href={lawHref}'); expect(card).toContain('>Estudar</Link>');
     expect(card).not.toContain('/questoes/${encodeURIComponent(law.slug)}/estudar');
   });
@@ -153,8 +192,8 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "law.codigo", "campaignStatus", "campaignProgress", "+ Adicionar ao edital", "✓ No edital", "Remover do edital"]) expect(card).toContain(expected);
-    expect(card).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignStatus", "campaignProgress", "+ Adicionar ao edital", "✓ No edital", "Remover do edital"]) expect(card).toContain(expected);
+    expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
       expect(card).not.toContain(forbidden);
@@ -174,13 +213,13 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("oferece carregamento, erro, vazio, resultado e busca sem resultado", () => {
-    for (const text of ["Carregando suas leis", "Não foi possível carregar suas leis", "Você ainda não possui leis liberadas", "Nenhuma lei encontrada", "lei liberada"]) {
+    for (const text of ["Carregando suas leis", "Não foi possível carregar suas leis", "Você ainda não possui leis liberadas", "Nenhuma lei encontrada", "contexto de estudo disponível"]) {
       expect(client).toContain(text);
     }
   });
 
   it("ativa a rota segura de estudo e permite controlar o Meu Edital sem duplicidade", () => {
-    expect(client).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    expect(client).toContain('const lawHref = isScope ?');
     expect(client).toContain("inMyExam={myExamLawIds.includes(law.id)}");
     expect(client).toContain("onToggleMyExam={() => void toggleMyExamLaw(law.id)}");
     expect(client).toContain('action: included ? "remove" : "add"');

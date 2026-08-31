@@ -89,7 +89,9 @@ describe("interface de estudo", () => {
     expect(page).toContain("<LawStudyPageClient slug={slug} ankiTutorialSettings={settings} />");
     expect(client).toContain("supabase.auth.getSession()");
     expect(client).toContain("/conta?modo=login&retorno=");
-    expect(cards).toContain('const lawHref = `/estudar/lei/${encodeURIComponent(law.slug)}`');
+    expect(cards).toContain('const lawHref = isScope ?');
+    expect(cards).toContain('?contexto=completo');
+    expect(cards).toContain('?recorte_id=');
     expect(cards).toContain("href={lawHref}");
     expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Estudar</Link>');
   });

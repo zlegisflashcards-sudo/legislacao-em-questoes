@@ -1,9 +1,8 @@
 import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
-import { parseStudentLawRows, type StudentLaw } from "@/lib/student-laws";
-import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
-import { countLawStudyContexts } from "@/lib/law-question-scope-access";
+import { parseStudentLawRows, projectStudentLawContexts, type StudentLaw } from "@/lib/student-laws";
+import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
 
 export class StudentLawsApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -37,11 +36,9 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
 
   const { data, error } = await createSupabaseUserClient(token).rpc("obter_minhas_leis");
   if (error) throw new StudentLawsApiError(503, "Não foi possível carregar suas leis agora.");
-  const parsedLaws = parseStudentLawRows(data);
-  const questionCounts = await activeQuestionCountsBySlug(parsedLaws.map((law) => law.slug));
-  const laws = parsedLaws.map((law) => ({ ...law, totalFlashcards: questionCounts.get(law.slug) ?? 0 }));
+  const laws = parseStudentLawRows(data);
   if (!student?.id || !laws.length) return laws;
-  const contextCounts = await countLawStudyContexts(student.id, laws.map((law) => law.id));
+  const contextsByLaw = await listLawStudyContextsByLaw(student.id, laws.map((law) => law.id));
   const { data: progress, error: progressError } = await getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", laws.map((law) => law.id));
   if (progressError) throw new StudentLawsApiError(503, `Não foi possível carregar o status dos Estudos Ativos da Lei: ${progressError.message}`);
   const map = new Map((progress ?? []).map((item) => [item.lei_id, item]));
@@ -49,7 +46,8 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   const { data: levels } = activeIds.length ? await getSupabaseServerClient().from("campanhas_leis_niveis").select("campanha_id,questoes_ids,concluido").in("campanha_id", activeIds) : { data: [] };
   const totals = new Map<string, { all: number; done: number }>();
   for (const level of levels ?? []) { const state = totals.get(level.campanha_id) ?? { all: 0, done: 0 }; const count = Array.isArray(level.questoes_ids) ? level.questoes_ids.length : 0; state.all += count; if (level.concluido) state.done += count; totals.set(level.campanha_id, state); }
-  return laws.map((law) => { const item = map.get(law.id); const total = typeof item?.campanha_ativa_id === "string" ? totals.get(item.campanha_ativa_id) : null; return { ...law, studyContextCount: contextCounts.get(law.id) ?? 0, campaignStatus: (item?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: total?.all ? Math.round(total.done / total.all * 100) : 0 }; });
+  const lawsWithCampaign = laws.map((law) => { const item = map.get(law.id); const total = typeof item?.campanha_ativa_id === "string" ? totals.get(item.campanha_ativa_id) : null; return { ...law, campaignStatus: (item?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: total?.all ? Math.round(total.done / total.all * 100) : 0 }; });
+  return projectStudentLawContexts(lawsWithCampaign, contextsByLaw);
 }
 
 export function studentLawsErrorResponse(error: unknown) {
