@@ -10,6 +10,7 @@ import { createOperationalAdminNotification } from "@/lib/admin-notification-ser
 import { normalizeHistoricalHotmartStatus, type HistoricalSaleStatus } from "@/lib/historical-import-status";
 import { normalizeStudentPhone } from "@/lib/student-phone";
 import { getE3Diagnosis, getE3PreviewDecision, safeE3FailureMessage, type E3Diagnosis } from "@/lib/crm-postsale-diagnosis";
+import { CRM_STAGE3_FINAL_CONFIRMATION_OBSERVATION, isStage3CompletionFromFinalConfirmation, shouldAutoCompleteStage3AfterFinalConfirmation } from "@/lib/crm-postsale-stage6";
 import {
   COMMERCIAL_ORIGINS,
   EDITORIAL_IMPORTANCE,
@@ -79,9 +80,9 @@ function isMissingPurchasePostSaleSchema(result: { error: { code?: string; messa
   return ["42p01", "pgrst205"].includes(String(result.error?.code ?? "").toLowerCase())
     && (message.includes("compras_pos_venda") || message.includes("relation"));
 }
-function postSaleStageState({ accessActive, emailSent, firstAccessAt, stage5At, stage6At, overrides = [] }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown; overrides?: number[] }) {
-  const automaticas = [true, accessActive, emailSent, Boolean(firstAccessAt), false, false];
-  const manuais = [1, 2, 3, 4, 5, 6].map((etapa) => overrides.includes(etapa) || (etapa === 5 && Boolean(stage5At)) || (etapa === 6 && Boolean(stage6At)));
+function postSaleStageState({ accessActive, emailSent, firstAccessAt, stage5At, stage6At, overrides = [], automaticStage3 = false }: { accessActive: boolean; emailSent: boolean; firstAccessAt: unknown; stage5At: unknown; stage6At: unknown; overrides?: number[]; automaticStage3?: boolean }) {
+  const automaticas = [true, accessActive, emailSent || automaticStage3, Boolean(firstAccessAt), false, false];
+  const manuais = [1, 2, 3, 4, 5, 6].map((etapa) => (overrides.includes(etapa) && !(etapa === 3 && automaticStage3)) || (etapa === 5 && Boolean(stage5At)) || (etapa === 6 && Boolean(stage6At)));
   return { automaticas, manuais, etapas: automaticas.map((automatic, index) => automatic || manuais[index]) };
 }
 function accessEmailForPurchase(notices: Record<string, unknown>[], purchase: Record<string, unknown>) {
@@ -899,7 +900,8 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       const email = accessEmailForPurchase(notices.data ?? [], purchase);
       const state = manualBy.get(purchase.id); const emailSent = email?.status === "enviado";
       const overrideRowsForPurchase = overridesByPurchase.get(String(purchase.id)) ?? [];
-      const stageState = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overrideRowsForPurchase.map((row) => Number(row.etapa)) });
+      const automaticStage3 = overrideRowsForPurchase.some((row) => isStage3CompletionFromFinalConfirmation(row.etapa, row.observacao));
+      const stageState = postSaleStageState({ accessActive: purchase.status_acesso === "ativo", emailSent, firstAccessAt: studentData.primeiro_acesso_em, stage5At: state?.etapa_5_concluida_em, stage6At: state?.etapa_6_concluida_em, overrides: overrideRowsForPurchase.map((row) => Number(row.etapa)), automaticStage3 });
       const stages = stageState.etapas;
       const next = stages.findIndex((done) => !done) + 1;
       return { ...purchase, produtos: { nome: productById.get(purchase.produto_id) ?? "Produto" }, etapas: stages, etapas_automaticas: stageState.automaticas, etapas_manuais: stageState.manuais, proxima_etapa: next || 6, historico: (historyRows.data ?? []).filter((row) => row.compra_id === purchase.id), overrides: overrideRowsForPurchase, etapa_6_resultado: overrideRowsForPurchase.find((row) => Number(row.etapa) === 6)?.resultado_final ?? null, email, liberacoes: (releases.data ?? []).filter((row) => row.compra_id === purchase.id), primeiro_acesso_em: studentData.primeiro_acesso_em, override_schema_disponivel: !overrideRows.error };
@@ -934,22 +936,53 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     if ((acao === "finalizar_confirmado" || acao === "finalizar_sem_resposta") && etapa !== 6) throw new CommercialValidationError("Resultado final disponível somente na Etapa 6.");
     const supabase = getSupabaseServerClient(); const now = new Date().toISOString();
     const resultadoFinal = acao === "finalizar_confirmado" ? "cliente_confirmou" : acao === "finalizar_sem_resposta" ? "nao_respondeu" : null;
-    const saved = acao !== "reabrir"
-      ? await supabase.from("compras_pos_venda_overrides").upsert({ compra_id: compraId, etapa, concluida_em: now, ator_user_id: actor, observacao: optionalString(data.observacao, "Observação", 2000) ?? null, resultado_final: resultadoFinal, updated_at: now }, { onConflict: "compra_id,etapa" })
-      : await supabase.from("compras_pos_venda_overrides").delete().eq("compra_id", compraId).eq("etapa", etapa);
-    if (saved.error) {
+    const confirmationContext = acao === "finalizar_confirmado"
+      ? await (async () => {
+        const [purchase, overrides] = await Promise.all([
+          supabase.from("compras").select("id,aluno_id,identificador_externo").eq("id", compraId).maybeSingle(),
+          supabase.from("compras_pos_venda_overrides").select("etapa,resultado_final").eq("compra_id", compraId),
+        ]);
+        if (purchase.error || !purchase.data || overrides.error) throw new CommercialHttpError(500, "Não foi possível preparar o encerramento do pós-venda.");
+        const notices = purchase.data.aluno_id
+          ? await supabase.from("alunos_notificacoes_acesso").select("idempotency_key,status,criado_em,enviado_em").eq("aluno_id", purchase.data.aluno_id)
+          : { data: [], error: null };
+        if (notices.error) throw new CommercialHttpError(500, "Não foi possível preparar o encerramento do pós-venda.");
+        const stage3Completed = (overrides.data ?? []).some((row) => Number(row.etapa) === 3);
+        const emailSent = Boolean(accessEmailForPurchase(notices.data ?? [], purchase.data));
+        return {
+          finalAlreadyConfirmed: (overrides.data ?? []).some((row) => Number(row.etapa) === 6 && row.resultado_final === "cliente_confirmou"),
+          shouldCompleteStage3: shouldAutoCompleteStage3AfterFinalConfirmation({ finalOutcome: "cliente_confirmou", emailSent, stage3Completed }),
+        };
+      })()
+      : null;
+    if (confirmationContext?.finalAlreadyConfirmed && !confirmationContext.shouldCompleteStage3) return { ok: true, unchanged: true };
+    const saved = confirmationContext?.finalAlreadyConfirmed
+      ? null
+      : acao !== "reabrir"
+        ? await supabase.from("compras_pos_venda_overrides").upsert({ compra_id: compraId, etapa, concluida_em: now, ator_user_id: actor, observacao: optionalString(data.observacao, "Observação", 2000) ?? null, resultado_final: resultadoFinal, updated_at: now }, { onConflict: "compra_id,etapa" })
+        : await supabase.from("compras_pos_venda_overrides").delete().eq("compra_id", compraId).eq("etapa", etapa);
+    if (saved?.error) {
       logCommercialDbError("Falha ao salvar override manual do Mini-CRM por compra", saved.error, { compraId, etapa, acao });
       if (isMissingPurchasePostSaleSchema(saved)) {
         throw new CommercialHttpError(503, "A migration de overrides manuais do Mini-CRM ainda não foi aplicada.");
       }
       throw new CommercialHttpError(500, "Não foi possível salvar a etapa manual do pós-venda.");
     }
+    const completedStage3 = confirmationContext?.shouldCompleteStage3
+      ? await supabase.from("compras_pos_venda_overrides").upsert({ compra_id: compraId, etapa: 3, concluida_em: now, ator_user_id: actor, observacao: CRM_STAGE3_FINAL_CONFIRMATION_OBSERVATION, resultado_final: null, updated_at: now }, { onConflict: "compra_id,etapa" })
+      : null;
+    if (completedStage3?.error) throw new CommercialHttpError(500, "Não foi possível concluir a Etapa 3 no encerramento do pós-venda.");
     if (acao === "reabrir" && etapa >= 5) {
       const legacy = await supabase.from("compras_pos_venda").upsert({ compra_id: compraId, [`etapa_${etapa}_concluida_em`]: null, updated_at: now }, { onConflict: "compra_id" });
       if (legacy.error && !isMissingPurchasePostSaleSchema(legacy)) throw new CommercialHttpError(500, "Não foi possível reabrir a etapa manual do pós-venda.");
     }
     const historyAction = acao === "reabrir" ? `etapa_${etapa}_reaberta_manual` : acao === "finalizar_confirmado" ? "etapa_6_cliente_confirmou" : acao === "finalizar_sem_resposta" ? "etapa_6_cliente_nao_respondeu" : `etapa_${etapa}_concluida_manual`;
-    const event = await supabase.from("compras_pos_venda_historico").insert({ compra_id: compraId, ator_user_id: actor, etapa, acao: historyAction, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }); assertQuery(event); return { ok: true };
+    const history = [
+      ...(confirmationContext?.finalAlreadyConfirmed ? [] : [{ compra_id: compraId, ator_user_id: actor, etapa, acao: historyAction, observacao: optionalString(data.observacao, "Observação", 2000) ?? null }]),
+      ...(completedStage3 ? [{ compra_id: compraId, ator_user_id: actor, etapa: 3, acao: "etapa_3_concluida_automaticamente_por_confirmacao_final", observacao: CRM_STAGE3_FINAL_CONFIRMATION_OBSERVATION }] : []),
+    ];
+    if (history.length) { const event = await supabase.from("compras_pos_venda_historico").insert(history); assertQuery(event); }
+    return { ok: true };
   }
 
   if (resource === "alunos" && action === "crm_detalhe") {

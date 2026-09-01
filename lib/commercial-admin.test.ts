@@ -170,6 +170,20 @@ describe("fronteira administrativa comercial", () => {
     expect(server).toContain("etapa_6_cliente_nao_respondeu");
     expect(postSaleFinalOutcomeMigration).toContain("resultado_final in ('cliente_confirmou', 'nao_respondeu')");
   });
+
+  it("conclui a Etapa 3 somente pela confirmação final e sem disparar e-mail", () => {
+    const start = server.indexOf('resource === "alunos" && action === "crm_compra_atualizar"');
+    const end = server.indexOf('resource === "alunos" && action === "crm_detalhe"');
+    const crmPurchaseUpdate = server.slice(start, end);
+
+    expect(crmPurchaseUpdate).toContain('shouldAutoCompleteStage3AfterFinalConfirmation({ finalOutcome: "cliente_confirmou", emailSent, stage3Completed })');
+    expect(crmPurchaseUpdate).toContain('etapa: 3');
+    expect(crmPurchaseUpdate).toContain('etapa_3_concluida_automaticamente_por_confirmacao_final');
+    expect(crmPurchaseUpdate).toContain('.eq("compra_id", compraId)');
+    expect(crmPurchaseUpdate).not.toContain("sendManualStudentAccessEmail");
+    expect(crmPurchaseUpdate).not.toContain("deliverStudentAccessEmail");
+    expect(crmPurchaseUpdate).not.toContain("sendPostSaleAccessEmails");
+  });
 });
 
 describe("metadados editoriais das leis", () => {
