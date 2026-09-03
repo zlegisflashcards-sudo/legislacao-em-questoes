@@ -97,6 +97,18 @@ export function optionalProductDemoVideoUrl(value: unknown, label: string): stri
   return `https://www.youtube.com/embed/${videoId}`;
 }
 
+export function optionalLeagueUrl(value: unknown, label: string): string | null | undefined {
+  const raw = optionalString(value, label, 2000);
+  if (!raw || raw.startsWith("/")) return raw;
+  let url: URL;
+  try { url = new URL(raw); }
+  catch { throw new CommercialValidationError(`${label} deve ser uma URL HTTP ou HTTPS válida, ou uma rota iniciada por /.`); }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new CommercialValidationError(`${label} deve ser uma URL HTTP ou HTTPS válida, ou uma rota iniciada por /.`);
+  }
+  return url.toString();
+}
+
 export function booleanValue(value: unknown, label: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new CommercialValidationError(`${label} deve ser verdadeiro ou falso.`);

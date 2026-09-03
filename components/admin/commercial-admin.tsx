@@ -404,8 +404,34 @@ function ProductPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelPr
     <label>Destacar na página inicial<select name="destaque" defaultValue={editing?.destaque ? "true" : "false"}><option value="false">Não</option><option value="true">Sim</option></select></label>
     <textarea name="observacao_administrativa" defaultValue={text(editing?.observacao_administrativa)} placeholder="Observação administrativa" /><input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required />
     <select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
-  </EditForm>{editing ? <CompositionEditor key={text(editing.id)} product={editing} laws={laws} busy={busy} mutate={mutate} /> : null}
+  </EditForm>{editing ? <><CompositionEditor key={text(editing.id)} product={editing} laws={laws} busy={busy} mutate={mutate} />{text(editing.tipo_produto) === "edital" ? <LeagueSettingsEditor key={text(editing.id)} product={editing} busy={busy} mutate={mutate} /> : null}</> : null}
   <DataTable headers={["Produto", "Tipo", "Leis", "Destaque", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.nome)}</strong><small>{text(row.slug)}</small></td><td>{text(row.tipo_produto)}</td><td>{Array.isArray(row.leis) ? row.leis.length : 0}</td><td>{row.destaque ? "Sim" : "Não"}</td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td><button onClick={() => setEditing(row)}>Editar / composição</button><button disabled={busy} onClick={() => void mutate("produtos", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do produto atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
+}
+
+function LeagueSettingsEditor({ product, busy, mutate }: { product: Row; busy: boolean; mutate: PanelProps["mutate"] }) {
+  const settings = relation(product, "liga");
+  const [enabled, setEnabled] = useState(Boolean(settings.ativo));
+  const bannerUrl = text(settings.imagem_url) || "/league/pmma-hero.png";
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.currentTarget));
+    await mutate("produtos", { action: "atualizar_liga", id: product.id, data: { ...data, liga_habilitada: enabled } }, enabled ? "Configuração da Liga salva com sucesso." : "Liga desabilitada com sucesso.");
+  }
+  return <form className="commercial-composition" onSubmit={save}>
+    <h3>Configuração da Liga</h3><p>A Liga herda automaticamente as leis da composição deste produto-edital.</p>
+    <label>Liga habilitada<select value={enabled ? "true" : "false"} onChange={(event) => setEnabled(event.target.value === "true")}><option value="false">Não</option><option value="true">Sim</option></select></label>
+    {enabled ? <div className="commercial-form-grid">
+      <input name="liga_slug" defaultValue={text(settings.slug)} placeholder="Slug da Liga (ex.: pmma)" required />
+      <input name="liga_nome" defaultValue={text(settings.nome)} placeholder="Nome da Liga" required />
+      <input name="liga_titulo" defaultValue={text(settings.titulo)} placeholder="Título principal" required />
+      <input name="liga_subtitulo" defaultValue={text(settings.subtitulo)} placeholder="Subtítulo curto" />
+      <label>URL do banner<input name="liga_banner_url" type="url" defaultValue={text(settings.imagem_url)} placeholder="/league/banner.png ou https://..." /><span>Use uma imagem larga (16:6 ou 3:1). O campo aceita asset público ou URL HTTPS.</span></label>
+      <div className="overflow-hidden rounded-xl border border-cyan-200/20 bg-slate-950"><div aria-label="Prévia do banner da Liga" className="aspect-[3/1] bg-cover bg-center" style={{ backgroundImage: `url(${bannerUrl})` }} /></div>
+      <input name="liga_cta_label" defaultValue={text(settings.cta_label)} placeholder="Texto do CTA" required />
+      <input name="liga_cta_href" defaultValue={text(settings.cta_href)} placeholder="Destino opcional do CTA (vazio = produto)" />
+    </div> : <p className="text-sm">A Liga não será exposta publicamente. Os campos de apresentação ficam recolhidos.</p>}
+    <div className="commercial-form-actions"><button className="admin-button primary" disabled={busy}>Salvar configuração da Liga</button></div>
+  </form>;
 }
 
 function AnkiTutorialsPanel({ rows, busy, mutate }: { rows: Row[]; busy: boolean; mutate: PanelProps["mutate"] }) {

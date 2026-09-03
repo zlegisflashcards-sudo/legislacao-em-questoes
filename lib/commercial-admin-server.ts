@@ -29,6 +29,7 @@ import {
   limitFrom,
   nonNegativeInteger,
   optionalIsoDate,
+  optionalLeagueUrl,
   optionalNonNegativeInteger,
   optionalProductDemoVideoUrl,
   optionalString,
@@ -463,6 +464,11 @@ export async function getCommercialResource(resource: CommercialResource, reques
       ? await supabase.from("produto_leis").select("produto_id,lei_id,ordem,recorte_id,recortes_leis(id,nome,ativo),leis(id,slug,titulo)").in("produto_id", ids).order("ordem")
       : { data: [], error: null };
     assertQuery(links);
+    const leagueSettings = ids.length
+      ? await supabase.from("ligas").select("produto_id,slug,nome,titulo,subtitulo,imagem_url,cta_label,cta_href,ativo").in("produto_id", ids)
+      : { data: [], error: null };
+    assertQuery(leagueSettings);
+    const leagueByProduct = new Map((leagueSettings.data ?? []).flatMap((league) => league.produto_id ? [[String(league.produto_id), league] as const] : []));
     const byProduct = new Map<string, unknown[]>();
     const lawsByProduct = new Map<string, Set<string>>();
     for (const link of links.data ?? []) {
@@ -472,7 +478,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
       if (!lawIds.has(lawId)) byProduct.set(key, [...(byProduct.get(key) ?? []), link]);
       lawIds.add(lawId); lawsByProduct.set(key, lawIds);
     }
-    return pageResult(productRows.map((row) => ({ ...row, leis: byProduct.get(String(row.id)) ?? [] })), productRows.length, page, limit);
+    return pageResult(productRows.map((row) => ({ ...row, leis: byProduct.get(String(row.id)) ?? [], liga: leagueByProduct.get(String(row.id)) ?? null })), productRows.length, page, limit);
   }
 
   if (resource === "aquisicoes") {
@@ -661,6 +667,25 @@ function validateProductData(raw: unknown, update = false) {
     result.observacao_administrativa = update ? value : value ?? null;
   }
   return result;
+}
+
+function validateLeagueSettings(raw: unknown) {
+  const data = asObject(raw);
+  const allowed = ["liga_habilitada", "liga_slug", "liga_nome", "liga_titulo", "liga_subtitulo", "liga_banner_url", "liga_cta_label", "liga_cta_href"] as const;
+  rejectUnknownKeys(data, allowed);
+  const enabled = booleanValue(data.liga_habilitada, "Liga habilitada");
+  if (enabled === undefined) throw new CommercialValidationError("Informe se a Liga está habilitada.");
+  if (!enabled) return { enabled };
+  return {
+    enabled,
+    slug: slug(data.liga_slug, "Slug da Liga"),
+    name: requiredString(data.liga_nome, "Nome da Liga", 200),
+    title: requiredString(data.liga_titulo, "Título da Liga", 300),
+    subtitle: optionalString(data.liga_subtitulo, "Subtítulo da Liga", 500) ?? null,
+    bannerUrl: optionalLeagueUrl(data.liga_banner_url, "Banner da Liga") ?? null,
+    ctaLabel: requiredString(data.liga_cta_label, "Texto do CTA", 200),
+    ctaHref: optionalLeagueUrl(data.liga_cta_href, "Destino do CTA") ?? null,
+  };
 }
 
 function validateStudentData(raw: unknown) {
@@ -1305,6 +1330,29 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       return rpc("admin_criar_produto", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
     if (action === "atualizar") return rpc("admin_atualizar_produto", { p_ator_user_id: actor, p_produto_id: uuid(body.id, "Produto"), p_dados: validateProductData(body.data, true) });
+    if (action === "atualizar_liga") {
+      const productId = uuid(body.id, "Produto");
+      const settings = validateLeagueSettings(body.data);
+      const supabase = getSupabaseServerClient();
+      const product = await supabase.from("produtos").select("id,tipo_produto").eq("id", productId).maybeSingle();
+      if (product.error || !product.data) throw new CommercialHttpError(404, "Produto não encontrado.");
+      if (product.data.tipo_produto !== "edital") throw new CommercialValidationError("A Liga só pode ser configurada em um produto do tipo edital.");
+      const current = await supabase.from("ligas").select("id,produto_id,slug,nome,titulo,subtitulo,imagem_url,cta_label,cta_href,ativo").eq("produto_id", productId).maybeSingle();
+      if (current.error) throw new CommercialHttpError(500, "Não foi possível carregar a configuração da Liga.");
+      if (!settings.enabled) {
+        if (!current.data) return { liga: null };
+        const disabled = await supabase.from("ligas").update({ ativo: false, updated_at: new Date().toISOString() }).eq("id", current.data.id).select().single();
+        if (disabled.error) throw new CommercialHttpError(500, "Não foi possível desabilitar a Liga.");
+        return { liga: disabled.data };
+      }
+      const duplicate = await supabase.from("ligas").select("id").eq("slug", settings.slug).neq("produto_id", productId).maybeSingle();
+      if (duplicate.error) throw new CommercialHttpError(500, "Não foi possível validar o slug da Liga.");
+      if (duplicate.data) throw new CommercialValidationError("Este slug de Liga já está em uso.");
+      const payload = { produto_id: productId, slug: settings.slug, nome: settings.name, titulo: settings.title, subtitulo: settings.subtitle, imagem_url: settings.bannerUrl, cta_label: settings.ctaLabel, cta_href: settings.ctaHref, ativo: true, updated_at: new Date().toISOString() };
+      const saved = await supabase.from("ligas").upsert(payload, { onConflict: "produto_id" }).select().single();
+      if (saved.error) throw new CommercialHttpError(500, "Não foi possível salvar a configuração da Liga.");
+      return { liga: saved.data };
+    }
     // Substitui a antiga rpc("admin_definir_leis_produto") preservando o contrato legado de lei completa.
     if (action === "definir_leis") {
       const vinculos = "vinculos" in body

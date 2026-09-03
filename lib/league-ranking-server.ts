@@ -8,7 +8,7 @@ type RankedLeagueEntry = { position: number; studentId: string; score: number };
 
 export type LeagueRankingEntry = { position: number; publicName: string; score: number };
 export type LeagueRankingData = {
-  league: { slug: string; name: string; title: string };
+  league: { slug: string; name: string; title: string; subtitle: string | null; bannerUrl: string | null; ctaLabel: string | null; ctaHref: string | null; productSlug: string | null };
   ranking: LeagueRankingEntry[];
   personal: { position: number; score: number } | null;
 };
@@ -20,7 +20,7 @@ function numberValue(value: number | string | null | undefined) {
 
 export async function loadLeagueRanking(slug: string, studentId: string | null = null): Promise<LeagueRankingData | null> {
   const supabase = getSupabaseServerClient();
-  const { data: league, error: leagueError } = await supabase.from("ligas").select("id,slug,nome,titulo").eq("slug", slug).eq("ativo", true).maybeSingle();
+  const { data: league, error: leagueError } = await supabase.from("ligas").select("id,slug,nome,titulo,subtitulo,imagem_url,cta_label,cta_href,produtos(slug)").eq("slug", slug).eq("ativo", true).maybeSingle();
   if (leagueError) throw new Error(`Não foi possível carregar a liga: ${leagueError.message}`);
   if (!league) return null;
 
@@ -41,7 +41,8 @@ export async function loadLeagueRanking(slug: string, studentId: string | null =
   const nameByUser = new Map((profiles ?? []).flatMap((profile) => typeof profile.id === "string" && typeof profile.nome_publico === "string" && profile.nome_publico.trim() ? [[profile.id, profile.nome_publico.trim()] as const] : []));
   const ranking = ranked.filter((entry) => entry.position <= 10).map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(userByStudent.get(entry.studentId) ?? ""), nome: studentById.get(entry.studentId)?.nome }), score: entry.score }));
   const self = studentId ? ranked.find((entry) => entry.studentId === studentId) ?? null : null;
-  return { league: { slug: league.slug, name: league.nome, title: league.titulo }, ranking, personal: self ? { position: self.position, score: self.score } : null };
+  const product = Array.isArray(league.produtos) ? league.produtos[0] : league.produtos;
+  return { league: { slug: league.slug, name: league.nome, title: league.titulo, subtitle: league.subtitulo, bannerUrl: league.imagem_url, ctaLabel: league.cta_label, ctaHref: league.cta_href, productSlug: product?.slug ?? null }, ranking, personal: self ? { position: self.position, score: self.score } : null };
 }
 
 function bearerToken(request: Request) {
