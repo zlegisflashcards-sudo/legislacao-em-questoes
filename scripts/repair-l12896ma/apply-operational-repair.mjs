@@ -1,0 +1,16 @@
+import fs from "node:fs";
+import { spawnSync } from "node:child_process";
+const dir="scripts/repair-l12896ma", plan=JSON.parse(fs.readFileSync(`${dir}/operational-repair-plan.json`,"utf8"));
+if(!plan.simulacao_valida||plan.simulacao!=="23/23")throw Error("Plano não validado");
+const esc=x=>"'"+String(x).replaceAll("'","''")+"'";
+const vals=plan.alteracoes.map(x=>`(${x.nivel_id},${esc(x.campanha_id)},${esc(JSON.stringify(x.before.questoes_ids))}::jsonb,${esc(JSON.stringify(x.before.pendencias_ids))}::jsonb,${x.before.proxima_posicao},${esc(JSON.stringify(x.after.questoes_ids))}::jsonb,${esc(JSON.stringify(x.after.pendencias_ids))}::jsonb,${x.after.proxima_posicao})`).join(",\n");
+const sql=`BEGIN;
+CREATE TEMP TABLE rp(id bigint primary key,campaign uuid,bq jsonb,bp jsonb,bpos integer,aq jsonb,ap jsonb,apos integer) ON COMMIT DROP;
+INSERT INTO rp VALUES ${vals};
+DO $$ DECLARE expected_count integer; matching_count integer; BEGIN SELECT count(*) INTO expected_count FROM rp; PERFORM 1 FROM campanhas_leis_niveis l JOIN rp ON rp.id=l.id FOR UPDATE; SELECT count(*) INTO matching_count FROM campanhas_leis_niveis l JOIN rp ON rp.id=l.id WHERE l.campanha_id=rp.campaign AND l.questoes_ids=rp.bq AND l.pendencias_ids=rp.bp AND l.proxima_posicao=rp.bpos; IF matching_count<>expected_count THEN RAISE EXCEPTION 'stale plan: %/% matching',matching_count,expected_count; END IF; END $$;
+UPDATE campanhas_leis_niveis l SET questoes_ids=rp.aq,pendencias_ids=rp.ap,proxima_posicao=rp.apos FROM rp WHERE l.id=rp.id;
+DO $$ DECLARE bad integer; BEGIN SELECT count(*) INTO bad FROM (SELECT DISTINCT rp.campaign FROM rp LEFT JOIN LATERAL (SELECT * FROM campanhas_leis_niveis l WHERE l.campanha_id=rp.campaign AND NOT l.concluido ORDER BY l.ordem LIMIT 1) l ON true LEFT JOIN questions q ON q.id=CASE WHEN l.proxima_posicao<jsonb_array_length(l.questoes_ids) THEN l.questoes_ids->>l.proxima_posicao ELSE l.pendencias_ids->>0 END AND q.lei_id=5 AND q.ativo=true WHERE q.id IS NULL) x; IF bad<>0 THEN RAISE EXCEPTION 'post validation failed: %',bad; END IF; END $$;
+COMMIT;`;
+const file=`${dir}/apply-operational-repair.sql`;fs.writeFileSync(file,sql);
+const r=spawnSync("npx.cmd",["--yes","supabase@2.110.0","db","query","--linked","--file",file],{stdio:"inherit",shell:false});
+if(r.status!==0)process.exit(r.status??1);
