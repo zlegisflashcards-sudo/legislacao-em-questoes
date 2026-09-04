@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { LegiscastPlaylistPlayer } from "@/components/legiscast-playlist-player";
+import { LegiscastAudioPlayer } from "@/components/legiscast-audio-player";
 import { LegislacaoEmbed } from "@/components/legislacao-content-tabs";
 import { loadPublicLawRanking } from "@/lib/public-law-ranking";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
@@ -179,6 +180,8 @@ export default async function CentralLegislacaoPage({
             />
           </section>
         ) : null}
+
+        <LegiscastAudioPlayer slug={legislacao.slug} />
 
         <section className="min-w-0 rounded-2xl border border-amber-100 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-7" aria-labelledby="law-ranking-title">
           <div className="flex items-center gap-3"><span aria-hidden="true" className="text-3xl">🏆</span><div><p className="text-sm font-bold text-amber-700">Ranking Legis Questões desta Lei</p><h2 id="law-ranking-title" className="text-2xl font-black text-[#062a5f]">Ranking da Lei</h2></div></div>

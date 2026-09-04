@@ -32,6 +32,7 @@ const panels = [
     title: "Legis Questões",
     description: "Cadastre e gerencie as questões vinculadas às leis ativas da plataforma.",
   },
+  { href: "/admin/legiscast-audios", icon: "🎧", title: "Áudios do LegisCast", description: "Envie e organize as faixas de áudio por legislação." },
   {
     href: "/admin/legisbot",
     icon: "🤖",
