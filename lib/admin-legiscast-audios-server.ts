@@ -1,29 +1,27 @@
 import "server-only";
 
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const BUCKET = "legiscast-audio";
 const MAX_BYTES = 100 * 1024 * 1024;
 const allowed = new Map<string, string>([["mp3", "audio/mpeg"], ["m4a", "audio/mp4"]]);
+type Operation = { lawId: number; path: string; expiresAt: number };
+type UploadInput = { lawId: unknown; fileName: unknown; mime: unknown; sizeBytes: unknown };
+type FinalizeInput = { lawId: unknown; path: unknown; operationToken: unknown; titulo: unknown; descricao: unknown; ordem: unknown; duracaoSegundos: unknown; ativo: unknown };
+
 export class AdminLegiscastAudioError extends Error { constructor(public status: number, message: string) { super(message); } }
-function storageUploadFailure(path: string, file: File, storageContentType: string, error: { status?: number; statusCode?: string | number; message?: string; error?: string }) {
-  const receivedStatus = Number(error.statusCode ?? error.status);
-  console.error("LegisCast storage upload failed", {
-    bucket: BUCKET,
-    path,
-    receivedMime: file.type || null,
-    storageContentType,
-    sizeBytes: file.size,
-    status: Number.isFinite(receivedStatus) ? receivedStatus : null,
-    message: error.message ?? null,
-    error: error.error ?? null,
-  });
-  const status = [400, 401, 403, 404, 413, 415, 422].includes(receivedStatus) ? receivedStatus : 502;
-  throw new AdminLegiscastAudioError(status, "Não foi possível enviar o áudio ao armazenamento privado.");
-}
-async function requireAdmin() { const admin = await obterAdministrador(); if (!admin) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); return admin; }
-function integer(value: FormDataEntryValue | null, fallback: number | null = null) { if (value === null || value === "") return fallback; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 0) throw new AdminLegiscastAudioError(400, "Número inválido."); return parsed; }
+
+async function requireAdmin() { const admin = await obterAdministrador(); if (!admin) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); }
+function positiveInteger(value: unknown, optional = false) { if ((value === null || value === undefined || value === "") && optional) return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 0) throw new AdminLegiscastAudioError(400, "Número inválido."); return parsed; }
+function extensionOf(fileName: string) { return fileName.split(".").pop()?.toLowerCase() ?? ""; }
+function validateUpload(input: UploadInput) { const lawId = positiveInteger(input.lawId) as number; const fileName = String(input.fileName ?? "").trim(); const mime = String(input.mime ?? "").toLowerCase(); const sizeBytes = positiveInteger(input.sizeBytes) as number; const extension = extensionOf(fileName); const storageContentType = allowed.get(extension); if (!fileName || !storageContentType || !mime || (mime !== storageContentType && !(extension === "m4a" && mime === "audio/x-m4a"))) throw new AdminLegiscastAudioError(400, "Aceitamos somente arquivos MP3 ou M4A."); if (!sizeBytes) throw new AdminLegiscastAudioError(400, "Selecione um arquivo MP3 ou M4A."); if (sizeBytes > MAX_BYTES) throw new AdminLegiscastAudioError(400, "O áudio deve ter no máximo 100 MB."); return { lawId, extension }; }
+function signingKey() { const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!key) throw new AdminLegiscastAudioError(500, "Configuração do servidor indisponível."); return key; }
+function sign(value: string) { return createHmac("sha256", signingKey()).update(value).digest("base64url"); }
+function createOperationToken(operation: Operation) { const payload = Buffer.from(JSON.stringify(operation)).toString("base64url"); return `${payload}.${sign(payload)}`; }
+function readOperationToken(token: unknown) { const [payload, suppliedSignature, ...extra] = String(token ?? "").split("."); if (!payload || !suppliedSignature || extra.length) throw new AdminLegiscastAudioError(403, "Autorização de upload inválida."); const expectedSignature = sign(payload); if (suppliedSignature.length !== expectedSignature.length || !timingSafeEqual(Buffer.from(suppliedSignature), Buffer.from(expectedSignature))) throw new AdminLegiscastAudioError(403, "Autorização de upload inválida."); let operation: Operation; try { operation = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); } catch { throw new AdminLegiscastAudioError(403, "Autorização de upload inválida."); } if (!Number.isSafeInteger(operation.lawId) || typeof operation.path !== "string" || !Number.isFinite(operation.expiresAt) || operation.expiresAt <= Date.now()) throw new AdminLegiscastAudioError(403, "Autorização de upload expirada."); return operation; }
+async function activeLaw(lawId: number) { const db = getSupabaseServerClient(); const { data, error } = await db.from("leis").select("slug").eq("id", lawId).eq("ativo", true).maybeSingle(); if (error || !data) throw new AdminLegiscastAudioError(400, "Lei inválida."); return { db, law: data }; }
 
 export async function listAdminLegiscastAudios() {
   await requireAdmin(); const db = getSupabaseServerClient();
@@ -32,19 +30,13 @@ export async function listAdminLegiscastAudios() {
   return { laws: laws.data ?? [], audios: audios.data ?? [], maxBytes: MAX_BYTES };
 }
 
-export async function uploadAdminLegiscastAudio(form: FormData) {
-  await requireAdmin(); const lawId = integer(form.get("lei_id")); const title = String(form.get("titulo") ?? "").trim(); const description = String(form.get("descricao") ?? "").trim() || null; const order = integer(form.get("ordem"), 0) ?? 0; const duration = integer(form.get("duracao_segundos")); const active = form.get("ativo") === "true"; const file = form.get("file");
-  if (!lawId || !title) throw new AdminLegiscastAudioError(400, "Lei e título são obrigatórios.");
-  if (!(file instanceof File) || !file.size) throw new AdminLegiscastAudioError(400, "Selecione um arquivo MP3 ou M4A.");
-  if (file.size > MAX_BYTES) throw new AdminLegiscastAudioError(400, "O áudio deve ter no máximo 100 MB.");
-  const extension = file.name.split(".").pop()?.toLowerCase() ?? ""; const contentType = allowed.get(extension);
-  if (!contentType || (file.type && file.type !== contentType && !(extension === "m4a" && file.type === "audio/x-m4a"))) throw new AdminLegiscastAudioError(400, "Aceitamos somente arquivos MP3 ou M4A.");
-  const db = getSupabaseServerClient(); const { data: law, error: lawError } = await db.from("leis").select("slug").eq("id", lawId).eq("ativo", true).maybeSingle();
-  if (lawError || !law) throw new AdminLegiscastAudioError(400, "Lei inválida.");
-  const path = `${law.slug}/${crypto.randomUUID()}.${extension}`;
-  const upload = await db.storage.from(BUCKET).upload(path, await file.arrayBuffer(), { contentType, upsert: false });
-  if (upload.error) storageUploadFailure(path, file, contentType, upload.error);
-  const created = await db.from("legiscast_audios").insert({ lei_id: lawId, titulo: title, descricao: description, storage_path: path, duracao_segundos: duration, ordem: order, ativo: active }).select("id,titulo").single();
-  if (created.error) { await db.storage.from(BUCKET).remove([path]); throw new AdminLegiscastAudioError(503, "Não foi possível vincular o áudio à lei."); }
+export async function authorizeAdminLegiscastUpload(input: UploadInput) {
+  await requireAdmin(); const { lawId, extension } = validateUpload(input); const { db, law } = await activeLaw(lawId); const path = `${law.slug}/${crypto.randomUUID()}.${extension}`; const { data, error } = await db.storage.from(BUCKET).createSignedUploadUrl(path);
+  if (error || !data?.token) throw new AdminLegiscastAudioError(502, "Não foi possível autorizar o envio do áudio.");
+  return { path, uploadToken: data.token, operationToken: createOperationToken({ lawId, path, expiresAt: Date.now() + 15 * 60 * 1000 }) };
+}
+
+export async function finalizeAdminLegiscastUpload(input: FinalizeInput) {
+  await requireAdmin(); const lawId = positiveInteger(input.lawId) as number; const path = String(input.path ?? ""); const operation = readOperationToken(input.operationToken); if (operation.lawId !== lawId || operation.path !== path) throw new AdminLegiscastAudioError(403, "Autorização de upload inválida."); const title = String(input.titulo ?? "").trim(); const description = String(input.descricao ?? "").trim() || null; const order = positiveInteger(input.ordem, true) ?? 0; const duration = positiveInteger(input.duracaoSegundos, true); const active = input.ativo === true; if (!title) throw new AdminLegiscastAudioError(400, "Lei e título são obrigatórios."); const extension = extensionOf(path); if (!allowed.has(extension)) throw new AdminLegiscastAudioError(400, "Arquivo de áudio inválido."); const { db, law } = await activeLaw(lawId); const escapedSlug = law.slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); if (!new RegExp(`^${escapedSlug}/[0-9a-f-]{36}\\.(mp3|m4a)$`).test(path)) throw new AdminLegiscastAudioError(403, "Caminho de upload inválido."); const slash = path.lastIndexOf("/"); const filename = path.slice(slash + 1); const { data: objects, error: objectError } = await db.storage.from(BUCKET).list(path.slice(0, slash), { search: filename }); if (objectError || !objects?.some((object) => object.name === filename)) throw new AdminLegiscastAudioError(400, "O arquivo enviado não foi encontrado."); const existing = await db.from("legiscast_audios").select("id,titulo").eq("storage_path", path).maybeSingle(); if (existing.data) return { audio: existing.data }; const created = await db.from("legiscast_audios").insert({ lei_id: lawId, titulo: title, descricao: description, storage_path: path, duracao_segundos: duration, ordem: order, ativo: active }).select("id,titulo").single(); if (created.error) { await db.storage.from(BUCKET).remove([path]); throw new AdminLegiscastAudioError(503, "Não foi possível vincular o áudio à lei."); }
   return { audio: created.data };
 }

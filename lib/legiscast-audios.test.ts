@@ -5,6 +5,8 @@ const migration = readFileSync("supabase/migrations/20260904123000_create_legisc
 const server = readFileSync("lib/legiscast-audios-server.ts", "utf8");
 const player = readFileSync("components/legiscast-audio-player.tsx", "utf8");
 const admin = readFileSync("lib/admin-legiscast-audios-server.ts", "utf8");
+const adminClient = readFileSync("components/admin/legiscast-audios-admin.tsx", "utf8");
+const adminRoute = readFileSync("app/api/admin/legiscast-audios/route.ts", "utf8");
 const page = readFileSync("app/leis/[slug]/page.tsx", "utf8");
 
 describe("LegisCast em áudio", () => {
@@ -33,7 +35,8 @@ describe("LegisCast em áudio", () => {
     expect(admin).toContain('[["mp3", "audio/mpeg"], ["m4a", "audio/mp4"]]');
     expect(admin).toContain("MAX_BYTES = 100 * 1024 * 1024");
     expect(admin).toContain("Aceitamos somente arquivos MP3 ou M4A.");
-    for (const expected of ["LegisCast storage upload failed", "bucket: BUCKET", "receivedMime", "storageContentType", "sizeBytes"]) expect(admin).toContain(expected);
-    for (const forbidden of ["SUPABASE_SERVICE_ROLE_KEY", "authorization", "cookie"]) expect(admin.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    for (const expected of ["createSignedUploadUrl(path)", "operationToken", "timingSafeEqual", "storage_path", "remove([path])"]) expect(admin).toContain(expected);
+    for (const expected of ["operation: \"authorize\"", "uploadToSignedUrl", "operation: \"finalize\""]) expect(adminClient).toContain(expected);
+    expect(adminRoute).not.toContain("formData()");
   });
 });
