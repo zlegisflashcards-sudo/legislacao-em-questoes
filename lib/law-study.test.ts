@@ -113,6 +113,14 @@ describe("interface de estudo", () => {
     for (const platform of ["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]) expect(contract).toContain(`label: "${platform}"`);
   });
 
+  it("oculta somente os blocos auxiliares enquanto há Estudo Ativo em andamento", () => {
+    expect(client).toContain('const activeCampaign = !publicStudy && campaign.status === "em_andamento"');
+    expect(client).toContain('showContextSelector && !activeCampaign');
+    expect(client).toContain('!mustChooseContext && !activeCampaign');
+    expect(client).toContain('!activeCampaign ? <Materials');
+    expect(client).toContain('campaign.status === "concluida"');
+  });
+
   it("mostra a posição atual do ranking da própria lei abaixo do melhor score", () => {
     expect(campaignServer).toContain('supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: studentId, p_lei_id: lawId })');
     expect(campaignServer).toContain("const rankingPosition = Number.isSafeInteger(position) && position > 0 ? position : null");
