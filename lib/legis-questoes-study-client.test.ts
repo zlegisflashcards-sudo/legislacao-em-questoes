@@ -22,8 +22,8 @@ describe("player Legis Questões", () => {
     expect(campaignStudy).not.toContain('const state = initial.status === "concluida"');
   });
 
-  it("separa explicitamente campanha e estudo livre", () => {
-    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={searchParams.get("recorte_id")} />');
+  it("separa explicitamente campanha, estudo livre e teste", () => {
+    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} recorteId={recorteId} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={recorteId} />'); expect(player).toContain('searchParams.get("teste") === "1"'); expect(player).toContain('<TestStudy slug={slug} recorteId={recorteId} />');
   });
 
   it("retorna do player para a central da lei atual em qualquer modo", () => {
@@ -261,8 +261,8 @@ describe("player Legis Questões", () => {
   it("usa uma única key para o estágio dinâmico de cada questão", () => {
     expect(player).not.toContain('<QuestionContent key=');
     expect(player).not.toContain('<AnswerFeedback key=');
-    expect(player.match(/className="lf-question-stage"/g)).toHaveLength(2);
-    expect(player.match(/key=\{(?:currentQuestion|question)\.id\}/g)).toHaveLength(2);
+    expect(player.match(/className="lf-question-stage"/g)).toHaveLength(3);
+    expect(player.match(/key=\{(?:currentQuestion|question)\.id\}/g)).toHaveLength(3);
   });
 
   it("restaura o contexto da lei e mantém HTML rico dentro de uma única moldura", () => {
@@ -292,9 +292,17 @@ describe("player Legis Questões", () => {
     expect(player).toContain('correct: typeof result.correct === "number" ? result.correct : current.correct');
     expect(player).toContain('errors: typeof result.errors === "number" ? result.errors : current.errors');
     expect(player).toContain('Sua posição no ranking:');
+    expect(player).toContain('📖 Estudo Livre');
+    expect(player).toContain('🎯 Teste');
+    expect(player).toContain('function TestStudy');
+    expect(player).toContain('[10, 20, 30, 50]');
+    expect(player).toContain('useState(20)');
+    const testStudy = player.slice(player.indexOf('function TestStudy'), player.indexOf('function FreeStudy'));
+    expect(testStudy).toContain('/api/questoes/${encodeURIComponent(slug)}/estudar');
+    expect(testStudy).not.toContain('/campanha');
     expect(styles).toContain('.lf-attempt-donut{display:grid;width:142px;height:142px');
     expect(styles).toContain('background:conic-gradient(#1eaa5d 0 var(--lf-correct),#e34d4d var(--lf-correct) 100%)');
-    expect(player).toContain('href={`/questoes/${encodeURIComponent(useContext(StudyLawContext) ?? "")}/estudar?livre=1`}');
+    expect(player).toContain('href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1${scopeQuery}`}');
     expect(player).toContain('href="/minhas-leis">Voltar às minhas leis');
     expect(player).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches');
     expect(styles).toContain('@media(prefers-reduced-motion:reduce){.lf-celebration-mark,.lf-celebration-particles i{animation:none}}');

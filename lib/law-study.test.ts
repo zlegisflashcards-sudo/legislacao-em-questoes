@@ -117,7 +117,7 @@ describe("interface de estudo", () => {
     expect(client).toContain('const activeCampaign = !publicStudy && campaign.status === "em_andamento"');
     expect(client).toContain('showContextSelector && !activeCampaign');
     expect(client).toContain('!mustChooseContext && !activeCampaign');
-    expect(client).toContain('!activeCampaign ? <Materials');
+    expect(client).not.toContain('<Materials');
     expect(client).toContain('campaign.status === "concluida"');
   });
 
@@ -149,14 +149,19 @@ describe("interface de estudo", () => {
   });
 
   it("libera estudo livre e capítulos somente após a campanha concluída", () => {
-    expect(client).toContain('completed && tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1${contextQuery}`}');
+    expect(client).toContain('tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1${contextQuery}`}');
     expect(client).toContain('structure_id=${node.id}');
+  });
+
+  it("oferece a criação de teste pós-conclusão no contexto selecionado", () => {
+    expect(client).toContain('completed ? <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap"><Link href={`/questoes/${encodeURIComponent(slug)}/estudar?teste=1${contextQuery}`}');
+    expect(client).toContain("🎯 Criar teste");
   });
 
   it("representa uma lei sem subbaralhos pelo deck raiz, sem ação duplicada", () => {
     expect(client).toContain('function RootDeck');
     expect(client).toContain('count={selectedContext?.questionCount ?? sourceLaw?.questions.length ?? 0}');
-    expect(client).toContain('completed && tree.length > 0 ? <Link');
+    expect(client).toContain('completed ? <Link href={href}');
     expect(client).toContain('const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1${recorteId ?');
   });
 

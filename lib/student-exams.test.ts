@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { nextExamLawProgress } from "./student-exams";
+import { nextExamLawProgress, selectExamReferenceCampaign, summarizeExamLawProgress } from "./student-exams";
 
 const migration = readFileSync("supabase/migrations/20260811150000_create_student_exam_notices.sql", "utf8");
 const scopedContextMigration = readFileSync("supabase/migrations/20260831130000_add_scoped_student_exam_context.sql", "utf8");
@@ -58,9 +58,12 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(nextExamLawProgress({ emEstudo: true, revisao: true }, "study")).toBeNull();
   });
 
-  it("deriva o progresso exclusivamente do status de campanha", () => {
+  it("exibe somente a barra diagnóstica, sem métricas competitivas por lei", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('law.campaignStatus === "concluida"'); expect(client).toContain('{completed} de {total} leis concluídas'); expect(client).toContain('{percent}%'); expect(client).not.toContain('ProgressControl');
+    expect(client).toContain('function ExamProgressBar');
+    expect(client).toContain('Verde = acerto · Vermelho = erro · Cinza = não respondido');
+    expect(client).toContain('bg-emerald-500'); expect(client).toContain('bg-red-500'); expect(client).toContain('bg-slate-200');
+    for (const forbidden of ['{percent}%', 'Progresso geral', 'Melhor score', 'Posição no ranking', 'ProgressControl']) expect(client).not.toContain(forbidden);
   });
 
   it("mantém o edital do produto sincronizado pela composição viva de produto_leis", () => {
@@ -101,18 +104,17 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).not.toContain('Próximo estudo:'); expect(client).not.toContain('const next ='); expect(client).toContain('/estudar/lei/${encodeURIComponent(law.slug)}');
   });
 
-  it("verticaliza as leis com setas horizontais acessíveis e indicador visual no fim da linha", () => {
+  it("mantém a lista vertical e os controles de ordem sem adicionar indicadores competitivos", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
     expect(client).toContain('grid-cols-[auto_minmax(0,1fr)_auto]');
     expect(client).toContain('aria-label={`Mover ${label} para cima`}');
     expect(client).toContain('aria-label={`Mover ${label} para baixo`}');
     expect(client).toContain('flex shrink-0 items-center gap-1');
     expect(client).toContain('items-start gap-2 border-b');
-    expect(client).toContain('shrink-0 self-start');
-    expect(client).toContain('concluded ? "⚡" : "○"');
-    expect(client).toContain('rounded-full bg-blue-700');
-    expect(client).toContain('Lei ainda não concluída');
-    expect(client).not.toContain('campaignStatus === "em_andamento" ? "Em andamento"');
+    expect(client).toContain('py-4 sm:gap-3');
+    expect(client).toContain('overflow-x-hidden');
+    expect(client).toContain('<ExamProgressBar progress={law.progress} />');
+    expect(client).not.toContain('Lei ainda não concluída');
   });
 });
 
@@ -133,13 +135,45 @@ describe("contextos autorizados no Meu Edital", () => {
     expect(scopedContextMigration).toContain("Contexto de estudo nao liberado.");
   });
 
-  it("faz o cliente enviar o contexto do card e preservar o recorte na navegação", () => {
+  it("preserva o contexto de recorte nas áreas de estudo e no edital", () => {
     const laws = readFileSync("components/student-laws-client.tsx", "utf8");
     const server = readFileSync("lib/student-exams-server.ts", "utf8");
     const exam = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(laws).toContain("recorteId: requestedScopeId");
-    expect(laws).toContain("confirmReplace: Boolean(existing && !sameContext)");
+    expect(laws).toContain('recorte_id=${encodeURIComponent(scopeId)}');
+    expect(laws).toContain('}/anki${scopeId ?');
     expect(server).toContain('fn: "definir_contexto_lei_meu_edital"');
     expect(exam).toContain("law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}`");
+  });
+});
+
+describe("barra diagnóstica do Meu Edital", () => {
+  const universe = ["a", "b", "c", "new"];
+
+  it("fica integralmente cinza quando não há campanha de referência", () => {
+    expect(summarizeExamLawProgress(universe, [])).toEqual({ correct: 0, errors: 0, unanswered: 4 });
+  });
+
+  it("separa acertos, erros e não respondidas sem ultrapassar o universo", () => {
+    expect(summarizeExamLawProgress(universe, [{ questionId: "a", correct: true }, { questionId: "b", correct: false }])).toEqual({ correct: 1, errors: 1, unanswered: 2 });
+    expect(summarizeExamLawProgress(["a", "b"], [{ questionId: "a", correct: true }, { questionId: "b", correct: true }])).toEqual({ correct: 2, errors: 0, unanswered: 0 });
+    expect(summarizeExamLawProgress(["a", "b"], [{ questionId: "a", correct: false }, { questionId: "b", correct: false }])).toEqual({ correct: 0, errors: 2, unanswered: 0 });
+  });
+
+  it("respeita o universo do recorte, questões novas e a resposta final de cada questão", () => {
+    expect(summarizeExamLawProgress(["a", "c"], [{ questionId: "b", correct: true }, { questionId: "a", correct: false }, { questionId: "a", correct: true }])).toEqual({ correct: 0, errors: 1, unanswered: 1 });
+    const progress = summarizeExamLawProgress(universe, [{ questionId: "a", correct: true }, { questionId: "b", correct: false }]);
+    expect(progress.correct + progress.errors + progress.unanswered).toBe(universe.length);
+  });
+
+  it("usa apenas campanhas válidas, em lote, e ignora a referência anterior após reset", () => {
+    const server = readFileSync("lib/student-exams-server.ts", "utf8");
+    expect(server).toContain('eq("abandonada", false)');
+    expect(server).toContain('state?.status_campanha === "concluida"');
+    expect(server).toContain('campanha_ativa_id');
+    expect(server).toContain('order("respondido_em", { ascending: false }).order("id", { ascending: false })');
+    expect(server).toContain('listLawStudyContextsByLaw(studentId, lawIds)');
+    expect(selectExamReferenceCampaign({ status: "em_andamento", campaignId: "active" }, [{ id: "active", concluded: false }, { id: "old", concluded: true }])).toBe("active");
+    expect(selectExamReferenceCampaign({ status: "concluida", campaignId: null }, [{ id: "latest", concluded: true }, { id: "old", concluded: true }])).toBe("latest");
+    expect(selectExamReferenceCampaign({ status: "nao_iniciada", campaignId: null }, [{ id: "old", concluded: true }])).toBeNull();
   });
 });

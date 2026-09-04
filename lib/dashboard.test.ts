@@ -33,11 +33,12 @@ describe("painel e edital ativo", () => {
     expect(route).not.toContain("PATCH");
   });
 
-  it("deriva o edital do status atual da campanha sem persistência extra", () => {
+  it("mostra o progresso de respostas do edital sem persistência extra", () => {
     const examClient = readFileSync("components/student-exam-client.tsx", "utf8");
     const server = readFileSync("lib/dashboard-server.ts", "utf8");
-    expect(examClient).toContain('law.campaignStatus === "concluida"');
-    expect(examClient).toContain('current?.leis.filter((law) => law.campaignStatus === "concluida")');
+    expect(examClient).toContain("function ExamProgressBar");
+    expect(examClient).toContain("progress.correct + progress.errors + progress.unanswered");
+    expect(examClient).not.toContain("campaignStatus");
     expect(examClient).not.toContain('Próximo estudo:');
     expect(server).toContain("const estados = examStates(exam.leis)");
     expect(server).toContain("loadStudentExamSelection(request)");

@@ -10,6 +10,7 @@ export type LawStudyContext = {
   nome: string;
   questionCount: number;
   structureIds: number[] | null;
+  questionIds?: string[];
 };
 
 type Release = { produto_id: string | null };
@@ -52,11 +53,12 @@ export async function listLawStudyContexts(studentId: string, lawId: number): Pr
   if (scopeLinksResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error.message}`);
   const linksByScope = new Map<string, number[]>();
   for (const link of scopeLinksResult.data ?? []) linksByScope.set(link.recorte_id, [...(linksByScope.get(link.recorte_id) ?? []), link.structure_id]);
-  const contexts: LawStudyContext[] = fullAccess ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null }] : [];
+  const contexts: LawStudyContext[] = fullAccess ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }] : [];
   for (const scope of scopes) {
     const selected = linksByScope.get(scope.id) ?? [];
     const structureIds = descendantsForScope(structure, selected);
-    contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: questionsInScope(questions, structureIds).length, structureIds });
+    const scopedQuestions = questionsInScope(questions, structureIds);
+    contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: scopedQuestions.length, structureIds, questionIds: scopedQuestions.map((question) => question.id) });
   }
   return contexts;
 }
@@ -107,11 +109,12 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
     const access = availableLawStudyAccess(releasesForLaw, productLinks);
     const questions = questionsByLaw.get(lawId) ?? [];
     const structure = structureByLaw.get(lawId) ?? [];
-    const contexts: LawStudyContext[] = access.full ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null }] : [];
+    const contexts: LawStudyContext[] = access.full ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }] : [];
     for (const scope of scopesByLaw.get(lawId) ?? []) {
       if (!access.recorteIds.includes(scope.id)) continue;
       const structureIds = descendantsForScope(structure, scopeLinksById.get(scope.id) ?? []);
-      contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: questionsInScope(questions, structureIds).length, structureIds });
+      const scopedQuestions = questionsInScope(questions, structureIds);
+      contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: scopedQuestions.length, structureIds, questionIds: scopedQuestions.map((question) => question.id) });
     }
     contextsByLaw.set(lawId, contexts);
   }

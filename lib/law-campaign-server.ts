@@ -33,6 +33,22 @@ export async function getCampaign(request: Request, slug: string) {
   return getCampaignFor(await authorizeLawStudy(request, slug));
 }
 
+/** Leitura exclusiva para modos não competitivos; nunca cria nem altera campanha. */
+export async function testCampaignAnswers(request: Request, slug: string) {
+  const context = await authorizeLawStudy(request, slug);
+  const state = await getCampaignFor(context);
+  let campaignId = state.campaignId;
+  if (!campaignId && state.status === "concluida") {
+    const { data, error } = await context.supabase.from("campanhas_leis_alunos").select("id").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("concluida", true).eq("abandonada", false).order("concluida_em", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw new LawStudyApiError(503, "Não foi possível carregar as respostas da campanha.");
+    campaignId = data?.id ?? null;
+  }
+  if (!campaignId) return { campaignId: null, answers: [] as Array<{ questionId: string; correct: boolean }> };
+  const { data, error } = await context.supabase.from("campanhas_leis_respostas").select("questao_id,correta").eq("campanha_id", campaignId);
+  if (error) throw new LawStudyApiError(503, "Não foi possível carregar as respostas da campanha.");
+  return { campaignId, answers: (data ?? []).flatMap((row) => typeof row.questao_id === "string" && typeof row.correta === "boolean" ? [{ questionId: row.questao_id, correct: row.correta }] : []) };
+}
+
 export async function startCampaign(request: Request, slug: string) {
   const context = await authorizeLawStudy(request, slug);
   const { supabase, lawId, studentId } = context;

@@ -56,7 +56,7 @@ export function SiteHeader() {
     <div className="mx-auto max-w-7xl px-4 sm:px-6">
       <div className="flex min-h-20 items-center justify-between gap-2 sm:gap-4">
         <Link href="/" className="inline-flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-300" aria-label="Legislação para Concursos — página inicial">
-          <img src="/logo-legis.png" alt="" className="h-11 w-11 shrink-0 rounded-lg object-contain" />
+          <img src="/logo-legis.png" alt="" className="h-11 w-11 shrink-0 rounded-full object-contain" />
           <span className="hidden truncate text-base font-black tracking-tight sm:inline sm:text-xl">Legislação para Concursos</span>
         </Link>
 

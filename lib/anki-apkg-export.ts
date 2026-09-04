@@ -26,7 +26,7 @@ function structurePath(structure: ExportStructure[], structureId: number | null)
   return path;
 }
 
-export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], structure: ExportStructure[]) {
+export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], structure: ExportStructure[], options?: { fileName?: string }) {
   const template = template4();
   const notetype = new Notetype({ id: stableAnkiId("legis-certo-errado-4"), name: "1 - certo ou errado 4.0", fields: fieldNames.map((name) => ({ name })), css: template.css, templates: [{ name: "Certo ou Errado", questionFormat: template.front, answerFormat: template.back }] });
   const decks = new Map<string, Deck>();
@@ -49,7 +49,7 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
   for (const deck of decks.values()) packageFile.addDeck(deck);
   const { default: initSqlJs } = await import("sql.js");
   const bytes = await packageFile.toUint8Array(await initSqlJs());
-  return { bytes, filename: ankiApkgFileName(law.titulo), notes: questions.length, decks: [...decks.keys()] };
+  return { bytes, filename: options?.fileName ?? ankiApkgFileName(law.titulo), notes: questions.length, decks: [...decks.keys()] };
 }
 
 export async function exportLawApkg(slug: string) {

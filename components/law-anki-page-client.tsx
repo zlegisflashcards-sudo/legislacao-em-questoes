@@ -1,0 +1,14 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { AnkiStudyPageClient } from "@/components/anki-study-page-client";
+import type { AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
+import type { LawStudyData, LawStudyMaterial } from "@/lib/law-study";
+import { supabase } from "@/lib/supabase";
+
+export function LawAnkiPageClient({ slug, recorteId, settings }: { slug: string; recorteId: string | null; settings: AnkiTutorialSettings | null }) {
+  const [study, setStudy] = useState<LawStudyData | null>(null); const [message, setMessage] = useState(""); const [downloading, setDownloading] = useState(false);
+  useEffect(() => { let live = true; void (async () => { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) { window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}/anki`)}`); return; } const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); const result = await response.json().catch(() => ({})); if (!response.ok) { if (live) setMessage(result.message || "Não foi possível carregar o material."); return; } if (live) setStudy(result.study ?? null); })(); return () => { live = false; }; }, [slug]);
+  async function download() { setDownloading(true); setMessage(""); try { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/anki/download${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`, { headers: { Authorization: `Bearer ${token ?? ""}` } }); if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.message || "Não foi possível gerar o deck."); } const blob = await response.blob(); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${slug}.apkg`; link.click(); URL.revokeObjectURL(link.href); } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível gerar o deck."); } finally { setDownloading(false); } }
+  return <AnkiStudyPageClient settings={settings}><div><p className="text-slate-600">{recorteId ? "Este deck contém somente os flashcards deste recorte." : "Baixe o deck atualizado desta lei para estudar no Anki."}</p><button type="button" disabled={downloading || !study} onClick={() => void download()} className="mt-5 inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white disabled:opacity-50">{downloading ? "Gerando deck…" : "Baixar deck (.apkg)"}</button>{message ? <p role="alert" className="mt-3 text-sm font-bold text-red-700">{message}</p> : null}</div></AnkiStudyPageClient>;
+}

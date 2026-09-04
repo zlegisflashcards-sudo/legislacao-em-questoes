@@ -117,7 +117,8 @@ describe("página autenticada do Anki", () => {
   it("exibe cabeçalho, plataformas e instruções acessíveis", () => {
     for (const expected of ["/icons/anki.png", "Material complementar", "Estudar no Anki", "Nesta mini aula, vamos apenas baixar e instalar o aplicativo. Na próxima aula, você vai baixar as questões.", "Não sabe qual escolher?", "Ver qual opção é ideal para mim", "Celular ou tablet:", "Navegador:", "aguarde novidades."]) expect(client).toContain(expected);
     expect(client).not.toContain("Neste tutorial, você aprenderá a:");
-    for (const expected of ["Agora que você instalou e configurou o Anki:", "Sua conta está pronta;", "A sincronização está configurada;", "O aplicativo está preparado para receber seus materiais.", "Próximo passo: acesse Legis Questões para escolher uma legislação e começar a estudar.", "Ir para Legis Questões", 'href="/minhas-leis"']) expect(client).toContain(expected);
+    for (const expected of ["Agora que você instalou e configurou o Anki:", "Sua conta está pronta;", "A sincronização está configurada;", "O aplicativo está preparado para receber seus materiais.", "Próximo passo: acesse Legis Questões para escolher uma legislação e começar a estudar."]) expect(client).toContain(expected);
+    expect(client).not.toContain("Ir para Legis Questões");
     expect(client).not.toContain("Passo obrigatório");
     expect(client).toContain("aria-pressed={selected}");
     expect(client).toContain("grid-cols-2");
@@ -136,20 +137,18 @@ describe("página autenticada do Anki", () => {
     expect(client).not.toContain("autoplay");
   });
 
-  it("marca e desmarca por uma única checkbox, sem API ou navegação", () => {
-    expect(client).toContain("markAnkiConfigured(window.localStorage, userId)");
-    expect(client).toContain("clearAnkiConfigured(window.localStorage, userId)");
+  it("não exibe status de conclusão do Anki, sem API ou navegação", () => {
     expect(client).toContain(">Verificando</strong>");
-    expect(client).toContain('type="checkbox"');
-    expect(client).toContain("Marcar como concluído");
-    expect(client).toContain("event.target.checked ? markConfigured() : markPending()");
+    expect(client).not.toContain('type="checkbox"');
+    expect(client).not.toContain("Marcar como concluído");
+    expect(client).not.toContain("anki-status-title");
     expect(client).not.toContain("Progresso da aula");
     expect(client).not.toContain("Concluir esta aula");
     for (const forbidden of ["fetch(", ".rpc(", "setProgress", "updateProgress", "window.location.href"] ) expect(client).not.toContain(forbidden);
   });
 
   it("não acessa localStorage durante a renderização do servidor", () => {
-    expect(client.indexOf("window.localStorage")).toBeGreaterThan(client.indexOf("useEffect(() =>"));
+    expect(client).not.toContain("window.localStorage");
     expect(page).not.toContain("localStorage");
   });
 });

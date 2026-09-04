@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterStudentLaws, parseStudentLawRows, projectStudentLawContexts, studentLawContextTitle, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
+import { filterStudentLaws, parseStudentLawRows, projectStudentLawContexts, studentLawContextTitle, studentLawMotherTitle, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
 
 const migration = readFileSync("supabase/migrations/20260806103510_create_student_acquired_laws_rpc.sql", "utf8");
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
@@ -106,6 +106,11 @@ describe("projeção de contextos em Minhas Leis", () => {
     expect(studentLawContextTitle("Constituição Federal", "PMERJ")).toBe("Constituição Federal - PMERJ");
     expect(studentLawContextTitle("Constituição Federal - PMERJ", "pmerj")).toBe("Constituição Federal - PMERJ");
   });
+
+  it("separa o nome da lei mãe do recorte quando o título público contém o sufixo", () => {
+    expect(studentLawMotherTitle("Código de Defesa do Consumidor - PMERJ", "PMERJ")).toBe("Código de Defesa do Consumidor");
+    expect(studentLawMotherTitle("Constituição Federal", "PMERJ")).toBe("Constituição Federal");
+  });
 });
 
 describe("fronteira autenticada das leis adquiridas", () => {
@@ -192,23 +197,31 @@ describe("interface das leis adquiridas", () => {
 
   it("lista somente as leis liberadas, sem estado local de configuração do Anki", () => {
     for (const forbidden of ["readAnkiConfigured", "markAnkiConfigured", "window.localStorage", "setProgress", "updateProgress"]) expect(client).not.toContain(forbidden);
-    expect(client).toContain("filteredLaws.map((law) => { const examLaw");
+    expect(client).toContain('filteredLaws.map((law) => <StudentLawCard');
     expect(client).toContain("{laws.length} {laws.length === 1");
     expect(client).not.toContain("laws.length + 1");
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "studentLawContextTitle", "campaignStatus", "campaignProgress", "+ Adicionar ao edital", "✓ No meu edital", "Remover do edital"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignStatus", "campaignProgress", ">Estudar</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
       expect(card).not.toContain(forbidden);
     }
+    for (const forbidden of ["+ Adicionar ao edital", "✓ No meu edital", "Remover do edital"]) expect(card).not.toContain(forbidden);
     expect(card).not.toContain("0 flashcards");
     expect(card).not.toContain("legislação conferida até");
     expect(card).not.toContain("url_externa");
     expect(card).not.toContain("observacao_interna");
     expect(card).not.toContain("historico_atualizacoes_leis");
+  });
+
+  it("exibe a lei mãe como título e o recorte em uma etiqueta", () => {
+    expect(card).toContain('studentLawMotherTitle(law.titulo, law.studyContextName)');
+    expect(card).toContain('rounded-full bg-blue-50');
+    expect(card).not.toContain('"Recorte do edital"');
+    expect(card).not.toContain('"Lei completa"');
   });
 
   it("exibe apenas barra e percentual real de progresso, sem score", () => {
@@ -224,12 +237,14 @@ describe("interface das leis adquiridas", () => {
     }
   });
 
-  it("ativa a rota segura de estudo e permite controlar o Meu Edital sem duplicidade", () => {
+  it("ativa as rotas seguras de estudo, Anki e LegisCast sem alterar o edital", () => {
     expect(client).toContain('const lawHref = isScope ?');
-    expect(client).toContain("examLaw={examLaw}");
-    expect(client).toContain("onToggleMyExam={() => void toggleMyExamLaw(law)}");
-    expect(client).toContain('action: included ? "remove" : "add"');
-    expect(client).toContain("recorteId: requestedScopeId");
+    expect(client).toContain('const ankiHref =');
+    expect(client).toContain('}/anki${scopeId ?');
+    expect(client).toContain('const legiscastHref =');
+    expect(client).toContain('}/legiscast${scopeId ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`');
+    expect(client).toContain('href={legiscastHref}');
+    expect(client).not.toContain('/api/aluno/editais');
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
       expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }

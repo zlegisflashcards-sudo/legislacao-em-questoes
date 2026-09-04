@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import { LawSearchSelect } from "@/components/law-search-select";
@@ -54,9 +53,6 @@ export function StudentExamClient() {
   const current = editais.find((exam) => exam.id === selected) ?? null;
   const isPersonalized = current?.tipo === "personalizado";
   const customExists = isPersonalized && current.id !== "0";
-  const completed = current?.leis.filter((law) => law.campaignStatus === "concluida").length ?? 0;
-  const total = current?.leis.length ?? 0;
-  const percent = total ? Math.round(completed / total * 100) : 0;
   const selectableLaws = useMemo(() => availableLaws.filter((law) => !current?.leis.some((item) => item.id === law.id)), [availableLaws, current]);
 
   useEffect(() => { setName(isPersonalized ? current?.nome ?? "" : ""); setLawToAdd(""); }, [current?.id, current?.nome, isPersonalized]);
@@ -85,19 +81,23 @@ export function StudentExamClient() {
       {current && isPersonalized && !customExists ? <section className="mt-6 max-w-lg border-b border-slate-200 pb-6"><h2 className="text-xl font-black text-[#062a5f]">Criar meu edital</h2><p className="mt-2 text-sm text-slate-600">Escolha um nome para organizar as leis que você já possui.</p><form onSubmit={(event) => void saveName(event)} className="mt-4 flex flex-col gap-3 sm:flex-row"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required placeholder="Ex.: PRF 2026" className="min-h-11 min-w-0 flex-1 rounded-lg border border-slate-300 px-3" /><button disabled={saving} className="min-h-11 rounded-lg bg-blue-700 px-4 font-black text-white disabled:opacity-50">Criar meu edital</button></form></section> : null}
       {current && (current.tipo === "produto" || customExists) ? <section className="mt-6 min-w-0" aria-labelledby="exam-laws-title">
         <div className="border-b border-slate-200 pb-5"><div className="flex min-w-0 items-center gap-3"><h2 id="exam-laws-title" className="min-w-0 flex-1 truncate text-lg font-black text-[#062a5f]">{current.nome}</h2>{isPersonalized ? <form onSubmit={(event) => void saveName(event)} className="flex min-w-0 shrink items-center gap-2"><label className="sr-only" htmlFor="exam-name">Nome do edital</label><input id="exam-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required className="min-h-9 min-w-0 w-28 rounded border border-slate-300 px-2 text-sm sm:w-44" /><button disabled={saving || name.trim() === current.nome} className="min-h-9 shrink-0 text-sm font-bold text-blue-700 disabled:text-slate-400">Salvar</button></form> : null}</div>
-          <div className="mt-4 flex min-w-0 items-center gap-3"><span className="shrink-0 text-sm font-black uppercase tracking-wide text-slate-700">Progresso geral</span><div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-200"><span className="block h-full rounded-full bg-blue-700" style={{ width: `${percent}%` }} /></div><strong className="shrink-0 text-sm text-[#062a5f]">{percent}%</strong></div><p className="mt-2 text-sm text-slate-500">{completed} de {total} leis concluídas</p>
           {isPersonalized ? <form onSubmit={(event) => void addLaw(event)} className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"><label className="sr-only" htmlFor="exam-law">Adicionar lei ao edital</label><LawSearchSelect name="exam-law" value={lawToAdd} onChange={setLawToAdd} options={selectableLaws} emptyLabel="Adicionar lei ao edital" placeholder="Pesquisar lei para adicionar…" className="flex-1" /><button disabled={saving || !lawToAdd} className="min-h-11 rounded-lg border border-blue-700 px-4 font-black text-blue-700 disabled:border-slate-300 disabled:text-slate-400">+ Adicionar ao edital</button></form> : null}
         </div>
-        {current.leis.length === 0 ? <p className="border-b border-slate-200 py-5 text-sm text-slate-600">{isPersonalized ? "Adicione leis liberadas para montar seu edital." : "Este edital ainda não possui leis."}</p> : <ol className="mt-3 border-t border-slate-200">{current.leis.map((law, index) => {
-          const concluded = law.campaignStatus === "concluida"; const label = law.titulo.trim() || `Lei ${law.id}`;
+        {current.leis.length === 0 ? <p className="border-b border-slate-200 py-5 text-sm text-slate-600">{isPersonalized ? "Adicione leis liberadas para montar seu edital." : "Este edital ainda não possui leis."}</p> : <><p className="mt-5 text-xs font-semibold text-slate-500">Verde = acerto · Vermelho = erro · Cinza = não respondido</p><ol className="mt-3 border-t border-slate-200">{current.leis.map((law, index) => {
+          const label = `${law.titulo.trim() || `Lei ${law.id}`}${law.recorteNome ? ` — ${law.recorteNome}` : ""}`;
           const studyHref = law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}` : `/estudar/lei/${encodeURIComponent(law.slug)}`;
-          return <li key={law.id} className={`grid min-w-0 ${isPersonalized ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"} items-start gap-2 border-b border-slate-200 py-2.5 sm:gap-3`}>
+          return <li key={law.id} className={`grid min-w-0 ${isPersonalized ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"} items-start gap-2 border-b border-slate-200 py-4 sm:gap-3`}>
             {isPersonalized ? <span className="flex shrink-0 items-center gap-1" aria-label="Reordenar lei"><button type="button" disabled={saving || index === 0} onClick={() => void move(index, -1)} aria-label={`Mover ${label} para cima`} className="grid h-9 w-9 place-items-center rounded text-base font-black text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent">↑</button><button type="button" disabled={saving || index === current.leis.length - 1} onClick={() => void move(index, 1)} aria-label={`Mover ${label} para baixo`} className="grid h-9 w-9 place-items-center rounded text-base font-black text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent">↓</button></span> : null}
-            <span className="flex min-w-0 items-start gap-3"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={36} height={36} className="mt-1 h-8 w-8 shrink-0 object-contain sm:h-9 sm:w-9" /><span className="min-w-0"><Link href={studyHref} className="block min-w-0 break-words py-1 text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</Link><span className="block break-words text-[11px] font-black uppercase tracking-wide text-blue-700">{law.slug}</span>{isPersonalized ? <span className="mt-1 flex flex-wrap items-center gap-2"><span className="text-xs font-black text-emerald-700">✓ No edital</span><button type="button" disabled={saving} onClick={() => void change("remove", { leiId: law.id })} aria-label={`Remover ${label} do edital`} className="min-h-8 text-xs font-bold text-slate-500 underline underline-offset-2 hover:text-red-700 disabled:text-slate-300">Remover do edital</button></span> : null}</span></span>
-            <span aria-label={concluded ? "Lei concluída" : "Lei ainda não concluída"} className={concluded ? "grid h-6 w-6 shrink-0 self-start place-items-center rounded-full bg-blue-700 text-xs text-white" : "shrink-0 self-start text-2xl leading-none text-slate-400"}>{concluded ? "⚡" : "○"}</span>
+            <span className="min-w-0"><Link href={studyHref} className="block min-w-0 break-words text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</Link><ExamProgressBar progress={law.progress} />{isPersonalized ? <span className="mt-2 flex flex-wrap items-center gap-2"><button type="button" disabled={saving} onClick={() => void change("remove", { leiId: law.id })} aria-label={`Remover ${label} do edital`} className="min-h-8 text-xs font-bold text-slate-500 underline underline-offset-2 hover:text-red-700 disabled:text-slate-300">Remover do edital</button></span> : null}</span>
           </li>;
-        })}</ol>}
+        })}</ol></>}
       </section> : null}
     </> : null}
   </main>;
+}
+
+function ExamProgressBar({ progress }: { progress: StudentExam["leis"][number]["progress"] }) {
+  const total = progress.correct + progress.errors + progress.unanswered;
+  const segments = total ? [{ key: "correct", value: progress.correct, className: "bg-emerald-500" }, { key: "errors", value: progress.errors, className: "bg-red-500" }, { key: "unanswered", value: progress.unanswered, className: "bg-slate-200" }] : [{ key: "unanswered", value: 1, className: "bg-slate-200" }];
+  return <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-slate-200" aria-label="Progresso de respostas da lei">{segments.filter((segment) => segment.value > 0).map((segment) => <span key={segment.key} className={segment.className} style={{ width: `${segment.value / (total || 1) * 100}%` }} />)}</div>;
 }

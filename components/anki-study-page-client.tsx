@@ -1,31 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import {
   ANKI_PLATFORM_IDS,
   DEFAULT_ANKI_PLATFORM,
-  clearAnkiConfigured,
   getAnkiYoutubeEmbedUrl,
-  markAnkiConfigured,
-  readAnkiConfigured,
   type AnkiPlatformId,
 } from "@/lib/anki-study";
 import { resolveAnkiPlatformTutorials, type AnkiTutorialSettings } from "@/lib/anki-tutorial-settings";
 import { supabase } from "@/lib/supabase";
 
 type SessionStatus = "loading" | "ready" | "error";
-type AnkiSetupStatus = "loading" | "pending" | "configured";
-
 const LOGIN_URL = "/conta?modo=login&retorno=%2Festudar%2Fanki";
 
-export function AnkiStudyPageClient({ settings, publicMode = false }: { settings: AnkiTutorialSettings | null; publicMode?: boolean }) {
+export function AnkiStudyPageClient({ settings, publicMode = false, children }: { settings: AnkiTutorialSettings | null; publicMode?: boolean; children?: ReactNode }) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>(publicMode ? "ready" : "loading");
-  const [userId, setUserId] = useState<string | null>(null);
-  const [setupStatus, setSetupStatus] = useState<AnkiSetupStatus>("loading");
   const [activePlatform, setActivePlatform] = useState<AnkiPlatformId>(DEFAULT_ANKI_PLATFORM);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (publicMode) return;
@@ -41,12 +33,9 @@ export function AnkiStudyPageClient({ settings, publicMode = false }: { settings
           return;
         }
         if (!active) return;
-        setUserId(authenticatedUserId);
-        setSetupStatus(readAnkiConfigured(window.localStorage, authenticatedUserId) ? "configured" : "pending");
         setSessionStatus("ready");
       } catch {
         if (!active) return;
-        setSetupStatus("pending");
         setSessionStatus("error");
       }
     }
@@ -58,27 +47,6 @@ export function AnkiStudyPageClient({ settings, publicMode = false }: { settings
   const tutorials = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
   const tutorial = tutorials[activePlatform];
   const embedUrl = useMemo(() => getAnkiYoutubeEmbedUrl(tutorial.videoUrl), [tutorial.videoUrl]);
-
-  function markConfigured() {
-    if (!userId) return;
-    if (!markAnkiConfigured(window.localStorage, userId)) {
-      setSetupStatus("pending");
-      setMessage("Não foi possível salvar esta preferência no navegador. Tente novamente.");
-      return;
-    }
-    setSetupStatus("configured");
-    setMessage("");
-  }
-
-  function markPending() {
-    if (!userId) return;
-    if (!clearAnkiConfigured(window.localStorage, userId)) {
-      setMessage("Não foi possível atualizar esta preferência no navegador. Tente novamente.");
-      return;
-    }
-    setSetupStatus("pending");
-    setMessage("");
-  }
 
   return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
     {!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}
@@ -130,17 +98,10 @@ export function AnkiStudyPageClient({ settings, publicMode = false }: { settings
         </div>
       </section>
 
-      {!publicMode ? <section aria-labelledby="anki-status-title" className="rounded-3xl border border-blue-200 bg-[#eaf3ff] p-6 sm:p-8">
-        <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3">
-          <input type="checkbox" checked={setupStatus === "configured"} onChange={(event) => event.target.checked ? markConfigured() : markPending()} className="h-5 w-5 shrink-0 accent-blue-700" />
-          <span id="anki-status-title" className="font-black text-[#062a5f]">Marcar como concluído</span>
-        </label>
-        {message ? <p role="alert" className="mt-3 text-sm font-bold text-red-700">{message}</p> : null}
-      </section> : null}
-
       <section aria-labelledby="anki-next-step-title" className="rounded-3xl border border-blue-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 id="anki-next-step-title" className="text-2xl font-black text-[#062a5f]">Agora que você instalou e configurou o Anki:</h2>
-        {publicMode ? <><p className="mt-4 text-slate-700">Seu aplicativo já está preparado para receber os materiais.</p><p className="mt-5 font-bold text-slate-800">Próximo passo: vamos colocar tudo em prática.</p><p className="mt-2 text-slate-700">Use nossa amostra gratuita da Constituição Federal para aprender a baixar, importar e começar a estudar os flashcards.</p><a href="#amostra-gratis" className="mt-5 inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Começar com a amostra grátis</a></> : <><ul className="mt-4 grid gap-2 text-slate-700"><li>Sua conta está pronta;</li><li>A sincronização está configurada;</li><li>O aplicativo está preparado para receber seus materiais.</li></ul><p className="mt-5 font-bold text-slate-800">Próximo passo: acesse Legis Questões para escolher uma legislação e começar a estudar.</p><a href="/minhas-leis" className="mt-5 inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Ir para Legis Questões</a></>}
+        {publicMode ? <><p className="mt-4 text-slate-700">Seu aplicativo já está preparado para receber os materiais.</p><p className="mt-5 font-bold text-slate-800">Próximo passo: vamos colocar tudo em prática.</p><p className="mt-2 text-slate-700">Use nossa amostra gratuita da Constituição Federal para aprender a baixar, importar e começar a estudar os flashcards.</p><a href="#amostra-gratis" className="mt-5 inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">Começar com a amostra grátis</a></> : <><ul className="mt-4 grid gap-2 text-slate-700"><li>Sua conta está pronta;</li><li>A sincronização está configurada;</li><li>O aplicativo está preparado para receber seus materiais.</li></ul><p className="mt-5 font-bold text-slate-800">Próximo passo: acesse Legis Questões para escolher uma legislação e começar a estudar.</p></>}
+        {children ? <div className="mt-6 border-t border-blue-100 pt-6">{children}</div> : null}
       </section>
     </div> : null}
   </div>;

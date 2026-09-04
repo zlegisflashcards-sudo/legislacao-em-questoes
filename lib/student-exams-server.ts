@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
-import { parseStudentExams, type StudentExam } from "@/lib/student-exams";
+import { parseStudentExams, selectExamReferenceCampaign, summarizeExamLawProgress, type StudentExam } from "@/lib/student-exams";
+import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
 
 export class StudentExamError extends Error { constructor(public status: number, public publicMessage: string) { super(publicMessage); } }
 const isUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -25,16 +26,38 @@ export async function loadStudentExams(request: Request): Promise<StudentExam[]>
   const lawIds = [...new Set(exams.flatMap((exam) => exam.leis.map((law) => law.id)))];
   if (!lawIds.length) return exams;
   const scopeIds = [...new Set(exams.flatMap((exam) => exam.leis.flatMap((law) => law.recorteId ? [law.recorteId] : [])))];
-  const [progressResult, scopesResult] = await Promise.all([
-    getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha").eq("aluno_id", studentId).in("lei_id", lawIds),
+  const [progressResult, scopesResult, contextsByLaw] = await Promise.all([
+    getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", studentId).in("lei_id", lawIds),
     scopeIds.length ? getSupabaseServerClient().from("recortes_leis").select("id,nome").in("id", scopeIds) : Promise.resolve({ data: [], error: null }),
+    listLawStudyContextsByLaw(studentId, lawIds),
   ]);
   const { data: progress, error: progressError } = progressResult;
   if (progressError) throw new StudentExamError(503, "Não foi possível carregar o progresso do edital agora.");
   if (scopesResult.error) throw new StudentExamError(503, "Não foi possível carregar os contextos do edital agora.");
-  const states = new Map((progress ?? []).map((item) => [item.lei_id, item.status_campanha]));
+  const states = new Map((progress ?? []).map((item) => [item.lei_id, item]));
   const scopeNames = new Map((scopesResult.data ?? []).map((scope) => [scope.id, scope.nome]));
-  return exams.map((exam) => ({ ...exam, leis: exam.leis.map((law) => ({ ...law, recorteNome: law.recorteId ? scopeNames.get(law.recorteId) ?? null : null, campaignStatus: states.get(law.id) === "concluida" || states.get(law.id) === "em_andamento" ? states.get(law.id)! : "nao_iniciada" })) }));
+  const { data: campaigns, error: campaignsError } = await getSupabaseServerClient().from("campanhas_leis_alunos").select("id,lei_id,concluida,concluida_em").eq("aluno_id", studentId).eq("score_version", 2).eq("abandonada", false).in("lei_id", lawIds).order("concluida_em", { ascending: false });
+  if (campaignsError) throw new StudentExamError(503, "Não foi possível carregar o progresso do edital agora.");
+  const campaignsById = new Map((campaigns ?? []).map((campaign) => [campaign.id, campaign]));
+  const campaignsByLaw = new Map<number, Array<{ id: string; concluida: boolean }>>();
+  for (const campaign of campaigns ?? []) campaignsByLaw.set(campaign.lei_id, [...(campaignsByLaw.get(campaign.lei_id) ?? []), campaign]);
+  const referenceByLaw = new Map<number, string>();
+  for (const lawId of lawIds) {
+    const state = states.get(lawId);
+    const reference = selectExamReferenceCampaign(state ? { status: state.status_campanha, campaignId: typeof state.campanha_ativa_id === "string" && campaignsById.has(state.campanha_ativa_id) ? state.campanha_ativa_id : null } : undefined, (campaignsByLaw.get(lawId) ?? []).map((campaign) => ({ id: campaign.id, concluded: campaign.concluida })));
+    if (reference) referenceByLaw.set(lawId, reference);
+  }
+  const referenceIds = [...new Set(referenceByLaw.values())];
+  const { data: answerRows, error: answersError } = referenceIds.length ? await getSupabaseServerClient().from("campanhas_leis_respostas").select("campanha_id,questao_id,correta,respondido_em,id").in("campanha_id", referenceIds).order("respondido_em", { ascending: false }).order("id", { ascending: false }) : { data: [], error: null };
+  if (answersError) throw new StudentExamError(503, "Não foi possível carregar o progresso do edital agora.");
+  const answersByCampaign = new Map<string, Array<{ questionId: string; correct: boolean }>>();
+  for (const answer of answerRows ?? []) if (typeof answer.campanha_id === "string" && typeof answer.questao_id === "string" && typeof answer.correta === "boolean") answersByCampaign.set(answer.campanha_id, [...(answersByCampaign.get(answer.campanha_id) ?? []), { questionId: answer.questao_id, correct: answer.correta }]);
+  return exams.map((exam) => ({ ...exam, leis: exam.leis.map((law) => {
+    const state = states.get(law.id);
+    const context = (contextsByLaw.get(law.id) ?? []).find((item) => item.recorteId === law.recorteId);
+    const campaignId = referenceByLaw.get(law.id);
+    return { ...law, recorteNome: law.recorteId ? scopeNames.get(law.recorteId) ?? null : null, campaignStatus: state?.status_campanha === "concluida" || state?.status_campanha === "em_andamento" ? state.status_campanha : "nao_iniciada", progress: summarizeExamLawProgress(context?.questionIds ?? [], campaignId ? answersByCampaign.get(campaignId) ?? [] : []) };
+  }) }));
 }
 
 export async function loadStudentExamSelection(request: Request) {

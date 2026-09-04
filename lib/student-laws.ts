@@ -63,6 +63,15 @@ export function studentLawContextTitle(lawTitle: string, contextName: string | n
   return normalizedTitle.endsWith(normalizedSuffix) ? title : `${title} - ${context}`;
 }
 
+/** Remove do título público somente o sufixo que corresponde ao recorte exibido no card. */
+export function studentLawMotherTitle(lawTitle: string, contextName: string | null | undefined) {
+  const title = lawTitle.trim();
+  const context = contextName?.trim();
+  if (!context) return title;
+  const suffix = ` - ${context}`;
+  return title.toLocaleLowerCase("pt-BR").endsWith(suffix.toLocaleLowerCase("pt-BR")) ? title.slice(0, -suffix.length).trim() : title;
+}
+
 const allowedRpcKeys = new Set([
   "id", "slug", "titulo", "nome_curto", "descricao", "codigo",
   "categoria", "thumbnail_url", "ordem", "fontes_ativas", "total_flashcards",

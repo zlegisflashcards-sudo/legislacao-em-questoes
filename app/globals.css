@@ -6,6 +6,7 @@
   color: #172033;
   background: #f7f8fb;
 }
+.lf-test-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.lf-test-options button{min-height:48px;border:1px solid #b9cadb;border-radius:13px;background:#fff;color:#38516b;font:inherit;font-weight:850;cursor:pointer}.lf-test-options button.is-selected{border-color:#0875ee;background:#eaf4ff;color:#075bc1}.lf-test-error{color:#a41f1f!important}.lf-test-counter{display:inline-flex;align-items:center;color:#58708b;font-size:14px;font-weight:850}@media(max-width:640px){.lf-test-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 body {
   margin: 0;
