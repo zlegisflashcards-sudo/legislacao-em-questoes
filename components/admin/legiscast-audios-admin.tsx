@@ -18,12 +18,16 @@ export function LegiscastAudiosAdmin() {
     event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const file = values.get("file"); setBusy(true); setError(""); setMessage("");
     try {
       if (!(file instanceof File)) throw new Error("Selecione um arquivo MP3 ou M4A.");
+      console.info("[legiscast-upload] step=authorize-request", { mime: file.type || null, sizeBytes: file.size });
       const authorizeResponse = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "authorize", lawId: values.get("lei_id"), fileName: file.name, mime: file.type, sizeBytes: file.size }) });
+      console.info("[legiscast-upload] step=authorize-response", { status: authorizeResponse.status });
       const authorizeBody = await readResponse(authorizeResponse); if (!authorizeResponse.ok) throw new Error(apiError(authorizeBody, "Não foi possível autorizar o envio do áudio."));
       const authorization = authorizeBody as unknown as AuthorizeResponse; if (!authorization.path || !authorization.uploadToken || !authorization.operationToken) throw new Error("Autorização de upload inválida.");
       const directUpload = await supabase.storage.from("legiscast-audio").uploadToSignedUrl(authorization.path, authorization.uploadToken, file, { contentType: file.type });
-      if (directUpload.error) throw new Error("Não foi possível enviar o áudio ao armazenamento privado.");
+      if (directUpload.error) { console.error("[legiscast-upload] step=storage-failed", { message: directUpload.error.message, status: directUpload.error.status ?? null }); throw new Error("Não foi possível enviar o áudio ao armazenamento privado."); }
+      console.info("[legiscast-upload] step=storage-ok", { path: authorization.path });
       const finalizeResponse = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "finalize", lawId: values.get("lei_id"), path: authorization.path, operationToken: authorization.operationToken, titulo: values.get("titulo"), descricao: values.get("descricao"), ordem: values.get("ordem"), duracaoSegundos: values.get("duracao_segundos"), ativo: values.get("ativo") === "true" }) });
+      console.info("[legiscast-upload] step=finalize-response", { status: finalizeResponse.status });
       const finalizeBody = await readResponse(finalizeResponse); if (!finalizeResponse.ok) throw new Error(apiError(finalizeBody, "Não foi possível vincular o áudio à lei."));
       form.reset(); setMessage("Áudio enviado e vinculado à lei."); await load();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível enviar o áudio."); } finally { setBusy(false); }
