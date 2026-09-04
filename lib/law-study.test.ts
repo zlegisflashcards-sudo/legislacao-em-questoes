@@ -134,9 +134,18 @@ describe("interface de estudo", () => {
     expect(campaignServer).toContain('eq("score_version", 2)');
     expect(client).toContain("campaign.record ?");
     expect(client).toContain("<CampaignPerformanceDonut compact {...competitiveCampaignPerformance(campaign.record.correct, campaign.record.errors)} />");
-    expect(client).toContain('completed || campaign.status === "em_andamento" || campaign.record');
+    expect(client).toContain('const hasCampaignSummary = completed || activeCampaign || Boolean(campaign.record)');
     expect(donut).toContain("lf-attempt-donut");
     expect(donut).toContain("is-compact");
+  });
+
+  it("reúne progresso, desempenho e reset no card principal da lei", () => {
+    const card = client.slice(client.indexOf('<header className="min-w-0 rounded-3xl'), client.indexOf('</header>') + '</header>'.length);
+    expect(card).toContain('aria-label="Estudo ativo"');
+    expect(card).toContain('>Desempenho<');
+    expect(card).toContain('<CampaignPerformanceDonut compact');
+    expect(card).toContain('Resetar Estudo Ativo da Lei');
+    expect(card).not.toContain('<h2 className="text-xl font-black text-[#062a5f]">Estudo Ativo da Lei</h2>');
   });
 
   it("libera estudo livre e capítulos somente após a campanha concluída", () => {
