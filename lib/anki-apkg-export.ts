@@ -53,7 +53,9 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
   // `__dirname` do sql.js pode mudar dentro de uma função serverless. Resolver
   // o WASM pelo runtime Node mantém o caminho correto tanto localmente quanto
   // no pacote rastreado pela Vercel.
-  const sqlWasmPath = nodeRequire.resolve("sql.js/dist/sql-wasm.wasm");
+  // Não use uma string estática aqui: o webpack tentaria interpretar o binário
+  // WASM como módulo. O tracing do Next o inclui separadamente no deployment.
+  const sqlWasmPath = nodeRequire.resolve(["sql.js", "dist", "sql-wasm.wasm"].join("/"));
   const bytes = await packageFile.toUint8Array(await initSqlJs({ locateFile: (file) => file === "sql-wasm.wasm" ? sqlWasmPath : file }));
   return { bytes, filename: options?.fileName ?? ankiApkgFileName(law.titulo), notes: questions.length, decks: [...decks.keys()] };
 }
