@@ -127,8 +127,7 @@ describe("administração de Legis Questões", () => {
     const exporter = readFileSync("lib/anki-apkg-export.ts", "utf8");
     expect(config).toContain('serverExternalPackages: ["sql.js", "ankipack"]');
     expect(config).toContain('"/api/aluno/estudar/lei/[slug]/anki/download"');
-    expect(config).toContain('"./node_modules/sql.js/dist/sql-wasm.wasm"');
-    expect(config).toContain('"./node_modules/ankipack/dist/**/*"');
+    expect(config).toContain('"./node_modules/.pnpm/sql.js@1.14.2/node_modules/sql.js/dist/sql-wasm.wasm"');
     expect(exporter).toContain('nodeRequire.resolve(["sql.js", "dist", "sql-wasm.wasm"].join("/"))');
     expect(exporter).toContain('locateFile: (file)');
     expect(route).toContain('export const runtime = "nodejs"');

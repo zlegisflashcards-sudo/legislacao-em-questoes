@@ -10,9 +10,9 @@ const nextConfig: NextConfig = {
   // o runtime SQLite necessário para criar o deck.
   outputFileTracingIncludes: {
     "/api/aluno/estudar/lei/[slug]/anki/download": [
-      "./node_modules/sql.js/dist/sql-wasm.js",
-      "./node_modules/sql.js/dist/sql-wasm.wasm",
-      "./node_modules/ankipack/dist/**/*",
+      // Evita incluir o symlink de node_modules no pacote serverless. O
+      // arquivo físico é o que `require.resolve` encontra no runtime pnpm.
+      "./node_modules/.pnpm/sql.js@1.14.2/node_modules/sql.js/dist/sql-wasm.wasm",
     ],
   },
 };
