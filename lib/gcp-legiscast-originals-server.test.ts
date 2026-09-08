@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-import { createLegiscastGcpAuthClient, createLegiscastOriginalMetadataUrl, createLegiscastV4CanonicalRequest, createLegiscastV4UploadUrl } from "@/lib/gcp-legiscast-originals-server";
+import { createLegiscastGcpAuthClient, createLegiscastOriginalMetadataUrl, createLegiscastV4CanonicalRequest, createLegiscastV4UploadUrl, runLegiscastCloudRunJob } from "@/lib/gcp-legiscast-originals-server";
 
 const serviceAccount = "legiscast-control@legisflashcards-audio.iam.gserviceaccount.com";
 const bucket = "legiscast-originals-test";
@@ -97,5 +97,28 @@ describe("LegisCast Vercel OIDC -> WIF", () => {
 
     expect(error).toMatchObject({ message: "IAM Credentials signBlob falhou (403).", code: 403 });
     expect(error.message).not.toContain("secret-token");
+  });
+
+  it("dispara o Cloud Run Job v2 com endpoint, payload e args corretos", async () => {
+    const requests: { endpoint: string; init: RequestInit }[] = [];
+    const fetchImpl = vi.fn(async (endpoint: string, init: RequestInit) => { requests.push({ endpoint, init }); return { ok: true, status: 200, json: async () => ({ name: "operations/test" }) }; });
+
+    await expect(runLegiscastCloudRunJob("732edc80-b07b-41b5-b949-1f2af856683f", { auth: { getAccessToken: async () => ({ token: "wif-token" }) }, projectId: "legisflashcards-audio", region: "us-east1", jobName: "legiscast-audio-transcode", fetchImpl: fetchImpl as any })).resolves.toEqual({ name: "operations/test" });
+
+    expect(requests[0].endpoint).toBe("https://run.googleapis.com/v2/projects/legisflashcards-audio/locations/us-east1/jobs/legiscast-audio-transcode:run");
+    expect(requests[0].init.method).toBe("POST");
+    expect(JSON.parse(requests[0].init.body as string)).toEqual({ overrides: { containerOverrides: [{ args: ["732edc80-b07b-41b5-b949-1f2af856683f"] }] } });
+  });
+
+  it.each([400, 403, 404])("registra e propaga Cloud Run HTTP %s sem token", async status => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const error = await runLegiscastCloudRunJob("job-id", { auth: { getAccessToken: async () => "secret-access-token" }, projectId: "legisflashcards-audio", region: "us-east1", jobName: "legiscast-audio-transcode", fetchImpl: async () => ({ ok: false, status, json: async () => ({ error: { code: status, status: "PERMISSION_DENIED", message: "Bearer secret-access-token denied" } }) }) }).catch(error => error);
+
+    expect(error).toMatchObject({ message: `Não foi possível iniciar o processamento (${status}).`, code: status, status });
+    const output = JSON.stringify(log.mock.calls);
+    expect(output).toContain("legiscast_cloud_run_start");
+    expect(output).toContain("Bearer [redacted]");
+    expect(output).not.toContain("secret-access-token");
+    log.mockRestore();
   });
 });

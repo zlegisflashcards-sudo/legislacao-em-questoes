@@ -8,6 +8,7 @@ type FederatedAuthClient = { getAccessToken: () => Promise<unknown> };
 type FetchLike = (input: string, init: RequestInit) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 type V4UploadDependencies = { auth: FederatedAuthClient; serviceAccount: string; bucket: string; jobId?: string; now?: Date; fetchImpl?: FetchLike };
 type MetadataLookupDependencies = { auth: FederatedAuthClient; bucket: string; jobId?: string; fetchImpl?: FetchLike };
+type CloudRunDependencies = { auth: FederatedAuthClient; projectId: string; region: string; jobName: string; fetchImpl?: FetchLike };
 
 function required(name: string) {
   const value = process.env[name]?.trim();
@@ -136,19 +137,38 @@ export async function getLegiscastOriginalMetadata(path: string, dependencies?: 
   }
 }
 
-export async function runLegiscastCloudRunJob(jobId: string) {
-  const auth = getLegiscastGcpAuthClient();
-  const token = await auth.getAccessToken();
-  if (!token) throw new Error("Não foi possível autenticar a execução do processamento.");
-  const projectId = getLegiscastGcpProjectId();
-  const region = getLegiscastCloudRunRegion();
-  const jobName = getLegiscastCloudRunJobName();
-  const response = await fetch(`https://run.googleapis.com/v2/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/jobs/${encodeURIComponent(jobName)}:run`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ overrides: { containerOverrides: [{ args: [jobId] }] } }),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`Não foi possível iniciar o processamento (${response.status}).`);
-  return response.json() as Promise<unknown>;
+function safeCloudRunMessage(value: unknown) {
+  return String(value ?? "Falha sem mensagem.").replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]").replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted-jwt]").slice(0, 500);
+}
+
+function logCloudRunStart(jobId: string, options: CloudRunDependencies, status?: number, errorCode?: number | string, sanitizedMessage?: string) {
+  console.info("legiscast_cloud_run_start", { jobId, projectId: options.projectId, region: options.region, jobName: options.jobName, status, errorCode, sanitizedMessage });
+}
+
+export async function runLegiscastCloudRunJob(jobId: string, dependencies?: CloudRunDependencies) {
+  const options: CloudRunDependencies = dependencies ?? { auth: getLegiscastGcpAuthClient(), projectId: getLegiscastGcpProjectId(), region: getLegiscastCloudRunRegion(), jobName: getLegiscastCloudRunJobName() };
+  try {
+    const token = accessToken(await options.auth.getAccessToken());
+    const endpoint = `https://run.googleapis.com/v2/projects/${encodeURIComponent(options.projectId)}/locations/${encodeURIComponent(options.region)}/jobs/${encodeURIComponent(options.jobName)}:run`;
+    const response = await (options.fetchImpl ?? fetch)(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ overrides: { containerOverrides: [{ args: [jobId] }] } }),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => undefined) as { error?: { code?: unknown; status?: unknown; message?: unknown } } | undefined;
+      const errorCode = typeof payload?.error?.code === "number" || typeof payload?.error?.code === "string" ? payload.error.code : response.status;
+      const message = safeCloudRunMessage(payload?.error?.message ?? payload?.error?.status ?? `HTTP ${response.status}`);
+      logCloudRunStart(jobId, options, response.status, errorCode, message);
+      const error = new Error(`Não foi possível iniciar o processamento (${response.status}).`);
+      Object.assign(error, { code: errorCode, status: response.status });
+      throw error;
+    }
+    logCloudRunStart(jobId, options, response.status);
+    return response.json() as Promise<unknown>;
+  } catch (error) {
+    if (!(error instanceof Error && typeof (error as { status?: unknown }).status === "number")) logCloudRunStart(jobId, options, undefined, typeof (error as { code?: unknown })?.code === "string" || typeof (error as { code?: unknown })?.code === "number" ? (error as { code: number | string }).code : undefined, safeCloudRunMessage(error instanceof Error ? error.message : undefined));
+    throw error;
+  }
 }
