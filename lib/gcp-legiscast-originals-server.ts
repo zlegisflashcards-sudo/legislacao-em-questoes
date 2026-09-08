@@ -1,12 +1,8 @@
 import "server-only";
 
-// `require` preserva estas bibliotecas como dependências server-side do Next e
-// evita colocar qualquer SDK Google no bundle do navegador.
-const { Storage } = require("@google-cloud/storage") as { Storage: any };
-const { getVercelOidcToken } = require("@vercel/oidc") as { getVercelOidcToken: () => Promise<string> };
-const { ExternalAccountClient } = require("google-auth-library") as { ExternalAccountClient: any };
-
 const REGION = "us-east1";
+type IdentityPoolClientConstructor = new (options: Record<string, unknown>) => any;
+type AuthDependencies = { IdentityPoolClient: IdentityPoolClientConstructor; getVercelOidcToken: () => Promise<string> };
 
 function required(name: string) {
   const value = process.env[name]?.trim();
@@ -15,21 +11,26 @@ function required(name: string) {
 }
 
 /** Credenciais efêmeras Vercel OIDC -> GCP Workload Identity Federation. */
-export function getLegiscastGcpAuthClient() {
+export function createLegiscastGcpAuthClient(dependencies: AuthDependencies) {
   const projectNumber = required("GCP_PROJECT_NUMBER");
   const poolId = required("GCP_WORKLOAD_IDENTITY_POOL_ID");
   const providerId = required("GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID");
   const serviceAccount = required("GCP_SERVICE_ACCOUNT_EMAIL");
-  const client = ExternalAccountClient.fromJSON({
-    type: "external_account",
+  const client = new dependencies.IdentityPoolClient({
     audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
-    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-    token_url: "https://sts.googleapis.com/v1/token",
-    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccount}:generateAccessToken`,
-    subject_token_supplier: { getSubjectToken: getVercelOidcToken },
+    subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
+    tokenUrl: "https://sts.googleapis.com/v1/token",
+    serviceAccountImpersonationUrl: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccount}:generateAccessToken`,
+    subjectTokenSupplier: async () => dependencies.getVercelOidcToken(),
   });
   if (!client) throw new Error("Não foi possível iniciar a autenticação federada do Google Cloud.");
   return client;
+}
+
+export function getLegiscastGcpAuthClient() {
+  const { IdentityPoolClient } = require("google-auth-library") as { IdentityPoolClient: IdentityPoolClientConstructor };
+  const { getVercelOidcToken } = require("@vercel/oidc") as { getVercelOidcToken: () => Promise<string> };
+  return createLegiscastGcpAuthClient({ IdentityPoolClient, getVercelOidcToken });
 }
 
 export function getLegiscastOriginalBucketName() { return required("GCP_LEGISCAST_ORIGINAL_BUCKET"); }
@@ -38,11 +39,12 @@ export function getLegiscastCloudRunJobName() { return required("GCP_LEGISCAST_C
 export function getLegiscastCloudRunRegion() { return process.env.GCP_LEGISCAST_REGION?.trim() || REGION; }
 
 export function getLegiscastOriginalStorage() {
+  const { Storage } = require("@google-cloud/storage") as { Storage: new (options: Record<string, unknown>) => any };
   return new Storage({ projectId: getLegiscastGcpProjectId(), authClient: getLegiscastGcpAuthClient() });
 }
 
-export async function createLegiscastOriginalUploadUrl(path: string, contentType: string) {
-  const [url] = await getLegiscastOriginalStorage().bucket(getLegiscastOriginalBucketName()).file(path).getSignedUrl({
+export async function createLegiscastOriginalUploadUrl(path: string, contentType: string, storage = getLegiscastOriginalStorage()) {
+  const [url] = await storage.bucket(getLegiscastOriginalBucketName()).file(path).getSignedUrl({
     version: "v4", action: "write", expires: Date.now() + 15 * 60 * 1000, contentType,
   });
   return url;

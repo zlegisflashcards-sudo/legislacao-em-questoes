@@ -12,6 +12,21 @@ type ConfirmInput = { jobId: unknown; operationToken: unknown };
 type RetryInput = { jobId: unknown };
 
 export class AdminLegiscastAudioError extends Error { constructor(public status: number, message: string) { super(message); } }
+function safeAuthorizationErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "Erro técnico sem mensagem.");
+  return message
+    .replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]")
+    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted-jwt]")
+    .replace(/([?&](?:access_token|token|signature|authorization)=)[^&\s]+/gi, "$1[redacted]")
+    .slice(0, 500);
+}
+function logLegiscastUploadAuthorizationFailure(error: unknown) {
+  const details = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const response = details.response && typeof details.response === "object" ? details.response as Record<string, unknown> : {};
+  const status = typeof details.code === "number" ? details.code : typeof response.status === "number" ? response.status : undefined;
+  const code = typeof details.code === "string" ? details.code : undefined;
+  console.error("legiscast_upload_authorization_failed", { errorName: error instanceof Error ? error.name : "UnknownError", message: safeAuthorizationErrorMessage(error), status, code });
+}
 async function requireAdmin() { if (!await obterAdministrador()) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); }
 function positiveInteger(value: unknown, optional = false) { if ((value === null || value === undefined || value === "") && optional) return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 0) throw new AdminLegiscastAudioError(400, "Número inválido."); return parsed; }
 function signingKey() { const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!key) throw new AdminLegiscastAudioError(500, "Configuração do servidor indisponível."); return key; }
@@ -47,7 +62,7 @@ export async function authorizeAdminLegiscastOriginal(input: AuthorizeInput) {
   const created = await db.from("legiscast_audio_jobs").insert({ id, lei_id: payload.lawId, titulo: payload.title, descricao: payload.description, ordem: payload.order, ativo: payload.active, original_bucket: getLegiscastOriginalBucketName(), original_path: originalPath, original_mime: payload.mime, original_size_bytes: payload.sizeBytes, final_path: finalPath }).select("id").single();
   if (created.error) throw new AdminLegiscastAudioError(503, "Não foi possível criar o processamento do áudio.");
   try { const uploadUrl = await createLegiscastOriginalUploadUrl(originalPath, payload.mime); return { jobId: id, uploadUrl, originalPath, operationToken: createOperationToken({ jobId: id, originalPath, expiresAt: Date.now() + LEGISCAST_ORIGINAL_UPLOAD_TTL_MS }) }; }
-  catch (error) { await db.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: "upload_authorization_failed", erro_mensagem: error instanceof Error ? error.message.slice(0, 500) : "Falha ao autorizar upload.", finished_at: new Date().toISOString() }).eq("id", id); throw new AdminLegiscastAudioError(502, "Não foi possível autorizar o envio do original."); }
+  catch (error) { logLegiscastUploadAuthorizationFailure(error); await db.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: "upload_authorization_failed", erro_mensagem: safeAuthorizationErrorMessage(error), finished_at: new Date().toISOString() }).eq("id", id); throw new AdminLegiscastAudioError(502, "Não foi possível autorizar o envio do original."); }
 }
 
 export async function confirmAdminLegiscastOriginal(input: ConfirmInput) {

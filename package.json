@@ -22,7 +22,7 @@
     "ankipack": "^0.3.0",
     "fflate": "^0.8.3",
     "fzstd": "^0.1.1",
-    "google-auth-library": "9.15.1",
+    "google-auth-library": "10.5.0",
     "marked": "^18.0.7",
     "next": "^15.0.0",
     "openai": "^6.46.0",
