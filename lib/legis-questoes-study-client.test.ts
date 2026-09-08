@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const player = readFileSync("components/legis-questoes-study-client.tsx", "utf8");
+const legisBotOverlay = readFileSync("components/legisbot-overlay.tsx", "utf8");
 const sanitizer = readFileSync("lib/legis-questoes-html.ts", "utf8");
 const campaignServer = readFileSync("lib/law-campaign-server.ts", "utf8");
 const campaignMigration = readFileSync("supabase/migrations/20260820100000_add_law_campaign_level_errors.sql", "utf8");
@@ -84,13 +85,13 @@ describe("player Legis Questões", () => {
   });
 
   it("abre o LegisBot sobre o jogador sem navegação e mantém as abas no mesmo painel", () => {
-    const overlay = player.slice(player.indexOf("function LegisBotOverlay"), player.indexOf("function isPlayerFormTarget"));
-    expect(overlay).toContain('<LegisBotPageClient slug={slug} ordem={question.ordem ?? ""}');
-    expect(overlay).toContain('initialTab={initialTab} embedded onClose={onClose}');
-    expect(overlay).toContain('document.body.style.overflow = "hidden"');
-    expect(overlay).toContain('event.key === "Escape"');
-    expect(overlay).toContain('role="dialog" aria-modal="true"');
-    expect(overlay).toContain('function trapFocus');
+    expect(player).toContain('import { LegisBotOverlay } from "@/components/legisbot-overlay"');
+    expect(legisBotOverlay).toContain('<LegisBotPageClient slug={slug} ordem={question.ordem ?? ""}');
+    expect(legisBotOverlay).toContain('initialTab={initialTab} embedded onClose={onClose}');
+    expect(legisBotOverlay).toContain('document.body.style.overflow = "hidden"');
+    expect(legisBotOverlay).toContain('event.key === "Escape"');
+    expect(legisBotOverlay).toContain('role="dialog" aria-modal="true"');
+    expect(legisBotOverlay).toContain('function trapFocus');
     expect(player).not.toContain('QuestionLegisBotTrigger');
     expect(styles).toContain('.lf-legisbot-overlay{position:fixed;z-index:100;inset:0');
     expect(styles).toContain('.lf-legisbot-panel{width:min(50vw,780px);height:100%;overflow-y:auto');
@@ -101,7 +102,7 @@ describe("player Legis Questões", () => {
     expect(legisBotPage).toContain('embedded?: boolean;');
     expect(legisBotPage).toContain('onClose?: () => void;');
     expect(legisBotPage).toContain('embedded ? <div className="legisbot-topic-tools">');
-    expect(legisBotPage).toContain('<a href={centralLegislacaoUrl} className="legislation-back-link">');
+    expect(legisBotPage).toContain('className="legislation-back-link legisbot-overlay-back" onClick={onClose}');
   });
 
   it("abre a edição administrativa do LegisBot no próprio contexto do artigo", () => {

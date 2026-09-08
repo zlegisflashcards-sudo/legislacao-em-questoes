@@ -77,4 +77,15 @@ describe("LegisCast em áudio", () => {
     expect(normalizeLegiscastPdfPage(0, 30)).toBe(1);
     for (const expected of ["pdfjs-dist/legacy/build/pdf.mjs", "getOutline", "getPageIndex", "localStorage.setItem", "normalizeLegiscastPdfPage", "scrollIntoView", "Aumentar zoom"]) expect(pdfViewer).toContain(expected);
   });
+
+  it("renderiza text layer e mantém download e impressão no fluxo autorizado", () => {
+    expect(pdfViewer).toContain("getTextContent");
+    expect(pdfViewer).toContain("new pdfjs.TextLayer");
+    expect(pdfViewer).toContain("textLayer");
+    expect(pdfViewer).toContain("authorizedPdfBlob");
+    expect(pdfViewer).toContain("Baixar PDF");
+    expect(pdfViewer).toContain("Imprimir");
+    expect(pdfViewer).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
+    expect(pdfViewer).toContain("catch { textLayer.remove(); }");
+  });
 });
