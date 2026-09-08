@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-import { createLegiscastGcpAuthClient, createLegiscastV4CanonicalRequest, createLegiscastV4UploadUrl } from "@/lib/gcp-legiscast-originals-server";
+import { createLegiscastGcpAuthClient, createLegiscastOriginalMetadataUrl, createLegiscastV4CanonicalRequest, createLegiscastV4UploadUrl } from "@/lib/gcp-legiscast-originals-server";
 
 const serviceAccount = "legiscast-control@legisflashcards-audio.iam.gserviceaccount.com";
 const bucket = "legiscast-originals-test";
@@ -69,6 +69,18 @@ describe("LegisCast Vercel OIDC -> WIF", () => {
     expect(Buffer.from(body.payload, "base64").toString()).toBe("GOOG4-RSA-SHA256\n20260907T123456Z\n20260907/auto/storage/goog4_request\nfdc0baef89fcca43704089da4803f613840c905171c59354da699fffa25c3b14");
     expect(url).toContain("X-Goog-Signature=00ff10");
     expect(url).toContain("X-Goog-SignedHeaders=content-type%3Bhost");
+  });
+
+  it("preserva o mesmo nome lógico entre URL de PUT e lookup de metadata", async () => {
+    const objectPath = "legiscast-audio-original/abc/original.m4a";
+    const uploadUrl = await createLegiscastV4UploadUrl(objectPath, "audio/mp4", { auth: { getAccessToken: async () => "wif-token" }, serviceAccount, bucket: "legisflashcards-legiscast-originals", now, fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ signedBlob: "AQ==" }) }) });
+    const metadataUrl = createLegiscastOriginalMetadataUrl("legisflashcards-legiscast-originals", objectPath);
+
+    expect(new URL(uploadUrl).pathname).toBe("/legisflashcards-legiscast-originals/legiscast-audio-original/abc/original.m4a");
+    expect(new URL(uploadUrl).pathname).not.toContain("%2F");
+    expect(new URL(uploadUrl).pathname).not.toContain("%252F");
+    expect(metadataUrl.pathname).toBe("/storage/v1/b/legisflashcards-legiscast-originals/o/legiscast-audio-original%2Fabc%2Foriginal.m4a");
+    expect(decodeURIComponent(metadataUrl.pathname.split("/o/")[1])).toBe(objectPath);
   });
 
   it("não usa Storage ou GoogleAuth/ADC para assinar", async () => {

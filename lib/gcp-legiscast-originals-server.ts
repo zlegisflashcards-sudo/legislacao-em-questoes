@@ -6,8 +6,8 @@ type IdentityPoolClientConstructor = new (options: Record<string, unknown>) => a
 type AuthDependencies = { IdentityPoolClient: IdentityPoolClientConstructor; getVercelOidcToken: () => Promise<string> };
 type FederatedAuthClient = { getAccessToken: () => Promise<unknown> };
 type FetchLike = (input: string, init: RequestInit) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
-type V4UploadDependencies = { auth: FederatedAuthClient; serviceAccount: string; bucket: string; now?: Date; fetchImpl?: FetchLike };
-type StorageConstructor = new (options: Record<string, unknown>) => any;
+type V4UploadDependencies = { auth: FederatedAuthClient; serviceAccount: string; bucket: string; jobId?: string; now?: Date; fetchImpl?: FetchLike };
+type MetadataLookupDependencies = { auth: FederatedAuthClient; bucket: string; jobId?: string; fetchImpl?: FetchLike };
 
 function required(name: string) {
   const value = process.env[name]?.trim();
@@ -103,23 +103,37 @@ export async function createLegiscastV4UploadUrl(path: string, contentType: stri
   const url = new URL(`https://storage.googleapis.com/${rfc3986(dependencies.bucket)}/${path.split("/").map(rfc3986).join("/")}`);
   url.search = `${parts.canonicalQuery}&X-Goog-Signature=${Buffer.from(body.signedBlob, "base64").toString("hex")}`;
   logUploadAuthStage("signed_url_created");
+  console.info("legiscast_original_upload_path", { jobId: dependencies.jobId, bucket: dependencies.bucket, originalStoragePath: path, signingPathname: parts.canonicalUri, finalUrlPathname: url.pathname });
   return url.toString();
 }
 
-export async function createLegiscastOriginalUploadUrl(path: string, contentType: string) {
+export async function createLegiscastOriginalUploadUrl(path: string, contentType: string, jobId?: string) {
   const auth = getLegiscastGcpAuthClient();
   logUploadAuthStage("oidc_client_created");
-  return createLegiscastV4UploadUrl(path, contentType, { auth, serviceAccount: required("GCP_SERVICE_ACCOUNT_EMAIL"), bucket: getLegiscastOriginalBucketName() });
+  return createLegiscastV4UploadUrl(path, contentType, { auth, serviceAccount: required("GCP_SERVICE_ACCOUNT_EMAIL"), bucket: getLegiscastOriginalBucketName(), jobId });
 }
 
-function getLegiscastOriginalStorage() {
-  const { Storage } = require("@google-cloud/storage") as { Storage: StorageConstructor };
-  return new Storage({ projectId: getLegiscastGcpProjectId(), authClient: getLegiscastGcpAuthClient() });
+export function createLegiscastOriginalMetadataUrl(bucket: string, path: string) {
+  return new URL(`https://storage.googleapis.com/storage/v1/b/${rfc3986(bucket)}/o/${rfc3986(path)}`);
 }
 
-export async function getLegiscastOriginalMetadata(path: string) {
-  const [metadata] = await getLegiscastOriginalStorage().bucket(getLegiscastOriginalBucketName()).file(path).getMetadata();
-  return metadata;
+export async function getLegiscastOriginalMetadata(path: string, dependencies?: MetadataLookupDependencies) {
+  const options: MetadataLookupDependencies = dependencies ?? { auth: getLegiscastGcpAuthClient(), bucket: getLegiscastOriginalBucketName() };
+  const url = createLegiscastOriginalMetadataUrl(options.bucket, path);
+  try {
+    const token = accessToken(await options.auth.getAccessToken());
+    const response = await (options.fetchImpl ?? fetch)(url.toString(), { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    console.info("legiscast_original_metadata_lookup", { jobId: options.jobId, bucket: options.bucket, originalStoragePath: path, metadataPathname: url.pathname, status: response.status });
+    if (!response.ok) {
+      const error = new Error(`Não foi possível consultar o original (${response.status}).`);
+      Object.assign(error, { code: response.status });
+      throw error;
+    }
+    return response.json() as Promise<{ size?: string | number | null; contentType?: string | null }>;
+  } catch (error) {
+    if (!(error instanceof Error && typeof (error as { code?: unknown }).code === "number")) console.error("legiscast_original_metadata_lookup_failed", { jobId: options.jobId, bucket: options.bucket, originalStoragePath: path, metadataPathname: url.pathname, errorName: error instanceof Error ? error.name : "UnknownError" });
+    throw error;
+  }
 }
 
 export async function runLegiscastCloudRunJob(jobId: string) {

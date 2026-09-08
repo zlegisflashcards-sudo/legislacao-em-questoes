@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { createLegiscastOriginalUploadUrl, getLegiscastOriginalBucketName, getLegiscastOriginalMetadata, runLegiscastCloudRunJob } from "@/lib/gcp-legiscast-originals-server";
+import { createLegiscastOriginalUploadUrl, getLegiscastGcpAuthClient, getLegiscastOriginalBucketName, getLegiscastOriginalMetadata, runLegiscastCloudRunJob } from "@/lib/gcp-legiscast-originals-server";
 import { LEGISCAST_MAX_ATTEMPTS, LEGISCAST_ORIGINAL_MAX_BYTES, LEGISCAST_ORIGINAL_UPLOAD_TTL_MS, extensionOfLegiscastAudio, isAcceptedLegiscastOriginal } from "@/lib/legiscast-audio-processing";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -61,7 +61,7 @@ export async function authorizeAdminLegiscastOriginal(input: AuthorizeInput) {
   await requireAdmin(); const payload = fields(input); const { db, law } = await activeLaw(payload.lawId); const id = randomUUID(); const originalPath = `legiscast-audio-original/${id}/original.${payload.extension}`; const finalPath = `${law.slug}/${id}.m4a`;
   const created = await db.from("legiscast_audio_jobs").insert({ id, lei_id: payload.lawId, titulo: payload.title, descricao: payload.description, ordem: payload.order, ativo: payload.active, original_bucket: getLegiscastOriginalBucketName(), original_path: originalPath, original_mime: payload.mime, original_size_bytes: payload.sizeBytes, final_path: finalPath }).select("id").single();
   if (created.error) throw new AdminLegiscastAudioError(503, "Não foi possível criar o processamento do áudio.");
-  try { const uploadUrl = await createLegiscastOriginalUploadUrl(originalPath, payload.mime); return { jobId: id, uploadUrl, originalPath, operationToken: createOperationToken({ jobId: id, originalPath, expiresAt: Date.now() + LEGISCAST_ORIGINAL_UPLOAD_TTL_MS }) }; }
+  try { const uploadUrl = await createLegiscastOriginalUploadUrl(originalPath, payload.mime, id); return { jobId: id, uploadUrl, originalPath, operationToken: createOperationToken({ jobId: id, originalPath, expiresAt: Date.now() + LEGISCAST_ORIGINAL_UPLOAD_TTL_MS }) }; }
   catch (error) { logLegiscastUploadAuthorizationFailure(error); await db.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: "upload_authorization_failed", erro_mensagem: safeAuthorizationErrorMessage(error), finished_at: new Date().toISOString() }).eq("id", id); throw new AdminLegiscastAudioError(502, "Não foi possível autorizar o envio do original."); }
 }
 
@@ -69,7 +69,7 @@ export async function confirmAdminLegiscastOriginal(input: ConfirmInput) {
   await requireAdmin(); const jobId = String(input.jobId ?? ""); const operation = readOperationToken(input.operationToken); if (operation.jobId !== jobId) throw new AdminLegiscastAudioError(403, "Autorização de upload inválida."); const db = getSupabaseServerClient();
   const { data: job, error } = await db.from("legiscast_audio_jobs").select("id,status,original_bucket,original_path,original_mime,original_size_bytes").eq("id", jobId).maybeSingle();
   if (error || !job || job.original_path !== operation.originalPath || job.original_bucket !== getLegiscastOriginalBucketName()) throw new AdminLegiscastAudioError(404, "Processamento não encontrado."); if (job.status === "concluido" || job.status === "processando") return { jobId, status: job.status };
-  let metadata: { size?: string | number | null; contentType?: string | null }; try { metadata = await getLegiscastOriginalMetadata(job.original_path); } catch { throw new AdminLegiscastAudioError(400, "O arquivo original não foi encontrado no armazenamento temporário."); }
+  let metadata: { size?: string | number | null; contentType?: string | null }; try { metadata = await getLegiscastOriginalMetadata(job.original_path, { auth: getLegiscastGcpAuthClient(), bucket: job.original_bucket, jobId }); } catch { throw new AdminLegiscastAudioError(400, "O arquivo original não foi encontrado no armazenamento temporário."); }
   const size = Number(metadata.size); const mime = String(metadata.contentType ?? "").toLowerCase();
   if (!Number.isSafeInteger(size) || size < 1 || size > LEGISCAST_ORIGINAL_MAX_BYTES || size !== Number(job.original_size_bytes) || mime !== job.original_mime) { await db.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: "invalid_original", erro_mensagem: "Metadados do arquivo original não conferem.", finished_at: new Date().toISOString() }).eq("id", jobId); throw new AdminLegiscastAudioError(400, "O arquivo enviado não passou na validação."); }
   await db.from("legiscast_audio_jobs").update({ status: "pendente", updated_at: new Date().toISOString() }).eq("id", jobId).in("status", ["pendente", "erro"]);
