@@ -124,7 +124,6 @@ export default function LegisBotPageClient({
   const ordemNormalizada = ordem.trim();
   const identifiersValid = SLUG_VALIDO.test(slugNormalizado) && ORDEM_VALIDA.test(ordemNormalizada);
   const apiUrl = `/api/legisbot/${encodeURIComponent(slugNormalizado)}/${encodeURIComponent(ordemNormalizada)}`;
-  const centralLegislacaoUrl = `/leis/${encodeURIComponent(slug.trim().toLowerCase())}`;
   const loginUrl = `/conta?retorno=${encodeURIComponent(returnPath)}`;
   const isCommentGenerationPending = answerState === "generating" || answerState === "processing";
   const questionPrompt = isCommentGenerationPending
@@ -325,7 +324,7 @@ export default function LegisBotPageClient({
   return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div> : <div className="legisbot-topic-tools"><a href={centralLegislacaoUrl} className="legislation-back-link"><span aria-hidden="true">←</span> {titulo}</a>{adminShortcut}</div>}
+        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div> : adminShortcut ? <div className="legisbot-topic-tools">{adminShortcut}</div> : null}
         <h1>{assunto}</h1>
       </header>
 

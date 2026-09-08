@@ -93,7 +93,7 @@ describe("interface de estudo", () => {
     expect(cards).toContain('?contexto=completo');
     expect(cards).toContain('?recorte_id=');
     expect(cards).toContain("href={lawHref}");
-    expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Estudar</Link>');
+    expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Legis Questões</Link>');
   });
 
   it("exige escolha explícita quando a lei possui mais de um contexto", () => {
@@ -113,10 +113,11 @@ describe("interface de estudo", () => {
     for (const platform of ["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]) expect(contract).toContain(`label: "${platform}"`);
   });
 
-  it("oculta somente os blocos auxiliares enquanto há Estudo Ativo em andamento", () => {
+  it("mantém o seletor de contexto separado do Estudo Livre", () => {
     expect(client).toContain('const activeCampaign = !publicStudy && campaign.status === "em_andamento"');
     expect(client).toContain('showContextSelector && !activeCampaign');
-    expect(client).toContain('!mustChooseContext && !activeCampaign');
+    expect(client).toContain('!mustChooseContext ? <section className="law-study-surface');
+    expect(client).not.toContain('!mustChooseContext && !activeCampaign');
     expect(client).not.toContain('<Materials');
     expect(client).toContain('campaign.status === "concluida"');
   });
@@ -148,20 +149,21 @@ describe("interface de estudo", () => {
     expect(card).not.toContain('<h2 className="text-xl font-black text-[#062a5f]">Estudo Ativo da Lei</h2>');
   });
 
-  it("libera estudo livre e capítulos somente após a campanha concluída", () => {
+  it("libera estudo livre e capítulos independentemente da campanha", () => {
     expect(client).toContain('tree.length > 0 ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1${contextQuery}`}');
     expect(client).toContain('structure_id=${node.id}');
+    expect(client).toContain('Escolha livremente o conteúdo e estude no seu ritmo.');
   });
 
-  it("oferece a criação de teste pós-conclusão no contexto selecionado", () => {
-    expect(client).toContain('completed ? <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap"><Link href={`/questoes/${encodeURIComponent(slug)}/estudar?teste=1${contextQuery}`}');
+  it("oferece a criação de teste no contexto selecionado", () => {
+    expect(client).toContain('<div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap"><Link href={`/questoes/${encodeURIComponent(slug)}/estudar?teste=1${contextQuery}`}');
     expect(client).toContain("🎯 Criar teste");
   });
 
   it("representa uma lei sem subbaralhos pelo deck raiz, sem ação duplicada", () => {
     expect(client).toContain('function RootDeck');
     expect(client).toContain('count={selectedContext?.questionCount ?? sourceLaw?.questions.length ?? 0}');
-    expect(client).toContain('completed ? <Link href={href}');
+    expect(client).toContain('<Link href={href} className="group flex min-w-0 flex-1');
     expect(client).toContain('const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1${recorteId ?');
   });
 
@@ -179,11 +181,15 @@ describe("interface de estudo", () => {
     expect(client).not.toContain('>{state}</span>');
   });
 
-  it("mantém a árvore do Estudo Ativo apenas informativa", () => {
+  it("mantém a árvore do Estudo Livre navegável", () => {
     const tree = client.slice(client.indexOf('function StructureTreeNode'), client.indexOf('function RootDeck'));
-    expect(tree).toContain('completed ? <Link href={href}');
-    expect(tree).toContain(': <div className="flex min-w-0 flex-1 items-start gap-2 py-1 sm:items-center sm:gap-3">{label}</div>');
-    expect(tree).not.toContain('href={href} className="flex min-w-0 flex-1 items-start gap-2 rounded-lg py-1 hover:bg-blue-50 sm:items-center sm:gap-3">{label}</Link> : <Link');
+    expect(tree).toContain('<Link href={href} className="group flex min-w-0 flex-1');
+    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} />');
+  });
+
+  it("inicia todos os níveis expansíveis recolhidos", () => {
+    expect(client).toContain("const [open, setOpen] = useState(false)");
+    expect(client).not.toContain("useState(depth < 1)");
   });
 
   it("apresenta o Estudo Livre como menu de decks disponível", () => {
@@ -191,8 +197,8 @@ describe("interface de estudo", () => {
     expect(tree).toContain('function FreeStudyLabel');
     expect(tree).toContain('border border-blue-100 bg-white');
     expect(tree).toContain('group-hover:border-blue-300 group-hover:bg-blue-50');
-    expect(tree).toContain('completed ? <FreeStudyLabel name={node.nome} count={node.count} />');
-    expect(tree).toContain('completed ? <Link href={href} className="group flex min-w-0 flex-1');
+    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} />');
+    expect(tree).toContain('<Link href={href} className="group flex min-w-0 flex-1');
     expect(tree).not.toContain('FreeStudyLabel name={node.nome} count={node.count} phase=');
   });
 

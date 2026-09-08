@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo } from "react";
 import { LegislacaoSearch } from "@/components/legislacao-search";
 import {
@@ -160,6 +161,18 @@ export function HomeCategoriasVadeMecum({
         <h1 className="text-2xl font-black leading-tight text-white sm:text-4xl">
           Escolha sua legislação para estudar
         </h1>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-blue-300/20 bg-slate-950/70">
+        <Image
+          src="/images/legis-questoes-catalog-banner.png"
+          alt="Legis Questões — Domine a legislação resolvendo questões"
+          width={1672}
+          height={941}
+          sizes="(min-width: 1152px) 1152px, calc(100vw - 40px)"
+          priority
+          className="h-auto w-full"
+        />
       </div>
 
       <section className="space-y-4 rounded-[22px] border border-blue-300/20 bg-slate-950/70 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.26)] sm:p-6">

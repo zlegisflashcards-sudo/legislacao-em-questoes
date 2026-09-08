@@ -54,26 +54,26 @@ export function StudentLawsClient() {
   }, []);
 
   const filteredLaws = useMemo(() => filterStudentLaws(laws, search), [laws, search]);
-  return <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-    <header className="mb-8">
-      <p className="font-bold text-blue-700">Área do aluno</p>
-      <h1 className="mt-1 text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Legis Questões</h1>
-      <p className="mt-3 max-w-2xl text-slate-600">Acesse as leis liberadas para sua conta e prepare sua rotina de estudo.</p>
+  return <div className="student-laws-page mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <header className="student-laws-header">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Biblioteca de estudo</p>
+      <h1 className="mt-1 text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Minhas leis</h1>
+      <p className="mt-2 max-w-2xl text-sm text-slate-600 sm:text-base">Acesse seus materiais e continue de onde parou.</p>
     </header>
 
     <StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} meuEditalHref="/meu-edital" />
 
-    {activeTab === "leis" ? <section id="student-laws-panel" role="tabpanel" aria-label="Legis Questões" className="grid gap-6">
-      {!loading && !error && laws.length > 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <label htmlFor="student-laws-search" className="text-sm font-black text-slate-800">Pesquisar em Legis Questões</label>
-        <input id="student-laws-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Título, código ou nome curto" className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 px-4 text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+    {activeTab === "leis" ? <section id="student-laws-panel" role="tabpanel" aria-label="Legis Questões" className="student-laws-panel grid gap-5">
+      {!loading && !error && laws.length > 0 ? <div className="student-laws-search rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <label htmlFor="student-laws-search" className="text-sm font-black text-slate-800">Buscar uma lei</label>
+        <div className="relative mt-2"><span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">⌕</span><input id="student-laws-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Título, código ou contexto" className="min-h-12 w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100" /></div>
         <p className="mt-3 text-sm font-semibold text-slate-500" aria-live="polite">{laws.length} {laws.length === 1 ? "contexto de estudo disponível" : "contextos de estudo disponíveis"}</p>
       </div> : null}
       {loading ? <div role="status" className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Carregando suas leis…</div> : null}
       {!loading && error ? <ErrorState message={error} /> : null}
       {!loading && !error && laws.length === 0 ? <EmptyState /> : null}
       {!loading && !error && laws.length > 0 && filteredLaws.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-xl font-black text-[#062a5f]">Nenhuma lei encontrada</h2><p className="mt-2 text-slate-600">Tente pesquisar por outro título, código ou nome curto.</p></div> : null}
-      {!loading && !error && filteredLaws.length > 0 ? <div className="grid gap-4" aria-label="Contextos de estudo liberados">{filteredLaws.map((law) => <StudentLawCard key={`${law.id}:${law.studyContextId ?? "completa"}`} law={law} />)}</div> : null}
+      {!loading && !error && filteredLaws.length > 0 ? <div className="student-laws-list grid gap-3" aria-label="Contextos de estudo liberados">{filteredLaws.map((law) => <StudentLawCard key={`${law.id}:${law.studyContextId ?? "completa"}`} law={law} />)}</div> : null}
     </section> : <section id="student-exam-panel" role="tabpanel" aria-label="Meu edital" className="rounded-3xl border border-blue-100 bg-white p-8 text-center shadow-sm sm:p-12">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Em breve</p>
       <h2 className="mt-3 text-2xl font-black text-[#062a5f]">Meu edital</h2>
@@ -96,7 +96,7 @@ function StudentLawCard({ law }: { law: StudentLaw }) {
   return <article className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex min-w-0 items-center gap-3"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" /><div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f]">{title}</h2>{isScope && law.studyContextName?.trim() ? <span className="mt-2 inline-flex max-w-full rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-700">{law.studyContextName}</span> : null}<p className="mt-1 text-sm font-semibold text-slate-600">{contextLabel}</p></div></div>
     {!isScope ? <div className="min-w-0"><div className="h-2 overflow-hidden rounded-full bg-blue-100" aria-label={`${progress}% concluído`}><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-black text-slate-700">{progress}%</p></div> : null}
-    <div className="grid gap-3 sm:flex sm:flex-wrap"><Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 sm:w-auto">Estudar</Link><Link href={ankiHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-700 px-5 py-3 text-center font-black text-blue-700 hover:bg-blue-50 sm:w-auto"><Image src="/icons/anki.png" alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0 object-contain" />Anki</Link><Link href={legiscastHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-center font-black text-slate-800 hover:bg-slate-50 sm:w-auto">🎧 LegisCast</Link></div>
+    <div className="grid gap-3 sm:flex sm:flex-wrap"><Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 text-center font-black text-white transition hover:bg-blue-600 sm:w-auto">Legis Questões</Link><Link href={ankiHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-700 px-5 py-3 text-center font-black text-blue-700 hover:bg-blue-50 sm:w-auto"><Image src="/icons/anki.png" alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0 object-contain" />Anki</Link><Link href={legiscastHref} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-300 px-5 py-3 text-center font-black text-slate-800 hover:bg-slate-50 sm:w-auto">🎧 LegisCast</Link></div>
   </article>;
 }
 

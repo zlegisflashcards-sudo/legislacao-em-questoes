@@ -305,6 +305,9 @@ describe("player Legis Questões", () => {
     expect(styles).toContain('background:conic-gradient(#1eaa5d 0 var(--lf-correct),#e34d4d var(--lf-correct) 100%)');
     expect(player).toContain('href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1${scopeQuery}`}');
     expect(player).toContain('href="/minhas-leis">Voltar às minhas leis');
+    const freeStudy = player.slice(player.indexOf('function FreeStudy'));
+    expect(freeStudy).not.toContain('lf-free-study-actions');
+    expect(freeStudy).not.toContain('🎯 Teste');
     expect(player).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches');
     expect(styles).toContain('@media(prefers-reduced-motion:reduce){.lf-celebration-mark,.lf-celebration-particles i{animation:none}}');
     expect(campaignServer).toContain('progress: state.status === "concluida" ? 100 : 0');

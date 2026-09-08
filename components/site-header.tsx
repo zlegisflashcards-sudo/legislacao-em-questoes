@@ -66,7 +66,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <Link href={legisQuestions.href} className="inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-2.5 py-2 text-xs font-black text-white transition hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 sm:px-3 sm:text-sm">Fazer questões</Link>
+          <Link href={legisQuestions.href} className="inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-2.5 py-2 text-xs font-black text-white transition hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 sm:px-3 sm:text-sm">Minhas leis</Link>
           <a href={siteConfig.links.whatsapp} target="_blank" rel="noreferrer" aria-label="Falar com a LegisFlashcards pelo WhatsApp" className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-green-600 px-2.5 py-2 text-sm font-bold text-white transition hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-200 sm:px-3"><WhatsAppIcon /><span className="hidden xl:inline">WhatsApp</span></a>
           <button type="button" aria-label={menuOpen ? "Fechar menu principal" : "Abrir menu principal"} aria-expanded={menuOpen} aria-controls="mobile-site-navigation" onClick={() => setMenuOpen((open) => !open)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-blue-200/30 text-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 lg:hidden"><span aria-hidden="true">{menuOpen ? "×" : "☰"}</span></button>
         </div>
