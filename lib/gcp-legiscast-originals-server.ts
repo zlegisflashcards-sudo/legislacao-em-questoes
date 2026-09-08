@@ -1,10 +1,12 @@
 import "server-only";
+import { createHash } from "node:crypto";
 
 const REGION = "us-east1";
 type IdentityPoolClientConstructor = new (options: Record<string, unknown>) => any;
 type AuthDependencies = { IdentityPoolClient: IdentityPoolClientConstructor; getVercelOidcToken: () => Promise<string> };
-type FederatedAuthClient = { getAccessToken: () => Promise<unknown>; getRequestHeaders?: (...args: any[]) => Promise<Record<string, string>>; request?: (...args: any[]) => Promise<unknown> };
+type FederatedAuthClient = { getAccessToken: () => Promise<unknown> };
 type FetchLike = (input: string, init: RequestInit) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+type V4UploadDependencies = { auth: FederatedAuthClient; serviceAccount: string; bucket: string; now?: Date; fetchImpl?: FetchLike };
 type StorageConstructor = new (options: Record<string, unknown>) => any;
 
 function required(name: string) {
@@ -47,50 +49,72 @@ function accessToken(value: unknown) {
   throw new Error("Não foi possível obter access token federado para assinatura.");
 }
 
-/** Contrato GoogleAuth-like que impede fallback para ADC no signer V4. */
-export function createLegiscastStorageSigner(auth: FederatedAuthClient, serviceAccount = required("GCP_SERVICE_ACCOUNT_EMAIL"), fetchImpl: FetchLike = fetch) {
-  return {
-    getCredentials: async () => ({ client_email: serviceAccount }),
-    getAccessToken: () => auth.getAccessToken(),
-    getRequestHeaders: async (...args: any[]) => auth.getRequestHeaders?.(...args) ?? { Authorization: `Bearer ${accessToken(await auth.getAccessToken())}` },
-    request: (...args: any[]) => {
-      if (!auth.request) throw new Error("Cliente federado não suporta requisições autenticadas.");
-      return auth.request(...args);
-    },
-    sign: async (blobToSign: string) => {
-      const token = accessToken(await auth.getAccessToken());
-      const response = await fetchImpl(`https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(serviceAccount)}:signBlob`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: Buffer.from(blobToSign).toString("base64") }),
-      });
-      if (!response.ok) {
-        const error = new Error(`IAM Credentials signBlob falhou (${response.status}).`);
-        Object.assign(error, { code: response.status });
-        throw error;
-      }
-      const body = await response.json() as { signedBlob?: unknown };
-      if (typeof body.signedBlob !== "string" || !body.signedBlob) throw new Error("IAM Credentials não retornou assinatura.");
-      return body.signedBlob;
-    },
-  };
+function rfc3986(value: string) { return encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`); }
+function sha256(value: string) { return createHash("sha256").update(value).digest("hex"); }
+function v4Date(now: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const date = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}`;
+  return { date, timestamp: `${date}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z` };
 }
 
-export function createLegiscastOriginalStorage(Storage: StorageConstructor, authClient: FederatedAuthClient, signer = createLegiscastStorageSigner(authClient)) {
-  return new Storage({ projectId: getLegiscastGcpProjectId(), authClient: signer });
+export function createLegiscastV4CanonicalRequest(path: string, contentType: string, serviceAccount: string, bucket: string, now: Date) {
+  const { date, timestamp } = v4Date(now);
+  const credentialScope = `${date}/auto/storage/goog4_request`;
+  const canonicalUri = `/${rfc3986(bucket)}/${path.split("/").map(rfc3986).join("/")}`;
+  const canonicalHeaders = `content-type:${contentType.trim()}\nhost:storage.googleapis.com\n`;
+  const signedHeaders = "content-type;host";
+  const query = new Map<string, string>([
+    ["X-Goog-Algorithm", "GOOG4-RSA-SHA256"],
+    ["X-Goog-Credential", `${serviceAccount}/${credentialScope}`],
+    ["X-Goog-Date", timestamp],
+    ["X-Goog-Expires", "900"],
+    ["X-Goog-SignedHeaders", signedHeaders],
+  ]);
+  const canonicalQuery = [...query].map(([key, value]) => [rfc3986(key), rfc3986(value)] as const).sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue)).map(([key, value]) => `${key}=${value}`).join("&");
+  const canonicalRequest = `PUT\n${canonicalUri}\n${canonicalQuery}\n${canonicalHeaders}\n${signedHeaders}\nUNSIGNED-PAYLOAD`;
+  return { canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, credentialScope, timestamp, canonicalRequest };
 }
 
-export function getLegiscastOriginalStorage() {
-  const { Storage } = require("@google-cloud/storage") as { Storage: StorageConstructor };
-  const authClient = getLegiscastGcpAuthClient();
-  return createLegiscastOriginalStorage(Storage, authClient);
+function logUploadAuthStage(stage: "oidc_client_created" | "access_token_obtained" | "canonical_request_created" | "signblob_started" | "signblob_completed" | "signed_url_created") {
+  console.info("legiscast_upload_auth_stage", { stage });
 }
 
-export async function createLegiscastOriginalUploadUrl(path: string, contentType: string, storage = getLegiscastOriginalStorage()) {
-  const [url] = await storage.bucket(getLegiscastOriginalBucketName()).file(path).getSignedUrl({
-    version: "v4", action: "write", expires: Date.now() + 15 * 60 * 1000, contentType,
+export async function createLegiscastV4UploadUrl(path: string, contentType: string, dependencies: V4UploadDependencies) {
+  const now = dependencies.now ?? new Date();
+  const token = accessToken(await dependencies.auth.getAccessToken());
+  logUploadAuthStage("access_token_obtained");
+  const parts = createLegiscastV4CanonicalRequest(path, contentType, dependencies.serviceAccount, dependencies.bucket, now);
+  logUploadAuthStage("canonical_request_created");
+  const stringToSign = `GOOG4-RSA-SHA256\n${parts.timestamp}\n${parts.credentialScope}\n${sha256(parts.canonicalRequest)}`;
+  logUploadAuthStage("signblob_started");
+  const response = await (dependencies.fetchImpl ?? fetch)(`https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(dependencies.serviceAccount)}:signBlob`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ payload: Buffer.from(stringToSign).toString("base64") }),
   });
-  return url;
+  if (!response.ok) {
+    const error = new Error(`IAM Credentials signBlob falhou (${response.status}).`);
+    Object.assign(error, { code: response.status });
+    throw error;
+  }
+  const body = await response.json() as { signedBlob?: unknown };
+  if (typeof body.signedBlob !== "string" || !body.signedBlob) throw new Error("IAM Credentials não retornou assinatura.");
+  logUploadAuthStage("signblob_completed");
+  const url = new URL(`https://storage.googleapis.com/${rfc3986(dependencies.bucket)}/${path.split("/").map(rfc3986).join("/")}`);
+  url.search = `${parts.canonicalQuery}&X-Goog-Signature=${Buffer.from(body.signedBlob, "base64").toString("hex")}`;
+  logUploadAuthStage("signed_url_created");
+  return url.toString();
+}
+
+export async function createLegiscastOriginalUploadUrl(path: string, contentType: string) {
+  const auth = getLegiscastGcpAuthClient();
+  logUploadAuthStage("oidc_client_created");
+  return createLegiscastV4UploadUrl(path, contentType, { auth, serviceAccount: required("GCP_SERVICE_ACCOUNT_EMAIL"), bucket: getLegiscastOriginalBucketName() });
+}
+
+function getLegiscastOriginalStorage() {
+  const { Storage } = require("@google-cloud/storage") as { Storage: StorageConstructor };
+  return new Storage({ projectId: getLegiscastGcpProjectId(), authClient: getLegiscastGcpAuthClient() });
 }
 
 export async function getLegiscastOriginalMetadata(path: string) {
