@@ -1,12 +1,10 @@
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import { Deck, Note, Notetype, Package } from "ankipack";
 import { ankiApkgFileName, stableAnkiGuid, stableAnkiId } from "./anki-apkg-identity";
 
 // Os templates fazem parte do projeto para também existirem no runtime serverless.
 const templateDirectory = join(process.cwd(), "public", "anki-templates");
-const nodeRequire = createRequire(import.meta.url);
 const fieldNames = ["pergunta", "resposta", "justificativa", "assunto", "legislação", "titulo", "TotalArtigos", "ordem", "slug", "ultimaAlteracaoLegislativa"];
 
 type ExportLaw = { slug: string; titulo: string };
@@ -50,12 +48,10 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
   const packageFile = new Package();
   for (const deck of decks.values()) packageFile.addDeck(deck);
   const { default: initSqlJs } = await import("sql.js");
-  // `__dirname` do sql.js pode mudar dentro de uma função serverless. Resolver
-  // o WASM pelo runtime Node mantém o caminho correto tanto localmente quanto
-  // no pacote rastreado pela Vercel.
-  // Não use uma string estática aqui: o webpack tentaria interpretar o binário
-  // WASM como módulo. O tracing do Next o inclui separadamente no deployment.
-  const sqlWasmPath = nodeRequire.resolve(["sql.js", "dist", "sql-wasm.wasm"].join("/"));
+  // A função serverless preserva o arquivo físico rastreado pelo pnpm, mas o
+  // resolvedor relativo ao bundle da rota não enxerga esse pacote. Este é o
+  // mesmo caminho físico declarado no tracing do Next.
+  const sqlWasmPath = join(process.cwd(), "node_modules", ".pnpm", "sql.js@1.14.2", "node_modules", "sql.js", "dist", "sql-wasm.wasm");
   const bytes = await packageFile.toUint8Array(await initSqlJs({ locateFile: (file) => file === "sql-wasm.wasm" ? sqlWasmPath : file }));
   return { bytes, filename: options?.fileName ?? ankiApkgFileName(law.titulo), notes: questions.length, decks: [...decks.keys()] };
 }
