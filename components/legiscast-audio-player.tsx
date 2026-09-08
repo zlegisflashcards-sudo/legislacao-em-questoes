@@ -7,7 +7,7 @@ type AudioTrack = { id: string; title: string; description: string | null; durat
 const speeds = [0.75, 1, 1.25, 1.5, 2];
 const formatTime = (seconds: number) => { const value = Math.max(0, Math.floor(seconds)); return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`; };
 
-export function LegiscastAudioPlayer({ slug, embedded = false }: { slug: string; embedded?: boolean }) {
+export function LegiscastAudioPlayer({ slug, embedded = false, lawTitle }: { slug: string; embedded?: boolean; lawTitle?: string }) {
   const audioRef = useRef<HTMLAudioElement>(null); const [tracks, setTracks] = useState<AudioTrack[]>([]); const [index, setIndex] = useState(0); const [currentTime, setCurrentTime] = useState(0); const [duration, setDuration] = useState(0); const [playing, setPlaying] = useState(false); const [speed, setSpeed] = useState(1); const [state, setState] = useState<"loading" | "ready" | "unavailable">("loading");
   const track = tracks[index];
   useEffect(() => { let active = true; void (async () => { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) { if (active) setState("unavailable"); return; } const response = await fetch(`/api/aluno/leis/${encodeURIComponent(slug)}/legiscast`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); const body = await response.json().catch(() => ({})); if (!response.ok || !Array.isArray(body.audios) || !body.audios.length) { if (active) setState("unavailable"); return; } if (active) { setTracks(body.audios); setState("ready"); } })(); return () => { active = false; }; }, [slug]);
