@@ -26,7 +26,7 @@ export function createLegiscastGcpAuthClient(dependencies: AuthDependencies) {
     subjectTokenType: "urn:ietf:params:oauth:token-type:id_token",
     tokenUrl: "https://sts.googleapis.com/v1/token",
     serviceAccountImpersonationUrl: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccount}:generateAccessToken`,
-    subjectTokenSupplier: async () => dependencies.getVercelOidcToken(),
+    subjectTokenSupplier: { getSubjectToken: async () => dependencies.getVercelOidcToken() },
   });
   if (!client) throw new Error("Não foi possível iniciar a autenticação federada do Google Cloud.");
   return client;

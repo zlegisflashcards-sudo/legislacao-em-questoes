@@ -37,7 +37,11 @@ describe("LegisCast Vercel OIDC -> WIF", () => {
       tokenUrl: "https://sts.googleapis.com/v1/token",
       serviceAccountImpersonationUrl: "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/legiscast-control@legisflashcards-audio.iam.gserviceaccount.com:generateAccessToken",
     });
-    await expect((state.authOptions?.subjectTokenSupplier as () => Promise<string>)()).resolves.toBe("test-oidc-token");
+    const supplier = state.authOptions?.subjectTokenSupplier as { getSubjectToken: () => Promise<string> };
+    expect(supplier).toEqual(expect.objectContaining({ getSubjectToken: expect.any(Function) }));
+    expect(typeof supplier).toBe("object");
+    await expect(supplier.getSubjectToken()).resolves.toBe("test-oidc-token");
+    expect(state.getVercelOidcToken).toHaveBeenCalledOnce();
   });
 
   it("cria canonical URI, query, headers e scope V4 determinísticos", () => {
