@@ -1,0 +1,6 @@
+title: LegisCastJobRunner
+description: Starts the LegisCast Cloud Run Job, including the job UUID override.
+stage: GA
+includedPermissions:
+  - run.jobs.run
+  - run.jobs.runWithOverrides
