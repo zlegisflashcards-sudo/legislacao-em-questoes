@@ -8,7 +8,7 @@ type RankedLeagueEntry = { position: number; studentId: string; score: number };
 
 export type LeagueRankingEntry = { position: number; publicName: string; score: number };
 export type LeagueRankingData = {
-  league: { slug: string; name: string; title: string; subtitle: string | null; bannerUrl: string | null; ctaLabel: string | null; ctaHref: string | null; productSlug: string | null };
+  league: { slug: string; name: string; title: string; subtitle: string | null; bannerUrl: string | null; contestImageUrl: string | null; ctaLabel: string | null; ctaHref: string | null; productSlug: string | null };
   ranking: LeagueRankingEntry[];
   personal: { position: number; score: number } | null;
 };
@@ -42,7 +42,9 @@ export async function loadLeagueRanking(slug: string, studentId: string | null =
   const ranking = ranked.filter((entry) => entry.position <= 10).map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(userByStudent.get(entry.studentId) ?? ""), nome: studentById.get(entry.studentId)?.nome }), score: entry.score }));
   const self = studentId ? ranked.find((entry) => entry.studentId === studentId) ?? null : null;
   const product = Array.isArray(league.produtos) ? league.produtos[0] : league.produtos;
-  return { league: { slug: league.slug, name: league.nome, title: league.titulo, subtitle: league.subtitulo, bannerUrl: league.imagem_url, ctaLabel: league.cta_label, ctaHref: league.cta_href, productSlug: product?.slug ?? null }, ranking, personal: self ? { position: self.position, score: self.score } : null };
+  // A imagem existente da PMMA permanece somente leitura em Records. O produto
+  // vinculado continua sendo a fonte da composição e do ranking.
+  return { league: { slug: league.slug, name: league.nome, title: league.titulo, subtitle: league.subtitulo, bannerUrl: league.imagem_url, contestImageUrl: league.imagem_url, ctaLabel: league.cta_label, ctaHref: league.cta_href, productSlug: product?.slug ?? null }, ranking, personal: self ? { position: self.position, score: self.score } : null };
 }
 
 function bearerToken(request: Request) {

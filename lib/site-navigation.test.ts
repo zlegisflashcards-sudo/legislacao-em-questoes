@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { headerNavigation, legisQuestionsNavigation } from "./site-navigation";
 
 describe("cabeçalho único", () => {
-  const publicLabels = ["Catálogo", "LegisCast TV", "Liga"];
+  const publicLabels = ["Catálogo", "LegisCast TV", "Records"];
 
   it("mantém os links públicos e oculta o perfil sem autenticação", () => {
     expect(headerNavigation(null).map((item) => item.label)).toEqual(publicLabels);
@@ -11,7 +11,7 @@ describe("cabeçalho único", () => {
     expect(headerNavigation(false).map((item) => item.href)).toEqual([
       "/",
       "/legiscast",
-      "/liga/pmma",
+      "/recordes",
     ]);
   });
 
