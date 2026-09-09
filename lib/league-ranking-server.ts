@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { publicStudentName } from "@/lib/public-student-name";
+import { resolveContestImage } from "@/lib/contest-image";
 
 type RankingRow = { posicao: number | string; aluno_id: string; score_total: number | string };
 type RankedLeagueEntry = { position: number; studentId: string; score: number };
@@ -18,9 +19,18 @@ function numberValue(value: number | string | null | undefined) {
   return Number.isFinite(number) ? number : null;
 }
 
+async function productImageUrl(productId: string | null | undefined) {
+  if (!productId) return null;
+  // Algumas instalações ainda não possuem esse campo em produtos. Nelas, a
+  // imagem da Liga permanece o fallback oficial, sem exigir migration.
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("produtos").select("imagem_url").eq("id", productId).maybeSingle();
+  return error ? null : typeof data?.imagem_url === "string" ? data.imagem_url : null;
+}
+
 export async function loadLeagueRanking(slug: string, studentId: string | null = null): Promise<LeagueRankingData | null> {
   const supabase = getSupabaseServerClient();
-  const { data: league, error: leagueError } = await supabase.from("ligas").select("id,slug,nome,titulo,subtitulo,imagem_url,cta_label,cta_href,produtos(slug)").eq("slug", slug).eq("ativo", true).maybeSingle();
+  const { data: league, error: leagueError } = await supabase.from("ligas").select("id,produto_id,slug,nome,titulo,subtitulo,imagem_url,cta_label,cta_href,produtos(slug)").eq("slug", slug).eq("ativo", true).maybeSingle();
   if (leagueError) throw new Error(`Não foi possível carregar a liga: ${leagueError.message}`);
   if (!league) return null;
 
@@ -42,9 +52,8 @@ export async function loadLeagueRanking(slug: string, studentId: string | null =
   const ranking = ranked.filter((entry) => entry.position <= 10).map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(userByStudent.get(entry.studentId) ?? ""), nome: studentById.get(entry.studentId)?.nome }), score: entry.score }));
   const self = studentId ? ranked.find((entry) => entry.studentId === studentId) ?? null : null;
   const product = Array.isArray(league.produtos) ? league.produtos[0] : league.produtos;
-  // A imagem existente da PMMA permanece somente leitura em Records. O produto
-  // vinculado continua sendo a fonte da composição e do ranking.
-  return { league: { slug: league.slug, name: league.nome, title: league.titulo, subtitle: league.subtitulo, bannerUrl: league.imagem_url, contestImageUrl: league.imagem_url, ctaLabel: league.cta_label, ctaHref: league.cta_href, productSlug: product?.slug ?? null }, ranking, personal: self ? { position: self.position, score: self.score } : null };
+  const contestImageUrl = resolveContestImage({ productImage: await productImageUrl(league.produto_id), leagueImage: league.imagem_url });
+  return { league: { slug: league.slug, name: league.nome, title: league.titulo, subtitle: league.subtitulo, bannerUrl: league.imagem_url, contestImageUrl, ctaLabel: league.cta_label, ctaHref: league.cta_href, productSlug: product?.slug ?? null }, ranking, personal: self ? { position: self.position, score: self.score } : null };
 }
 
 function bearerToken(request: Request) {

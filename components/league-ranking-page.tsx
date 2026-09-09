@@ -5,11 +5,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { leaguePagePresentation, leagueProductHref } from "@/lib/league-page-config";
 import type { LeagueRankingData } from "@/lib/league-ranking-server";
+import type { RecordsRankingData } from "@/lib/records-ranking-server";
 import { RecordsContestImage } from "@/components/records-contest-image";
 
 const medal = (position: number) => position === 1 ? "🥇" : position === 2 ? "🥈" : position === 3 ? "🥉" : `${position}º`;
+const podiumClass = (position: number) => position === 1 ? "border-amber-300/60 bg-gradient-to-r from-amber-300/20 via-amber-300/10 to-transparent shadow-[0_0_30px_rgba(251,191,36,.12)]" : position === 2 ? "border-slate-200/40 bg-slate-100/[.07]" : position === 3 ? "border-orange-300/45 bg-orange-300/[.08]" : "border-cyan-200/10 bg-slate-950/35";
 
-export function LeagueRankingPage({ initial, records = false }: { initial: LeagueRankingData; records?: boolean }) {
+export function LeagueRankingPage({ initial, records = false }: { initial: LeagueRankingData | RecordsRankingData; records?: boolean }) {
   const [data, setData] = useState(initial);
   const [authenticated, setAuthenticated] = useState(false);
   const config = leaguePagePresentation(data.league);
@@ -21,9 +23,10 @@ export function LeagueRankingPage({ initial, records = false }: { initial: Leagu
       const token = sessionData.session?.access_token;
       if (!live || !token) return;
       setAuthenticated(true);
-      const response = await fetch(`/api/liga/${encodeURIComponent(initial.league.slug)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const endpoint = records ? `/api/recordes/${encodeURIComponent(initial.league.slug)}` : `/api/liga/${encodeURIComponent(initial.league.slug)}`;
+      const response = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       if (!response.ok) return;
-      const next = await response.json() as LeagueRankingData;
+      const next = await response.json() as LeagueRankingData | RecordsRankingData;
       if (live) setData(next);
     })();
     return () => { live = false; };
@@ -32,7 +35,7 @@ export function LeagueRankingPage({ initial, records = false }: { initial: Leagu
   const loginReturn = records ? `/recordes/${encodeURIComponent(data.league.slug)}` : `/liga/${encodeURIComponent(data.league.slug)}`;
   return <main className="min-h-screen bg-[#020817] px-4 py-10 text-slate-100 sm:px-6 lg:py-16">
     <div className="mx-auto max-w-5xl">
-      {records ? <section className="rounded-[2rem] border border-cyan-300/35 bg-[#031126] px-6 py-8 shadow-[0_0_70px_rgba(14,165,233,.16)] sm:px-10 sm:py-10"><Link href="/recordes" className="inline-flex text-sm font-bold text-cyan-300 underline underline-offset-4">← Voltar para Records</Link><div className="mt-6 flex items-center gap-4 sm:gap-5"><RecordsContestImage src={data.league.contestImageUrl} alt="Imagem PMMA" className="h-16 w-16 shrink-0 rounded-2xl border border-cyan-200/25 object-cover object-right sm:h-20 sm:w-20" /><div><h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">PMMA</h1><p className="mt-1 text-base text-slate-300">Ranking Legis Questões</p></div></div></section> : <section className="relative isolate min-h-[23rem] overflow-hidden rounded-[2rem] border border-cyan-300/35 bg-[#031126] px-6 py-10 shadow-[0_0_70px_rgba(14,165,233,.16)] sm:min-h-[26rem] sm:px-10 sm:py-14">
+      {records ? <section className="relative isolate overflow-hidden rounded-[2rem] border border-cyan-300/35 bg-[#031126] px-6 py-8 shadow-[0_0_70px_rgba(14,165,233,.16)] sm:px-10 sm:py-10"><div aria-hidden="true" className="absolute inset-0 -z-10 opacity-60 [background-image:linear-gradient(rgba(56,189,248,.06)_1px,transparent_1px),linear-gradient(90deg,rgba(56,189,248,.06)_1px,transparent_1px)] [background-size:26px_26px]" /><Link href="/recordes" className="inline-flex text-sm font-bold text-cyan-300 underline underline-offset-4">← Voltar para Records</Link><div className="mt-6 flex items-center gap-4 sm:gap-5"><RecordsContestImage src={data.league.contestImageUrl} alt="Imagem PMMA" className="h-16 w-16 shrink-0 rounded-2xl border border-cyan-200/25 object-cover object-right sm:h-20 sm:w-20" /><div><p className="font-mono text-[10px] font-black tracking-[.26em] text-cyan-300">UNIDADE DE ELITE</p><h1 className="mt-1 text-4xl font-black tracking-tight text-white sm:text-5xl">PMMA</h1><p className="mt-1 text-base text-slate-300">Ranking Legis Questões</p></div></div></section> : <section className="relative isolate min-h-[23rem] overflow-hidden rounded-[2rem] border border-cyan-300/35 bg-[#031126] px-6 py-10 shadow-[0_0_70px_rgba(14,165,233,.16)] sm:min-h-[26rem] sm:px-10 sm:py-14">
         {config.heroImage ? <div aria-hidden="true" className="absolute inset-0 -z-20 bg-cover bg-center" style={{ backgroundImage: `url(${config.heroImage})` }} /> : null}
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(2,8,23,.98)_0%,rgba(2,8,23,.88)_42%,rgba(2,8,23,.32)_100%)]" />
         <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200 to-transparent" />
@@ -45,7 +48,7 @@ export function LeagueRankingPage({ initial, records = false }: { initial: Leagu
           <div><p className="font-mono text-xs font-black tracking-[.3em] text-cyan-300">HIGH SCORES</p><h2 className="mt-1 text-xl font-black text-white sm:text-2xl">{data.league.name}</h2></div>
         </div>
         <div className="mt-3 grid grid-cols-[3.8rem_minmax(0,1fr)_auto] gap-2 px-3 py-2 text-[11px] font-black tracking-wider text-cyan-200/70 sm:grid-cols-[5rem_minmax(0,1fr)_9rem] sm:px-5"><span>POS.</span><span>JOGADOR</span><span className="text-right">SCORE</span></div>
-        {data.ranking.length ? <ol className="space-y-2">{data.ranking.map((entry) => <li key={entry.position} className={`grid grid-cols-[3.8rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border px-3 py-3 sm:grid-cols-[5rem_minmax(0,1fr)_9rem] sm:px-5 sm:py-4 ${entry.position <= 3 ? "border-amber-300/45 bg-amber-300/10" : "border-cyan-200/10 bg-slate-950/35"}`}><strong className={`font-mono text-base sm:text-lg ${entry.position === 1 ? "text-amber-300" : entry.position === 2 ? "text-slate-200" : entry.position === 3 ? "text-orange-300" : "text-cyan-200"}`}>{medal(entry.position)}</strong><span className="truncate font-bold text-slate-100">{entry.publicName}</span><strong className="text-right font-mono text-base text-cyan-300 sm:text-xl">{entry.score.toLocaleString("pt-BR")}</strong></li>)}</ol> : <p className="py-12 text-center text-sm font-medium text-slate-400">Ainda não há participantes no ranking da {data.league.name}.</p>}
+        {data.ranking.length ? <ol className="space-y-2">{data.ranking.map((entry) => <li key={entry.position} className={`grid grid-cols-[3.8rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border px-3 py-3 sm:grid-cols-[5rem_minmax(0,1fr)_9rem] sm:px-5 sm:py-4 ${podiumClass(entry.position)}`}><strong className={`font-mono text-base sm:text-lg ${entry.position === 1 ? "text-amber-300" : entry.position === 2 ? "text-slate-200" : entry.position === 3 ? "text-orange-300" : "text-cyan-200"}`}>{medal(entry.position)}</strong><span className="truncate font-bold text-slate-100">{entry.publicName}</span><strong className="text-right font-mono text-base text-cyan-300 sm:text-xl">{entry.score.toLocaleString("pt-BR")}</strong></li>)}</ol> : <p className="py-12 text-center text-sm font-medium text-slate-400">Ainda não há participantes no ranking da {data.league.name}.</p>}
         <div className="mt-7 flex justify-center"><Link href={leagueProductHref(config)} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-200/70 bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 px-6 py-3 text-center text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,.32)] transition hover:-translate-y-0.5 hover:shadow-[0_0_38px_rgba(34,211,238,.48)] active:translate-y-0 active:scale-[.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 sm:px-8 sm:text-base">{config.ctaLabel}</Link></div>
       </section>
 

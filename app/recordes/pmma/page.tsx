@@ -1,11 +1,7 @@
-import { notFound } from "next/navigation";
-import { LeagueRankingPage } from "@/components/league-ranking-page";
-import { loadLeagueRanking } from "@/lib/league-ranking-server";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function PmmaRecordsPage() {
-  const data = await loadLeagueRanking("pmma");
-  if (!data) notFound();
-  return <LeagueRankingPage initial={data} records />;
+  redirect("/recordes/pmmasd");
 }
