@@ -17,7 +17,7 @@ export async function listAuthorizedLegiscastAudios(request: Request, slug: stri
   const audios = await Promise.all(sortLegiscastAudiosByStructure(audioResult.data ?? [], structureResult.data ?? []).map(async (audio) => {
     const signed = await db.storage.from(BUCKET).createSignedUrl(audio.storage_path, 60 * 60);
     if (signed.error || !signed.data?.signedUrl) throw new LawStudyApiError(503, "Não foi possível preparar os áudios desta lei.");
-    return { id: audio.id, title: audio.titulo, description: audio.descricao, durationSeconds: audio.duracao_segundos, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
+    return { id: audio.id, structureId: audio.structure_id, title: audio.titulo, description: audio.descricao, durationSeconds: audio.duracao_segundos, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
   }));
-  return { audios };
+  return { audios, structure: structureResult.data ?? [] };
 }

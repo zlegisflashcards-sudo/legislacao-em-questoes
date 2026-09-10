@@ -50,10 +50,11 @@ describe("LegisCast em áudio", () => {
     expect(server).toContain('from("law_structure")');
     expect(server).toContain("sortLegiscastAudiosByStructure");
     expect(server).toContain("titleGroupId: audio.titleGroupId");
-    expect(player).toContain("item.titleGroup");
-    expect(player).toContain("Título:");
-    expect(player).toContain("<h3");
-    expect(player).toContain("tracks[itemIndex - 1]?.titleGroupId");
+    expect(player).toContain("buildLegiscastStructureTree");
+    expect(player).toContain("tracksByStructure");
+    expect(player).toContain("Sumário da lei");
+    expect(player).toContain("overflow-y-auto");
+    expect(player).toContain("aria-current");
   });
 
   it("envia somente o original ao Cloud Storage e mantém o limite do resultado", () => {
