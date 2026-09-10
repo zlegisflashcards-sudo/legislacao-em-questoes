@@ -45,6 +45,17 @@ describe("LegisCast em áudio", () => {
     expect(lawLegiscastPage).toContain("recorte_id");
   });
 
+  it("carrega a hierarquia real da lei e renderiza título somente como agrupador visual", () => {
+    expect(server).toContain('"id,titulo,descricao,duracao_segundos,ordem,storage_path,created_at,structure_id"');
+    expect(server).toContain('from("law_structure")');
+    expect(server).toContain("sortLegiscastAudiosByStructure");
+    expect(server).toContain("titleGroupId: audio.titleGroupId");
+    expect(player).toContain("item.titleGroup");
+    expect(player).toContain("Título:");
+    expect(player).toContain("<h3");
+    expect(player).toContain("tracks[itemIndex - 1]?.titleGroupId");
+  });
+
   it("envia somente o original ao Cloud Storage e mantém o limite do resultado", () => {
     expect(LEGISCAST_AUDIO_MAX_BYTES).toBe(50 * 1024 * 1024);
     expect(LEGISCAST_FINAL_MAX_BYTES).toBe(50 * 1024 * 1024);
