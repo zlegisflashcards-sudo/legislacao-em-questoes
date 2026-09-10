@@ -396,12 +396,30 @@ function MaterialPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelP
 }
 
 function ProductPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[] }) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("produtos", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, destaque: data.destaque === "true", ordem: Number(data.ordem), ativo: data.ativo === "true" } }, "Produto salvo com sucesso."); }
+  const [productType, setProductType] = useState(text(editing?.tipo_produto) || "lei_avulsa");
+  const [imageUrl, setImageUrl] = useState(text(editing?.imagem_url));
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState("");
+  useEffect(() => { setProductType(text(editing?.tipo_produto) || "lei_avulsa"); setImageUrl(text(editing?.imagem_url)); setImageError(""); }, [editing]);
+  async function uploadImage(file: File | null) {
+    if (!editing || !file) return;
+    setUploadingImage(true); setImageError("");
+    try {
+      const data = new FormData(); data.set("image", file);
+      const response = await fetch(`/api/admin/comercial/produtos/${encodeURIComponent(text(editing.id))}/imagem`, { method: "POST", body: data });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || typeof result.imagem_url !== "string") throw new Error(typeof result.error === "string" ? result.error : "Não foi possível enviar a imagem.");
+      setImageUrl(result.imagem_url); setEditing({ ...editing, imagem_url: result.imagem_url });
+    } catch (caught) { setImageError(caught instanceof Error ? caught.message : "Não foi possível enviar a imagem."); }
+    finally { setUploadingImage(false); }
+  }
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("produtos", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, destaque: data.destaque === "true", records_enabled: data.records_enabled === "true", ordem: Number(data.ordem), ativo: data.ativo === "true" } }, "Produto salvo com sucesso."); }
   return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar produto" : "Cadastrar produto"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
     <input name="nome" defaultValue={text(editing?.nome)} placeholder="Nome" required /><input name="slug" defaultValue={text(editing?.slug)} placeholder="slug-do-produto" required />
-    <textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" /><select name="tipo_produto" defaultValue={text(editing?.tipo_produto) || "lei_avulsa"}>{["lei_avulsa","combo","edital","assinatura","outro"].map((item) => <option key={item}>{item}</option>)}</select>
+    <textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" /><select name="tipo_produto" value={productType} onChange={(event) => setProductType(event.target.value)}>{["lei_avulsa","combo","edital","assinatura","outro"].map((item) => <option key={item}>{item}</option>)}</select>
     <input name="hotmart_url" type="url" defaultValue={text(editing?.hotmart_url)} placeholder="URL Hotmart opcional" /><input name="hotmart_product_id" defaultValue={text(editing?.hotmart_product_id)} placeholder="ID do produto Hotmart" /><label>URL do vídeo de demonstração<input name="video_demo_url" type="url" defaultValue={text(editing?.video_demo_url)} /></label>
     <label>Destacar na página inicial<select name="destaque" defaultValue={editing?.destaque ? "true" : "false"}><option value="false">Não</option><option value="true">Sim</option></select></label>
+    {productType === "edital" ? <section className="commercial-settings-group"><h3>Records</h3><p>Controle a presença deste concurso na galeria pública.</p><div><label>Exibir no Records<select name="records_enabled" defaultValue={editing?.records_enabled ? "true" : "false"}><option value="false">Não</option><option value="true">Sim</option></select></label><label>Imagem do concurso<input name="imagem_url" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://... ou /imagem.png" /></label>{editing ? <label>Enviar imagem (PNG, JPEG ou WebP; até 3 MB)<input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploadingImage} onChange={(event) => void uploadImage(event.target.files?.[0] ?? null)} /></label> : <p className="text-sm">Salve o produto primeiro para enviar uma imagem.</p>}{imageUrl ? <img src={imageUrl} alt="Prévia da imagem do concurso" className="max-h-40 rounded-xl border border-cyan-200/20 object-cover" /> : null}{imageError ? <p className="admin-alert error" role="alert">{imageError}</p> : null}</div></section> : null}
     <textarea name="observacao_administrativa" defaultValue={text(editing?.observacao_administrativa)} placeholder="Observação administrativa" /><input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required />
     <select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
   </EditForm>{editing ? <><CompositionEditor key={text(editing.id)} product={editing} laws={laws} busy={busy} mutate={mutate} />{text(editing.tipo_produto) === "edital" ? <LeagueSettingsEditor key={text(editing.id)} product={editing} busy={busy} mutate={mutate} /> : null}</> : null}

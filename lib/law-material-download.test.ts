@@ -6,6 +6,8 @@ const server = readFileSync("lib/law-material-download-server.ts", "utf8");
 const route = readFileSync("app/api/aluno/estudar/lei/[slug]/materiais/[materialId]/download/route.ts", "utf8");
 const pageServer = readFileSync("lib/law-study-server.ts", "utf8");
 const client = readFileSync("components/law-study-page-client.tsx", "utf8");
+const legiscastClient = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
+const legiscastViewer = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
 
 describe("referências seguras de material", () => {
   const id = "1AbCdEfGhIjKlMnOp";
@@ -91,7 +93,14 @@ describe("fronteira autenticada de download", () => {
     expect(server).toContain("!upstream.ok");
     expect(server).toContain("!upstream.body");
     expect(server).toContain("!isAllowedGoogleDriveResponseUrl(upstream.url)");
-    expect(server).toContain('contentType === "text/html"');
+    expect(server).toContain("isInvalidPdfResponse(contentType)");
+  });
+
+  it("mantém o PDF autorizado do LegisCast independente de URL direta", () => {
+    expect(legiscastClient).toContain('material.type === "pdf" && material.accessAvailable');
+    expect(legiscastClient).not.toContain('material.type === "pdf" && material.accessAvailable && material.accessUrl');
+    expect(legiscastViewer).toContain("authorizedLegiscastPdfPath(slug, materialId, recorteId)");
+    expect(legiscastViewer).toContain("fetchAuthorizedLegiscastPdf(slug, materialId, recorteId)");
   });
 });
 

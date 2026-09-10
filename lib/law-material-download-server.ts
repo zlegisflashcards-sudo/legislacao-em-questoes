@@ -13,6 +13,14 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isInvalidPdfResponse(contentType: string) {
+  return contentType.includes("text/html") || contentType.includes("application/json");
+}
+
+function logUpstreamMaterialFailure(slug: string, materialId: number, upstream: Response, contentType: string) {
+  console.warn("law_material_upstream_failed", { slug, materialId, status: upstream.status, contentType, contentLength: upstream.headers.get("content-length"), hasBody: Boolean(upstream.body), allowedGoogleHost: isAllowedGoogleDriveResponseUrl(upstream.url) });
+}
+
 export async function downloadAuthorizedLawMaterial(request: Request, slug: string, rawMaterialId: string) {
   const materialId = parseMaterialId(rawMaterialId);
   if (materialId === null) throw new LawStudyApiError(400, "Identificador de material inválido.");
@@ -47,7 +55,8 @@ export async function downloadAuthorizedLawMaterial(request: Request, slug: stri
     throw new LawStudyApiError(503, "Material temporariamente indisponível.");
   }
   const contentType = upstream.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "application/octet-stream";
-  if (!upstream.ok || !upstream.body || !isAllowedGoogleDriveResponseUrl(upstream.url) || contentType === "text/html") {
+  if (!upstream.ok || !upstream.body || !isAllowedGoogleDriveResponseUrl(upstream.url) || isInvalidPdfResponse(contentType) || upstream.headers.get("content-length") === "0") {
+    logUpstreamMaterialFailure(slug, materialId, upstream, contentType);
     await upstream.body?.cancel();
     throw new LawStudyApiError(503, "Material temporariamente indisponível.");
   }

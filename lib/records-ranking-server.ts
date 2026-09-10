@@ -8,11 +8,12 @@ type RankingRow = { posicao: number | string; aluno_id: string; score_total: num
 type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: string; descricao: string | null };
 type LeagueRow = { produto_id: string | null; slug: string; nome: string; titulo: string; subtitulo: string | null; imagem_url: string | null; cta_label: string | null; cta_href: string | null };
 export type RecordsRankingData = {
-  contest: { productSlug: string; shortName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string };
+  contest: { productSlug: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string };
   league: { slug: string; name: string; title: string; subtitle: string | null; bannerUrl: string | null; contestImageUrl: string | null; ctaLabel: string | null; ctaHref: string | null; productSlug: string | null };
   ranking: { position: number; publicName: string; score: number }[];
   personal: { position: number; score: number } | null;
 };
+export type RecordsContest = RecordsRankingData["contest"];
 
 const numberValue = (value: number | string | null | undefined) => Number.isFinite(Number(value)) ? Number(value) : null;
 const shortName = (slug: string) => slug.replace(/sd$/, "").toUpperCase();
@@ -25,6 +26,23 @@ async function legacyLeagueForProduct(product: Pick<ProductRow, "id" | "slug">) 
   if (error) return null;
   const rows = (data ?? []) as LeagueRow[];
   return rows.find((league) => league.produto_id === product.id) ?? rows.find((league) => candidates.includes(league.slug)) ?? null;
+}
+
+function recordsContestForProduct(product: ProductRow, league: LeagueRow | null): RecordsContest {
+  const contestImageUrl = resolveContestImage({
+    productImage: typeof product.imagem_url === "string" ? product.imagem_url : null,
+    leagueImage: league?.imagem_url,
+  });
+
+  return {
+    productSlug: product.slug,
+    shortName: shortName(product.slug),
+    productName: product.nome,
+    name: product.nome,
+    description: product.descricao,
+    contestImageUrl,
+    rankingHref: `/recordes/${encodeURIComponent(product.slug)}`,
+  };
 }
 
 async function hydrateRanking(rows: RankingRow[], studentId: string | null) {
@@ -45,7 +63,7 @@ async function hydrateRanking(rows: RankingRow[], studentId: string | null) {
 
 export async function loadRecordsRanking(slug: string, studentId: string | null = null): Promise<RecordsRankingData | null> {
   const supabase = getSupabaseServerClient();
-  const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("tipo_produto", "edital").maybeSingle();
+  const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("tipo_produto", "edital").eq("records_enabled", true).maybeSingle();
   if (productError) throw new Error(`Não foi possível carregar o produto do ranking: ${productError.message}`);
   if (!product) return null;
   const typedProduct = product as ProductRow;
@@ -55,15 +73,16 @@ export async function loadRecordsRanking(slug: string, studentId: string | null 
   ]);
   if (rankingResult.error) throw new Error(`Não foi possível carregar o ranking do produto: ${rankingResult.error.message}`);
   const league = legacyLeague;
-  const imageUrl = resolveContestImage({ productImage: typeof typedProduct.imagem_url === "string" ? typedProduct.imagem_url : null, leagueImage: league?.imagem_url });
+  const contest = recordsContestForProduct(typedProduct, league);
   const hydrated = await hydrateRanking((rankingResult.data ?? []) as RankingRow[], studentId);
-  return { contest: { productSlug: typedProduct.slug, shortName: shortName(typedProduct.slug), name: typedProduct.nome, description: typedProduct.descricao, contestImageUrl: imageUrl, rankingHref: `/recordes/${encodeURIComponent(typedProduct.slug)}` }, league: { slug: typedProduct.slug, name: typedProduct.nome, title: league?.titulo ?? "Ranking Legis Questões", subtitle: league?.subtitulo ?? null, bannerUrl: league?.imagem_url ?? null, contestImageUrl: imageUrl, ctaLabel: league?.cta_label ?? "Ver produto", ctaHref: league?.cta_href ?? null, productSlug: typedProduct.slug }, ...hydrated };
+  return { contest, league: { slug: typedProduct.slug, name: typedProduct.nome, title: league?.titulo ?? "Ranking Legis Questões", subtitle: league?.subtitulo ?? null, bannerUrl: league?.imagem_url ?? null, contestImageUrl: contest.contestImageUrl, ctaLabel: league?.cta_label ?? "Ver produto", ctaHref: league?.cta_href ?? null, productSlug: typedProduct.slug }, ...hydrated };
 }
 
-export async function loadRecordsRankings() {
+export async function loadRecordsContests(): Promise<RecordsContest[]> {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase.from("produtos").select("slug").eq("ativo", true).eq("tipo_produto", "edital").not("slug", "is", null).order("ordem").order("nome");
+  const { data, error } = await supabase.from("produtos").select("*").eq("ativo", true).eq("tipo_produto", "edital").eq("records_enabled", true).not("slug", "is", null).order("ordem").order("nome");
   if (error) throw new Error(`Não foi possível carregar os concursos: ${error.message}`);
-  const rankings = await Promise.all((data ?? []).flatMap((product) => typeof product.slug === "string" ? [loadRecordsRanking(product.slug)] : []));
-  return rankings.filter((ranking): ranking is RecordsRankingData => Boolean(ranking));
+  const products = (data ?? []).filter((product): product is ProductRow => typeof product.slug === "string" && typeof product.id === "string" && typeof product.nome === "string");
+  const leagues = await Promise.all(products.map((product) => legacyLeagueForProduct(product)));
+  return products.map((product, index) => recordsContestForProduct(product, leagues[index]));
 }
