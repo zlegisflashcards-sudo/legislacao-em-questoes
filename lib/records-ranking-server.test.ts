@@ -25,6 +25,12 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain('.eq("ativo", true).eq("records_enabled", true)');
     expect(loader).not.toContain('.eq("tipo_produto", "edital")');
     expect(loader).toContain('rpc("obter_detalhes_records_produto"');
+    expect(loader).toContain("resolveRecordsContestImage");
+    expect(loader).not.toContain('from("ligas")');
+    expect(loader).not.toContain("legacyLeagueForProduct");
+    expect(loader).not.toContain("LeagueRow");
+    expect(loader).not.toContain("legacyLeagueSlug");
+    expect(loader).not.toContain("league:");
   });
 
   it("usa tipo somente para organizar a galeria e libera o admin/upload para qualquer produto", () => {

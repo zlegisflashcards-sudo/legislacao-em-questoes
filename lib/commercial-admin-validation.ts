@@ -97,7 +97,7 @@ export function optionalProductDemoVideoUrl(value: unknown, label: string): stri
   return `https://www.youtube.com/embed/${videoId}`;
 }
 
-export function optionalLeagueUrl(value: unknown, label: string): string | null | undefined {
+export function optionalPublicUrl(value: unknown, label: string): string | null | undefined {
   const raw = optionalString(value, label, 2000);
   if (!raw || raw.startsWith("/")) return raw;
   let url: URL;
@@ -108,6 +108,9 @@ export function optionalLeagueUrl(value: unknown, label: string): string | null 
   }
   return url.toString();
 }
+
+/** @deprecated Compatibilidade de compilação para consumidores legados de Liga. */
+export const optionalLeagueUrl = optionalPublicUrl;
 
 export function booleanValue(value: unknown, label: string): boolean | undefined {
   if (value === undefined) return undefined;

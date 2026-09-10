@@ -4,6 +4,9 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { publicStudentName } from "@/lib/public-student-name";
 import { resolveContestImage } from "@/lib/contest-image";
 
+/** @deprecated Consumidores legados devem migrar para studentIdFromRankingRequest. */
+export { studentIdFromRankingRequest as studentIdFromLeagueRequest } from "@/lib/ranking-request-auth";
+
 type RankingRow = { posicao: number | string; aluno_id: string; score_total: number | string };
 type RankedLeagueEntry = { position: number; studentId: string; score: number };
 
@@ -54,19 +57,4 @@ export async function loadLeagueRanking(slug: string, studentId: string | null =
   const product = Array.isArray(league.produtos) ? league.produtos[0] : league.produtos;
   const contestImageUrl = resolveContestImage({ productImage: await productImageUrl(league.produto_id), leagueImage: league.imagem_url });
   return { league: { slug: league.slug, name: league.nome, title: league.titulo, subtitle: league.subtitulo, bannerUrl: league.imagem_url, contestImageUrl, ctaLabel: league.cta_label, ctaHref: league.cta_href, productSlug: product?.slug ?? null }, ranking, personal: self ? { position: self.position, score: self.score } : null };
-}
-
-function bearerToken(request: Request) {
-  const authorization = request.headers.get("authorization") ?? "";
-  return authorization.startsWith("Bearer ") ? authorization.slice(7).trim() || null : null;
-}
-
-export async function studentIdFromLeagueRequest(request: Request) {
-  const token = bearerToken(request);
-  if (!token) return null;
-  const supabase = getSupabaseServerClient();
-  const { data: userData, error } = await supabase.auth.getUser(token);
-  if (error || !userData.user) return null;
-  const { data: student } = await supabase.from("alunos").select("id").eq("user_id", userData.user.id).maybeSingle();
-  return typeof student?.id === "string" ? student.id : null;
 }

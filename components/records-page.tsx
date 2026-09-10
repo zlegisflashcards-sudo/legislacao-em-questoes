@@ -14,10 +14,9 @@ export function RecordsPage({ contests }: { contests: RecordsContest[] }) {
         <div aria-hidden="true" className="absolute inset-0 -z-20 opacity-70 [background-image:linear-gradient(rgba(56,189,248,.07)_1px,transparent_1px),linear-gradient(90deg,rgba(56,189,248,.07)_1px,transparent_1px)] [background-size:28px_28px]" />
         <div aria-hidden="true" className="absolute -right-24 top-0 -z-10 h-64 w-64 rounded-full bg-cyan-400/15 blur-3xl" />
         <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200 to-transparent" />
-        <p className="font-mono text-[11px] font-black tracking-[.32em] text-cyan-300">OPERAÇÃO · HALL OF FAME</p>
+        <p className="font-mono text-[11px] font-black tracking-[.32em] text-cyan-300">GALERIA DE CONCURSOS</p>
         <h1 className="mt-3 text-5xl font-black tracking-[.04em] text-white sm:text-7xl">RECORDS</h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-200 sm:text-lg">Acompanhe os melhores desempenhos da comunidade Legis Flashcards. Escolha um concurso e veja quem está se destacando.</p>
-        <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-amber-200"><span aria-hidden="true">★</span> Galeria de elite</div>
       </header>
 
       <section className="mt-6 rounded-2xl border border-cyan-200/15 bg-[#071329] px-5 py-4 shadow-[0_0_30px_rgba(6,182,212,.06)] sm:px-6" aria-labelledby="pontuacao-title">
@@ -35,7 +34,7 @@ export function RecordsPage({ contests }: { contests: RecordsContest[] }) {
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{group.items.map((contest) => <Link key={contest.productSlug} href={contest.rankingHref} className="group relative flex min-h-52 items-center gap-5 overflow-hidden rounded-[1.75rem] border border-cyan-300/35 bg-[#071a34] p-5 shadow-[0_0_48px_rgba(6,182,212,.11)] transition hover:-translate-y-0.5 hover:border-cyan-200/75 hover:shadow-[0_0_56px_rgba(34,211,238,.22)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 sm:p-6 max-[360px]:flex-col max-[360px]:items-start">
           <div aria-hidden="true" className="absolute inset-y-0 right-0 w-3/4 bg-gradient-to-l from-cyan-400/[.08] to-transparent" />
           <RecordsContestImage src={contest.contestImageUrl} alt={`Imagem ${contest.shortName}`} className="relative h-20 w-20 shrink-0 rounded-2xl border border-cyan-200/30 object-cover object-right shadow-[0_0_28px_rgba(34,211,238,.15)] sm:h-24 sm:w-24" />
-          <span className="relative flex min-w-0 flex-1 self-stretch flex-col py-1"><span className="inline-flex w-fit rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">Elite</span>
+          <span className="relative flex min-w-0 flex-1 self-stretch flex-col py-1"><span className="inline-flex w-fit rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">Grupo de elite</span>
             <span className="mt-2 text-3xl font-black tracking-tight text-white">{contest.shortName}</span>
             <span className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-300">{contest.name}</span>
             <span className="mt-auto pt-3 text-sm font-black text-cyan-300 underline underline-offset-4">Ver ranking <span aria-hidden="true" className="ml-1 inline-block transition group-hover:translate-x-1">→</span></span>

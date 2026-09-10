@@ -10,6 +10,7 @@ import {
   optionalIsoDate,
   optionalNonNegativeInteger,
   optionalProductDemoVideoUrl,
+  optionalPublicUrl,
   productLawLinks,
   safeSearch,
   slug,
@@ -62,6 +63,12 @@ describe("validação da administração comercial", () => {
     ]) expect(optionalProductDemoVideoUrl(url, "Vídeo")).toBe("https://www.youtube.com/embed/LDa1zANCIQY");
     expect(() => optionalProductDemoVideoUrl("ftp://youtube.com/watch?v=LDa1zANCIQY", "Vídeo")).toThrow(CommercialValidationError);
     expect(() => optionalProductDemoVideoUrl("https://www.youtube.com/watch?v=invalido", "Vídeo")).toThrow(CommercialValidationError);
+  });
+
+  it("valida a imagem pública do produto sem depender da configuração de Liga", () => {
+    expect(optionalPublicUrl("/records/pmma.webp", "Imagem")).toBe("/records/pmma.webp");
+    expect(optionalPublicUrl("https://cdn.example.com/pmma.webp", "Imagem")).toBe("https://cdn.example.com/pmma.webp");
+    expect(() => optionalPublicUrl("javascript:alert(1)", "Imagem")).toThrow(CommercialValidationError);
   });
 
   it("aceita somente o contrato explícito de lei completa ou recorte coerente", () => {
@@ -266,5 +273,12 @@ describe("operações comerciais auditáveis", () => {
     expect(server).toContain('productLawLinks(body.vinculos)');
     expect(server).toContain('rpc("admin_definir_leis_produto_recortes"');
     expect(client).toContain("recorte_lei_id: scopeByLaw[lei_id] ? Number(lei_id) : null");
+  });
+
+  it("administra somente Records, sem metadados ou ação de Liga", () => {
+    expect(server).not.toContain('from("ligas")');
+    expect(server).not.toContain('action === "atualizar_liga"');
+    expect(client).not.toContain("Configuração da Liga");
+    expect(client).toContain("<h3>Records</h3>");
   });
 });

@@ -1,19 +1,17 @@
 import "server-only";
 
-import { resolveContestImage } from "@/lib/contest-image";
+import { resolveRecordsContestImage } from "@/lib/contest-image";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { publicStudentName } from "@/lib/public-student-name";
 
 type RankingRow = { posicao: number | string; aluno_id: string; score_total: number | string };
 type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: string; descricao: string | null; tipo_produto: string };
-type LeagueRow = { produto_id: string | null; slug: string; nome: string; titulo: string; subtitulo: string | null; imagem_url: string | null; cta_label: string | null; cta_href: string | null };
 type RawLawScore = { lei_id: number | string; slug: string; titulo: string; score: number | string };
 type DetailsPayload = { top10?: RankingRow[]; current_user?: RankingRow | null; nearby?: RankingRow[]; laws?: RawLawScore[] };
 export type RecordsEntry = { position: number; publicName: string; score: number; isCurrentUser: boolean };
 export type RecordsLaw = { slug: string; name: string; score: number; hasAccess: boolean; href: string; actionLabel: "Estudar" | "Adquirir" };
 export type RecordsRankingData = {
   contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string };
-  league: { slug: string; name: string; title: string; subtitle: string | null; bannerUrl: string | null; contestImageUrl: string | null; ctaLabel: string | null; ctaHref: string | null; productSlug: string | null };
   ranking: RecordsEntry[];
   personal: RecordsEntry | null;
   nearby: RecordsEntry[];
@@ -23,18 +21,10 @@ export type RecordsContest = RecordsRankingData["contest"];
 
 const numberValue = (value: number | string | null | undefined) => Number.isFinite(Number(value)) ? Number(value) : null;
 const shortName = (slug: string) => slug.replace(/sd$/, "").toUpperCase();
-const legacyLeagueSlug = (slug: string) => slug.replace(/sd$/, "");
 const asRows = (value: unknown) => Array.isArray(value) ? value as RankingRow[] : [];
 
-async function legacyLeagueForProduct(product: Pick<ProductRow, "id" | "slug">) {
-  const supabase = getSupabaseServerClient(); const candidates = [...new Set([product.slug, legacyLeagueSlug(product.slug)])];
-  const { data, error } = await supabase.from("ligas").select("produto_id,slug,nome,titulo,subtitulo,imagem_url,cta_label,cta_href").or(`produto_id.eq.${product.id},slug.in.(${candidates.join(",")})`);
-  if (error) return null; const rows = (data ?? []) as LeagueRow[];
-  return rows.find((league) => league.produto_id === product.id) ?? rows.find((league) => candidates.includes(league.slug)) ?? null;
-}
-
-function recordsContestForProduct(product: ProductRow, league: LeagueRow | null): RecordsContest {
-  return { productSlug: product.slug, productType: product.tipo_produto, shortName: shortName(product.slug), productName: product.nome, name: product.nome, description: product.descricao, contestImageUrl: resolveContestImage({ productImage: typeof product.imagem_url === "string" ? product.imagem_url : null, leagueImage: league?.imagem_url }), rankingHref: `/recordes/${encodeURIComponent(product.slug)}` };
+function recordsContestForProduct(product: ProductRow): RecordsContest {
+  return { productSlug: product.slug, productType: product.tipo_produto, shortName: shortName(product.slug), productName: product.nome, name: product.nome, description: product.descricao, contestImageUrl: resolveRecordsContestImage(typeof product.imagem_url === "string" ? product.imagem_url : null), rankingHref: `/recordes/${encodeURIComponent(product.slug)}` };
 }
 
 async function hydrateEntries(rows: RankingRow[], studentId: string | null) {
@@ -66,15 +56,16 @@ async function personalizedLaws(rows: unknown, studentId: string | null): Promis
 export async function loadRecordsRanking(slug: string, studentId: string | null = null): Promise<RecordsRankingData | null> {
   const supabase = getSupabaseServerClient(); const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("records_enabled", true).maybeSingle();
   if (productError) throw new Error(`Não foi possível carregar o produto do ranking: ${productError.message}`); if (!product) return null;
-  const typedProduct = product as ProductRow; const [league, detailsResult] = await Promise.all([legacyLeagueForProduct(typedProduct), supabase.rpc("obter_detalhes_records_produto", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId })]);
-  if (detailsResult.error) throw new Error(`Não foi possível carregar o ranking do produto: ${detailsResult.error.message}`);
-  const details = (detailsResult.data ?? {}) as DetailsPayload; const topRows = asRows(details.top10); const currentRow = details.current_user && typeof details.current_user === "object" ? [details.current_user] : [];
-  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedLaws(details.laws, studentId)]); const contest = recordsContestForProduct(typedProduct, league);
-  return { contest, league: { slug: typedProduct.slug, name: typedProduct.nome, title: league?.titulo ?? "Ranking Legis Questões", subtitle: league?.subtitulo ?? null, bannerUrl: league?.imagem_url ?? null, contestImageUrl: contest.contestImageUrl, ctaLabel: league?.cta_label ?? "Ver produto", ctaHref: league?.cta_href ?? null, productSlug: typedProduct.slug }, ranking, personal: current[0] ?? null, nearby, laws };
+  const typedProduct = product as ProductRow; const { data, error: detailsError } = await supabase.rpc("obter_detalhes_records_produto", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId });
+  if (detailsError) throw new Error(`Não foi possível carregar o ranking do produto: ${detailsError.message}`);
+  const details = (data ?? {}) as DetailsPayload; const topRows = asRows(details.top10); const currentRow = details.current_user && typeof details.current_user === "object" ? [details.current_user] : [];
+  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedLaws(details.laws, studentId)]); const contest = recordsContestForProduct(typedProduct);
+  return { contest, ranking, personal: current[0] ?? null, nearby, laws };
 }
 
 export async function loadRecordsContests(): Promise<RecordsContest[]> {
   const supabase = getSupabaseServerClient(); const { data, error } = await supabase.from("produtos").select("*").eq("ativo", true).eq("records_enabled", true).not("slug", "is", null).order("ordem").order("nome");
   if (error) throw new Error(`Não foi possível carregar os concursos: ${error.message}`);
-  const products = (data ?? []).filter((product): product is ProductRow => typeof product.slug === "string" && typeof product.id === "string" && typeof product.nome === "string" && typeof product.tipo_produto === "string"); const leagues = await Promise.all(products.map((product) => legacyLeagueForProduct(product))); return products.map((product, index) => recordsContestForProduct(product, leagues[index]));
+  const products = (data ?? []).filter((product): product is ProductRow => typeof product.slug === "string" && typeof product.id === "string" && typeof product.nome === "string" && typeof product.tipo_produto === "string");
+  return products.map(recordsContestForProduct);
 }

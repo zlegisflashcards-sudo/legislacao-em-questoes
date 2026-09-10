@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveContestImage } from "./contest-image";
+import { resolveContestImage, resolveRecordsContestImage } from "./contest-image";
 
 describe("resolveContestImage", () => {
   it("prioriza a imagem do produto", () => {
@@ -16,5 +16,16 @@ describe("resolveContestImage", () => {
 
   it("deixa o componente visual aplicar o fallback sem nenhuma URL válida", () => {
     expect(resolveContestImage({ productImage: "", leagueImage: null })).toBeNull();
+  });
+});
+
+describe("resolveRecordsContestImage", () => {
+  it("usa somente a imagem válida do produto", () => {
+    expect(resolveRecordsContestImage("/products/cbmma.webp")).toBe("/products/cbmma.webp");
+  });
+
+  it("devolve null sem imagem do produto para o componente aplicar seu fallback", () => {
+    expect(resolveRecordsContestImage(null)).toBeNull();
+    expect(resolveRecordsContestImage("imagem-inválida")).toBeNull();
   });
 });

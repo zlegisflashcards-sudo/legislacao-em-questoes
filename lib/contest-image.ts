@@ -8,7 +8,12 @@ function validImageUrl(value: string | null | undefined) {
   return url && (url.startsWith("/") || /^https?:\/\//i.test(url)) ? url : null;
 }
 
-/** Centraliza a identidade visual pública: produto, Liga, depois monograma do componente. */
+/** Resolução legada da Liga: produto, Liga, depois monograma do componente. */
 export function resolveContestImage({ productImage, leagueImage }: ContestImageSource) {
   return validImageUrl(productImage) ?? validImageUrl(leagueImage);
+}
+
+/** A identidade visual de Records é administrada exclusivamente pelo produto. */
+export function resolveRecordsContestImage(productImage?: string | null) {
+  return validImageUrl(productImage);
 }
