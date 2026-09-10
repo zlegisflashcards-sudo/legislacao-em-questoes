@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareQuestionStructureNames, inferQuestionStructureType, planQuestionDeckStructure } from "./questoes-structure";
+import { compareQuestionStructureNames, inferQuestionStructureType, planQuestionDeckStructure, validQuestionStructureParent } from "./questoes-structure";
 
 describe("estrutura dos decks de questões", () => {
   it("infere título, capítulo, seção e subseção sem alterar o nome", () => {
@@ -22,6 +22,19 @@ describe("estrutura dos decks de questões", () => {
     expect(plan.nodes).toHaveLength(1);
     expect(plan.nodes[0].existingId).toBe(10);
     expect(plan.decks.every((deck) => deck.error === null && deck.structureKey === plan.nodes[0].key)).toBe(true);
+  });
+
+  it("aceita somente a hierarquia usada pela árvore administrativa e pelo importador", () => {
+    expect(validQuestionStructureParent("titulo", null)).toBe(true);
+    expect(validQuestionStructureParent("capitulo", null)).toBe(true);
+    expect(validQuestionStructureParent("capitulo", "titulo")).toBe(true);
+    expect(validQuestionStructureParent("secao", "capitulo")).toBe(true);
+    expect(validQuestionStructureParent("subsecao", "secao")).toBe(true);
+
+    expect(validQuestionStructureParent("titulo", "capitulo")).toBe(false);
+    expect(validQuestionStructureParent("secao", null)).toBe(false);
+    expect(validQuestionStructureParent("secao", "titulo")).toBe(false);
+    expect(validQuestionStructureParent("subsecao", "titulo")).toBe(false);
   });
 
   it("mantém nomes iguais em pais diferentes e rejeita hierarquia impossível", () => {

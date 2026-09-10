@@ -17,7 +17,7 @@ export function inferQuestionStructureType(value: string): QuestionStructureType
   return null;
 }
 
-function validParent(type: QuestionStructureType, parentType: QuestionStructureType | null) {
+export function validQuestionStructureParent(type: QuestionStructureType, parentType: QuestionStructureType | null) {
   return (type === "titulo" && parentType === null)
     || (type === "capitulo" && (parentType === null || parentType === "titulo"))
     || (type === "secao" && parentType === "capitulo")
@@ -43,7 +43,7 @@ export function planQuestionDeckStructure(rows: Array<{ line: number; deck: stri
       const nome = segment.trim();
       const tipo = inferQuestionStructureType(nome);
       if (!tipo) { error = `Tipo estrutural não reconhecido em “${nome}”.`; break; }
-      if (!validParent(tipo, parentType)) { error = `Hierarquia estrutural inválida em “${nome}”.`; break; }
+      if (!validQuestionStructureParent(tipo, parentType)) { error = `Hierarquia estrutural inválida em “${nome}”.`; break; }
       const key: string = `${parentKey ?? "raiz"}\u0000${tipo}\u0000${normalizeQuestionStructureName(nome)}`;
       let node = planned.get(key);
       if (!node) {

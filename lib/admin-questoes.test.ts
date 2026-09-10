@@ -210,4 +210,21 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("Questões vinculadas:");
     expect(panel).toContain(">Excluir<");
   });
+
+  it("mantém a criação inline e a confirmação de exclusão no layout de questões selecionado", () => {
+    const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
+    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    expect(server).toContain("validQuestionStructureParent(nodeType");
+    expect(panel).not.toContain("window.prompt");
+    expect(panel).toContain("function startCreation");
+    expect(panel).toContain("function saveCreation");
+    expect(panel).toContain('event.key === "Enter"');
+    expect(panel).toContain('event.key === "Escape"');
+    expect(panel).toContain("parent_id: pending.parentId");
+    expect(panel).toContain("if (!pending || !nome || saving || creatingRequest.current) return");
+    expect(panel).toContain("creatingRequest.current");
+    expect(panel).toContain("await load(slug); setCreating(null)");
+    expect(panel).toContain("deleting && <DeletionDialog");
+    expect(panel).toContain("onConfirmDelete");
+  });
 });
