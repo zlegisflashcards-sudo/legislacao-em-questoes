@@ -23,9 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (image.size > MAX_IMAGE_BYTES) return failure("A imagem deve ter no máximo 3 MB.", 413);
 
     const db = getSupabaseServerClient();
-    const { data: product, error: productError } = await db.from("produtos").select("id,tipo_produto").eq("id", productId).maybeSingle();
+    const { data: product, error: productError } = await db.from("produtos").select("id").eq("id", productId).maybeSingle();
     if (productError) throw productError;
-    if (!product || product.tipo_produto !== "edital") return failure("Imagem de Records só pode ser enviada para produto do tipo edital.", 404);
+    if (!product) return failure("Produto não encontrado.", 404);
 
     const extension = extensions[image.type];
     const path = `${product.id}/cover.${extension}`;

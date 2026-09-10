@@ -5,10 +5,10 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { publicStudentName } from "@/lib/public-student-name";
 
 type RankingRow = { posicao: number | string; aluno_id: string; score_total: number | string };
-type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: string; descricao: string | null };
+type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: string; descricao: string | null; tipo_produto: string };
 type LeagueRow = { produto_id: string | null; slug: string; nome: string; titulo: string; subtitulo: string | null; imagem_url: string | null; cta_label: string | null; cta_href: string | null };
 export type RecordsRankingData = {
-  contest: { productSlug: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string };
+  contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string };
   league: { slug: string; name: string; title: string; subtitle: string | null; bannerUrl: string | null; contestImageUrl: string | null; ctaLabel: string | null; ctaHref: string | null; productSlug: string | null };
   ranking: { position: number; publicName: string; score: number }[];
   personal: { position: number; score: number } | null;
@@ -36,6 +36,7 @@ function recordsContestForProduct(product: ProductRow, league: LeagueRow | null)
 
   return {
     productSlug: product.slug,
+    productType: product.tipo_produto,
     shortName: shortName(product.slug),
     productName: product.nome,
     name: product.nome,
@@ -63,13 +64,13 @@ async function hydrateRanking(rows: RankingRow[], studentId: string | null) {
 
 export async function loadRecordsRanking(slug: string, studentId: string | null = null): Promise<RecordsRankingData | null> {
   const supabase = getSupabaseServerClient();
-  const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("tipo_produto", "edital").eq("records_enabled", true).maybeSingle();
+  const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("records_enabled", true).maybeSingle();
   if (productError) throw new Error(`Não foi possível carregar o produto do ranking: ${productError.message}`);
   if (!product) return null;
   const typedProduct = product as ProductRow;
   const [legacyLeague, rankingResult] = await Promise.all([
     legacyLeagueForProduct(typedProduct),
-    supabase.rpc("obter_ranking_produto_edital", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId, p_limite: 10 }),
+    supabase.rpc("obter_ranking_produto_records", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId, p_limite: 10 }),
   ]);
   if (rankingResult.error) throw new Error(`Não foi possível carregar o ranking do produto: ${rankingResult.error.message}`);
   const league = legacyLeague;
@@ -80,7 +81,7 @@ export async function loadRecordsRanking(slug: string, studentId: string | null 
 
 export async function loadRecordsContests(): Promise<RecordsContest[]> {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase.from("produtos").select("*").eq("ativo", true).eq("tipo_produto", "edital").eq("records_enabled", true).not("slug", "is", null).order("ordem").order("nome");
+  const { data, error } = await supabase.from("produtos").select("*").eq("ativo", true).eq("records_enabled", true).not("slug", "is", null).order("ordem").order("nome");
   if (error) throw new Error(`Não foi possível carregar os concursos: ${error.message}`);
   const products = (data ?? []).filter((product): product is ProductRow => typeof product.slug === "string" && typeof product.id === "string" && typeof product.nome === "string");
   const leagues = await Promise.all(products.map((product) => legacyLeagueForProduct(product)));
