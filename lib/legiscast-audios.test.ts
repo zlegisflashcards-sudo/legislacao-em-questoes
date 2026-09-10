@@ -57,6 +57,21 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain("aria-current");
   });
 
+  it("coordena lei, PDF e áudio antes de revelar o LegisCast", () => {
+    const client = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
+    const pdf = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
+    expect(client).toContain("const pageReady = pdfReady && audioReady");
+    expect(client).toContain("LegiscastSkeleton");
+    expect(client).toContain('pageReady ? "" : "invisible"');
+    expect(client).toContain("<LegiscastCommentedArticles");
+    expect(client).toContain("!pageReady ? <div");
+    expect(client).toContain("Tentar novamente");
+    expect(client).not.toContain("setTimeout");
+    expect(player).toContain("onReady?.()");
+    expect(player).toContain("onError?.(");
+    expect(pdf).toContain("if (status === \"ready\") onReady?.()");
+  });
+
   it("envia somente o original ao Cloud Storage e mantém o limite do resultado", () => {
     expect(LEGISCAST_AUDIO_MAX_BYTES).toBe(50 * 1024 * 1024);
     expect(LEGISCAST_FINAL_MAX_BYTES).toBe(50 * 1024 * 1024);
