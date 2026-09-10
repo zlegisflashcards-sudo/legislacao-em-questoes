@@ -227,4 +227,34 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("deleting && <DeletionDialog");
     expect(panel).toContain("onConfirmDelete");
   });
+
+  it("renomeia nós estruturais sem modificar identidade, hierarquia ou ordem", () => {
+    const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
+    const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
+    const update = server.slice(server.indexOf("export async function updateStructureNode"), server.indexOf("export async function deactivateStructureNode"));
+    expect(update).toContain('update({ nome: text(body.nome, "Nome") })');
+    expect(update).not.toContain("ordem:");
+    expect(update).not.toContain("parent_id:");
+    expect(update).not.toContain("tipo:");
+    expect(update).toContain('.eq("id", id(body.id))');
+    expect(update).toContain('.eq("lei_id", current.id)');
+    expect(route).toContain('action === "atualizar_estrutura"');
+  });
+
+  it("oferece renomeação inline genérica para título, capítulo, seção e subseção", () => {
+    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    expect(panel).toContain('type StructureRename = { id: number; nome: string }');
+    expect(panel).toContain("function startRename(node: Node)");
+    expect(panel).toContain("function saveRename()");
+    expect(panel).toContain('action: "atualizar_estrutura"');
+    expect(panel).toContain("setRenaming({ id: node.id, nome: node.nome })");
+    expect(panel).toContain("autoFocus");
+    expect(panel).toContain('event.key === "Enter"');
+    expect(panel).toContain('event.key === "Escape"');
+    expect(panel).toContain("renameForNode.nome.trim()");
+    expect(panel).toContain("renamingRequest.current");
+    expect(panel).toContain("await load(slug); setRenaming(null)");
+    expect(panel).toContain("labels[node.tipo]");
+    expect(panel).toContain("changeRename(null)");
+  });
 });
