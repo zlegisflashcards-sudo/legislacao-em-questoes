@@ -6,6 +6,8 @@ const loader = readFileSync("lib/records-ranking-server.ts", "utf8");
 const page = readFileSync("components/records-page.tsx", "utf8");
 const admin = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 const upload = readFileSync("app/api/admin/comercial/produtos/[id]/imagem/route.ts", "utf8");
+const personalMigration = readFileSync("supabase/migrations/20260910150000_create_records_personalization.sql", "utf8");
+const recordsPage = readFileSync("components/records-ranking-page.tsx", "utf8");
 
 describe("Records por produto habilitado", () => {
   it("cria uma RPC própria sem alterar a RPC legada", () => {
@@ -22,7 +24,7 @@ describe("Records por produto habilitado", () => {
   it("carrega e lista Records apenas por ativo e records_enabled", () => {
     expect(loader).toContain('.eq("ativo", true).eq("records_enabled", true)');
     expect(loader).not.toContain('.eq("tipo_produto", "edital")');
-    expect(loader).toContain('rpc("obter_ranking_produto_records"');
+    expect(loader).toContain('rpc("obter_detalhes_records_produto"');
   });
 
   it("usa tipo somente para organizar a galeria e libera o admin/upload para qualquer produto", () => {
@@ -31,5 +33,17 @@ describe("Records por produto habilitado", () => {
     expect(admin).not.toContain('{productType === "edital" ? <section className="commercial-settings-group"><h3>Records</h3>');
     expect(admin).toContain("Este produto está habilitado no Records, mas não possui leis vinculadas");
     expect(upload).not.toContain('product.tipo_produto !== "edital"');
+  });
+
+  it("calcula Top 10, janela próxima e scores por lei no banco", () => {
+    expect(personalMigration).toContain("create function public.obter_detalhes_records_produto");
+    expect(personalMigration).toContain("where c.score_version = 2");
+    expect(personalMigration).toContain("join public.produto_leis pl");
+    expect(personalMigration).toContain("where a.posicao > 10");
+    expect(personalMigration).toContain("l.inicio + 9");
+    expect(personalMigration).toContain("coalesce((select m.melhor_score");
+    expect(loader).toContain('rpc("obter_detalhes_records_produto"');
+    expect(recordsPage).toContain("Pontuação por lei");
+    expect(recordsPage).toContain("Posições próximas");
   });
 });
