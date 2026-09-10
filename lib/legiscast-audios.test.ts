@@ -112,7 +112,7 @@ describe("LegisCast em áudio", () => {
     expect(pdfViewer).toContain("authorizedPdfBlob");
     expect(pdfViewer).toContain("Baixar PDF");
     expect(pdfViewer).toContain("Imprimir");
-    expect(pdfViewer).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
+    expect(pdfViewer).toContain("authorizedLegiscastPdfPath(slug, materialId, recorteId)");
     expect(pdfViewer).toContain("catch { textLayer.remove(); }");
   });
 });
