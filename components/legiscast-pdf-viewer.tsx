@@ -31,6 +31,34 @@ async function fetchAuthorizedLegiscastPdf(slug: string, materialId: number, rec
   return new Blob([bytes], { type: "application/pdf" });
 }
 
+async function downloadAuthorizedPdf(slug: string, materialId: number, recorteId: string | null, title: string) {
+  const blob = await fetchAuthorizedLegiscastPdf(slug, materialId, recorteId);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${title.replace(/[\\/:*?"<>|]/g, "-")}.pdf`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function printAuthorizedPdf(slug: string, materialId: number, recorteId: string | null) {
+  const blob = await fetchAuthorizedLegiscastPdf(slug, materialId, recorteId);
+  const url = URL.createObjectURL(blob);
+  const frame = document.createElement("iframe");
+  frame.className = "fixed h-px w-px opacity-0";
+  frame.src = url;
+  frame.onload = () => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60000);
+  };
+  document.body.append(frame);
+}
+
+export function LegiscastPdfActions({ slug, materialId, recorteId, title, onExpand }: { slug: string; materialId: number; recorteId: string | null; title: string; onExpand: () => void }) {
+  return <div className="grid grid-cols-3 gap-2" aria-label="Ações do PDF"><button type="button" onClick={() => void downloadAuthorizedPdf(slug, materialId, recorteId, title)} className="min-h-12 min-w-0 rounded-xl border border-blue-200 bg-white px-2 py-2 text-xs font-black text-blue-800">Baixar PDF</button><button type="button" onClick={() => void printAuthorizedPdf(slug, materialId, recorteId)} className="min-h-12 min-w-0 rounded-xl border border-blue-200 bg-white px-2 py-2 text-xs font-black text-blue-800">Imprimir</button><button type="button" onClick={onExpand} className="min-h-12 min-w-0 rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-black text-blue-800">Expandir PDF</button></div>;
+}
+
 export function LegiscastPdfViewer({ slug, materialId, recorteId, title, onReady, onError }: { slug: string; materialId: number; recorteId: string | null; title: string; onReady?: () => void; onError?: () => void }) {
   const viewportRef = useRef<HTMLDivElement>(null); const pagesRef = useRef<HTMLDivElement>(null); const documentRef = useRef<PdfDocument | null>(null); const objectUrlRef = useRef(""); const [page, setPage] = useState(1); const [total, setTotal] = useState(0); const [zoom, setZoom] = useState(1); const [outline, setOutline] = useState<OutlineItem[]>([]); const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => { let active = true; let objectUrl = ""; const render = async () => {
@@ -57,8 +85,8 @@ export function LegiscastPdfViewer({ slug, materialId, recorteId, title, onReady
   useEffect(() => { if (status === "ready") onReady?.(); if (status === "error") onError?.(); }, [status, onReady, onError]);
   async function openOutline(dest: unknown) { const pdf = documentRef.current; if (!pdf || !dest) return; try { const resolved = typeof dest === "string" ? await pdf.getDestination(dest) : dest; const reference = Array.isArray(resolved) ? resolved[0] : null; if (!reference) return; const target = await pdf.getPageIndex(reference) + 1; pagesRef.current?.querySelector<HTMLElement>(`canvas[data-page="${target}"]`)?.scrollIntoView({ block: "start" }); } catch {} }
   async function authorizedPdfBlob() { return fetchAuthorizedLegiscastPdf(slug, materialId, recorteId); }
-  async function downloadPdf() { const blob = await authorizedPdfBlob(); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${title.replace(/[\\/:*?"<>|]/g, "-")}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-  async function printPdf() { const blob = await authorizedPdfBlob(); const url = URL.createObjectURL(blob); const frame = document.createElement("iframe"); frame.className = "fixed h-px w-px opacity-0"; frame.src = url; frame.onload = () => { frame.contentWindow?.focus(); frame.contentWindow?.print(); setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60000); }; document.body.append(frame); }
+  async function downloadPdf() { await downloadAuthorizedPdf(slug, materialId, recorteId, title); }
+  async function printPdf() { await printAuthorizedPdf(slug, materialId, recorteId); }
   const Outline = ({ items, depth = 0 }: { items: OutlineItem[]; depth?: number }) => <ul className="grid gap-1">{items.map((item, index) => <li key={`${depth}-${index}-${item.title}`}><button type="button" onClick={() => void openOutline(item.dest)} className="w-full rounded px-2 py-1 text-left text-sm font-semibold text-blue-800 hover:bg-blue-50" style={{ paddingLeft: `${8 + depth * 14}px` }}>{item.title || "Seção"}</button>{item.items?.length ? <Outline items={item.items} depth={depth + 1} /> : null}</li>)}</ul>;
   return <div className="mt-0 min-w-0"><div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border border-slate-300 bg-slate-50 px-3 py-2"><p className="text-sm font-bold text-slate-700">{status === "ready" ? `Página ${page} de ${total}` : status === "error" ? "Não foi possível abrir o PDF" : "Carregando PDF…"}</p><div className="flex items-center gap-2"><button type="button" disabled={status !== "ready" || zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, Number((value - 0.25).toFixed(2))))} className="min-h-9 rounded border border-slate-300 bg-white px-3 font-black disabled:opacity-50" aria-label="Diminuir zoom">−</button><span className="text-sm font-bold text-slate-600">{Math.round(zoom * 100)}%</span><button type="button" disabled={status !== "ready" || zoom >= 2} onClick={() => setZoom((value) => Math.min(2, Number((value + 0.25).toFixed(2))))} className="min-h-9 rounded border border-slate-300 bg-white px-3 font-black disabled:opacity-50" aria-label="Aumentar zoom">+</button><button type="button" onClick={() => void downloadPdf()} className="min-h-9 rounded border border-slate-300 bg-white px-3 text-sm font-bold text-blue-800">Baixar PDF</button><button type="button" onClick={() => void printPdf()} className="min-h-9 rounded border border-slate-300 bg-white px-3 text-sm font-bold text-blue-800">Imprimir</button></div></div>{outline.length ? <details className="border-x border-t border-slate-300 bg-white"><summary className="cursor-pointer px-3 py-2 text-sm font-black text-[#062a5f]">Sumário do PDF</summary><div className="max-h-56 overflow-auto border-t border-slate-200 p-2"><Outline items={outline} /></div></details> : null}<div ref={viewportRef} className="h-[52vh] min-h-[360px] overflow-auto overflow-x-auto rounded-b-xl border border-slate-300 bg-slate-100 sm:h-[62vh] sm:min-h-[460px] lg:h-[74vh] lg:min-h-[520px]" aria-label={`PDF: ${title}`}><div ref={pagesRef} /></div></div>;
 }

@@ -60,7 +60,7 @@ describe("LegisCast em áudio", () => {
   it("coordena lei, PDF e áudio antes de revelar o LegisCast", () => {
     const client = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
     const pdf = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
-    expect(client).toContain("const pageReady = pdfReady && audioReady");
+    expect(client).toContain("const pageReady = mobileLayout !== null && audioReady && (mobileLayout || pdfReady)");
     expect(client).toContain("LegiscastSkeleton");
     expect(client).toContain('pageReady ? "" : "invisible"');
     expect(client).toContain("<LegiscastCommentedArticles");
@@ -114,5 +114,27 @@ describe("LegisCast em áudio", () => {
     expect(pdfViewer).toContain("Imprimir");
     expect(pdfViewer).toContain("authorizedLegiscastPdfPath(slug, materialId, recorteId)");
     expect(pdfViewer).toContain("catch { textLayer.remove(); }");
+  });
+
+  it("mantém no mobile capa, ações do PDF, player, playlist e artigos nessa ordem", () => {
+    const cover = lawLegiscastClient.indexOf("Capa dos hosts do LegisCast");
+    const actions = lawLegiscastClient.indexOf("<LegiscastPdfActions");
+    const playerPosition = lawLegiscastClient.indexOf("<LegiscastAudioPlayer key=");
+    const articles = lawLegiscastClient.indexOf("<LegiscastCommentedArticles");
+    expect(cover).toBeGreaterThan(-1);
+    expect(actions).toBeGreaterThan(cover);
+    expect(playerPosition).toBeGreaterThan(actions);
+    expect(articles).toBeGreaterThan(playerPosition);
+    expect(player).toContain("<StructureSummary");
+    expect(player.indexOf('aria-label="Posição da reprodução"')).toBeLessThan(player.indexOf("<StructureSummary"));
+  });
+
+  it("abre o PDF autorizado em modal mobile sem desmontar o player", () => {
+    expect(lawLegiscastClient).toContain("mobilePdfOpen && pdf");
+    expect(lawLegiscastClient).toContain('role="dialog" aria-modal="true"');
+    expect(lawLegiscastClient).toContain('aria-label="Fechar PDF"');
+    expect(lawLegiscastClient).toContain("setMobilePdfOpen(false)");
+    expect(pdfViewer).toContain("export function LegiscastPdfActions");
+    expect(pdfViewer).toContain("fetchAuthorizedLegiscastPdf(slug, materialId, recorteId)");
   });
 });
