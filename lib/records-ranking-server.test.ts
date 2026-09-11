@@ -26,6 +26,7 @@ describe("Records por produto habilitado", () => {
     expect(loader).not.toContain('.eq("tipo_produto", "edital")');
     expect(loader).toContain('rpc("obter_detalhes_records_produto"');
     expect(loader).toContain("resolveRecordsContestImage");
+    expect(loader).toContain("productHref: `/leisflashcards/");
     expect(loader).not.toContain('from("ligas")');
     expect(loader).not.toContain("legacyLeagueForProduct");
     expect(loader).not.toContain("LeagueRow");
@@ -51,5 +52,6 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain('rpc("obter_detalhes_records_produto"');
     expect(recordsPage).toContain("Pontuação por lei");
     expect(recordsPage).toContain("Posições próximas");
+    expect(recordsPage).toContain("data.contest.productHref");
   });
 });

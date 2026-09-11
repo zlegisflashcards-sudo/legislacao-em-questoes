@@ -11,7 +11,7 @@ type DetailsPayload = { top10?: RankingRow[]; current_user?: RankingRow | null; 
 export type RecordsEntry = { position: number; publicName: string; score: number; isCurrentUser: boolean };
 export type RecordsLaw = { slug: string; name: string; score: number; hasAccess: boolean; href: string; actionLabel: "Estudar" | "Adquirir" };
 export type RecordsRankingData = {
-  contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string };
+  contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string; productHref: string };
   ranking: RecordsEntry[];
   personal: RecordsEntry | null;
   nearby: RecordsEntry[];
@@ -24,7 +24,7 @@ const shortName = (slug: string) => slug.replace(/sd$/, "").toUpperCase();
 const asRows = (value: unknown) => Array.isArray(value) ? value as RankingRow[] : [];
 
 function recordsContestForProduct(product: ProductRow): RecordsContest {
-  return { productSlug: product.slug, productType: product.tipo_produto, shortName: shortName(product.slug), productName: product.nome, name: product.nome, description: product.descricao, contestImageUrl: resolveRecordsContestImage(typeof product.imagem_url === "string" ? product.imagem_url : null), rankingHref: `/recordes/${encodeURIComponent(product.slug)}` };
+  return { productSlug: product.slug, productType: product.tipo_produto, shortName: shortName(product.slug), productName: product.nome, name: product.nome, description: product.descricao, contestImageUrl: resolveRecordsContestImage(typeof product.imagem_url === "string" ? product.imagem_url : null), rankingHref: `/recordes/${encodeURIComponent(product.slug)}`, productHref: `/leisflashcards/${encodeURIComponent(product.slug)}` };
 }
 
 async function hydrateEntries(rows: RankingRow[], studentId: string | null) {
