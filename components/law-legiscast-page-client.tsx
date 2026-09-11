@@ -33,7 +33,7 @@ export function LawLegiscastPageClient({ slug, recorteId, commentedArticles = []
       <section className="grid min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]">
         <div className="min-w-0 p-4 sm:p-6">
           <div className="lg:hidden">
-            <div className="mb-4 text-center"><h2 className="text-3xl font-black text-[#062a5f]">🎧 LegisCast</h2><p className="mt-1 text-sm text-slate-600">Ouça nossos hosts enquanto acompanha a legislação.</p></div>
+            <div className="mb-4 text-center"><h2 className="text-3xl font-black text-[#062a5f]">🎧 LegisCast</h2><p className="mt-1 text-sm text-slate-600">Estude em qualquer lugar com nossa legislação explicada em áudio!</p></div>
             <img src="/images/legiscast-hosts.png" alt={`Capa dos hosts do LegisCast — ${study.law.title}`} className="mx-auto aspect-square w-[min(100%,220px)] rounded-2xl object-cover" />
           </div>
           {mobileLayout === false ? (pdf ? <LegiscastPdfViewer key={`pdf-${attempt}`} slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onReady={completePdf} onError={() => fail("Não foi possível carregar o PDF desta lei.")} /> : <p className="rounded-xl bg-slate-50 p-4 text-slate-600">O PDF desta lei não está disponível no momento.</p>) : null}
