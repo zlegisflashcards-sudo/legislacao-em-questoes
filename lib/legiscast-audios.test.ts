@@ -137,4 +137,15 @@ describe("LegisCast em áudio", () => {
     expect(pdfViewer).toContain("export function LegiscastPdfActions");
     expect(pdfViewer).toContain("fetchAuthorizedLegiscastPdf(slug, materialId, recorteId)");
   });
+
+  it("usa capa e controles compactos no mobile sem alterar os rótulos desktop", () => {
+    expect(lawLegiscastClient).toContain("w-[min(100%,220px)]");
+    expect(lawLegiscastClient).toContain("mx-auto aspect-square");
+    expect(player).toContain('aria-label={playing ? "Pausar" : "Reproduzir"}');
+    expect(player).toContain('{playing ? "⏸" : "▶"}');
+    expect(player).toContain('aria-label="Voltar 15 segundos"');
+    expect(player).toContain('aria-label="Avançar 15 segundos"');
+    expect(player).toContain('className="hidden lg:inline">{playing ? "Pausar" : "Reproduzir"}');
+    expect(player).not.toContain("overflow-x-auto");
+  });
 });

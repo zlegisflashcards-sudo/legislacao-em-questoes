@@ -33,7 +33,7 @@ export function LawLegiscastPageClient({ slug, recorteId, commentedArticles = []
       <section className="grid min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]">
         <div className="min-w-0 p-4 sm:p-6">
           <div className="lg:hidden">
-            <img src="/images/legiscast-hosts.png" alt={`Capa dos hosts do LegisCast — ${study.law.title}`} className="aspect-square w-full rounded-2xl object-cover" />
+            <img src="/images/legiscast-hosts.png" alt={`Capa dos hosts do LegisCast — ${study.law.title}`} className="mx-auto aspect-square w-[min(100%,220px)] rounded-2xl object-cover" />
             {pdf ? <div className="mt-3"><LegiscastPdfActions slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onExpand={() => setMobilePdfOpen(true)} /></div> : <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">O PDF desta lei não está disponível no momento.</p>}
           </div>
           {mobileLayout === false ? (pdf ? <LegiscastPdfViewer key={`pdf-${attempt}`} slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onReady={completePdf} onError={() => fail("Não foi possível carregar o PDF desta lei.")} /> : <p className="rounded-xl bg-slate-50 p-4 text-slate-600">O PDF desta lei não está disponível no momento.</p>) : null}
