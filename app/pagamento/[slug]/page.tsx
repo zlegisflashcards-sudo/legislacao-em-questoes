@@ -2,7 +2,6 @@ import Script from "next/script";
 import { notFound, redirect } from "next/navigation";
 import {
   encontrarLegislacaoPorSlug,
-  filtrarLegislacoesAtivas,
   getVadeMecumHotmartUrl,
   getLegislacoes,
   isVadeMecum,
@@ -47,14 +46,6 @@ function escaparAtributoHtml(valor: string) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-export async function generateStaticParams() {
-  const legislacoes = await withActiveQuestionCounts(await getLegislacoes());
-
-  return filtrarLegislacoesAtivas(legislacoes).map((legislacao) => ({
-    slug: legislacao.slug,
-  }));
 }
 
 export default async function PagamentoPage({ params }: PagamentoPageProps) {
