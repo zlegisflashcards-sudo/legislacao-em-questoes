@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import { LEGISCAST_AUDIO_MAX_BYTES, formatLegiscastAudioSize } from "@/lib/legiscast-audio-upload";
 import { LEGISCAST_FINAL_MAX_BYTES, LEGISCAST_ORIGINAL_MAX_BYTES, isAcceptedLegiscastOriginal } from "@/lib/legiscast-audio-processing";
 import { legiscastPdfPositionKey, normalizeLegiscastPdfPage } from "@/lib/legiscast-pdf-position";
+import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 
 const migration = readFileSync("supabase/migrations/20260904123000_create_legiscast_audios.sql", "utf8");
 const pdfPageMigration = readFileSync("supabase/migrations/20260911120000_add_law_structure_pdf_page.sql", "utf8");
+const optionalTitleMigration = readFileSync("supabase/migrations/20260911150000_make_legiscast_audio_titles_optional.sql", "utf8");
 const server = readFileSync("lib/legiscast-audios-server.ts", "utf8");
 const player = readFileSync("components/legiscast-audio-player.tsx", "utf8");
 const admin = readFileSync("lib/admin-legiscast-audios-server.ts", "utf8");
@@ -44,6 +46,30 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain("border-t border-slate-200 pt-6");
     expect(lawLegiscastPage).toContain("searchParams");
     expect(lawLegiscastPage).toContain("recorte_id");
+  });
+
+  it("usa título opcional como override e recorre ao nome da estrutura", () => {
+    expect(legiscastAudioDisplayTitle("  Faixa especial  ", "Capítulo 01")).toBe("Faixa especial");
+    expect(legiscastAudioDisplayTitle("", "Capítulo 01")).toBe("Capítulo 01");
+    expect(legiscastAudioDisplayTitle(null, "Capítulo 01")).toBe("Capítulo 01");
+    expect(legiscastAudioDisplayTitle("   ", "  Capítulo 01  ")).toBe("Capítulo 01");
+    expect(legiscastAudioDisplayTitle(null, null)).toBe("Áudio");
+    expect(server).toContain("legiscastAudioDisplayTitle(audio.titulo");
+    expect(server).toContain("structureNames.get(audio.structure_id)");
+  });
+
+  it("aceita título vazio no admin, schema e publicação do worker", () => {
+    expect(optionalTitleMigration).toContain("alter column titulo drop not null");
+    expect(optionalTitleMigration).toContain("drop constraint if exists legiscast_audios_titulo_check");
+    expect(optionalTitleMigration).toContain("drop constraint if exists legiscast_audio_jobs_titulo_check");
+    expect(admin).toContain('const title = String(input.titulo ?? "").trim() || null');
+    expect(admin).toContain('patch.titulo = String(input.titulo ?? "").trim() || null');
+    expect(admin).not.toContain("Lei e título são obrigatórios.");
+    expect(admin).not.toContain("Título obrigatório.");
+    expect(adminClient).toContain("Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.");
+    expect(adminClient).not.toContain('name="titulo" required');
+    expect(worker).toContain("titulo: job.titulo");
+    expect(worker).not.toContain("job.titulo.trim");
   });
 
   it("carrega a hierarquia real da lei e renderiza título somente como agrupador visual", () => {

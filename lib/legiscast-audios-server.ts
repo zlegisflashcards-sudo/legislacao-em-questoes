@@ -2,6 +2,7 @@ import "server-only";
 
 import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
 import { sortLegiscastAudiosByStructure } from "@/lib/legiscast-audio-structure";
+import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const BUCKET = "legiscast-audio";
@@ -14,10 +15,11 @@ export async function listAuthorizedLegiscastAudios(request: Request, slug: stri
     db.from("law_structure").select("id,parent_id,tipo,nome,ordem,pdf_page").eq("lei_id", context.lawId).eq("ativo", true),
   ]);
   if (audioResult.error || structureResult.error) throw new LawStudyApiError(503, "Não foi possível carregar os áudios desta lei.");
+  const structureNames = new Map((structureResult.data ?? []).map((node) => [node.id, node.nome]));
   const audios = await Promise.all(sortLegiscastAudiosByStructure(audioResult.data ?? [], structureResult.data ?? []).map(async (audio) => {
     const signed = await db.storage.from(BUCKET).createSignedUrl(audio.storage_path, 60 * 60);
     if (signed.error || !signed.data?.signedUrl) throw new LawStudyApiError(503, "Não foi possível preparar os áudios desta lei.");
-    return { id: audio.id, structureId: audio.structure_id, title: audio.titulo, description: audio.descricao, durationSeconds: audio.duracao_segundos, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
+    return { id: audio.id, structureId: audio.structure_id, title: legiscastAudioDisplayTitle(audio.titulo, audio.structure_id === null ? null : structureNames.get(audio.structure_id)), description: audio.descricao, durationSeconds: audio.duracao_segundos, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
   }));
   return { audios, structure: structureResult.data ?? [] };
 }

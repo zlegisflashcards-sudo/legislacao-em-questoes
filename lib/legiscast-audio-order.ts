@@ -1,6 +1,6 @@
 export type LegiscastAudioOrderable = {
   id: string;
-  titulo: string;
+  titulo: string | null;
   ordem: number | null;
   created_at: string | null;
 };
@@ -21,7 +21,7 @@ export function sortLegiscastAudios<T extends LegiscastAudioOrderable>(audios: T
     if (leftManual === null && rightManual !== null) return 1;
     if (leftManual !== null && rightManual !== null && leftManual !== rightManual) return leftManual - rightManual;
 
-    const title = titleCollator.compare(left.titulo, right.titulo);
+    const title = titleCollator.compare(left.titulo ?? "", right.titulo ?? "");
     if (title) return title;
     const createdAt = String(left.created_at ?? "").localeCompare(String(right.created_at ?? ""));
     if (createdAt) return createdAt;
