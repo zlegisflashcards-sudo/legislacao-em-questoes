@@ -5,6 +5,7 @@ import { LEGISCAST_FINAL_MAX_BYTES, LEGISCAST_ORIGINAL_MAX_BYTES, isAcceptedLegi
 import { legiscastPdfPositionKey, normalizeLegiscastPdfPage } from "@/lib/legiscast-pdf-position";
 
 const migration = readFileSync("supabase/migrations/20260904123000_create_legiscast_audios.sql", "utf8");
+const pdfPageMigration = readFileSync("supabase/migrations/20260911120000_add_law_structure_pdf_page.sql", "utf8");
 const server = readFileSync("lib/legiscast-audios-server.ts", "utf8");
 const player = readFileSync("components/legiscast-audio-player.tsx", "utf8");
 const admin = readFileSync("lib/admin-legiscast-audios-server.ts", "utf8");
@@ -114,6 +115,46 @@ describe("LegisCast em áudio", () => {
     expect(pdfViewer).toContain("Imprimir");
     expect(pdfViewer).toContain("authorizedLegiscastPdfPath(slug, materialId, recorteId)");
     expect(pdfViewer).toContain("catch { textLayer.remove(); }");
+  });
+
+  it("não exibe o sumário antigo do PDF.js no LegisCast", () => {
+    expect(pdfViewer).not.toContain("Sumário do PDF");
+    expect(pdfViewer).not.toContain("<details");
+    expect(pdfViewer).toContain("getOutline");
+    expect(pdfViewer).toContain("getPageIndex");
+    expect(player).toContain("Sumário da lei");
+  });
+
+  it("adiciona e administra a página inicial opcional de cada estrutura", () => {
+    expect(pdfPageMigration).toContain("add column if not exists pdf_page integer");
+    expect(pdfPageMigration).toContain("pdf_page is null or pdf_page >= 1");
+    expect(admin).toContain("function positivePdfPage");
+    expect(admin).toContain("Number.isSafeInteger(parsed)");
+    expect(admin).toContain("parsed < 1");
+    expect(admin).toContain("pdfPage = positivePdfPage(input.pdfPage)");
+    expect(admin).toContain("update({ pdf_page: pdfPage");
+    expect(adminRoute).toContain('body.operation === "update-structure-pdf-page"');
+    expect(adminClient).toContain('name="pdf_page" type="number" min="1" step="1"');
+    expect(adminClient).toContain('rawPage || null');
+    expect(adminClient).toContain('Number(rawPage) < 1');
+    expect(adminClient).toContain("Página onde esta estrutura começa no PDF.");
+    expect(adminClient).toContain("Sem faixas vinculadas.");
+  });
+
+  it("navega do sumário estrutural para o PDF sem recarregar áudio ou documento", () => {
+    expect(server).toContain("id,parent_id,tipo,nome,ordem,pdf_page");
+    expect(player).toContain("node.pdf_page");
+    expect(player).toContain("onNavigateToPdfPage?.(navigablePage)");
+    expect(player).toContain("first || navigablePage !== null");
+    expect(lawLegiscastClient).toContain("onNavigateToPdfPage={setTargetPdfPage}");
+    expect(lawLegiscastClient.match(/targetPage=\{targetPdfPage\}/g)).toHaveLength(2);
+    expect(pdfViewer).toContain('canvas[data-page="${targetPage}"]');
+    expect(pdfViewer).toContain("legiscast_pdf_page_navigation_ignored");
+    expect(pdfViewer).toContain("targetPage > total");
+    const viewerEffect = pdfViewer.slice(pdfViewer.indexOf('if (status !== "ready" || targetPage'), pdfViewer.indexOf("[targetPage, status, total"));
+    expect(viewerEffect).not.toContain("setZoom");
+    expect(viewerEffect).not.toContain("fetchAuthorizedLegiscastPdf");
+    expect(player.match(/<audio /g)).toHaveLength(1);
   });
 
   it("mantém no mobile capa, player, playlist, ações do PDF e artigos nessa ordem", () => {

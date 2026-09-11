@@ -11,6 +11,7 @@ type AuthorizeInput = { lawId: unknown; structureId?: unknown; titulo: unknown; 
 type ConfirmInput = { jobId: unknown; operationToken: unknown };
 type RetryInput = { jobId: unknown };
 type AudioInput = { audioId: unknown; titulo?: unknown; descricao?: unknown; ordem?: unknown; ativo?: unknown; structureId?: unknown };
+type StructurePdfPageInput = { structureId: unknown; pdfPage?: unknown };
 
 export class AdminLegiscastAudioError extends Error { constructor(public status: number, message: string) { super(message); } }
 function safeAuthorizationErrorMessage(error: unknown) {
@@ -30,6 +31,7 @@ function logLegiscastUploadAuthorizationFailure(error: unknown) {
 }
 async function requireAdmin() { if (!await obterAdministrador()) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); }
 function positiveInteger(value: unknown, optional = false) { if ((value === null || value === undefined || value === "") && optional) return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 0) throw new AdminLegiscastAudioError(400, "Número inválido."); return parsed; }
+function positivePdfPage(value: unknown) { if (value === null || value === undefined || value === "") return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 1) throw new AdminLegiscastAudioError(400, "A página do PDF deve ser um número inteiro maior ou igual a 1."); return parsed; }
 function signingKey() { const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!key) throw new AdminLegiscastAudioError(500, "Configuração do servidor indisponível."); return key; }
 function sign(value: string) { return createHmac("sha256", signingKey()).update(value).digest("base64url"); }
 function createOperationToken(operation: Operation) { const payload = Buffer.from(JSON.stringify(operation)).toString("base64url"); return `${payload}.${sign(payload)}`; }
@@ -55,8 +57,10 @@ export async function listAdminLegiscastAudios() {
     db.from("legiscast_audio_jobs").select("id,lei_id,titulo,status,original_size_bytes,final_size_bytes,duracao_segundos,erro_codigo,tentativas,created_at,leis(titulo,slug)").order("created_at", { ascending: false }).limit(30),
   ]);
   if (laws.error || audios.error || jobs.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar os áudios do LegisCast.");
-  const structures = await db.from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem").eq("ativo", true).order("ordem"); if (structures.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar a estrutura das leis."); return { laws: laws.data ?? [], audios: audios.data ?? [], structures: structures.data ?? [], jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
+  const structures = await db.from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page").eq("ativo", true).order("ordem"); if (structures.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar a estrutura das leis."); return { laws: laws.data ?? [], audios: audios.data ?? [], structures: structures.data ?? [], jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
 }
+
+export async function updateAdminLegiscastStructurePdfPage(input: StructurePdfPageInput) { await requireAdmin(); const structureId = positiveInteger(input.structureId) as number; const pdfPage = positivePdfPage(input.pdfPage); const db = getSupabaseServerClient(); const result = await db.from("law_structure").update({ pdf_page: pdfPage, updated_at: new Date().toISOString() }).eq("id", structureId).select("id").maybeSingle(); if (result.error) throw new AdminLegiscastAudioError(503, "Não foi possível atualizar a página da estrutura."); if (!result.data) throw new AdminLegiscastAudioError(404, "Estrutura não encontrada."); return { id: structureId, pdfPage }; }
 
 export async function authorizeAdminLegiscastOriginal(input: AuthorizeInput) {
   await requireAdmin(); const payload = fields(input); const { db, law } = await activeLaw(payload.lawId); if (payload.structureId) { const structure = await db.from("law_structure").select("id").eq("id", payload.structureId).eq("lei_id", payload.lawId).maybeSingle(); if (structure.error || !structure.data) throw new AdminLegiscastAudioError(400, "Estrutura inválida para esta lei."); } const id = randomUUID(); const originalPath = `legiscast-audio-original/${id}/original.${payload.extension}`; const finalPath = `${law.slug}/${id}.m4a`;

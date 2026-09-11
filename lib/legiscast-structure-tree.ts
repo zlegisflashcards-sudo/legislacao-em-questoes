@@ -1,4 +1,4 @@
-export type LegiscastStructureTreeNode = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number | null };
+export type LegiscastStructureTreeNode = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number | null; pdf_page?: number | null };
 export type LegiscastStructureTreeItem = LegiscastStructureTreeNode & { children: LegiscastStructureTreeItem[] };
 
 const collator = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });

@@ -11,7 +11,7 @@ export async function listAuthorizedLegiscastAudios(request: Request, slug: stri
   const db = getSupabaseServerClient();
   const [audioResult, structureResult] = await Promise.all([
     db.from("legiscast_audios").select("id,titulo,descricao,duracao_segundos,ordem,storage_path,created_at,structure_id").eq("lei_id", context.lawId).eq("ativo", true),
-    db.from("law_structure").select("id,parent_id,tipo,nome,ordem").eq("lei_id", context.lawId).eq("ativo", true),
+    db.from("law_structure").select("id,parent_id,tipo,nome,ordem,pdf_page").eq("lei_id", context.lawId).eq("ativo", true),
   ]);
   if (audioResult.error || structureResult.error) throw new LawStudyApiError(503, "Não foi possível carregar os áudios desta lei.");
   const audios = await Promise.all(sortLegiscastAudiosByStructure(audioResult.data ?? [], structureResult.data ?? []).map(async (audio) => {

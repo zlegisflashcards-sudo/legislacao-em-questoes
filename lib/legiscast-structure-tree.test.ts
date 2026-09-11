@@ -13,4 +13,13 @@ describe("sumário estrutural do LegisCast", () => {
   it("mantém capítulos raiz quando a lei não possui títulos", () => {
     expect(buildLegiscastStructureTree([node(2, "Capítulo 2", null), node(1, "Capítulo 1", null)]).map((item) => item.nome)).toEqual(["Capítulo 1", "Capítulo 2"]);
   });
+
+  it("preserva pdf_page em nós com e sem filhos", () => {
+    const tree = buildLegiscastStructureTree([
+      { ...node(1, "Título I", null, 1, "titulo"), pdf_page: 3 },
+      { ...node(2, "Capítulo I", 1, 1), pdf_page: 8 },
+    ]);
+    expect(tree[0].pdf_page).toBe(3);
+    expect(tree[0].children[0].pdf_page).toBe(8);
+  });
 });
