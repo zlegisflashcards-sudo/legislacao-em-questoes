@@ -29,16 +29,16 @@ export function LawLegiscastPageClient({ slug, recorteId, commentedArticles = []
   return <main className="relative mx-auto w-full max-w-[1600px] overflow-x-hidden px-4 py-6 sm:px-6 sm:py-10">
     <div className={pageReady ? "" : "invisible"}>
       <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />
-      <header className="mb-5 rounded-3xl border border-blue-100 bg-white p-5 shadow-sm sm:p-7"><h1 className="mt-2 text-3xl font-black text-[#062a5f] sm:text-4xl">{study.law.title}</h1>{recorteId ? <p className="mt-2 text-sm text-slate-600">Contexto do recorte selecionado.</p> : null}</header>
+      <header className="mb-5 rounded-3xl border border-blue-100 bg-white p-5 shadow-sm sm:p-7"><h1 className="mt-2 text-2xl font-black leading-tight text-[#062a5f] sm:text-4xl">{study.law.title}</h1>{recorteId ? <p className="mt-2 text-sm text-slate-600">Contexto do recorte selecionado.</p> : null}</header>
       <section className="grid min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]">
         <div className="min-w-0 p-4 sm:p-6">
           <div className="lg:hidden">
+            <div className="mb-4 text-center"><h2 className="text-3xl font-black text-[#062a5f]">🎧 LegisCast</h2><p className="mt-1 text-sm text-slate-600">Ouça nossos hosts enquanto acompanha a legislação.</p></div>
             <img src="/images/legiscast-hosts.png" alt={`Capa dos hosts do LegisCast — ${study.law.title}`} className="mx-auto aspect-square w-[min(100%,220px)] rounded-2xl object-cover" />
-            {pdf ? <div className="mt-3"><LegiscastPdfActions slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onExpand={() => setMobilePdfOpen(true)} /></div> : <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">O PDF desta lei não está disponível no momento.</p>}
           </div>
           {mobileLayout === false ? (pdf ? <LegiscastPdfViewer key={`pdf-${attempt}`} slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onReady={completePdf} onError={() => fail("Não foi possível carregar o PDF desta lei.")} /> : <p className="rounded-xl bg-slate-50 p-4 text-slate-600">O PDF desta lei não está disponível no momento.</p>) : null}
         </div>
-        <div className="min-h-0 min-w-0 p-4 pt-0 sm:p-6 lg:h-[calc(74vh+4rem)]"><LegiscastAudioPlayer key={`audio-${attempt}`} slug={slug} embedded onReady={completeAudio} onError={fail} /></div>
+        <div className="min-h-0 min-w-0 p-4 pt-0 sm:p-6 lg:h-[calc(74vh+4rem)]"><LegiscastAudioPlayer key={`audio-${attempt}`} slug={slug} embedded onReady={completeAudio} onError={fail} />{pdf ? <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3 lg:hidden" aria-labelledby="mobile-pdf-title"><header className="mb-3 flex items-center gap-3"><img src="/icons/pdf.png" alt="" aria-hidden="true" className="h-11 w-11 shrink-0 rounded-lg object-contain" /><div className="min-w-0 text-left"><h3 id="mobile-pdf-title" className="font-black text-[#062a5f]">Material em PDF</h3><p className="text-xs text-slate-600">Acesse a legislação esquematizada desta lei.</p></div></header><LegiscastPdfActions slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onExpand={() => setMobilePdfOpen(true)} /></section> : <p className="mt-6 rounded-xl bg-slate-50 p-3 text-sm text-slate-600 lg:hidden">O PDF desta lei não está disponível no momento.</p>}</div>
       </section>
       <div className="mt-10 border-t border-slate-200 pt-2 lg:mt-0 lg:border-t-0 lg:pt-0"><LegiscastCommentedArticles comments={commentedArticles} recorteId={recorteId} /></div>
     </div>

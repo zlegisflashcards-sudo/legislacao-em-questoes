@@ -116,15 +116,15 @@ describe("LegisCast em áudio", () => {
     expect(pdfViewer).toContain("catch { textLayer.remove(); }");
   });
 
-  it("mantém no mobile capa, ações do PDF, player, playlist e artigos nessa ordem", () => {
+  it("mantém no mobile capa, player, playlist, ações do PDF e artigos nessa ordem", () => {
     const cover = lawLegiscastClient.indexOf("Capa dos hosts do LegisCast");
     const actions = lawLegiscastClient.indexOf("<LegiscastPdfActions");
     const playerPosition = lawLegiscastClient.indexOf("<LegiscastAudioPlayer key=");
     const articles = lawLegiscastClient.indexOf("<LegiscastCommentedArticles");
     expect(cover).toBeGreaterThan(-1);
-    expect(actions).toBeGreaterThan(cover);
-    expect(playerPosition).toBeGreaterThan(actions);
-    expect(articles).toBeGreaterThan(playerPosition);
+    expect(playerPosition).toBeGreaterThan(cover);
+    expect(actions).toBeGreaterThan(playerPosition);
+    expect(articles).toBeGreaterThan(actions);
     expect(player).toContain("<StructureSummary");
     expect(player.indexOf('aria-label="Posição da reprodução"')).toBeLessThan(player.indexOf("<StructureSummary"));
   });
@@ -147,5 +147,16 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain('aria-label="Avançar 15 segundos"');
     expect(player).toContain('className="hidden lg:inline">{playing ? "Pausar" : "Reproduzir"}');
     expect(player).not.toContain("overflow-x-auto");
+  });
+
+  it("separa as ações mobile em um cabeçalho de PDF sem viewer embutido", () => {
+    expect(lawLegiscastClient).toContain('aria-labelledby="mobile-pdf-title"');
+    expect(lawLegiscastClient).toContain('src="/icons/pdf.png"');
+    expect(lawLegiscastClient).toContain("Material em PDF");
+    expect(lawLegiscastClient).toContain("Acesse a legislação esquematizada desta lei.");
+    expect(pdfViewer).toContain(">Baixar</button>");
+    expect(pdfViewer).toContain(">Imprimir</button>");
+    expect(pdfViewer).toContain(">Expandir</button>");
+    expect(lawLegiscastClient).toContain("mobileLayout === false ? (pdf ? <LegiscastPdfViewer");
   });
 });
