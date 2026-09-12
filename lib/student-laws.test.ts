@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterStudentLaws, parseStudentLawRows, projectStudentLawContexts, studentLawContextTitle, studentLawMotherTitle, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
+import { filterStudentLaws, mergeAdministratorLawCatalog, parseStudentLawRows, projectStudentLawContexts, studentLawContextTitle, studentLawMotherTitle, studentLawReferenceLabel, studentLawShortNameForDisplay, studentLawStatusLabel, uniqueStudentLawsById, type StudentLaw } from "./student-laws";
 
 const migration = readFileSync("supabase/migrations/20260806103510_create_student_acquired_laws_rpc.sql", "utf8");
 const server = readFileSync("lib/student-laws-server.ts", "utf8");
@@ -113,6 +113,33 @@ describe("projeção de contextos em Minhas Leis", () => {
   });
 });
 
+describe("catálogo administrativo em Minhas Leis", () => {
+  it("mostra todas as leis ativas ao ADM sem liberações", () => {
+    const result = mergeAdministratorLawCatalog([], laws);
+    expect(result.map((law) => law.id)).toEqual([1, 2]);
+    expect(result.every((law) => law.accessKind === "admin")).toBe(true);
+  });
+
+  it("completa as liberações do ADM sem duplicar a lei", () => {
+    const released = [{ ...laws[0], studyContextId: null, studyContextKind: "completa" as const }];
+    const result = mergeAdministratorLawCatalog(released, laws);
+    expect(result.map((law) => law.id)).toEqual([1, 2]);
+    expect(result.find((law) => law.id === 1)?.accessKind).toBe("student");
+    expect(result.find((law) => law.id === 2)?.accessKind).toBe("admin");
+  });
+
+  it("preserva todos os contextos comerciais e não acrescenta fallback duplicado", () => {
+    const released = [
+      { ...laws[0], studyContextId: "pmerj", studyContextKind: "recorte" as const },
+      { ...laws[0], studyContextId: "pmesp", studyContextKind: "recorte" as const },
+    ];
+    const result = mergeAdministratorLawCatalog(released, laws);
+    expect(result.filter((law) => law.id === 1)).toHaveLength(2);
+    expect(result.filter((law) => law.id === 1).every((law) => law.accessKind === "student")).toBe(true);
+    expect(result.filter((law) => law.id === 2)).toHaveLength(1);
+  });
+});
+
 describe("fronteira autenticada das leis adquiridas", () => {
   it("usa auth.uid e consolida somente liberações e leis ativas", () => {
     expect(migration).toContain("function public.obter_minhas_leis()");
@@ -147,14 +174,25 @@ describe("fronteira autenticada das leis adquiridas", () => {
     expect(server).toContain("auth.getUser(token)");
     expect(server).toContain('rpc("obter_minhas_leis")');
     expect(server).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
-    expect(client).toContain('Authorization: `Bearer ${token}`');
+    expect(client).toContain("headers: await protectedApiHeaders()");
     expect(client).toContain("/conta?modo=login&retorno=%2Fminhas-leis");
+  });
+
+  it("reconhece ADM no servidor e completa apenas com leis ativas", () => {
+    expect(server).toContain("usuarioEhAdministrador(bearerUser)");
+    expect(server).toContain("await obterAdministrador()");
+    expect(server).toContain('.from("leis").select(');
+    expect(server).toContain('.eq("ativo", true)');
+    expect(server).toContain('url.searchParams.get("visao") === "minhas-leis"');
+    expect(server).toContain("mergeAdministratorLawCatalog(studentContexts, await loadActiveLawCatalog())");
+    expect(client).toContain('/api/aluno/minhas-leis?visao=minhas-leis');
+    expect(server).not.toMatch(/\.from\("(?:alunos|compras|liberacoes_leis)"\)\.(?:insert|upsert)/);
   });
 
   it("projeta cada contexto com a contagem central de questões ativas", () => {
     expect(server).toContain("listLawStudyContextsByLaw(student.id, laws.map((law) => law.id))");
     expect(server).toContain("projectStudentLawContexts(lawsWithCampaign, contextsByLaw)");
-    expect(server).not.toContain("quantidade_itens");
+    expect(server).toContain('.eq("tipo", "flashcards")');
   });
 
   it("expõe apenas GET saneado e desabilita cache privado", () => {
@@ -172,7 +210,7 @@ describe("interface das leis adquiridas", () => {
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain('?contexto=completo');
     expect(card).toContain('?recorte_id=');
-    expect(card).toContain('href={lawHref}'); expect(card).toContain('>Legis Questões</Link>');
+    expect(card).toContain('href={lawHref}'); expect(card).toContain('>Estudar</Link>');
     expect(card).not.toContain('/questoes/${encodeURIComponent(law.slug)}/estudar');
   });
 
@@ -203,7 +241,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignStatus", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignStatus", "campaignProgress", ">Estudar</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
@@ -222,6 +260,11 @@ describe("interface das leis adquiridas", () => {
     expect(card).toContain('rounded-full bg-blue-50');
     expect(card).not.toContain('"Recorte do edital"');
     expect(card).not.toContain('"Lei completa"');
+  });
+
+  it("marca discretamente apenas o fallback administrativo", () => {
+    expect(card).toContain('law.accessKind === "admin"');
+    expect(card).toContain("Acesso ADM");
   });
 
   it("exibe apenas barra e percentual real de progresso, sem score", () => {

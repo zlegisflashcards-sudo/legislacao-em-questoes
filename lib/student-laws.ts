@@ -21,6 +21,7 @@ export type StudentLaw = {
   studyContextId?: string | null;
   studyContextName?: string;
   studyContextKind?: "completa" | "recorte";
+  accessKind?: "student" | "admin";
 };
 
 export type StudentLawStudyContext = {
@@ -182,4 +183,27 @@ export function uniqueStudentLawsById(laws: StudentLaw[]) {
     if (!current || (current.studyContextKind === "recorte" && law.studyContextKind === "completa")) byId.set(law.id, law);
   }
   return [...byId.values()];
+}
+
+/** Mantém os contextos comerciais e acrescenta uma única prévia para cada lei restante do catálogo. */
+export function mergeAdministratorLawCatalog(studentLaws: StudentLaw[], activeCatalog: StudentLaw[]) {
+  const releasedLawIds = new Set(studentLaws.map((law) => law.id));
+  const normalAccess = studentLaws.map((law) => ({ ...law, accessKind: "student" as const }));
+  const administrativeAccess = activeCatalog
+    .filter((law) => !releasedLawIds.has(law.id))
+    .map((law) => ({
+      ...law,
+      accessKind: "admin" as const,
+      campaignStatus: "nao_iniciada" as const,
+      campaignProgress: 0,
+      studyContextId: null,
+      studyContextName: "Lei completa",
+      studyContextKind: "completa" as const,
+    }));
+
+  return [...normalAccess, ...administrativeAccess].sort((left, right) =>
+    left.ordem - right.ordem
+    || left.titulo.localeCompare(right.titulo, "pt-BR")
+    || left.id - right.id
+  );
 }
