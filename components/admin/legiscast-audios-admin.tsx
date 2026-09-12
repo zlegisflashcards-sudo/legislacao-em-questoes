@@ -1,60 +1,1093 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { LEGISCAST_ORIGINAL_MAX_BYTES, formatLegiscastAudioSize, isAcceptedLegiscastOriginal } from "@/lib/legiscast-audio-processing";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  LEGISCAST_ORIGINAL_MAX_BYTES,
+  formatLegiscastAudioSize,
+  isAcceptedLegiscastOriginal,
+} from "@/lib/legiscast-audio-processing";
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
+import { filterLegiscastAdminLaws, normalizeLegiscastPdfPage } from "@/lib/legiscast-audios-admin-form";
 
 type Law = { id: number; slug: string; titulo: string };
-type Structure = { id: number; lei_id: number; parent_id: number | null; tipo: string; nome: string; ordem: number; pdf_page: number | null };
-type Audio = { id: string; lei_id: number; structure_id: number | null; titulo: string | null; descricao?: string | null; duracao_segundos?: number | null; ordem: number; ativo: boolean; final_size_bytes?: number | null; updated_at?: string | null; leis?: { titulo?: string } | null };
-type Job = { id: string; structure_id: number | null; titulo: string | null; status: "pendente" | "processando" | "concluido" | "erro"; statusLabel: string; original_size_bytes: number; final_size_bytes?: number | null; duracao_segundos?: number | null; tentativas: number; leis?: { titulo?: string } | null };
-type AuthorizeResponse = { jobId: string; uploadUrl: string; operationToken: string };
-async function readResponse(response: Response) { const text = await response.text(); try { return JSON.parse(text) as Record<string, unknown>; } catch { return { error: text || "Não foi possível concluir a operação." }; } }
-function apiError(body: Record<string, unknown>, fallback: string) { return typeof body.error === "string" ? body.error : fallback; }
-function reduction(job: Job) { return job.final_size_bytes ? Math.max(0, Math.round((1 - job.final_size_bytes / job.original_size_bytes) * 100)) : null; }
-function formatDuration(seconds?: number | null) { if (!seconds) return "—"; const total = Math.round(seconds); const hours = Math.floor(total / 3600); const minutes = Math.floor((total % 3600) / 60); const remaining = total % 60; return hours ? `${hours}h${String(minutes).padStart(2, "0")}min` : minutes ? `${minutes}min${String(remaining).padStart(2, "0")}s` : `${remaining}s`; }
-function formatSize(bytes?: number | null) { return bytes ? formatLegiscastAudioSize(bytes) : "—"; }
-function formatUpdatedAt(value?: string | null) { return value ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value)) : "—"; }
-function tracksForLaw(audios: Audio[], lawId: number) { return audios.filter((audio) => audio.lei_id === lawId).sort((first, second) => first.ordem - second.ordem || String(first.titulo ?? "").localeCompare(String(second.titulo ?? ""))); }
-function audioDisplayTitle(audio: Pick<Audio, "titulo" | "structure_id"> | Pick<Job, "titulo" | "structure_id">, structures: Structure[]) { return legiscastAudioDisplayTitle(audio.titulo, audio.structure_id === null ? null : structures.find((structure) => structure.id === audio.structure_id)?.nome); }
-function summaryForLaw(audios: Audio[], lawId: number) { const tracks = tracksForLaw(audios, lawId); return { tracks, active: tracks.filter((audio) => audio.ativo).length, duration: tracks.reduce((total, audio) => total + (audio.duracao_segundos ?? 0), 0), updatedAt: tracks.reduce<string | null>((latest, audio) => !latest || (audio.updated_at && audio.updated_at > latest) ? audio.updated_at ?? latest : latest, null) }; }
-function structuresForLaw(structures: Structure[], lawId: number) { return structures.filter((structure) => structure.lei_id === lawId).sort((first, second) => first.ordem - second.ordem || first.nome.localeCompare(second.nome)); }
-function structureOptions(structures: Structure[], lawId: number) { const lawStructures = structuresForLaw(structures, lawId); const byParent = new Map<number | null, Structure[]>(); lawStructures.forEach((structure) => byParent.set(structure.parent_id, [...(byParent.get(structure.parent_id) ?? []), structure])); const result: Array<{ structure: Structure; depth: number }> = []; const visit = (parentId: number | null, depth: number) => (byParent.get(parentId) ?? []).forEach((structure) => { result.push({ structure, depth }); visit(structure.id, depth + 1); }); visit(null, 0); return result.length === lawStructures.length ? result : lawStructures.map((structure) => ({ structure, depth: 0 })); }
-function structureName(structures: Structure[], structureId: number | null) { return structureId === null ? "Outros / Sem estrutura" : structures.find((structure) => structure.id === structureId)?.nome ?? "Estrutura não encontrada"; }
+type Structure = {
+  id: number;
+  lei_id: number;
+  parent_id: number | null;
+  tipo: string;
+  nome: string;
+  ordem: number;
+  pdf_page: number | null;
+};
+type Audio = {
+  id: string;
+  lei_id: number;
+  structure_id: number | null;
+  titulo: string | null;
+  descricao?: string | null;
+  duracao_segundos?: number | null;
+  ordem: number;
+  ativo: boolean;
+  final_size_bytes?: number | null;
+  updated_at?: string | null;
+  leis?: { titulo?: string } | null;
+};
+type Job = {
+  id: string;
+  structure_id: number | null;
+  titulo: string | null;
+  status: "pendente" | "processando" | "concluido" | "erro";
+  statusLabel: string;
+  original_size_bytes: number;
+  final_size_bytes?: number | null;
+  duracao_segundos?: number | null;
+  tentativas: number;
+  leis?: { titulo?: string } | null;
+};
+type AuthorizeResponse = {
+  jobId: string;
+  uploadUrl: string;
+  operationToken: string;
+};
+async function readResponse(response: Response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { error: text || "Não foi possível concluir a operação." };
+  }
+}
+function apiError(body: Record<string, unknown>, fallback: string) {
+  return typeof body.error === "string" ? body.error : fallback;
+}
+function reduction(job: Job) {
+  return job.final_size_bytes
+    ? Math.max(
+        0,
+        Math.round((1 - job.final_size_bytes / job.original_size_bytes) * 100),
+      )
+    : null;
+}
+function formatDuration(seconds?: number | null) {
+  if (!seconds) return "—";
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remaining = total % 60;
+  return hours
+    ? `${hours}h${String(minutes).padStart(2, "0")}min`
+    : minutes
+      ? `${minutes}min${String(remaining).padStart(2, "0")}s`
+      : `${remaining}s`;
+}
+function formatSize(bytes?: number | null) {
+  return bytes ? formatLegiscastAudioSize(bytes) : "—";
+}
+function formatUpdatedAt(value?: string | null) {
+  return value
+    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(
+        new Date(value),
+      )
+    : "—";
+}
+function tracksForLaw(audios: Audio[], lawId: number) {
+  return audios
+    .filter((audio) => audio.lei_id === lawId)
+    .sort(
+      (first, second) =>
+        first.ordem - second.ordem ||
+        String(first.titulo ?? "").localeCompare(String(second.titulo ?? "")),
+    );
+}
+function audioDisplayTitle(
+  audio:
+    | Pick<Audio, "titulo" | "structure_id">
+    | Pick<Job, "titulo" | "structure_id">,
+  structures: Structure[],
+) {
+  return legiscastAudioDisplayTitle(
+    audio.titulo,
+    audio.structure_id === null
+      ? null
+      : structures.find((structure) => structure.id === audio.structure_id)
+          ?.nome,
+  );
+}
+function summaryForLaw(audios: Audio[], lawId: number) {
+  const tracks = tracksForLaw(audios, lawId);
+  return {
+    tracks,
+    active: tracks.filter((audio) => audio.ativo).length,
+    duration: tracks.reduce(
+      (total, audio) => total + (audio.duracao_segundos ?? 0),
+      0,
+    ),
+    updatedAt: tracks.reduce<string | null>(
+      (latest, audio) =>
+        !latest || (audio.updated_at && audio.updated_at > latest)
+          ? (audio.updated_at ?? latest)
+          : latest,
+      null,
+    ),
+  };
+}
+function structuresForLaw(structures: Structure[], lawId: number) {
+  return structures
+    .filter((structure) => structure.lei_id === lawId)
+    .sort(
+      (first, second) =>
+        first.ordem - second.ordem || first.nome.localeCompare(second.nome),
+    );
+}
+function structureOptions(structures: Structure[], lawId: number) {
+  const lawStructures = structuresForLaw(structures, lawId);
+  const byParent = new Map<number | null, Structure[]>();
+  lawStructures.forEach((structure) =>
+    byParent.set(structure.parent_id, [
+      ...(byParent.get(structure.parent_id) ?? []),
+      structure,
+    ]),
+  );
+  const result: Array<{ structure: Structure; depth: number }> = [];
+  const visit = (parentId: number | null, depth: number) =>
+    (byParent.get(parentId) ?? []).forEach((structure) => {
+      result.push({ structure, depth });
+      visit(structure.id, depth + 1);
+    });
+  visit(null, 0);
+  return result.length === lawStructures.length
+    ? result
+    : lawStructures.map((structure) => ({ structure, depth: 0 }));
+}
+function structureName(structures: Structure[], structureId: number | null) {
+  return structureId === null
+    ? "Outros / Sem estrutura"
+    : (structures.find((structure) => structure.id === structureId)?.nome ??
+        "Estrutura não encontrada");
+}
 
-function DeleteAudioConfirmation({ title, busy, onCancel, onConfirm }: { title: string; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return <div className="fixed inset-0 z-[60] grid place-items-end bg-slate-950/40 p-3 sm:place-items-center"><div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl"><strong>Excluir definitivamente a faixa “{title}”?</strong><p className="mt-2 text-sm text-slate-600">O áudio publicado será removido. O histórico de processamento será preservado.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" className="admin-button" onClick={onCancel}>Cancelar</button><button type="button" className="admin-button" disabled={busy} onClick={onConfirm}>{busy ? "Excluindo…" : "Excluir áudio"}</button></div></div></div>;
+function LawSearchSelect({
+  laws,
+  value,
+  onChange,
+}: {
+  laws: Law[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const selected = laws.find((law) => String(law.id) === value) ?? null;
+  const [query, setQuery] = useState(selected?.titulo ?? "");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const results = useMemo(
+    () => filterLegiscastAdminLaws(laws, query).slice(0, 12),
+    [laws, query],
+  );
+  useEffect(() => {
+    if (selected) setQuery(selected.titulo);
+  }, [selected]);
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  const choose = (law: Law) => {
+    onChange(String(law.id));
+    setQuery(law.titulo);
+    setOpen(false);
+    setActiveIndex(0);
+  };
+  const clear = () => {
+    onChange("");
+    setQuery("");
+    setOpen(false);
+    setActiveIndex(0);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((index) =>
+        results.length
+          ? (index + (event.key === "ArrowDown" ? 1 : -1) + results.length) %
+            results.length
+          : 0,
+      );
+      return;
+    }
+    if (event.key === "Enter" && open && results[activeIndex]) {
+      event.preventDefault();
+      choose(results[activeIndex]);
+    }
+  };
+  return (
+    <div ref={rootRef} className="relative min-w-0">
+      <label className="grid gap-1 font-bold">
+        Lei
+        <div className="relative">
+          <input
+            role="combobox"
+            aria-expanded={open}
+            aria-controls="legiscast-law-results"
+            aria-autocomplete="list"
+            placeholder="Pesquisar lei..."
+            value={query}
+            onFocus={() => setOpen(true)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              onChange("");
+              setOpen(true);
+              setActiveIndex(0);
+            }}
+            onKeyDown={keyDown}
+            className="w-full pr-20"
+          />
+          {query ? (
+            <button
+              type="button"
+              aria-label="Limpar lei selecionada"
+              onClick={clear}
+              className="absolute right-10 top-1/2 -translate-y-1/2 px-2 text-slate-500"
+            >
+              ×
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label={open ? "Fechar lista de leis" : "Abrir lista de leis"}
+            onClick={() => setOpen((current) => !current)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 px-2 text-slate-600"
+          >
+            ⌄
+          </button>
+        </div>
+      </label>
+      <input type="hidden" name="lei_id" value={value} />
+      {open ? (
+        <div
+          id="legiscast-law-results"
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-xl"
+        >
+          {results.length ? (
+            results.map((law, index) => (
+              <button
+                key={law.id}
+                type="button"
+                role="option"
+                aria-selected={String(law.id) === value}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choose(law)}
+                className={`block w-full rounded-md px-3 py-2 text-left text-sm ${index === activeIndex ? "bg-blue-50 text-blue-800" : "hover:bg-slate-50"}`}
+              >
+                <span className="block font-bold">{law.titulo}</span>
+                <span className="text-xs text-slate-500">{law.slug}</span>
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-sm text-slate-500">
+              Nenhuma lei encontrada.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DeleteAudioConfirmation({
+  title,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-end bg-slate-950/40 p-3 sm:place-items-center">
+      <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl">
+        <strong>Excluir definitivamente a faixa “{title}”?</strong>
+        <p className="mt-2 text-sm text-slate-600">
+          O áudio publicado será removido. O histórico de processamento será
+          preservado.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" className="admin-button" onClick={onCancel}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="admin-button"
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? "Excluindo…" : "Excluir áudio"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function LegiscastAudiosAdmin() {
-  const [laws, setLaws] = useState<Law[]>([]); const [audios, setAudios] = useState<Audio[]>([]); const [structures, setStructures] = useState<Structure[]>([]); const [jobs, setJobs] = useState<Job[]>([]); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [error, setError] = useState("");
-  const [uploadLawId, setUploadLawId] = useState(""); const [lawSearch, setLawSearch] = useState(""); const [selectedLawId, setSelectedLawId] = useState<number | null>(null); const [editingAudio, setEditingAudio] = useState<Audio | null>(null); const [previewAudioId, setPreviewAudioId] = useState<string | null>(null); const [previewUrl, setPreviewUrl] = useState(""); const [deletingAudio, setDeletingAudio] = useState<Audio | null>(null); const [actionId, setActionId] = useState<string | null>(null);
-  async function load() { const response = await fetch("/api/admin/legiscast-audios", { cache: "no-store" }); const body = await readResponse(response); if (!response.ok) throw new Error(apiError(body, "Não foi possível carregar os áudios.")); setLaws(Array.isArray(body.laws) ? body.laws as Law[] : []); setAudios(Array.isArray(body.audios) ? body.audios as Audio[] : []); setStructures(Array.isArray(body.structures) ? body.structures as Structure[] : []); setJobs(Array.isArray(body.jobs) ? body.jobs as Job[] : []); }
-  useEffect(() => { void load().catch((caught) => setError(caught instanceof Error ? caught.message : "Não foi possível carregar os áudios.")); }, []);
-  useEffect(() => { if (!jobs.some((job) => job.status === "pendente" || job.status === "processando")) return; const interval = window.setInterval(() => void load().catch(() => undefined), 10_000); return () => window.clearInterval(interval); }, [jobs]);
+  const [laws, setLaws] = useState<Law[]>([]);
+  const [audios, setAudios] = useState<Audio[]>([]);
+  const [structures, setStructures] = useState<Structure[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [uploadLawId, setUploadLawId] = useState("");
+  const [uploadStructureId, setUploadStructureId] = useState("");
+  const [uploadPdfPage, setUploadPdfPage] = useState("");
+  const [lawSearch, setLawSearch] = useState("");
+  const [selectedLawId, setSelectedLawId] = useState<number | null>(null);
+  const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
+  const [previewAudioId, setPreviewAudioId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [deletingAudio, setDeletingAudio] = useState<Audio | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+  async function load() {
+    const response = await fetch("/api/admin/legiscast-audios", {
+      cache: "no-store",
+    });
+    const body = await readResponse(response);
+    if (!response.ok)
+      throw new Error(apiError(body, "Não foi possível carregar os áudios."));
+    setLaws(Array.isArray(body.laws) ? (body.laws as Law[]) : []);
+    setAudios(Array.isArray(body.audios) ? (body.audios as Audio[]) : []);
+    setStructures(
+      Array.isArray(body.structures) ? (body.structures as Structure[]) : [],
+    );
+    setJobs(Array.isArray(body.jobs) ? (body.jobs as Job[]) : []);
+  }
+  useEffect(() => {
+    void load().catch((caught) =>
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível carregar os áudios.",
+      ),
+    );
+  }, []);
+  useEffect(() => {
+    if (
+      !jobs.some(
+        (job) => job.status === "pendente" || job.status === "processando",
+      )
+    )
+      return;
+    const interval = window.setInterval(
+      () => void load().catch(() => undefined),
+      10_000,
+    );
+    return () => window.clearInterval(interval);
+  }, [jobs]);
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const file = values.get("file"); setBusy(true); setError(""); setMessage("");
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const file = values.get("file");
+    setBusy(true);
+    setError("");
+    setMessage("");
     try {
-      if (!(file instanceof File) || !file.size) throw new Error("Selecione um arquivo MP3, M4A ou WAV."); if (!isAcceptedLegiscastOriginal(file.name, file.type)) throw new Error("Aceitamos somente arquivos MP3, M4A ou WAV."); if (file.size > LEGISCAST_ORIGINAL_MAX_BYTES) throw new Error(`O original possui ${formatLegiscastAudioSize(file.size)} e ultrapassa o limite de 500 MB.`);
-      const authorizeResponse = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "authorize-original", lawId: values.get("lei_id"), structureId: values.get("structure_id") || null, titulo: values.get("titulo"), descricao: values.get("descricao"), ordem: values.get("ordem"), ativo: values.get("ativo") === "true", fileName: file.name, mime: file.type, sizeBytes: file.size }) }); const authorizeBody = await readResponse(authorizeResponse); if (!authorizeResponse.ok) throw new Error(apiError(authorizeBody, "Não foi possível autorizar o original.")); const authorization = authorizeBody as unknown as AuthorizeResponse;
-      if (!authorization.jobId || !authorization.uploadUrl || !authorization.operationToken) throw new Error("Autorização de upload inválida."); setMessage("Enviando original para o armazenamento temporário…"); const upload = await fetch(authorization.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file }); if (!upload.ok) throw new Error("Não foi possível enviar o arquivo original.");
-      setMessage("Original enviado. Colocando o áudio na fila…"); const confirmResponse = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "confirm-original", jobId: authorization.jobId, operationToken: authorization.operationToken }) }); const confirmBody = await readResponse(confirmResponse); if (!confirmResponse.ok) throw new Error(apiError(confirmBody, "Não foi possível iniciar o processamento.")); form.reset(); setMessage("Áudio na fila de processamento."); await load();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível enviar o áudio."); } finally { setBusy(false); }
+      if (!uploadLawId) throw new Error("Selecione uma lei.");
+      if (!(file instanceof File) || !file.size)
+        throw new Error("Selecione um arquivo MP3, M4A ou WAV.");
+      if (!isAcceptedLegiscastOriginal(file.name, file.type))
+        throw new Error("Aceitamos somente arquivos MP3, M4A ou WAV.");
+      if (file.size > LEGISCAST_ORIGINAL_MAX_BYTES)
+        throw new Error(
+          `O original possui ${formatLegiscastAudioSize(file.size)} e ultrapassa o limite de 500 MB.`,
+        );
+      const pdfPage = normalizeLegiscastPdfPage(uploadPdfPage);
+      if (uploadStructureId) {
+        const currentStructure = structures.find(
+          (structure) =>
+            String(structure.id) === uploadStructureId &&
+            String(structure.lei_id) === uploadLawId,
+        );
+        if (!currentStructure)
+          throw new Error("Selecione uma estrutura válida para esta lei.");
+        if (currentStructure.pdf_page !== pdfPage) {
+          const pageResponse = await fetch("/api/admin/legiscast-audios", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              operation: "update-structure-pdf-page",
+              structureId: currentStructure.id,
+              pdfPage,
+            }),
+          });
+          const pageBody = await readResponse(pageResponse);
+          if (!pageResponse.ok)
+            throw new Error(
+              apiError(
+                pageBody,
+                "Não foi possível atualizar a página da estrutura.",
+              ),
+            );
+        }
+      }
+      const authorizeResponse = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "authorize-original",
+          lawId: values.get("lei_id"),
+          structureId: values.get("structure_id") || null,
+          titulo: values.get("titulo"),
+          descricao: values.get("descricao"),
+          ordem: values.get("ordem"),
+          ativo: values.get("ativo") === "true",
+          fileName: file.name,
+          mime: file.type,
+          sizeBytes: file.size,
+        }),
+      });
+      const authorizeBody = await readResponse(authorizeResponse);
+      if (!authorizeResponse.ok)
+        throw new Error(
+          apiError(authorizeBody, "Não foi possível autorizar o original."),
+        );
+      const authorization = authorizeBody as unknown as AuthorizeResponse;
+      if (
+        !authorization.jobId ||
+        !authorization.uploadUrl ||
+        !authorization.operationToken
+      )
+        throw new Error("Autorização de upload inválida.");
+      setMessage("Enviando original para o armazenamento temporário…");
+      const upload = await fetch(authorization.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!upload.ok)
+        throw new Error("Não foi possível enviar o arquivo original.");
+      setMessage("Original enviado. Colocando o áudio na fila…");
+      const confirmResponse = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "confirm-original",
+          jobId: authorization.jobId,
+          operationToken: authorization.operationToken,
+        }),
+      });
+      const confirmBody = await readResponse(confirmResponse);
+      if (!confirmResponse.ok)
+        throw new Error(
+          apiError(confirmBody, "Não foi possível iniciar o processamento."),
+        );
+      form.reset();
+      setUploadLawId("");
+      setUploadStructureId("");
+      setUploadPdfPage("");
+      setMessage("Áudio na fila de processamento.");
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível enviar o áudio.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
-  async function retry(jobId: string) { setError(""); try { const response = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "retry", jobId }) }); const body = await readResponse(response); if (!response.ok) throw new Error(apiError(body, "Não foi possível repetir o processamento.")); setMessage("Nova tentativa colocada na fila."); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível repetir o processamento."); } }
-  async function audioOperation(operation: "update" | "preview" | "delete", audioId: string, payload: Record<string, unknown> = {}) {
-    setActionId(audioId); setError(""); setMessage("");
+  async function retry(jobId: string) {
+    setError("");
     try {
-      const response = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation, audioId, ...payload }) });
-      const body = await readResponse(response); if (!response.ok) throw new Error(apiError(body, "Não foi possível atualizar o áudio."));
-      if (operation === "preview") { const url = typeof body.url === "string" ? body.url : ""; if (!url) throw new Error("Não foi possível gerar a prévia do áudio."); setPreviewAudioId(audioId); setPreviewUrl(url); return; }
-      setPreviewAudioId(null); setPreviewUrl(""); setEditingAudio(null); setDeletingAudio(null); setMessage(operation === "delete" ? "Áudio excluído." : "Áudio atualizado."); await load();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar o áudio."); } finally { setActionId(null); }
+      const response = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "retry", jobId }),
+      });
+      const body = await readResponse(response);
+      if (!response.ok)
+        throw new Error(
+          apiError(body, "Não foi possível repetir o processamento."),
+        );
+      setMessage("Nova tentativa colocada na fila.");
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível repetir o processamento.",
+      );
+    }
   }
-  async function saveStructurePdfPage(event: FormEvent<HTMLFormElement>, structureId: number) { event.preventDefault(); const actionKey = `structure:${structureId}`; const values = new FormData(event.currentTarget); const rawPage = String(values.get("pdf_page") ?? "").trim(); setActionId(actionKey); setError(""); setMessage(""); try { if (rawPage && (!/^\d+$/.test(rawPage) || Number(rawPage) < 1)) throw new Error("A página do PDF deve ser um número inteiro maior ou igual a 1."); const response = await fetch("/api/admin/legiscast-audios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "update-structure-pdf-page", structureId, pdfPage: rawPage || null }) }); const body = await readResponse(response); if (!response.ok) throw new Error(apiError(body, "Não foi possível atualizar a página da estrutura.")); setMessage("Página da estrutura atualizada."); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a página da estrutura."); } finally { setActionId(null); } }
-  async function saveEdit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!editingAudio) return; const values = new FormData(event.currentTarget); await audioOperation("update", editingAudio.id, { titulo: values.get("titulo"), descricao: values.get("descricao"), ordem: values.get("ordem"), structureId: values.get("structure_id") || null, ativo: values.get("ativo") === "true" }); }
+  async function audioOperation(
+    operation: "update" | "preview" | "delete",
+    audioId: string,
+    payload: Record<string, unknown> = {},
+  ) {
+    setActionId(audioId);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation, audioId, ...payload }),
+      });
+      const body = await readResponse(response);
+      if (!response.ok)
+        throw new Error(apiError(body, "Não foi possível atualizar o áudio."));
+      if (operation === "preview") {
+        const url = typeof body.url === "string" ? body.url : "";
+        if (!url) throw new Error("Não foi possível gerar a prévia do áudio.");
+        setPreviewAudioId(audioId);
+        setPreviewUrl(url);
+        return;
+      }
+      setPreviewAudioId(null);
+      setPreviewUrl("");
+      setEditingAudio(null);
+      setDeletingAudio(null);
+      setMessage(
+        operation === "delete" ? "Áudio excluído." : "Áudio atualizado.",
+      );
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível atualizar o áudio.",
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+  async function saveStructurePdfPage(
+    event: FormEvent<HTMLFormElement>,
+    structureId: number,
+  ) {
+    event.preventDefault();
+    const actionKey = `structure:${structureId}`;
+    const values = new FormData(event.currentTarget);
+    const rawPage = String(values.get("pdf_page") ?? "").trim();
+    setActionId(actionKey);
+    setError("");
+    setMessage("");
+    try {
+      const pdfPage = normalizeLegiscastPdfPage(rawPage);
+      const response = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "update-structure-pdf-page",
+          structureId,
+          pdfPage,
+        }),
+      });
+      const body = await readResponse(response);
+      if (!response.ok)
+        throw new Error(
+          apiError(body, "Não foi possível atualizar a página da estrutura."),
+        );
+      setMessage("Página da estrutura atualizada.");
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível atualizar a página da estrutura.",
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingAudio) return;
+    const values = new FormData(event.currentTarget);
+    await audioOperation("update", editingAudio.id, {
+      titulo: values.get("titulo"),
+      descricao: values.get("descricao"),
+      ordem: values.get("ordem"),
+      structureId: values.get("structure_id") || null,
+      ativo: values.get("ativo") === "true",
+    });
+  }
   const selectedLaw = laws.find((law) => law.id === selectedLawId) ?? null;
-  const visibleLaws = laws.filter((law) => law.titulo.toLocaleLowerCase("pt-BR").includes(lawSearch.toLocaleLowerCase("pt-BR")));
-  const selectedTracks = selectedLaw ? tracksForLaw(audios, selectedLaw.id) : [];
-  return <section className="commercial-card"><h2>Áudios do LegisCast</h2><p>Envie o original em MP3, M4A ou WAV (até 500 MB). O sistema converte para voz em M4A otimizado antes de publicar.</p><form className="commercial-form-grid" onSubmit={(event) => void submit(event)}><select name="lei_id" required value={uploadLawId} onChange={(event) => setUploadLawId(event.target.value)}><option value="" disabled>Selecione a lei</option>{laws.map((law) => <option key={law.id} value={law.id}>{law.titulo}</option>)}</select>{uploadLawId ? <label>Estrutura da lei (opcional)<select name="structure_id" defaultValue=""><option value="">Sem estrutura</option>{structureOptions(structures, Number(uploadLawId)).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>)}</select></label> : null}<label>Título<input name="titulo" placeholder="Título da faixa" /><small>Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.</small></label><textarea name="descricao" placeholder="Descrição opcional" /><input name="ordem" type="number" min="0" defaultValue="0" /><label>Original MP3, M4A ou WAV<input name="file" type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,.mp3,.m4a,.wav" required /></label><select name="ativo" defaultValue="true"><option value="true">Publicar ao concluir</option><option value="false">Manter inativo ao concluir</option></select><button className="admin-button primary" disabled={busy}>{busy ? "Enviando…" : "Enviar e processar"}</button></form>{error ? <p className="admin-alert error" role="alert">{error}</p> : null}{message ? <p className="admin-alert success" role="status">{message}</p> : null}<div className="mt-6 grid gap-2"><h3 className="font-black">Processamentos recentes</h3>{jobs.map((job) => <article key={job.id} className="rounded-lg border border-slate-200 px-3 py-3"><strong>{audioDisplayTitle(job, structures)}</strong> · {job.leis?.titulo ?? "Lei"}<p className="text-sm">{job.statusLabel} · original {formatLegiscastAudioSize(job.original_size_bytes)}{job.final_size_bytes ? <> · final {formatLegiscastAudioSize(job.final_size_bytes)} · redução {reduction(job)}%{job.duracao_segundos ? ` · ${job.duracao_segundos}s` : ""}</> : null}</p>{job.status === "erro" ? <><p className="text-sm text-red-700">Não foi possível processar este áudio.</p>{job.tentativas < 3 ? <button type="button" className="admin-button" onClick={() => void retry(job.id)}>Tentar novamente ({3 - job.tentativas})</button> : null}</> : null}</article>)}</div><div className="mt-8 grid gap-4"><h3 className="font-black">Acervo do LegisCast</h3>{selectedLaw ? <div className="grid gap-4"><button type="button" className="admin-button w-fit" onClick={() => { setSelectedLawId(null); setPreviewAudioId(null); setPreviewUrl(""); }}>← Voltar para leis</button><div><h4 className="text-lg font-black">{selectedLaw.titulo}</h4><p className="text-sm text-slate-600">{selectedTracks.length} faixas</p></div>{structureOptions(structures, selectedLaw.id).map(({ structure, depth }) => { const tracks = selectedTracks.filter((audio) => audio.structure_id === structure.id); return <div key={structure.id} className="grid gap-2" style={{ marginLeft: `${depth * 12}px` }}><div className="flex flex-wrap items-end justify-between gap-3"><h5 className="font-bold text-slate-700">{structure.tipo}: {structure.nome}</h5><form className="flex flex-wrap items-end gap-2" onSubmit={(event) => void saveStructurePdfPage(event, structure.id)}><label className="grid gap-1 text-xs font-bold text-slate-600">Página no PDF<input name="pdf_page" type="number" min="1" step="1" defaultValue={structure.pdf_page ?? ""} className="min-h-10 w-28 rounded border border-slate-300 px-2" aria-describedby={`pdf-page-help-${structure.id}`} /></label><span id={`pdf-page-help-${structure.id}`} className="max-w-48 text-xs text-slate-500">Página onde esta estrutura começa no PDF.</span><button type="submit" className="admin-button" disabled={actionId === `structure:${structure.id}`}>{actionId === `structure:${structure.id}` ? "Salvando…" : "Salvar página"}</button></form></div>{tracks.map((audio) => <article key={audio.id} className="grid gap-2 rounded-lg border border-slate-200 p-3"><div><strong>{audio.ordem}. {audioDisplayTitle(audio, structures)}</strong><p className="text-sm text-slate-600">{audio.descricao || "Sem descrição"}</p><p className="text-xs text-slate-500">{formatDuration(audio.duracao_segundos)} · {formatSize(audio.final_size_bytes)} · {audio.ativo ? "Ativo" : "Inativo"} · atualizado em {formatUpdatedAt(audio.updated_at)}</p></div><div className="flex flex-wrap gap-2"><button type="button" className="admin-button" disabled={actionId === audio.id} onClick={() => void audioOperation("preview", audio.id)}>Ouvir</button><button type="button" className="admin-button" onClick={() => setEditingAudio(audio)}>Editar</button><button type="button" className="admin-button" disabled={actionId === audio.id} onClick={() => void audioOperation("update", audio.id, { ativo: !audio.ativo })}>{audio.ativo ? "Desativar" : "Ativar"}</button><button type="button" className="admin-button" onClick={() => setDeletingAudio(audio)}>Excluir</button></div>{previewAudioId === audio.id && previewUrl ? <div className="grid gap-2"><audio className="w-full" controls src={previewUrl} /><button type="button" className="admin-button w-fit" onClick={() => { setPreviewAudioId(null); setPreviewUrl(""); }}>Fechar prévia</button></div> : null}{deletingAudio?.id === audio.id ? <div className="rounded bg-red-50 p-3 text-sm">Excluir definitivamente a faixa “{audioDisplayTitle(audio, structures)}”?<br />O áudio publicado será removido. O histórico de processamento será preservado.<div className="mt-2 flex gap-2"><button type="button" className="admin-button" onClick={() => setDeletingAudio(null)}>Cancelar</button><button type="button" className="admin-button" disabled={actionId === audio.id} onClick={() => void audioOperation("delete", audio.id)}>Excluir áudio</button></div></div> : null}</article>)}{!tracks.length ? <p className="text-sm text-slate-500">Sem faixas vinculadas.</p> : null}</div>; })}{selectedTracks.filter((audio) => audio.structure_id === null).length ? <div className="grid gap-2"><h5 className="font-bold text-slate-700">Outros / Sem estrutura</h5>{selectedTracks.filter((audio) => audio.structure_id === null).map((audio) => <article key={audio.id} className="rounded-lg border border-slate-200 p-3"><strong>{audio.ordem}. {audioDisplayTitle(audio, structures)}</strong><p className="text-sm text-slate-600">{audio.descricao || "Sem descrição"} · {formatDuration(audio.duracao_segundos)} · {formatSize(audio.final_size_bytes)} · {audio.ativo ? "Ativo" : "Inativo"}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" className="admin-button" onClick={() => void audioOperation("preview", audio.id)}>Ouvir</button><button type="button" className="admin-button" onClick={() => setEditingAudio(audio)}>Editar</button><button type="button" className="admin-button" onClick={() => void audioOperation("update", audio.id, { ativo: !audio.ativo })}>{audio.ativo ? "Desativar" : "Ativar"}</button><button type="button" className="admin-button" onClick={() => setDeletingAudio(audio)}>Excluir</button></div>{previewAudioId === audio.id && previewUrl ? <audio className="mt-2 w-full" controls src={previewUrl} /> : null}</article>)}</div> : null}</div> : <><input aria-label="Buscar lei" placeholder="Buscar lei..." value={lawSearch} onChange={(event) => setLawSearch(event.target.value)} />{visibleLaws.map((law) => { const summary = summaryForLaw(audios, law.id); return <article key={law.id} className="grid gap-2 rounded-lg border border-slate-200 p-4"><strong>{law.titulo}</strong><p className="text-sm text-slate-600">{summary.tracks.length} faixas · {summary.active} ativas · {formatDuration(summary.duration)}<br />Atualizado em {formatUpdatedAt(summary.updatedAt)}</p><button type="button" className="admin-button w-fit" onClick={() => setSelectedLawId(law.id)}>Gerenciar áudios</button></article>; })}</>}</div>{editingAudio ? <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/40 p-3 sm:place-items-center"><form className="grid w-full max-w-lg gap-3 rounded-lg bg-white p-4 shadow-xl" onSubmit={(event) => void saveEdit(event)}><h3 className="font-black">Editar faixa</h3><label>Título<input name="titulo" defaultValue={editingAudio.titulo ?? ""} /><small>Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.</small></label><textarea name="descricao" defaultValue={editingAudio.descricao ?? ""} /><input name="ordem" type="number" min="0" defaultValue={editingAudio.ordem} /><select name="structure_id" defaultValue={editingAudio.structure_id ?? ""}><option value="">Outros / Sem estrutura</option>{structureOptions(structures, editingAudio.lei_id).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>)}</select><select name="ativo" defaultValue={String(editingAudio.ativo)}><option value="true">Ativo</option><option value="false">Inativo</option></select><div className="flex flex-wrap gap-2"><button type="button" className="admin-button" onClick={() => setEditingAudio(null)}>Cancelar</button><button className="admin-button primary" disabled={actionId === editingAudio.id}>{actionId === editingAudio.id ? "Salvando…" : "Salvar"}</button></div></form></div> : null}</section>;
+  const visibleLaws = laws.filter((law) =>
+    law.titulo
+      .toLocaleLowerCase("pt-BR")
+      .includes(lawSearch.toLocaleLowerCase("pt-BR")),
+  );
+  const selectedTracks = selectedLaw
+    ? tracksForLaw(audios, selectedLaw.id)
+    : [];
+  return (
+    <section className="commercial-card">
+      <h2>Áudios do LegisCast</h2>
+      <p>
+        Envie o original em MP3, M4A ou WAV (até 500 MB). O sistema converte
+        para voz em M4A otimizado antes de publicar.
+      </p>
+      <form
+        className="mt-5 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
+        onSubmit={(event) => void submit(event)}
+      >
+        <LawSearchSelect laws={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} />
+        <label className="grid min-w-0 gap-1 font-bold">
+          Estrutura
+          <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => { const structureId = event.target.value; setUploadStructureId(structureId); const selectedStructure = structures.find((structure) => String(structure.id) === structureId); setUploadPdfPage(selectedStructure?.pdf_page ? String(selectedStructure.pdf_page) : ""); }}>
+            <option value="">{uploadLawId ? "Sem estrutura" : "Selecione uma lei primeiro"}</option>
+            {uploadLawId ? structureOptions(structures, Number(uploadLawId)).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>) : null}
+          </select>
+        </label>
+        <label className="grid min-w-0 gap-1 font-bold">
+          Página no PDF
+          <input name="pdf_page" type="number" min="1" step="1" inputMode="numeric" value={uploadPdfPage} disabled={!uploadStructureId} onChange={(event) => setUploadPdfPage(event.target.value)} aria-describedby="upload-pdf-page-help" />
+          <small id="upload-pdf-page-help" className="font-normal text-slate-500">Página onde esta estrutura começa no PDF.</small>
+        </label>
+        <label className="grid min-w-0 gap-1 font-bold">
+          Título
+          <input name="titulo" placeholder="Título da faixa" />
+          <small className="font-normal text-slate-500">
+            Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.
+          </small>
+        </label>
+        <label className="grid min-w-0 gap-1 font-bold lg:col-span-2">Descrição<textarea name="descricao" placeholder="Descrição opcional" /></label>
+        <label className="grid min-w-0 gap-1 font-bold">Ordem<input name="ordem" type="number" min="0" defaultValue="0" /></label>
+        <label className="grid min-w-0 gap-1 font-bold">
+          Original MP3, M4A ou WAV
+          <input
+            name="file"
+            type="file"
+            accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,.mp3,.m4a,.wav"
+            required
+          />
+        </label>
+        <label className="grid min-w-0 gap-1 font-bold">Publicação<select name="ativo" defaultValue="true"><option value="true">Publicar ao concluir</option><option value="false">Manter inativo ao concluir</option></select></label>
+        <button className="admin-button primary min-h-12 lg:self-end" disabled={busy}>
+          {busy ? "Enviando…" : "Enviar e processar"}
+        </button>
+      </form>
+      {error ? (
+        <p className="admin-alert error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="admin-alert success" role="status">
+          {message}
+        </p>
+      ) : null}
+      <div className="mt-6 grid gap-2">
+        <h3 className="font-black">Processamentos recentes</h3>
+        {jobs.map((job) => (
+          <article
+            key={job.id}
+            className="rounded-lg border border-slate-200 px-3 py-3"
+          >
+            <strong>{audioDisplayTitle(job, structures)}</strong> ·{" "}
+            {job.leis?.titulo ?? "Lei"}
+            <p className="text-sm">
+              {job.statusLabel} · original{" "}
+              {formatLegiscastAudioSize(job.original_size_bytes)}
+              {job.final_size_bytes ? (
+                <>
+                  {" "}
+                  · final {formatLegiscastAudioSize(job.final_size_bytes)} ·
+                  redução {reduction(job)}%
+                  {job.duracao_segundos ? ` · ${job.duracao_segundos}s` : ""}
+                </>
+              ) : null}
+            </p>
+            {job.status === "erro" ? (
+              <>
+                <p className="text-sm text-red-700">
+                  Não foi possível processar este áudio.
+                </p>
+                {job.tentativas < 3 ? (
+                  <button
+                    type="button"
+                    className="admin-button"
+                    onClick={() => void retry(job.id)}
+                  >
+                    Tentar novamente ({3 - job.tentativas})
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      <div className="mt-8 grid gap-4">
+        <h3 className="font-black">Acervo do LegisCast</h3>
+        {selectedLaw ? (
+          <div className="grid gap-4">
+            <button
+              type="button"
+              className="admin-button w-fit"
+              onClick={() => {
+                setSelectedLawId(null);
+                setPreviewAudioId(null);
+                setPreviewUrl("");
+              }}
+            >
+              ← Voltar para leis
+            </button>
+            <div>
+              <h4 className="text-lg font-black">{selectedLaw.titulo}</h4>
+              <p className="text-sm text-slate-600">
+                {selectedTracks.length} faixas
+              </p>
+            </div>
+            {structureOptions(structures, selectedLaw.id).map(
+              ({ structure, depth }) => {
+                const tracks = selectedTracks.filter(
+                  (audio) => audio.structure_id === structure.id,
+                );
+                return (
+                  <div
+                    key={structure.id}
+                    className="grid gap-2"
+                    style={{ marginLeft: `${depth * 12}px` }}
+                  >
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <h5 className="font-bold text-slate-700">
+                        {structure.tipo}: {structure.nome}
+                      </h5>
+                      <form
+                        className="flex flex-wrap items-end gap-2"
+                        onSubmit={(event) =>
+                          void saveStructurePdfPage(event, structure.id)
+                        }
+                      >
+                        <label className="grid gap-1 text-xs font-bold text-slate-600">
+                          Página no PDF
+                          <input
+                            name="pdf_page"
+                            type="number"
+                            min="1"
+                            step="1"
+                            defaultValue={structure.pdf_page ?? ""}
+                            className="min-h-10 w-28 rounded border border-slate-300 px-2"
+                            aria-describedby={`pdf-page-help-${structure.id}`}
+                          />
+                        </label>
+                        <span
+                          id={`pdf-page-help-${structure.id}`}
+                          className="max-w-48 text-xs text-slate-500"
+                        >
+                          Página onde esta estrutura começa no PDF.
+                        </span>
+                        <button
+                          type="submit"
+                          className="admin-button"
+                          disabled={actionId === `structure:${structure.id}`}
+                        >
+                          {actionId === `structure:${structure.id}`
+                            ? "Salvando…"
+                            : "Salvar página"}
+                        </button>
+                      </form>
+                    </div>
+                    {tracks.map((audio) => (
+                      <article
+                        key={audio.id}
+                        className="grid gap-2 rounded-lg border border-slate-200 p-3"
+                      >
+                        <div>
+                          <strong>
+                            {audio.ordem}.{" "}
+                            {audioDisplayTitle(audio, structures)}
+                          </strong>
+                          <p className="text-sm text-slate-600">
+                            {audio.descricao || "Sem descrição"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {formatDuration(audio.duracao_segundos)} ·{" "}
+                            {formatSize(audio.final_size_bytes)} ·{" "}
+                            {audio.ativo ? "Ativo" : "Inativo"} · atualizado em{" "}
+                            {formatUpdatedAt(audio.updated_at)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="admin-button"
+                            disabled={actionId === audio.id}
+                            onClick={() =>
+                              void audioOperation("preview", audio.id)
+                            }
+                          >
+                            Ouvir
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-button"
+                            onClick={() => setEditingAudio(audio)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-button"
+                            disabled={actionId === audio.id}
+                            onClick={() =>
+                              void audioOperation("update", audio.id, {
+                                ativo: !audio.ativo,
+                              })
+                            }
+                          >
+                            {audio.ativo ? "Desativar" : "Ativar"}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-button"
+                            onClick={() => setDeletingAudio(audio)}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                        {previewAudioId === audio.id && previewUrl ? (
+                          <div className="grid gap-2">
+                            <audio
+                              className="w-full"
+                              controls
+                              src={previewUrl}
+                            />
+                            <button
+                              type="button"
+                              className="admin-button w-fit"
+                              onClick={() => {
+                                setPreviewAudioId(null);
+                                setPreviewUrl("");
+                              }}
+                            >
+                              Fechar prévia
+                            </button>
+                          </div>
+                        ) : null}
+                        {deletingAudio?.id === audio.id ? (
+                          <div className="rounded bg-red-50 p-3 text-sm">
+                            Excluir definitivamente a faixa “
+                            {audioDisplayTitle(audio, structures)}”?
+                            <br />O áudio publicado será removido. O histórico
+                            de processamento será preservado.
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                type="button"
+                                className="admin-button"
+                                onClick={() => setDeletingAudio(null)}
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-button"
+                                disabled={actionId === audio.id}
+                                onClick={() =>
+                                  void audioOperation("delete", audio.id)
+                                }
+                              >
+                                Excluir áudio
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </article>
+                    ))}
+                    {!tracks.length ? (
+                      <p className="text-sm text-slate-500">
+                        Sem faixas vinculadas.
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              },
+            )}
+            {selectedTracks.filter((audio) => audio.structure_id === null)
+              .length ? (
+              <div className="grid gap-2">
+                <h5 className="font-bold text-slate-700">
+                  Outros / Sem estrutura
+                </h5>
+                {selectedTracks
+                  .filter((audio) => audio.structure_id === null)
+                  .map((audio) => (
+                    <article
+                      key={audio.id}
+                      className="rounded-lg border border-slate-200 p-3"
+                    >
+                      <strong>
+                        {audio.ordem}. {audioDisplayTitle(audio, structures)}
+                      </strong>
+                      <p className="text-sm text-slate-600">
+                        {audio.descricao || "Sem descrição"} ·{" "}
+                        {formatDuration(audio.duracao_segundos)} ·{" "}
+                        {formatSize(audio.final_size_bytes)} ·{" "}
+                        {audio.ativo ? "Ativo" : "Inativo"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="admin-button"
+                          onClick={() =>
+                            void audioOperation("preview", audio.id)
+                          }
+                        >
+                          Ouvir
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-button"
+                          onClick={() => setEditingAudio(audio)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-button"
+                          onClick={() =>
+                            void audioOperation("update", audio.id, {
+                              ativo: !audio.ativo,
+                            })
+                          }
+                        >
+                          {audio.ativo ? "Desativar" : "Ativar"}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-button"
+                          onClick={() => setDeletingAudio(audio)}
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                      {previewAudioId === audio.id && previewUrl ? (
+                        <audio
+                          className="mt-2 w-full"
+                          controls
+                          src={previewUrl}
+                        />
+                      ) : null}
+                    </article>
+                  ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <input
+              aria-label="Buscar lei"
+              placeholder="Buscar lei..."
+              value={lawSearch}
+              onChange={(event) => setLawSearch(event.target.value)}
+            />
+            {visibleLaws.map((law) => {
+              const summary = summaryForLaw(audios, law.id);
+              return (
+                <article
+                  key={law.id}
+                  className="grid gap-2 rounded-lg border border-slate-200 p-4"
+                >
+                  <strong>{law.titulo}</strong>
+                  <p className="text-sm text-slate-600">
+                    {summary.tracks.length} faixas · {summary.active} ativas ·{" "}
+                    {formatDuration(summary.duration)}
+                    <br />
+                    Atualizado em {formatUpdatedAt(summary.updatedAt)}
+                  </p>
+                  <button
+                    type="button"
+                    className="admin-button w-fit"
+                    onClick={() => setSelectedLawId(law.id)}
+                  >
+                    Gerenciar áudios
+                  </button>
+                </article>
+              );
+            })}
+          </>
+        )}
+      </div>
+      {editingAudio ? (
+        <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/40 p-3 sm:place-items-center">
+          <form
+            className="grid w-full max-w-lg gap-3 rounded-lg bg-white p-4 shadow-xl"
+            onSubmit={(event) => void saveEdit(event)}
+          >
+            <h3 className="font-black">Editar faixa</h3>
+            <label>
+              Título
+              <input name="titulo" defaultValue={editingAudio.titulo ?? ""} />
+              <small>
+                Opcional. Se ficar vazio, será usado o nome da estrutura
+                vinculada.
+              </small>
+            </label>
+            <textarea
+              name="descricao"
+              defaultValue={editingAudio.descricao ?? ""}
+            />
+            <input
+              name="ordem"
+              type="number"
+              min="0"
+              defaultValue={editingAudio.ordem}
+            />
+            <select
+              name="structure_id"
+              defaultValue={editingAudio.structure_id ?? ""}
+            >
+              <option value="">Outros / Sem estrutura</option>
+              {structureOptions(structures, editingAudio.lei_id).map(
+                ({ structure, depth }) => (
+                  <option key={structure.id} value={structure.id}>
+                    {"— ".repeat(depth)}
+                    {structure.tipo}: {structure.nome}
+                  </option>
+                ),
+              )}
+            </select>
+            <select name="ativo" defaultValue={String(editingAudio.ativo)}>
+              <option value="true">Ativo</option>
+              <option value="false">Inativo</option>
+            </select>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="admin-button"
+                onClick={() => setEditingAudio(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="admin-button primary"
+                disabled={actionId === editingAudio.id}
+              >
+                {actionId === editingAudio.id ? "Salvando…" : "Salvar"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </section>
+  );
 }

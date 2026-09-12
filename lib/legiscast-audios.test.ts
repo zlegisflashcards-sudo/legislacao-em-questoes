@@ -161,8 +161,7 @@ describe("LegisCast em áudio", () => {
     expect(admin).toContain("update({ pdf_page: pdfPage");
     expect(adminRoute).toContain('body.operation === "update-structure-pdf-page"');
     expect(adminClient).toContain('name="pdf_page" type="number" min="1" step="1"');
-    expect(adminClient).toContain('rawPage || null');
-    expect(adminClient).toContain('Number(rawPage) < 1');
+    expect(adminClient).toContain("normalizeLegiscastPdfPage(rawPage)");
     expect(adminClient).toContain("Página onde esta estrutura começa no PDF.");
     expect(adminClient).toContain("Sem faixas vinculadas.");
   });
