@@ -14,12 +14,16 @@ describe("navegação responsiva dos modos da lei", () => {
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
   });
 
-  it("mantém a barra inferior no mobile e mostra uma pill lateral no desktop", () => {
+  it("mantém a barra inferior no mobile e unifica a pill lateral em tablet e desktop", () => {
     expect(source).toContain('aria-current={active ? "page" : undefined}');
-    expect(source).toContain("lg:hidden");
-    expect(source).toContain("hidden w-44 -translate-y-1/2 flex-col");
+    expect(source).toContain("md:hidden");
+    expect(source).toContain('hidden -translate-y-1/2 md:block');
     expect(source).toContain("right-5 top-1/2");
-    expect(source).toContain("lg:flex");
+    expect(source).toContain('variant="side"');
+    expect(source).toContain('aria-label="Expandir modos de estudo"');
+    expect(source).toContain('aria-label="Recolher modos de estudo"');
+    expect(source).toContain('useState(false)');
+    expect(source).toContain('window.matchMedia("(min-width: 1024px)").matches');
     expect(source).toContain("env(safe-area-inset-bottom)");
   });
 
