@@ -171,7 +171,7 @@ describe("fronteira autenticada das leis adquiridas", () => {
 
   it("exige sessão, rejeita aluno_id e usa o token no cliente limitado", () => {
     expect(server).toContain('url.searchParams.has("aluno_id")');
-    expect(server).toContain("auth.getUser(token)");
+    expect(server).toContain("authenticateAcademicSession(request)");
     expect(server).toContain('rpc("obter_minhas_leis")');
     expect(server).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
     expect(client).toContain("headers: await protectedApiHeaders()");
@@ -179,8 +179,8 @@ describe("fronteira autenticada das leis adquiridas", () => {
   });
 
   it("reconhece ADM no servidor e completa apenas com leis ativas", () => {
-    expect(server).toContain("usuarioEhAdministrador(bearerUser)");
-    expect(server).toContain("await obterAdministrador()");
+    expect(server).toContain("usuarioEhAdministrador(authenticatedUser)");
+    expect(readFileSync("lib/academic-session-server.ts", "utf8")).toContain("await obterAdministrador()");
     expect(server).toContain('.from("leis").select(');
     expect(server).toContain('.eq("ativo", true)');
     expect(server).toContain('url.searchParams.get("visao") === "minhas-leis"');

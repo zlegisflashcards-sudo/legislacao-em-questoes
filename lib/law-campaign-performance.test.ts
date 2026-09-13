@@ -21,7 +21,7 @@ describe("performance do Estudo Ativo da Lei", () => {
 
   it("paraleliza as consultas independentes de autorização", () => {
     expect(lawStudy).toContain("const [{ data: studentData, error: studentError }, { data: lawData, error: lawError }] = await Promise.all([");
-    expect(lawStudy).toContain("const [{ data: passwordStatus, error: passwordStatusError }, { data: accessData, error: accessError }] = await Promise.all([");
+    expect(lawStudy).toContain("const [{ data: passwordStatus, error: passwordStatusError }, { data: accessData, error: accessError }] = studentId ? await Promise.all([");
   });
 
   it("busca apenas as questões necessárias após a abertura", () => {

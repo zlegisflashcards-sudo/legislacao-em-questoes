@@ -1,13 +1,15 @@
 import { loadStudentLaws, studentLawsErrorResponse } from "@/lib/student-laws-server";
 import { uniqueStudentLawsById } from "@/lib/student-laws";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
     const requestedSlug = new URL(request.url).searchParams.get("slug")?.trim();
-    const allStudentLaws = uniqueStudentLawsById(await loadStudentLaws(request));
+    const access = requestedSlug ? await authorizeLawStudy(request, requestedSlug) : null;
+    const allStudentLaws = access ? [{ id: access.lawId, slug: requestedSlug!, titulo: access.title }] : uniqueStudentLawsById(await loadStudentLaws(request));
     const laws = requestedSlug ? allStudentLaws.filter((law) => law.slug === requestedSlug) : allStudentLaws;
     if (!laws.length) return Response.json({ laws: [] }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
     const ids = laws.map((law) => law.id);
@@ -23,5 +25,5 @@ export async function GET(request: Request) {
       questions: (questionsResult.data ?? []).filter((question) => question.lei_id === law.id),
       structure: (structureResult.data ?? []).filter((node) => node.lei_id === law.id),
     })) }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
-  } catch (error) { return studentLawsErrorResponse(error); }
+  } catch (error) { return new URL(request.url).searchParams.has("slug") ? lawStudyErrorResponse(error) : studentLawsErrorResponse(error); }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { legiscastPdfPositionKey, normalizeLegiscastPdfPage } from "@/lib/legiscast-pdf-position";
 import { authorizedLegiscastPdfPath, LegiscastPdfError, pdfFailureForHttpStatus, validateLegiscastPdfBytes } from "@/lib/legiscast-pdf";
-import { supabase } from "@/lib/supabase";
+import { protectedApiFetch } from "@/lib/authenticated-api-client";
 
 type OutlineItem = { title: string; dest: unknown; items?: OutlineItem[] };
 type PdfViewport = { width: number; height: number; scale?: number };
@@ -15,10 +15,7 @@ function storageKey(slug: string, recorteId: string | null) { return legiscastPd
 function savedPage(slug: string, recorteId: string | null) { try { const page = Number(window.localStorage.getItem(storageKey(slug, recorteId))); return Number.isSafeInteger(page) && page > 0 ? page : 1; } catch { return 1; } }
 
 async function fetchAuthorizedLegiscastPdf(slug: string, materialId: number, recorteId: string | null) {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new LegiscastPdfError("unauthorized", "Sessão expirada.");
-  const response = await fetch(authorizedLegiscastPdfPath(slug, materialId, recorteId), { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const response = await protectedApiFetch(authorizedLegiscastPdfPath(slug, materialId, recorteId), { cache: "no-store" });
   const contentType = response.headers.get("content-type");
   const contentLength = response.headers.get("content-length");
   if (!response.ok) {

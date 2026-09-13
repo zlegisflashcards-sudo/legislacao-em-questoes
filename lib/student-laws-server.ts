@@ -1,21 +1,15 @@
 import "server-only";
 
-import { cookies } from "next/headers";
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
 import { mergeAdministratorLawCatalog, parseStudentLawRows, projectStudentLawContexts, type StudentLaw } from "@/lib/student-laws";
 import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
-import { adminCookieNames, obterAdministrador, usuarioEhAdministrador } from "@/lib/admin-auth";
+import { usuarioEhAdministrador } from "@/lib/admin-auth";
+import { AcademicSessionError, authenticateAcademicSession } from "@/lib/academic-session-server";
 
 export class StudentLawsApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
     super(publicMessage);
   }
-}
-
-function bearerToken(request: Request) {
-  const authorization = request.headers.get("authorization") ?? "";
-  if (!authorization.startsWith("Bearer ")) return null;
-  return authorization.slice(7).trim() || null;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -91,25 +85,14 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
     throw new StudentLawsApiError(400, "Parâmetro não permitido.");
   }
 
-  const token = bearerToken(request);
-  const bearer = token ? await getSupabaseServerClient().auth.getUser(token) : { data: { user: null }, error: null };
-  const bearerUser = bearer.error ? null : bearer.data.user;
-  const cookieAdministrator = bearerUser ? null : await obterAdministrador();
-  const administrator = usuarioEhAdministrador(bearerUser) ? bearerUser : cookieAdministrator;
-  const authenticatedUser = bearerUser ?? administrator;
-  if (!authenticatedUser) {
-    throw new StudentLawsApiError(401, "Sua sessão expirou. Entre novamente.");
-  }
-
-  const isAdministrator = Boolean(administrator);
+  const session = await authenticateAcademicSession(request);
+  const authenticatedUser = session.user;
+  const isAdministrator = session.cookieAdministrator || usuarioEhAdministrador(authenticatedUser);
   const { data: student, error: studentError } = await getSupabaseServerClient().from("alunos").select("id,deve_trocar_senha").eq("user_id", authenticatedUser.id).maybeSingle();
   if (studentError) throw new StudentLawsApiError(503, "Não foi possível verificar seu acesso agora.");
   if (!isAdministrator && student?.deve_trocar_senha === true) throw new StudentLawsApiError(403, "Crie sua nova senha antes de acessar suas leis.");
 
-  const cookieToken = isAdministrator && !bearerUser ? (await cookies()).get(adminCookieNames.access)?.value ?? null : null;
-  const authenticatedToken = bearerUser ? token : cookieToken;
-  if (!authenticatedToken) throw new StudentLawsApiError(401, "Sua sessão expirou. Entre novamente.");
-  const { data, error } = await createSupabaseUserClient(authenticatedToken).rpc("obter_minhas_leis");
+  const { data, error } = await createSupabaseUserClient(session.token).rpc("obter_minhas_leis");
   if (error) throw new StudentLawsApiError(503, "Não foi possível carregar suas leis agora.");
   const laws = student?.deve_trocar_senha === true ? [] : parseStudentLawRows(data);
   const contextsByLaw = student?.id && laws.length ? await listLawStudyContextsByLaw(student.id, laws.map((law) => law.id)) : new Map();
@@ -127,9 +110,9 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
 }
 
 export function studentLawsErrorResponse(error: unknown) {
-  if (error instanceof StudentLawsApiError) {
+  if (error instanceof StudentLawsApiError || error instanceof AcademicSessionError) {
     return Response.json({ success: false, message: error.publicMessage }, {
-      status: error.status,
+      status: error.status === 503 ? 500 : error.status,
       headers: { "Cache-Control": "private, no-store, max-age=0" },
     });
   }

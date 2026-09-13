@@ -41,7 +41,7 @@ describe("LegisCast em áudio", () => {
     for (const forbidden of ["score", "ranking", "campanha", "porcentagem"]) expect(player.toLowerCase()).not.toContain(forbidden);
     expect(page).not.toContain("LegiscastAudioPlayer");
     expect(lawLegiscastPage).toContain("LawLegiscastPageClient");
-    for (const expected of ["LegiscastPdfViewer", "<LegiscastAudioPlayer slug={slug} embedded />", "StudentAreaTabs", "minhasLeisHref=\"/minhas-leis\"", "/api/aluno/estudar/lei/", "/conta?modo=login", "recorteId ? `?recorte_id="]) expect(lawLegiscastClient).toContain(expected);
+    for (const expected of ["LegiscastPdfViewer", "<LegiscastAudioPlayer slug={slug} embedded />", "StudentAreaTabs", "minhasLeisHref=\"/minhas-leis\"", "/api/aluno/estudar/lei/", "protectedApiFetch", "recorteId={recorteId}"]) expect(lawLegiscastClient).toContain(expected);
     expect(player).toContain("embedded = false");
     expect(player).toContain("border-t border-slate-200 pt-6");
     expect(lawLegiscastPage).toContain("searchParams");

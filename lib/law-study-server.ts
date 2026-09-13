@@ -4,6 +4,9 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isValidLawSlug, lawStudyShortName, type LawStudyData, type LawStudyHistoryItem, type LawStudyMaterial } from "@/lib/law-study";
 import { materialAccessReference } from "@/lib/law-material-download";
 import { activeQuestionCountBySlug } from "@/lib/question-counts-server";
+import { AcademicSessionError, authenticateAcademicSession } from "@/lib/academic-session-server";
+import { usuarioEhAdministrador } from "@/lib/admin-auth";
+import { resolveLawStudyAccess } from "@/lib/law-study-access";
 
 export class LawStudyApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -12,12 +15,6 @@ export class LawStudyApiError extends Error {
 }
 
 export const PUBLIC_SAMPLE_LAW_SLUG = "cf0800";
-
-function bearerToken(request: Request) {
-  const authorization = request.headers.get("authorization") ?? "";
-  if (!authorization.startsWith("Bearer ")) return null;
-  return authorization.slice(7).trim() || null;
-}
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -81,38 +78,36 @@ export async function authorizeLawStudy(request: Request, slug: string) {
   const url = new URL(request.url);
   if (url.searchParams.has("aluno_id") || url.searchParams.has("lei_id")) throw new LawStudyApiError(400, "Parâmetro não permitido.");
 
-  const token = bearerToken(request);
-  if (!token) throw new LawStudyApiError(401, "Entre na sua conta para acessar esta lei.");
-
+  const session = await authenticateAcademicSession(request);
+  const userData = { user: session.user };
   const supabase = getSupabaseServerClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userData.user) throw new LawStudyApiError(401, "Sua sessão expirou. Entre novamente.");
 
   const [{ data: studentData, error: studentError }, { data: lawData, error: lawError }] = await Promise.all([
     supabase.from("alunos").select("id").eq("user_id", userData.user.id).maybeSingle(),
     supabase.from("leis").select("id,slug,titulo,nome_curto,codigo").eq("slug", slug).eq("ativo", true).maybeSingle(),
   ]);
-  if (studentError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
+  if (studentError) throw new LawStudyApiError(500, "Não foi possível verificar seu acesso agora.");
   const student = record(studentData);
   const studentId = text(student?.id);
-  if (!studentId) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
-  if (lawError) throw new LawStudyApiError(503, "Não foi possível carregar esta lei agora.");
+  if (lawError) throw new LawStudyApiError(500, "Não foi possível carregar esta lei agora.");
   const law = record(lawData);
   const lawId = positiveInteger(law?.id);
   const title = text(law?.titulo);
   if (lawId === null || !title) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
 
-  const [{ data: passwordStatus, error: passwordStatusError }, { data: accessData, error: accessError }] = await Promise.all([
+  const [{ data: passwordStatus, error: passwordStatusError }, { data: accessData, error: accessError }] = studentId ? await Promise.all([
     supabase.from("alunos").select("deve_trocar_senha").eq("id", studentId).single(),
     supabase.from("liberacoes_leis").select("id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("status", "ativo").limit(1),
-  ]);
-  if (passwordStatusError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
-  if (passwordStatus?.deve_trocar_senha === true) throw new LawStudyApiError(403, "Crie sua nova senha antes de acessar suas leis.");
-
-  if (accessError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
-  if (!Array.isArray(accessData) || accessData.length === 0) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
-
-  return { supabase, lawId, title, law, studentId };
+  ]) : [{ data: null, error: null }, { data: [], error: null }];
+  if (passwordStatusError || accessError) throw new LawStudyApiError(500, "Não foi possível verificar seu acesso agora.");
+  const hasActiveRelease = Array.isArray(accessData) && accessData.length > 0;
+  const mustChangePassword = passwordStatus?.deve_trocar_senha === true;
+  // Não consultar permissão ADM no caminho normal de aluno autorizado.
+  const normalAccess = Boolean(studentId && hasActiveRelease && !mustChangePassword);
+  const decision = resolveLawStudyAccess({ studentId, hasActiveRelease, mustChangePassword,
+    administrator: !normalAccess && (session.cookieAdministrator || usuarioEhAdministrador(session.user)) });
+  if (!decision.allowed) throw new LawStudyApiError(decision.status, decision.message);
+  return { supabase, lawId, title, law, studentId: decision.studentId, accessKind: decision.kind };
 }
 
 export async function loadLawStudy(request: Request, slug: string): Promise<LawStudyData> {
@@ -120,7 +115,7 @@ export async function loadLawStudy(request: Request, slug: string): Promise<LawS
   const [materialsResult, historyResult, progressResult, totalFlashcards] = await Promise.all([
     supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true }),
     supabase.from("historico_atualizacoes_leis").select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at").eq("lei_id", lawId).eq("visivel_aluno", true).order("data_publicacao", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }),
-    supabase.from("progresso_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle(),
+    studentId ? supabase.from("progresso_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     activeQuestionCountBySlug(slug),
   ]);
   if (materialsResult.error || historyResult.error || progressResult.error) throw new LawStudyApiError(503, "Não foi possível carregar os dados de estudo agora.");
@@ -172,6 +167,7 @@ export function parseLawProgressInput(value: unknown): LawProgressInput {
 export async function updateLawProgress(request: Request, slug: string, value: unknown): Promise<LawProgressInput> {
   const next = parseLawProgressInput(value);
   const { supabase, lawId, studentId } = await authorizeLawStudy(request, slug);
+  if (!studentId) throw new LawStudyApiError(403, "A prévia administrativa não registra progresso de aluno.");
   if (!next.inStudy && !next.questionsFinished) {
     const { error } = await supabase.from("progresso_leis_alunos").delete().eq("aluno_id", studentId).eq("lei_id", lawId);
     if (error) throw new LawStudyApiError(503, "Não foi possível salvar seu progresso agora.");
@@ -189,8 +185,8 @@ export async function updateLawProgress(request: Request, slug: string, value: u
 }
 
 export function lawStudyErrorResponse(error: unknown) {
-  if (error instanceof LawStudyApiError) {
-    return Response.json({ success: false, message: error.publicMessage }, { status: error.status, headers: { "Cache-Control": "private, no-store, max-age=0" } });
+  if (error instanceof LawStudyApiError || error instanceof AcademicSessionError) {
+    return Response.json({ success: false, message: error.publicMessage }, { status: error.status === 503 ? 500 : error.status, headers: { "Cache-Control": "private, no-store, max-age=0" } });
   }
   console.error("Falha ao carregar área de estudo da lei", error instanceof Error ? error.message : "erro desconhecido");
   return Response.json({ success: false, message: "Não foi possível concluir a operação." }, { status: 500, headers: { "Cache-Control": "private, no-store, max-age=0" } });

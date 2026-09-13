@@ -83,7 +83,7 @@ describe("persistência privada aluno × lei", () => {
   });
 
   it("valida sessão e liberação ativa antes de ler ou alterar", () => {
-    expect(server).toContain("auth.getUser(token)");
+    expect(server).toContain("authenticateAcademicSession(request)");
     expect(server).toContain('.from("liberacoes_leis").select("id")');
     expect(server).toContain('.eq("status", "ativo")');
     expect(server.indexOf("authorizeLawStudy(request, slug)", server.indexOf("updateLawProgress"))).toBeLessThan(server.indexOf('.from("progresso_leis_alunos").upsert'));
