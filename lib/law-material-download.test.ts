@@ -62,7 +62,7 @@ describe("referências seguras de material", () => {
 describe("fronteira autenticada de download", () => {
   it("reutiliza a autenticação e a autorização da lei antes de buscar o material", () => {
     expect(server).toContain("authorizeLawStudy(request, slug)");
-    expect(pageServer).toContain("authenticateAcademicSession(request)");
+    expect(pageServer).toContain("auth.getUser(token)");
     expect(pageServer).toContain('.from("liberacoes_leis").select("id")');
     expect(pageServer).toContain('.eq("status", "ativo")');
     expect(server.indexOf("authorizeLawStudy(request, slug)")).toBeLessThan(server.indexOf('.from("materiais_leis")'));
@@ -113,7 +113,7 @@ describe("interface de download", () => {
 
   it("mantém tutorial e download autenticado do Anki", () => {
     expect(client).toContain('resolveLawStudyPlatformTutorials'); expect(client).toContain('Baixar deck (.apkg)');
-    expect(client).toContain("protectedApiFetch(");
+    expect(client).toContain("Authorization: `Bearer ${token}`");
     expect(client).toContain('material.type === "pdf" ? "Legislação esquematizada.pdf" : "Legislação em questões.apkg"');
     expect(client).toContain('onDownload={() => void download(flashcard)}');
     expect(client).not.toContain('/apkg`');

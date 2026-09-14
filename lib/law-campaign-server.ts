@@ -22,30 +22,8 @@ async function loadQuestionSnapshot(lawId: number, title: string) {
 
 type StudyContext = Awaited<ReturnType<typeof authorizeLawStudy>>;
 
-async function administrativeCampaignPreview(context: StudyContext) {
-  const [questions, structure] = await Promise.all([mainQuestions(context.lawId), mainStructure(context.lawId)]);
-  if (!questions.length) throw new LawStudyApiError(404, "Esta lei ainda não possui questões disponíveis.");
-  return { administrativePreview: true, status: "em_andamento" as const, score: 0, scoreVersion: 2,
-    correct: 0, errors: 0, structure, progress: 0, question: questions[0],
-    levels: [{ id: 0, chave: "admin-preview", nome: "Prévia administrativa", concluido: false, posicao: 0, totalQuestoes: questions.length, revisando: false }],
-    level: { id: 0, nome: "Prévia administrativa", position: 0, firstPassProgress: 0, reviewing: false, questions } };
-}
-
-async function answerAdministrativePreview(context: StudyContext, questionId: string, selectedAnswer: "certo" | "errado") {
-  const questions = await mainQuestions(context.lawId);
-  const position = questions.findIndex((question) => question.id === questionId);
-  if (position < 0) throw new LawStudyApiError(409, "A questão atual foi atualizada. Recarregue a página.");
-  const correct = normalizedAnswer(questions[position].resposta) === selectedAnswer;
-  const next = questions[position + 1];
-  return { administrativePreview: true, levelConcluded: !next, campaignConcluded: !next, score: 0,
-    correct: correct ? 1 : 0, errors: correct ? 0 : 1, progress: Math.round((position + 1) / questions.length * 100),
-    next: next ? { questionId: next.id, position: position + 1, reviewing: false } : null,
-    levelResult: null, result: !next ? { score: 0, bestScore: 0, correct: 0, errors: 0 } : null };
-}
-
 async function getCampaignFor(context: StudyContext) {
   const { supabase, lawId, studentId } = context;
-  if (!studentId) return { status: "nao_iniciada" as const, campaignId: null };
   const { data: progress, error } = await supabase.from("progresso_leis_alunos").select("status_campanha,campanha_ativa_id").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle();
   if (error) throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei.");
   return { status: progress?.status_campanha ?? "nao_iniciada", campaignId: progress?.campanha_ativa_id ?? null };
@@ -58,7 +36,6 @@ export async function getCampaign(request: Request, slug: string) {
 /** Leitura exclusiva para modos não competitivos; nunca cria nem altera campanha. */
 export async function testCampaignAnswers(request: Request, slug: string) {
   const context = await authorizeLawStudy(request, slug);
-  if (context.accessKind === "admin") return { campaignId: null, answers: [] as Array<{ questionId: string; correct: boolean }> };
   const state = await getCampaignFor(context);
   let campaignId = state.campaignId;
   if (!campaignId && state.status === "concluida") {
@@ -74,7 +51,6 @@ export async function testCampaignAnswers(request: Request, slug: string) {
 
 export async function startCampaign(request: Request, slug: string) {
   const context = await authorizeLawStudy(request, slug);
-  if (context.accessKind === "admin") return administrativeCampaignPreview(context);
   const { supabase, lawId, studentId } = context;
   const current = await getCampaignFor(context);
   if (current.status === "concluida") return campaignStateFor(context);
@@ -102,7 +78,6 @@ export async function startCampaign(request: Request, slug: string) {
 }
 
 async function campaignStateFor(context: StudyContext) {
-  if (context.accessKind === "admin") return { status: "nao_iniciada" as const, campaignId: null, bestScore: null, record: null, result: null, level: null, question: null, progress: 0 };
   const { supabase, lawId, studentId } = context;
   const state = await getCampaignFor(context);
   let bestScore: number | null = null;
@@ -171,9 +146,7 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new LawStudyApiError(400, "Resposta inválida.");
   const body = value as Record<string, unknown>; const questionId = typeof body.questionId === "string" ? body.questionId : null; const selectedAnswer = body.answer === "certo" || body.answer === "errado" ? body.answer : null; const idempotencyKey = typeof body.idempotencyKey === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.idempotencyKey) ? body.idempotencyKey : null;
   if (!questionId || !selectedAnswer || !idempotencyKey) throw new LawStudyApiError(400, "Resposta inválida.");
-  const context = await authorizeLawStudy(request, slug);
-  if (context.accessKind === "admin") return answerAdministrativePreview(context, questionId, selectedAnswer);
-  const { supabase } = context; const state = await getCampaignFor(context);
+  const context = await authorizeLawStudy(request, slug); const { supabase } = context; const state = await getCampaignFor(context);
   if (state.status !== "em_andamento" || !state.campaignId) throw new LawStudyApiError(409, "Não há Estudo Ativo da Lei em andamento para responder.");
   const { data: rawLevels, error } = await supabase.from("campanhas_leis_niveis").select("id,ordem,nome,questoes_ids,proxima_posicao,pendencias_ids,total_erros,score_competitivo_acertos,score_competitivo_erros,concluido").eq("campanha_id", state.campaignId).order("ordem");
   if (error) throw new LawStudyApiError(503, "Não foi possível salvar sua resposta.");
@@ -228,9 +201,7 @@ export async function answerCampaign(request: Request, slug: string, value: unkn
 
 /** O reset arquiva a tentativa aberta e preserva todo o histórico de respostas. */
 export async function resetCampaign(request: Request, slug: string) {
-  const context = await authorizeLawStudy(request, slug);
-  if (context.accessKind === "admin") return { status: "nao_iniciada" as const, campaignId: null, progress: 0 };
-  const { supabase, lawId, studentId } = context;
+  const { supabase, lawId, studentId } = await authorizeLawStudy(request, slug);
   const { data: current, error: currentError } = await supabase.from("progresso_leis_alunos").select("campanha_ativa_id").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle();
   if (currentError) throw new LawStudyApiError(503, "Não foi possível resetar seu Estudo Ativo da Lei.");
   if (typeof current?.campanha_ativa_id === "string") {

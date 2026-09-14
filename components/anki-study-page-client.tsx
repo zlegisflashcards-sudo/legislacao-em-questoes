@@ -15,12 +15,12 @@ import { supabase } from "@/lib/supabase";
 type SessionStatus = "loading" | "ready" | "error";
 const LOGIN_URL = "/conta?modo=login&retorno=%2Festudar%2Fanki";
 
-export function AnkiStudyPageClient({ settings, publicMode = false, apiProtectedContent = false, children }: { settings: AnkiTutorialSettings | null; publicMode?: boolean; apiProtectedContent?: boolean; children?: ReactNode }) {
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>(publicMode || apiProtectedContent ? "ready" : "loading");
+export function AnkiStudyPageClient({ settings, publicMode = false, children }: { settings: AnkiTutorialSettings | null; publicMode?: boolean; children?: ReactNode }) {
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>(publicMode ? "ready" : "loading");
   const [activePlatform, setActivePlatform] = useState<AnkiPlatformId>(DEFAULT_ANKI_PLATFORM);
 
   useEffect(() => {
-    if (publicMode || apiProtectedContent) return;
+    if (publicMode) return;
     let active = true;
 
     async function authenticate() {
@@ -42,7 +42,7 @@ export function AnkiStudyPageClient({ settings, publicMode = false, apiProtected
 
     void authenticate();
     return () => { active = false; };
-  }, [publicMode, apiProtectedContent]);
+  }, [publicMode]);
 
   const tutorials = useMemo(() => resolveAnkiPlatformTutorials(settings), [settings]);
   const tutorial = tutorials[activePlatform];

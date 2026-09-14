@@ -54,8 +54,7 @@ describe("contrato da página de estudo da lei", () => {
 
 describe("autorização e exposição segura", () => {
   it("autentica, resolve o aluno e verifica a liberação ativa antes dos materiais", () => {
-    expect(server).toContain("authenticateAcademicSession(request)");
-    expect(readFileSync("lib/academic-session-server.ts", "utf8")).toContain("auth.getUser(token)");
+    expect(server).toContain("auth.getUser(token)");
     expect(server).toContain('.from("alunos").select("id").eq("user_id", userData.user.id)');
     expect(server).toContain('.from("liberacoes_leis").select("id")');
     expect(server).toContain('.eq("status", "ativo")');
@@ -88,8 +87,8 @@ describe("interface de estudo", () => {
   it("cria a rota autenticada e faz o card abrir a página interna", () => {
     expect(page).toContain("getAnkiTutorialSettings");
     expect(page).toContain("<LawStudyPageClient slug={slug} ankiTutorialSettings={settings} />");
-    expect(client).toContain("protectedApiFetch(path");
-    expect(client).toContain("academicResponseMessage(response.status");
+    expect(client).toContain("supabase.auth.getSession()");
+    expect(client).toContain("/conta?modo=login&retorno=");
     expect(cards).toContain('const lawHref = isScope ?');
     expect(cards).toContain('?contexto=completo');
     expect(cards).toContain('?recorte_id=');
@@ -184,8 +183,8 @@ describe("interface de estudo", () => {
 
   it("mantém a árvore do Estudo Livre navegável", () => {
     const tree = client.slice(client.indexOf('function StructureTreeNode'), client.indexOf('function RootDeck'));
-    expect(tree).toContain('<Link href={href} className="group flex min-w-0 flex-1');
-    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} />');
+    expect(tree).toContain('<Link href={href} className="flex min-w-0 flex-1');
+    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} framed={false} />');
   });
 
   it("inicia todos os níveis expansíveis recolhidos", () => {
@@ -198,8 +197,8 @@ describe("interface de estudo", () => {
     expect(tree).toContain('function FreeStudyLabel');
     expect(tree).toContain('border border-blue-100 bg-white');
     expect(tree).toContain('group-hover:border-blue-300 group-hover:bg-blue-50');
-    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} />');
-    expect(tree).toContain('<Link href={href} className="group flex min-w-0 flex-1');
+    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} framed={false} />');
+    expect(tree).toContain('<Link href={href} className="flex min-w-0 flex-1');
     expect(tree).not.toContain('FreeStudyLabel name={node.nome} count={node.count} phase=');
   });
 
