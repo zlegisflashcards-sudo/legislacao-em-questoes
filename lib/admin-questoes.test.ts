@@ -77,21 +77,21 @@ describe("administração de Legis Questões", () => {
   });
 
   it("oferece o fluxo visual de análise e confirmação do TXT sem alterar o servidor", () => {
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     expect(panel).toContain('type="file" accept=".txt,text/plain"');
     expect(panel).toContain("await file.text()");
     expect(panel).toContain('action: "previsualizar_anki"');
     expect(panel).toContain('action: "importar_anki"');
     expect(panel).toContain("Existem problemas que precisam ser corrigidos antes da importação.");
     expect(panel).toContain("Importar outro TXT");
-    expect(panel).toContain("await reload()");
+    expect(panel).toContain("await onImported?.()");
     expect(panel).toContain("Duplicadas:");
   });
 
   it("oferece prévia APKG sem rota de persistência", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     expect(server).toContain("export async function previewApkgImport");
     expect(server).toContain("parseLegisApkg");
     expect(route).toContain('action !== "previsualizar_apkg" && action !== "importar_apkg"');
@@ -100,7 +100,7 @@ describe("administração de Legis Questões", () => {
   });
 
   it("oferece a exportação APKG somente pelo painel administrativo protegido", () => {
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     const route = readFileSync("app/api/admin/questoes/exportar-apkg/route.ts", "utf8");
     expect(panel).toContain("Exportar APKG");
     expect(panel).toContain("/api/admin/questoes/exportar-apkg?slug=");
@@ -111,7 +111,7 @@ describe("administração de Legis Questões", () => {
   it("confirma APKG pela mesma persistência compartilhada do TXT", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     expect(server).toContain("async function persist(");
     expect(server).toContain("return persist(slug(body.law_slug), parsed.rows, data)");
     expect(server).toContain("return persist(slug(body.lawSlug), parsed.rows, data, parsed.unrecognizedModels");
@@ -144,7 +144,7 @@ describe("administração de Legis Questões", () => {
   });
 
   it("renderiza detalhes de erros impeditivos nas prévias TXT e APKG", () => {
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     expect(panel).toContain('<ImportErrors errors={preview.errors ?? []} expectedCount={preview.summary.erros} />');
     expect(panel).toContain("A prévia informou {expectedCount} erro(s) impeditivo(s)");
     expect(panel).toContain("Erros impeditivos");
@@ -152,15 +152,17 @@ describe("administração de Legis Questões", () => {
 
   it("permite editar questões importadas com estrutura e HTML no formulário", () => {
     const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const sharedEditor = readFileSync("components/admin/admin-question-editor.tsx", "utf8");
     expect(panel).toContain("function editQuestion(question: Q)");
-    expect(panel).toContain("setForm({ ...question })");
+    expect(panel).toContain("setForm(adminQuestionFormFrom(question))");
     expect(panel).toContain('action: editing ? "atualizar" : "criar"');
-    expect(panel).toContain('type="text" inputMode="decimal" value={form.ordem}');
-    expect(panel).toContain("onClick={() => editQuestion(question)}");
+    expect(panel).toContain("<AdminQuestionEditor");
+    expect(sharedEditor).toContain('input required inputMode="decimal" value={value.ordem}');
+    expect(panel).toContain("onClick={() => onEdit(question)}");
   });
 
   it("edita cada campo rico visualmente sem sanitizar ou reserializar o HTML armazenado", () => {
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-editor.tsx", "utf8");
     const editor = readFileSync("components/admin/question-rich-editor.tsx", "utf8");
     expect(panel).toContain('<QuestionRichEditor label="Pergunta"');
     expect(panel).toContain('<QuestionRichEditor label="Justificativa"');
@@ -186,7 +188,7 @@ describe("administração de Legis Questões", () => {
 
   it("planeja a estrutura na prévia e só a cria na confirmação", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     const decks = readFileSync("components/legis-questoes-client.tsx", "utf8");
     expect(server).toContain("planQuestionDeckStructure(rows, nodes)");
     expect(server).toContain('db().from("law_structure").insert');
@@ -195,10 +197,33 @@ describe("administração de Legis Questões", () => {
     expect(decks).toContain("compareQuestionStructureNames");
   });
 
+  it("oferece prévia e confirmação da estrutura TXT somente para a lei da URL", () => {
+    const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
+    const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
+    const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
+    expect(route).toContain('action === "previsualizar_estrutura_txt"');
+    expect(route).toContain('action === "importar_estrutura_txt"');
+    expect(server).toContain("parseQuestionStructureTxt(input)");
+    expect(server).toContain("planQuestionDeckStructure(parsed.rows, existing)");
+    expect(server).toContain("lei_id: prepared.current.id");
+    expect(server).toContain('.eq("lei_id", prepared.current.id).in("id", insertedIds)');
+    expect(panel).toContain("Importar estrutura por TXT");
+    expect(panel).toContain("Gerar prévia");
+    expect(panel).toContain("Confirmar importação de");
+  });
+
+  it("mantém o importador Anki no mesmo planejador hierárquico", () => {
+    const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
+    const ankiPreview = server.slice(server.indexOf("async function preview("), server.indexOf("export async function previewAnkiImport"));
+    const ankiPersist = server.slice(server.indexOf("async function persist("), server.indexOf("export async function importAnkiTxt"));
+    expect(ankiPreview).toContain("planQuestionDeckStructure(rows, nodes)");
+    expect(ankiPersist).toContain("planQuestionDeckStructure(newRows, before)");
+  });
+
   it("protege a exclusão de estrutura quando houver questões e oferece confirmação administrativa", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
     expect(server).toContain("structureDeletionSummary");
     expect(server).toContain('.in("structure_id", ids)');
     expect(server).toContain("pode_excluir");
@@ -213,7 +238,7 @@ describe("administração de Legis Questões", () => {
 
   it("mantém a criação inline e a confirmação de exclusão no layout de questões selecionado", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
     expect(server).toContain("validQuestionStructureParent(nodeType");
     expect(panel).not.toContain("window.prompt");
     expect(panel).toContain("function startCreation");
@@ -223,16 +248,17 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("parent_id: pending.parentId");
     expect(panel).toContain("if (!pending || !nome || saving || creatingRequest.current) return");
     expect(panel).toContain("creatingRequest.current");
-    expect(panel).toContain("await load(slug); setCreating(null)");
-    expect(panel).toContain("deleting && <DeletionDialog");
-    expect(panel).toContain("onConfirmDelete");
+    expect(panel).toContain("await onReload(); setCreating(null)");
+    expect(panel).toContain("deleting ? <DeletionDialog");
+    expect(panel).toContain("confirmDelete");
   });
 
   it("renomeia nós estruturais sem modificar identidade, hierarquia ou ordem", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const update = server.slice(server.indexOf("export async function updateStructureNode"), server.indexOf("export async function deactivateStructureNode"));
-    expect(update).toContain('update({ nome: text(body.nome, "Nome") })');
+    expect(update).toContain('const patch: { nome: string; pdf_page?: number | null }');
+    expect(update).toContain(".update(patch)");
     expect(update).not.toContain("ordem:");
     expect(update).not.toContain("parent_id:");
     expect(update).not.toContain("tipo:");
@@ -242,19 +268,16 @@ describe("administração de Legis Questões", () => {
   });
 
   it("oferece renomeação inline genérica para título, capítulo, seção e subseção", () => {
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
-    expect(panel).toContain('type StructureRename = { id: number; nome: string }');
-    expect(panel).toContain("function startRename(node: Node)");
-    expect(panel).toContain("function saveRename()");
+    const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
+    expect(panel).toContain('type Edition = { id: number; nome: string; pdfPage: string }');
+    expect(panel).toContain("async function saveEdition()");
     expect(panel).toContain('action: "atualizar_estrutura"');
-    expect(panel).toContain("setRenaming({ id: node.id, nome: node.nome })");
+    expect(panel).toContain("changeEdition({ id: node.id, nome: node.nome");
     expect(panel).toContain("autoFocus");
-    expect(panel).toContain('event.key === "Enter"');
-    expect(panel).toContain('event.key === "Escape"');
-    expect(panel).toContain("renameForNode.nome.trim()");
-    expect(panel).toContain("renamingRequest.current");
-    expect(panel).toContain("await load(slug); setRenaming(null)");
+    expect(panel).toContain("current.nome.trim()");
+    expect(panel).toContain("editingRequest.current");
+    expect(panel).toContain("await onReload(); setEditing(null)");
     expect(panel).toContain("labels[node.tipo]");
-    expect(panel).toContain("changeRename(null)");
+    expect(panel).toContain("changeEdition(null)");
   });
 });

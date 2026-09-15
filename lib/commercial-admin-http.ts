@@ -51,9 +51,10 @@ export async function handleCommercialGet(
 export async function handleCommercialMutation(
   resource: CommercialResource,
   request: Request,
+  context?: { lawId?: number },
 ) {
   try {
-    const result = await mutateCommercialResource(resource, request);
+    const result = await mutateCommercialResource(resource, request, context);
     return NextResponse.json(result, { headers: NO_STORE_HEADERS });
   } catch (error) {
     return failure(error);

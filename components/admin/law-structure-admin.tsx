@@ -1,0 +1,140 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { compareQuestionStructureNames } from "@/lib/questoes-structure";
+
+export type AdminLawStructureKind = "titulo" | "capitulo" | "secao" | "subsecao";
+export type AdminLawStructureNode = { id: number; parent_id: number | null; tipo: AdminLawStructureKind; nome: string; ordem: number; pdf_page?: number | null };
+type Creation = { tipo: AdminLawStructureKind; parentId: number | null; nome: string };
+type Edition = { id: number; nome: string; pdfPage: string };
+type DeletionSummary = { id: number; nome: string; tipo: AdminLawStructureKind; ids: number[]; descendentes: number; por_tipo: Partial<Record<AdminLawStructureKind, number>>; questoes: number; questoes_diretas: number; questoes_descendentes: number; pode_excluir: boolean };
+type StructureImportPreview = { items: Array<{ key: string; parent_key: string | null; line: number; path: string; nome: string; tipo: AdminLawStructureKind; status: "novo" | "existente" }>; conflicts: Array<{ line: number; path: string; message: string }>; summary: { novos: number; existentes: number; conflitos: number }; can_import: boolean };
+
+const labels: Record<AdminLawStructureKind, string> = { titulo: "Título", capitulo: "Capítulo", secao: "Seção", subsecao: "Subseção" };
+const next: Partial<Record<AdminLawStructureKind, AdminLawStructureKind>> = { titulo: "capitulo", capitulo: "secao", secao: "subsecao" };
+
+async function api<T>(body: Record<string, unknown>) {
+  const response = await fetch("/api/admin/questoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Erro na operação estrutural.");
+  return data as T;
+}
+
+export function LawStructureAdmin({ lawSlug, nodes, onReload, onSelectNode, onDeleteComplete }: { lawSlug: string; nodes: AdminLawStructureNode[]; onReload: () => Promise<void>; onSelectNode?: (node: AdminLawStructureNode) => void; onDeleteComplete?: (ids: number[]) => void }) {
+  const [creating, setCreating] = useState<Creation | null>(null);
+  const [editing, setEditing] = useState<Edition | null>(null);
+  const [deleting, setDeleting] = useState<DeletionSummary | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importFileName, setImportFileName] = useState("");
+  const [importPreview, setImportPreview] = useState<StructureImportPreview | null>(null);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const creatingRequest = useRef(false);
+  const editingRequest = useRef(false);
+  const kids = (parentId: number | null) => nodes.filter((node) => node.parent_id === parentId).sort(compareQuestionStructureNames);
+
+  function startCreation(tipo: AdminLawStructureKind, parentId: number | null) {
+    if (!saving && !creating && !editing) { setError(""); setCreating({ tipo, parentId, nome: "" }); }
+  }
+  async function saveCreation() {
+    const pending = creating; const nome = pending?.nome.trim();
+    if (!pending || !nome || saving || creatingRequest.current) return;
+    creatingRequest.current = true; setSaving(true); setError("");
+    try {
+      await api({ action: "criar_estrutura", law_slug: lawSlug, tipo: pending.tipo, parent_id: pending.parentId, nome, ordem: nodes.length + 1 });
+      await onReload(); setCreating(null);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível salvar a estrutura."); }
+    finally { creatingRequest.current = false; setSaving(false); }
+  }
+  async function saveEdition() {
+    const pending = editing; const nome = pending?.nome.trim();
+    if (!pending || !nome || saving || editingRequest.current) return;
+    const pdfPage = pending.pdfPage.trim() ? Number(pending.pdfPage) : null;
+    if (pdfPage !== null && (!Number.isSafeInteger(pdfPage) || pdfPage < 1)) { setError("A página do PDF deve ser um inteiro positivo."); return; }
+    editingRequest.current = true; setSaving(true); setError("");
+    try {
+      await api({ action: "atualizar_estrutura", law_slug: lawSlug, id: pending.id, nome, pdf_page: pdfPage });
+      await onReload(); setEditing(null);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a estrutura."); }
+    finally { editingRequest.current = false; setSaving(false); }
+  }
+  async function askDelete(node: AdminLawStructureNode) {
+    setError("");
+    try { setDeleting(await api<DeletionSummary>({ action: "resumo_exclusao_estrutura", law_slug: lawSlug, id: node.id })); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível analisar a exclusão."); }
+  }
+  async function confirmDelete() {
+    if (!deleting) return; setSaving(true); setError("");
+    try { await api({ action: "excluir_estrutura", law_slug: lawSlug, id: deleting.id }); onDeleteComplete?.(deleting.ids); setDeleting(null); await onReload(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível excluir a estrutura."); }
+    finally { setSaving(false); }
+  }
+  async function chooseImportFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; setError(""); setImportPreview(null);
+    if (!file) { setImportFileName(""); return; }
+    if (!file.name.toLowerCase().endsWith(".txt")) { setError("Selecione um arquivo .txt."); event.target.value = ""; return; }
+    if (file.size > 500_000) { setError("O arquivo TXT deve ter no máximo 500 KB."); event.target.value = ""; return; }
+    try { setImportText(await file.text()); setImportFileName(file.name); }
+    catch { setError("Não foi possível ler o arquivo TXT."); }
+  }
+  async function previewImport() {
+    setSaving(true); setError(""); setMessage(""); setImportPreview(null);
+    try { setImportPreview(await api<StructureImportPreview>({ action: "previsualizar_estrutura_txt", law_slug: lawSlug, text: importText })); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível gerar a prévia da estrutura."); }
+    finally { setSaving(false); }
+  }
+  async function confirmImport() {
+    if (!importPreview?.can_import) return;
+    setSaving(true); setError(""); setMessage("");
+    try {
+      const result = await api<{ criados: number }>({ action: "importar_estrutura_txt", law_slug: lawSlug, text: importText });
+      await onReload(); setMessage(`${result.criados} nó(s) estrutural(is) importado(s).`); setImportOpen(false); setImportText(""); setImportFileName(""); setImportPreview(null);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível importar a estrutura."); }
+    finally { setSaving(false); }
+  }
+
+  return <article className="commercial-card">
+    <h2>Estrutura da legislação</h2>
+    <p>A estrutura pertence à lei e pode ser cadastrada antes de questões ou arquivos Anki.</p>
+    {message ? <p className="admin-alert success" role="status">{message}</p> : null}
+    {error ? <p className="admin-alert error" role="alert">{error}</p> : null}
+    <div className="flex flex-wrap gap-3"><button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => startCreation("titulo", null)}>+ Título</button><button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => startCreation("capitulo", null)}>+ Capítulo</button><button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => { setImportOpen((value) => !value); setImportPreview(null); setError(""); }}>Importar estrutura por TXT</button></div>
+    {importOpen ? <section className="structure-txt-import" aria-labelledby="structure-txt-title"><div><h3 id="structure-txt-title">Importar estrutura por TXT</h3><p>Uma linha por caminho. Separe os níveis com <code>::</code>. A prévia não altera o banco.</p></div><label>Arquivo .txt<input type="file" accept=".txt,text/plain" disabled={saving} onChange={(event) => void chooseImportFile(event)} /></label>{importFileName ? <p><strong>Arquivo:</strong> {importFileName}</p> : null}<label>Conteúdo TXT<textarea value={importText} disabled={saving} placeholder={"TÍTULO I\nTÍTULO I::CAPÍTULO I\nTÍTULO I::CAPÍTULO I::SEÇÃO I"} onChange={(event) => { setImportText(event.target.value); setImportPreview(null); setImportFileName(""); }} /></label><div className="flex flex-wrap gap-2"><button type="button" className="admin-button secondary" disabled={saving || !importText.trim()} onClick={() => void previewImport()}>{saving ? "Analisando…" : "Gerar prévia"}</button><button type="button" className="admin-button secondary" disabled={saving} onClick={() => { setImportOpen(false); setImportPreview(null); }}>Cancelar</button></div>{importPreview ? <section className="anki-import-preview" aria-live="polite"><h3>Prévia da estrutura</h3><div className="anki-import-summary"><p className="new"><strong>Novos:</strong> {importPreview.summary.novos}</p><p className="duplicate"><strong>Existentes:</strong> {importPreview.summary.existentes}</p><p className="error"><strong>Conflitos:</strong> {importPreview.summary.conflitos}</p></div>{importPreview.conflicts.length ? <div><h4>Conflitos encontrados</h4><ul>{importPreview.conflicts.map((conflict, index) => <li key={`${conflict.line}-${index}`}><strong>{conflict.line ? `Linha ${conflict.line}` : "Arquivo"}:</strong> {conflict.message}{conflict.path ? ` — ${conflict.path}` : ""}</li>)}</ul></div> : null}{importPreview.items.length ? <details open><summary>Hierarquia resultante ({importPreview.items.length} nós)</summary><ul>{importPreview.items.map((item) => <li key={item.key}>{item.status === "novo" ? "+" : "✓"} {item.path} — {item.status === "novo" ? "será criado" : "já existe"}</li>)}</ul></details> : null}<button type="button" className="admin-button primary" disabled={saving || !importPreview.can_import} onClick={() => void confirmImport()}>{saving ? "Importando…" : importPreview.summary.novos ? `Confirmar importação de ${importPreview.summary.novos} nó(s)` : "Nenhum nó novo"}</button></section> : null}</section> : null}
+    <StructureTree nodes={kids(null)} kids={kids} creating={creating} editing={editing} saving={saving} add={startCreation} changeCreation={setCreating} saveCreation={saveCreation} changeEdition={setEditing} saveEdition={saveEdition} selectNode={onSelectNode} onDelete={askDelete} />
+    {!nodes.length && !creating && !importOpen ? <div className="admin-empty law-center-empty"><h3>Comece pela estrutura da lei</h3><p>Crie um Título ou Capítulo agora. Questões, áudios e recortes podem ser vinculados depois.</p><div className="flex flex-wrap gap-2"><button type="button" className="admin-button primary" onClick={() => startCreation("titulo", null)}>Criar primeiro Título</button><button type="button" className="admin-button secondary" onClick={() => startCreation("capitulo", null)}>Criar primeiro Capítulo</button><button type="button" className="admin-button secondary" onClick={() => setImportOpen(true)}>Importar TXT</button></div></div> : null}
+    {deleting ? <DeletionDialog summary={deleting} saving={saving} onCancel={() => setDeleting(null)} onConfirm={() => void confirmDelete()} /> : null}
+  </article>;
+}
+
+function StructureTree({ nodes, kids, parentId = null, creating, editing, saving, add, changeCreation, saveCreation, changeEdition, saveEdition, selectNode, onDelete, depth = 0 }: { nodes: AdminLawStructureNode[]; kids: (id: number | null) => AdminLawStructureNode[]; parentId?: number | null; creating: Creation | null; editing: Edition | null; saving: boolean; add: (kind: AdminLawStructureKind, parent: number | null) => void; changeCreation: React.Dispatch<React.SetStateAction<Creation | null>>; saveCreation: () => Promise<void>; changeEdition: React.Dispatch<React.SetStateAction<Edition | null>>; saveEdition: () => Promise<void>; selectNode?: (node: AdminLawStructureNode) => void; onDelete: (node: AdminLawStructureNode) => void; depth?: number }) {
+  const inputForCurrentParent = creating?.parentId === parentId ? creating : null;
+  return <ul className="admin-questoes-structure">
+    {nodes.map((node) => { const current = editing?.id === node.id ? editing : null; return <li key={node.id} style={{ marginLeft: depth * 18 }}>
+      {current ? <div className="flex flex-wrap items-end gap-2">
+        <label><strong>{labels[node.tipo]}</strong><input autoFocus aria-label={`Nome do ${labels[node.tipo]}`} value={current.nome} disabled={saving} onChange={(event) => changeEdition((value) => value ? { ...value, nome: event.target.value } : value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); changeEdition(null); } if (event.key === "Enter") { event.preventDefault(); if (current.nome.trim() && !saving) void saveEdition(); } }} /></label>
+        <label>Página PDF<input type="number" min="1" inputMode="numeric" value={current.pdfPage} disabled={saving} onChange={(event) => changeEdition((value) => value ? { ...value, pdfPage: event.target.value } : value)} /></label>
+        <button type="button" disabled={saving || !current.nome.trim()} onClick={() => void saveEdition()}>{saving ? "Salvando…" : "Salvar"}</button>
+        <button type="button" disabled={saving} onClick={() => changeEdition(null)}>Cancelar</button>
+      </div> : <>
+        <strong>{labels[node.tipo]}:</strong> {node.nome}{node.pdf_page ? ` · PDF p. ${node.pdf_page}` : ""}{" "}
+        <button type="button" className="admin-link-button" aria-label={`Editar ${labels[node.tipo]} ${node.nome}`} disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => changeEdition({ id: node.id, nome: node.nome, pdfPage: node.pdf_page ? String(node.pdf_page) : "" })}>✎</button>{" "}
+        {selectNode ? <button type="button" disabled={Boolean(editing)} onClick={() => selectNode(node)}>Cadastrar questão aqui</button> : null}
+      </>}
+      {next[node.tipo] ? <button type="button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => add(next[node.tipo]!, node.id)}>+ {labels[next[node.tipo]!]}</button> : null}
+      <button type="button" className="admin-link-button danger" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => onDelete(node)}>Excluir</button>
+      <StructureTree nodes={kids(node.id)} kids={kids} parentId={node.id} creating={creating} editing={editing} saving={saving} add={add} changeCreation={changeCreation} saveCreation={saveCreation} changeEdition={changeEdition} saveEdition={saveEdition} selectNode={selectNode} onDelete={onDelete} depth={depth + 1} />
+    </li>; })}
+    {inputForCurrentParent ? <li style={{ marginLeft: depth * 18 }}>
+      <input autoFocus aria-label={`Nome do ${labels[inputForCurrentParent.tipo]}`} value={inputForCurrentParent.nome} disabled={saving} placeholder={`Nome do ${labels[inputForCurrentParent.tipo].toLowerCase()}...`} onChange={(event) => changeCreation((current) => current ? { ...current, nome: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); changeCreation(null); } if (event.key === "Enter") { event.preventDefault(); if (inputForCurrentParent.nome.trim() && !saving) void saveCreation(); } }} />
+      <button type="button" disabled={saving || !inputForCurrentParent.nome.trim()} onClick={() => void saveCreation()}>{saving ? "Salvando…" : "Salvar"}</button>
+      <button type="button" disabled={saving} onClick={() => changeCreation(null)}>Cancelar</button>
+    </li> : null}
+  </ul>;
+}
+
+function DeletionDialog({ summary, saving, onCancel, onConfirm }: { summary: DeletionSummary; saving: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const descendants = (Object.keys(labels) as AdminLawStructureKind[]).flatMap((kind) => summary.por_tipo[kind] ? [`${summary.por_tipo[kind]} ${labels[kind].toLowerCase()}${summary.por_tipo[kind] === 1 ? "" : "s"}`] : []);
+  return <div className="admin-modal-backdrop" role="presentation"><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="delete-structure-title"><h2 id="delete-structure-title">Excluir {labels[summary.tipo]} {summary.nome}?</h2><p>Esta ação removerá este item e os itens abaixo.</p>{descendants.length ? <p>Também serão excluídos: {descendants.join(", ")}.</p> : <p>Este é um item sem descendentes.</p>}<p><strong>Questões vinculadas: {summary.questoes}</strong> ({summary.questoes_diretas} neste item e {summary.questoes_descendentes} nos subitens)</p>{summary.pode_excluir ? <p>A estrutura está vazia e pode ser excluída com segurança.</p> : <p className="admin-alert error">Este item não pode ser excluído porque existem {summary.questoes} questões vinculadas a ele ou aos seus subitens. Mova ou exclua essas questões antes de remover a estrutura.</p>}<div className="admin-modal-actions"><button type="button" className="admin-button secondary" disabled={saving} onClick={onCancel}>Cancelar</button>{summary.pode_excluir ? <button type="button" className="admin-button danger" disabled={saving} onClick={onConfirm}>{saving ? "Excluindo…" : "Excluir"}</button> : null}</div></section></div>;
+}

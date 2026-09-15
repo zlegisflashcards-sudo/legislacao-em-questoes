@@ -836,7 +836,7 @@ async function importHistoricalHotmartSales(actor: string, rawRows: unknown, dry
   return summary;
 }
 
-export async function mutateCommercialResource(resource: CommercialResource, request: Request) {
+export async function mutateCommercialResource(resource: CommercialResource, request: Request, context?: { lawId?: number }) {
   const admin = await requireAdmin();
   const actor = uuid(admin.id, "Administrador");
   const body = await readCommercialBody(request);
@@ -1254,11 +1254,13 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   }
 
   if (resource === "materiais") {
+    const contextLawId = context?.lawId == null ? null : positiveIntegerId(context.lawId, "Lei de contexto");
     if (action === "criar") {
       const data = validateMaterialData(body.data);
+      if (contextLawId !== null && Number(data.lei_id) !== contextLawId) throw new CommercialHttpError(422, "O material deve permanecer vinculado à lei selecionada.");
       return rpc("admin_criar_material_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
-    if (action === "atualizar") { const data=validateMaterialData(body.data,true); return rpc("admin_atualizar_material_lei", { p_ator_user_id: actor, p_material_id: positiveIntegerId(body.id, "Material"), p_dados: data }); }
+    if (action === "atualizar") { const materialId=positiveIntegerId(body.id, "Material"); if (contextLawId !== null) { const current=await getSupabaseServerClient().from("materiais_leis").select("id").eq("id", materialId).eq("lei_id", contextLawId).maybeSingle(); assertQuery(current); if (!current.data) throw new CommercialHttpError(404, "Material não encontrado para a lei selecionada."); } const data=validateMaterialData(body.data,true); return rpc("admin_atualizar_material_lei", { p_ator_user_id: actor, p_material_id: materialId, p_dados: data }); }
   }
 
   if (resource === "atualizacoes") {

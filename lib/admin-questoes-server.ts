@@ -4,9 +4,10 @@ import { parseQuestionDraft, type QuestionDraft } from "@/lib/admin-questoes";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
-import { compareQuestionStructureNames, planQuestionDeckStructure, validQuestionStructureParent, type QuestionStructureNode } from "@/lib/questoes-structure";
+import { compareQuestionStructureNames, normalizeQuestionStructureName, parseQuestionStructureTxt, planQuestionDeckStructure, validQuestionStructureParent, type QuestionStructureNode } from "@/lib/questoes-structure";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
+import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, plainQuestionText } from "@/lib/admin-question-search";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = "titulo" | "capitulo" | "secao" | "subsecao";
@@ -24,7 +25,7 @@ function type(value: unknown) { if (!types.includes(value as StructureType)) thr
 function optionalId(value: unknown) { return value === null || value === undefined || value === "" ? null : id(value); }
 function draft(value: unknown) { try { return parseQuestionDraft(value as Record<string, unknown>); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "Dados da questão inválidos."); } }
 async function law(lawSlug: string): Promise<Law> { const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo").eq("slug", slug(lawSlug)).eq("ativo", true).maybeSingle(); if (r.error) fail("carregar_lei", r.error); if (!r.data) throw new AdminQuestoesError(404, "Lei ativa não encontrada no banco principal."); return r.data as Law; }
-async function structure(leiId: number) { const r = await db().from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,ativo,created_at,updated_at").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("id"); if (r.error) fail("listar_estrutura", r.error); return [...(r.data ?? [])].sort(compareQuestionStructureNames) as QuestionStructureNode[]; }
+async function structure(leiId: number) { const r = await db().from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page,ativo,created_at,updated_at").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("id"); if (r.error) fail("listar_estrutura", r.error); return [...(r.data ?? [])].sort(compareQuestionStructureNames) as QuestionStructureNode[]; }
 async function validateStructure(leiId: number, structureId: number | null) { if (!structureId) return; const r = await db().from("law_structure").select("id").eq("id", structureId).eq("lei_id", leiId).eq("ativo", true).maybeSingle(); if (r.error) fail("validar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(422, "A estrutura selecionada não pertence à lei ativa."); }
 function values(law: Law, d: QuestionDraft) { return { lei_id: law.id, structure_id: d.structure_id, pergunta: d.pergunta, resposta: d.resposta, justificativa: d.justificativa, assunto: d.assunto, legislacao: d.legislacao, ordem: d.ordem, titulo: d.titulo, total_artigos: d.total_artigos, slug: law.slug, capitulo: d.capitulo, secao: d.secao, subsecao: d.subsecao, artigo: d.artigo }; }
 
@@ -33,6 +34,16 @@ export async function listLawQuestionScopes(lawSlug: string) { await requireAdmi
 export async function saveLawQuestionScope(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const name = text(body.nome, "Nome do recorte"); const description = typeof body.descricao === "string" ? body.descricao.trim() : ""; const ids = Array.isArray(body.structure_ids) ? body.structure_ids.map(Number).filter((item) => Number.isSafeInteger(item) && item > 0) : []; const suppliedId = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null; const result = await db().rpc("admin_salvar_recorte_lei", { p_recorte_id: suppliedId, p_lei_id: current.id, p_nome: name, p_descricao: description, p_ativo: body.ativo !== false, p_structure_ids: ids }); if (result.error || !result.data) fail("salvar_recorte", result.error); return { id: result.data, lei_id: current.id, nome: name, descricao: description, structure_ids: ids }; }
 export async function listQuestionContent(lawSlug: string) { const current = await law(lawSlug); const r = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).order("ordem").order("created_at").order("id"); if (r.error) fail("listar_questoes", r.error); return { law: current, questions: r.data ?? [], structure: await structure(current.id) }; }
 export async function listAdminQuestions(lawSlug: string) { await requireAdmin(); return listQuestionContent(lawSlug); }
+export async function searchAdminQuestions(input: { lawSlug: string; query?: unknown; filter?: unknown; page?: unknown; limit?: unknown }) {
+  await requireAdmin(); const current = await law(input.lawSlug); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit;
+  let request = db().from("questions").select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,updated_at", { count: "exact" }).eq("lei_id", current.id).eq("ativo", true);
+  if (filter === "certo") request = request.eq("resposta", "Certo"); else if (filter === "errado") request = request.eq("resposta", "Errado"); else if (filter === "unstructured") request = request.is("structure_id", null);
+  for (const term of terms) request = request.or(["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`).join(","));
+  request = terms.length ? request.order("ordem").order("id") : request.order("updated_at", { ascending: false }).order("id");
+  const result = await request.range(offset, offset + limit - 1); if (result.error) fail("pesquisar_questoes", result.error); const total = result.count ?? 0;
+  return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter };
+}
+export async function getAdminQuestion(lawSlug: string, questionId: unknown) { await requireAdmin(); const current = await law(lawSlug); const result = await db().from("questions").select(questionFields).eq("id", qid(questionId)).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (result.error) fail("carregar_questao", result.error); if (!result.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); return { law: current, question: result.data }; }
 export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); await validateStructure(current.id, d.structure_id); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); return r.data; }
 export async function updateAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); await validateStructure(current.id, d.structure_id); const r = await db().from("questions").update(values(current, d)).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", true).select(questionFields).maybeSingle(); if (r.error) fail("editar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); return r.data; }
 export async function updateQuickAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const question = await db().from("questions").select(questionFields).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (question.error) fail("ler_questao", question.error); if (!question.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const input = body.data as Record<string, unknown>; if (!input || Object.keys(input).some((key) => !["pergunta","resposta","justificativa","assunto","legislacao","ordem"].includes(key))) throw new AdminQuestoesError(400, "A edição rápida não permite alterar a estrutura da questão."); return updateAdminQuestion({ law_slug: current.slug, id: question.data.id, data: { ...question.data, ...input } }); }
@@ -40,10 +51,72 @@ export async function deactivateAdminQuestion(body: Record<string, unknown>) { a
 export async function reactivateAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const r = await db().from("questions").update({ ativo: true }).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", false).select("id").maybeSingle(); if (r.error) fail("reativar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão inativa não encontrada para a lei selecionada."); return { id: r.data.id, ativo: true }; }
 
 export async function createStructureNode(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const nodeType = type(body.tipo); const parentId = optionalId(body.parent_id); if (parentId) { const r = await db().from("law_structure").select("tipo").eq("id", parentId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (r.error) fail("validar_pai", r.error); if (!r.data || !validQuestionStructureParent(nodeType, r.data.tipo as StructureType)) throw new AdminQuestoesError(422, "Relação estrutural inválida para esta lei."); } else if (!validQuestionStructureParent(nodeType, null)) throw new AdminQuestoesError(422, "Este nível exige um nível pai compatível."); const r = await db().from("law_structure").insert({ lei_id: current.id, parent_id: parentId, tipo: nodeType, nome: text(body.nome, "Nome"), ordem: optionalId(body.ordem) ?? 0, ativo: true }).select().single(); if (r.error || !r.data) fail("criar_estrutura", r.error); return r.data; }
-export async function updateStructureNode(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const r = await db().from("law_structure").update({ nome: text(body.nome, "Nome") }).eq("id", id(body.id)).eq("lei_id", current.id).eq("ativo", true).select().maybeSingle(); if (r.error) fail("editar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(404, "Estrutura ativa não encontrada."); return r.data; }
+export async function updateStructureNode(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const patch: { nome: string; pdf_page?: number | null } = { nome: text(body.nome, "Nome") }; if ("pdf_page" in body) { const page = body.pdf_page === null || body.pdf_page === "" ? null : Number(body.pdf_page); if (page !== null && (!Number.isSafeInteger(page) || page < 1)) throw new AdminQuestoesError(400, "Página do PDF inválida."); patch.pdf_page = page; } const r = await db().from("law_structure").update(patch).eq("id", id(body.id)).eq("lei_id", current.id).eq("ativo", true).select().maybeSingle(); if (r.error) fail("editar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(404, "Estrutura ativa não encontrada."); return r.data; }
 export async function deactivateStructureNode(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const r = await db().from("law_structure").update({ ativo: false }).eq("id", id(body.id)).eq("lei_id", current.id).eq("ativo", true).select("id").maybeSingle(); if (r.error) fail("desativar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(404, "Estrutura ativa não encontrada."); return r.data; }
 export async function structureDeletionSummary(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const rootId = id(body.id); const nodes = await structure(current.id); const root = nodes.find((node) => node.id === rootId); if (!root) throw new AdminQuestoesError(404, "Estrutura ativa não encontrada."); const children = new Map<number, QuestionStructureNode[]>(); for (const node of nodes) if (node.parent_id !== null) children.set(node.parent_id, [...(children.get(node.parent_id) ?? []), node]); const descendants = (node: QuestionStructureNode): QuestionStructureNode[] => [node, ...(children.get(node.id) ?? []).flatMap(descendants)]; const affected = descendants(root); const ids = affected.map((node) => node.id); const q = await db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true).in("structure_id", ids); if (q.error) fail("resumo_exclusao", q.error); const direct = q.data?.filter((question) => question.structure_id === root.id).length ?? 0; return { id: root.id, nome: root.nome, tipo: root.tipo, ids, descendentes: affected.length - 1, por_tipo: Object.fromEntries(types.map((item) => [item, affected.filter((node) => node.id !== root.id && node.tipo === item).length])), questoes: q.data?.length ?? 0, questoes_diretas: direct, questoes_descendentes: (q.data?.length ?? 0) - direct, pode_excluir: !(q.data?.length) }; }
 export async function deleteStructureNode(body: Record<string, unknown>) { const summary = await structureDeletionSummary(body); if (!summary.pode_excluir) throw new AdminQuestoesError(422, `Este item não pode ser excluído porque existem ${summary.questoes} questões vinculadas a ele ou aos seus subitens.`); const current = await law(String(body.law_slug)); const r = await db().from("law_structure").delete().eq("id", summary.id).eq("lei_id", current.id).select("id").maybeSingle(); if (r.error) fail("excluir_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(404, "Estrutura ativa não encontrada."); return { ...summary, excluido: true }; }
+
+function structureTxt(value: unknown) {
+  if (typeof value !== "string" || value.length > 500_000) throw new AdminQuestoesError(400, "O conteúdo TXT é inválido ou excede 500 KB.");
+  return value;
+}
+
+async function buildStructureTxtImport(lawSlug: string, input: string) {
+  const current = await law(lawSlug);
+  const existing = await structure(current.id);
+  const parsed = parseQuestionStructureTxt(input);
+  const plan = planQuestionDeckStructure(parsed.rows, existing);
+  const rowsByLine = new Map(parsed.rows.map((row) => [row.line, row]));
+  const plannedByKey = new Map(plan.nodes.map((node) => [node.key, node]));
+  const conflicts = [...parsed.issues];
+  for (const deck of plan.decks) if (deck.error) conflicts.push({ line: deck.line, path: rowsByLine.get(deck.line)?.deck.slice(1).join("::") ?? "", message: deck.error });
+  for (const node of plan.nodes) {
+    if (node.existingId !== null) continue;
+    const plannedParent = node.parentKey ? plannedByKey.get(node.parentKey) : null;
+    if (plannedParent && plannedParent.existingId === null) continue;
+    const parentId = plannedParent?.existingId ?? null;
+    const conflict = existing.find((item) => item.parent_id === parentId && normalizeQuestionStructureName(item.nome) === normalizeQuestionStructureName(node.nome) && item.tipo !== node.tipo);
+    if (conflict) conflicts.push({ line: parsed.rows.find((row) => row.deck.slice(1).map(normalizeQuestionStructureName).join(" › ").startsWith(node.path.split(" › ").map(normalizeQuestionStructureName).join(" › ")))?.line ?? 0, path: node.path, message: `Já existe “${conflict.nome}” neste nível com o tipo ${conflict.tipo}.` });
+  }
+  const firstLine = (path: string) => {
+    const target = path.split(" › ").map(normalizeQuestionStructureName).join("\u0000");
+    return parsed.rows.find((row) => row.deck.slice(1).slice(0, path.split(" › ").length).map(normalizeQuestionStructureName).join("\u0000") === target)?.line ?? 0;
+  };
+  const items = plan.nodes.map((node) => ({ key: node.key, parent_key: node.parentKey, line: firstLine(node.path), path: node.path, nome: node.nome, tipo: node.tipo, status: node.existingId === null ? "novo" as const : "existente" as const }));
+  return { current, existing, plan, response: { law: { id: current.id, slug: current.slug, titulo: current.titulo }, items, conflicts, summary: { novos: items.filter((item) => item.status === "novo").length, existentes: items.filter((item) => item.status === "existente").length, conflitos: conflicts.length }, can_import: conflicts.length === 0 && items.some((item) => item.status === "novo") } };
+}
+
+export async function previewStructureTxtImport(body: Record<string, unknown>) {
+  await requireAdmin();
+  return (await buildStructureTxtImport(String(body.law_slug), structureTxt(body.text))).response;
+}
+
+export async function importStructureTxt(body: Record<string, unknown>) {
+  await requireAdmin();
+  const prepared = await buildStructureTxtImport(String(body.law_slug), structureTxt(body.text));
+  if (prepared.response.conflicts.length) throw new AdminQuestoesError(422, `A importação possui ${prepared.response.conflicts.length} conflito(s). Revise a prévia antes de confirmar.`);
+  const ids = new Map(prepared.plan.nodes.filter((node) => node.existingId !== null).map((node) => [node.key, node.existingId!]));
+  const insertedIds: number[] = [];
+  const nextOrder = new Map<number | null, number>();
+  for (const node of prepared.existing) nextOrder.set(node.parent_id, Math.max(nextOrder.get(node.parent_id) ?? 0, Number(node.ordem) || 0));
+  try {
+    for (const node of prepared.plan.nodes) {
+      if (ids.has(node.key)) continue;
+      const parentId = node.parentKey ? ids.get(node.parentKey) : null;
+      if (node.parentKey && !parentId) throw new AdminQuestoesError(422, `O pai de “${node.nome}” não pôde ser resolvido.`);
+      const order = (nextOrder.get(parentId ?? null) ?? 0) + 1;
+      const result = await db().from("law_structure").insert({ lei_id: prepared.current.id, parent_id: parentId ?? null, tipo: node.tipo, nome: node.nome, ordem: order, ativo: true }).select("id").single();
+      if (result.error || !result.data) throw new Error("Falha ao persistir nó estrutural.");
+      const createdId = Number(result.data.id); ids.set(node.key, createdId); insertedIds.push(createdId); nextOrder.set(parentId ?? null, order);
+    }
+  } catch (error) {
+    const rollback = insertedIds.length ? await db().from("law_structure").delete().eq("lei_id", prepared.current.id).in("id", insertedIds) : null;
+    if (rollback?.error) { console.error("Falha ao reverter importação de estrutura", { lawId: prepared.current.id, insertedIds, error: rollback.error }); throw new AdminQuestoesError(500, "A importação falhou e a reversão automática não foi concluída. Não tente novamente antes de revisar a estrutura."); }
+    if (error instanceof AdminQuestoesError) throw error;
+    throw new AdminQuestoesError(502, "A importação falhou e nenhuma alteração parcial foi mantida.");
+  }
+  return { law: prepared.response.law, criados: insertedIds.length, existentes: prepared.response.summary.existentes, conflitos: 0 };
+}
 
 function withSlug(rows: ImportedQuestion[], lawSlug: string) { return rows.map((row) => ({ ...row, slug: effectiveAnkiSlug(row.slug, lawSlug) })); }
 function diagnostics(issues: ImportIssue[], items: Array<{ line: number; deck: string; ordem: string; pergunta: string; status: string; motivo: string | null }>) { return [...issues.map((issue) => ({ severity: "erro", line: issue.line, deck: issue.deck?.join("::") ?? "", ordem: issue.ordem ?? "", pergunta: issue.pergunta ?? "", field: issue.field ?? "arquivo", received: issue.received ?? "", expected: issue.expected ?? "", motivo: issue.message })), ...items.filter((item) => item.status === "erro").map((item) => ({ severity: "erro", line: item.line, deck: item.deck, ordem: item.ordem, pergunta: item.pergunta, field: "estrutura", received: item.deck, expected: "Deck/subdeck com níveis reconhecidos", motivo: item.motivo ?? "Estrutura inválida." }))]; }

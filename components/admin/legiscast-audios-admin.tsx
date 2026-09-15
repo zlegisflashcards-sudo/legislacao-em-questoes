@@ -16,7 +16,8 @@ import {
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 import { filterLegiscastAdminLaws, normalizeLegiscastPdfPage } from "@/lib/legiscast-audios-admin-form";
 
-type Law = { id: number; slug: string; titulo: string };
+export type LegiscastAdminLaw = { id: number; slug: string; titulo: string };
+type Law = LegiscastAdminLaw;
 type Structure = {
   id: number;
   lei_id: number;
@@ -346,26 +347,27 @@ function DeleteAudioConfirmation({
   );
 }
 
-export function LegiscastAudiosAdmin() {
-  const [laws, setLaws] = useState<Law[]>([]);
+export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: LegiscastAdminLaw | null } = {}) {
+  const [laws, setLaws] = useState<Law[]>(lawContext ? [lawContext] : []);
   const [audios, setAudios] = useState<Audio[]>([]);
   const [structures, setStructures] = useState<Structure[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [uploadLawId, setUploadLawId] = useState("");
+  const [uploadLawId, setUploadLawId] = useState(lawContext ? String(lawContext.id) : "");
   const [uploadStructureId, setUploadStructureId] = useState("");
   const [uploadPdfPage, setUploadPdfPage] = useState("");
   const [lawSearch, setLawSearch] = useState("");
-  const [selectedLawId, setSelectedLawId] = useState<number | null>(null);
+  const [selectedLawId, setSelectedLawId] = useState<number | null>(lawContext?.id ?? null);
   const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
   const [previewAudioId, setPreviewAudioId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [deletingAudio, setDeletingAudio] = useState<Audio | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   async function load() {
-    const response = await fetch("/api/admin/legiscast-audios", {
+    const endpoint = lawContext ? `/api/admin/legiscast-audios?law_slug=${encodeURIComponent(lawContext.slug)}` : "/api/admin/legiscast-audios";
+    const response = await fetch(endpoint, {
       cache: "no-store",
     });
     const body = await readResponse(response);
@@ -386,7 +388,7 @@ export function LegiscastAudiosAdmin() {
           : "Não foi possível carregar os áudios.",
       ),
     );
-  }, []);
+  }, [lawContext?.slug]);
   useEffect(() => {
     if (
       !jobs.some(
@@ -434,6 +436,7 @@ export function LegiscastAudiosAdmin() {
             body: JSON.stringify({
               operation: "update-structure-pdf-page",
               structureId: currentStructure.id,
+              lawId: uploadLawId,
               pdfPage,
             }),
           });
@@ -499,7 +502,7 @@ export function LegiscastAudiosAdmin() {
           apiError(confirmBody, "Não foi possível iniciar o processamento."),
         );
       form.reset();
-      setUploadLawId("");
+      setUploadLawId(lawContext ? String(lawContext.id) : "");
       setUploadStructureId("");
       setUploadPdfPage("");
       setMessage("Áudio na fila de processamento.");
@@ -598,6 +601,7 @@ export function LegiscastAudiosAdmin() {
         body: JSON.stringify({
           operation: "update-structure-pdf-page",
           structureId,
+          lawId: structures.find((structure) => structure.id === structureId)?.lei_id,
           pdfPage,
         }),
       });
@@ -650,7 +654,7 @@ export function LegiscastAudiosAdmin() {
         className="mt-5 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
         onSubmit={(event) => void submit(event)}
       >
-        <LawSearchSelect laws={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} />
+        {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <LawSearchSelect laws={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} />}
         <label className="grid min-w-0 gap-1 font-bold">
           Estrutura
           <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => { const structureId = event.target.value; setUploadStructureId(structureId); const selectedStructure = structures.find((structure) => String(structure.id) === structureId); setUploadPdfPage(selectedStructure?.pdf_page ? String(selectedStructure.pdf_page) : ""); }}>
@@ -686,6 +690,7 @@ export function LegiscastAudiosAdmin() {
           {busy ? "Enviando…" : "Enviar e processar"}
         </button>
       </form>
+      {lawContext && !structures.length ? <p className="admin-alert mt-4">Esta lei ainda não possui estrutura. Você pode cadastrar o áudio sem estrutura ou <a className="font-bold underline" href={`/admin/leis/${encodeURIComponent(lawContext.slug)}/estrutura`}>criar a estrutura da lei</a>.</p> : null}
       {error ? (
         <p className="admin-alert error" role="alert">
           {error}
@@ -740,7 +745,7 @@ export function LegiscastAudiosAdmin() {
         <h3 className="font-black">Acervo do LegisCast</h3>
         {selectedLaw ? (
           <div className="grid gap-4">
-            <button
+            {!lawContext ? <button
               type="button"
               className="admin-button w-fit"
               onClick={() => {
@@ -750,7 +755,7 @@ export function LegiscastAudiosAdmin() {
               }}
             >
               ← Voltar para leis
-            </button>
+            </button> : null}
             <div>
               <h4 className="text-lg font-black">{selectedLaw.titulo}</h4>
               <p className="text-sm text-slate-600">
@@ -991,6 +996,7 @@ export function LegiscastAudiosAdmin() {
                   ))}
               </div>
             ) : null}
+            {!selectedTracks.length ? <div className="law-center-empty rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5"><h3>Nenhuma faixa cadastrada</h3><p className="text-sm text-slate-500">Use o formulário desta página para enviar o primeiro áudio da lei. A estrutura pode ser vinculada agora ou depois.</p></div> : null}
           </div>
         ) : (
           <>

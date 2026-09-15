@@ -11,14 +11,18 @@ import {
   listAdminQuestionLaws,
   listLawQuestionScopes,
   listAdminQuestions,
+  searchAdminQuestions,
+  getAdminQuestion,
   previewAnkiImport,
   previewApkgImport,
   importApkg,
   importAnkiTxt,
+  importStructureTxt,
   updateAdminQuestion,
   updateQuickAdminQuestion,
   updateStructureNode,
   saveLawQuestionScope,
+  previewStructureTxtImport,
 } from "@/lib/admin-questoes-server";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +40,14 @@ function failure(error: unknown) {
 
 export async function GET(request: Request) {
   try {
-    const lawSlug = new URL(request.url).searchParams.get("law_slug");
-    const scopes = new URL(request.url).searchParams.get("recortes") === "1";
-    const data = lawSlug ? scopes ? await listLawQuestionScopes(lawSlug) : await listAdminQuestions(lawSlug) : { laws: await listAdminQuestionLaws() };
+    const searchParams = new URL(request.url).searchParams;
+    const lawSlug = searchParams.get("law_slug");
+    const scopes = searchParams.get("recortes") === "1";
+    const data = lawSlug && searchParams.get("mode") === "search"
+      ? await searchAdminQuestions({ lawSlug, query: searchParams.get("q"), filter: searchParams.get("filter"), page: searchParams.get("page"), limit: searchParams.get("limit") })
+      : lawSlug && searchParams.get("question_id")
+        ? await getAdminQuestion(lawSlug, searchParams.get("question_id"))
+        : lawSlug ? scopes ? await listLawQuestionScopes(lawSlug) : await listAdminQuestions(lawSlug) : { laws: await listAdminQuestionLaws() };
     return NextResponse.json(data, { headers });
   } catch (error) {
     return failure(error);
@@ -68,6 +77,8 @@ export async function POST(request: Request) {
     else if (body.action === "desativar_estrutura") data = await deactivateStructureNode(body);
     else if (body.action === "excluir_estrutura") data = await deleteStructureNode(body);
     else if (body.action === "resumo_exclusao_estrutura") data = await structureDeletionSummary(body);
+    else if (body.action === "previsualizar_estrutura_txt") data = await previewStructureTxtImport(body);
+    else if (body.action === "importar_estrutura_txt") data = await importStructureTxt(body);
     else if (body.action === "salvar_recorte") data = await saveLawQuestionScope(body);
     else if (body.action === "previsualizar_anki") data = await previewAnkiImport(body);
     else if (body.action === "importar_anki") data = await importAnkiTxt(body);

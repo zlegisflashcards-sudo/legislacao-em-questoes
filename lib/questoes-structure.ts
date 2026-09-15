@@ -1,7 +1,8 @@
 export type QuestionStructureType = "titulo" | "capitulo" | "secao" | "subsecao";
-export type QuestionStructureNode = { id: number; parent_id: number | null; tipo: QuestionStructureType; nome: string };
+export type QuestionStructureNode = { id: number; parent_id: number | null; tipo: QuestionStructureType; nome: string; ordem?: number };
 export type PlannedQuestionStructure = { key: string; parentKey: string | null; tipo: QuestionStructureType; nome: string; path: string; existingId: number | null };
 export type QuestionDeckPlan = { line: number; structureKey: string | null; error: string | null };
+export type StructureTxtIssue = { line: number; path: string; message: string };
 
 const collator = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
 
@@ -22,6 +23,28 @@ export function validQuestionStructureParent(type: QuestionStructureType, parent
     || (type === "capitulo" && (parentType === null || parentType === "titulo"))
     || (type === "secao" && parentType === "capitulo")
     || (type === "subsecao" && parentType === "secao");
+}
+
+export function parseQuestionStructureTxt(value: string) {
+  const rows: Array<{ line: number; deck: string[] }> = [];
+  const issues: StructureTxtIssue[] = [];
+  const known = new Map<string, number>();
+  const lines = value.replace(/^\uFEFF/, "").split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index].trim();
+    if (!raw) continue;
+    const line = index + 1;
+    const segments = raw.split("::").map((segment) => segment.trim());
+    if (segments.some((segment) => !segment)) { issues.push({ line, path: raw, message: "O caminho possui um nível vazio." }); continue; }
+    if (segments.length > 4) { issues.push({ line, path: raw, message: "A profundidade máxima suportada é Título, Capítulo, Seção e Subseção." }); continue; }
+    const key = segments.map(normalizeQuestionStructureName).join("\u0000");
+    const firstLine = known.get(key);
+    if (firstLine) { issues.push({ line, path: raw, message: `Caminho duplicado; ele já foi informado na linha ${firstLine}.` }); continue; }
+    known.set(key, line);
+    rows.push({ line, deck: ["Estrutura", ...segments] });
+  }
+  if (!rows.length && !issues.length) issues.push({ line: 0, path: "", message: "O TXT está vazio." });
+  return { rows, issues };
 }
 
 export function planQuestionDeckStructure(rows: Array<{ line: number; deck: string[] }>, existing: QuestionStructureNode[]) {
