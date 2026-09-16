@@ -225,15 +225,14 @@ describe("administração de Legis Questões", () => {
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
     expect(server).toContain("structureDeletionSummary");
-    expect(server).toContain('.in("structure_id", ids)');
-    expect(server).toContain("pode_excluir");
-    expect(server).toContain("questões vinculadas a ele ou aos seus subitens");
+    expect(server).toContain('rpc("admin_delete_law_content"');
+    expect(server).toContain("structureDeletionSummary");
     expect(route).toContain('action === "resumo_exclusao_estrutura"');
     expect(route).toContain('action === "excluir_estrutura"');
     expect(panel).toContain('action: "resumo_exclusao_estrutura"');
     expect(panel).toContain('action: "excluir_estrutura"');
-    expect(panel).toContain("Questões vinculadas:");
-    expect(panel).toContain(">Excluir<");
+    expect(panel).toContain("questão(ões)");
+    expect(panel).toContain("Excluir estrutura e campanhas afetadas");
   });
 
   it("mantém a criação inline e a confirmação de exclusão no layout de questões selecionado", () => {

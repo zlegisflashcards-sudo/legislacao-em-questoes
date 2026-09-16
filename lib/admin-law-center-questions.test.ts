@@ -34,7 +34,7 @@ describe("Questões na Central da Lei", () => {
     const search = server.slice(server.indexOf("export async function searchAdminQuestions"), server.indexOf("export async function createAdminQuestion"));
     expect(search).toContain('.eq("lei_id", current.id)');
     expect(search).toContain('.eq("id", qid(questionId)).eq("lei_id", current.id)');
-    expect(search).toContain("Questão ativa não encontrada para a lei selecionada.");
+    expect(search).toContain("Questão não encontrada para a lei selecionada.");
   });
 
   it("aplica os filtros Certo, Errado e Sem estrutura", () => {
@@ -56,7 +56,7 @@ describe("Questões na Central da Lei", () => {
   });
 
   it("não envia o HTML completo de todas as questões na pesquisa", () => {
-    expect(server).toContain('select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,updated_at", { count: "exact" })');
+    expect(server).toContain('select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,ativo,updated_at", { count: "exact" })');
     expect(server).toContain("pergunta_trecho: plainQuestionText(question.pergunta)");
     expect(central).toContain('question_id: id');
     expect(plainQuestionText("<p>Afastamento&nbsp;do <strong>lar</strong></p>")).toBe("Afastamento do lar");
@@ -72,7 +72,7 @@ describe("Questões na Central da Lei", () => {
 
   it("protege edição de questão pertencente a outra lei", () => {
     const update = server.slice(server.indexOf("export async function updateAdminQuestion"), server.indexOf("export async function updateQuickAdminQuestion"));
-    expect(update).toContain('.eq("id", qid(body.id)).eq("lei_id", current.id)');
+    expect(update).toContain('.eq("id", questionId).eq("lei_id", current.id)');
     expect(update).toContain("Questão ativa não encontrada para a lei selecionada.");
   });
 

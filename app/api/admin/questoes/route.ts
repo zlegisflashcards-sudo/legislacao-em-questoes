@@ -7,6 +7,9 @@ import {
   deleteStructureNode,
   structureDeletionSummary,
   deactivateAdminQuestion,
+  deleteAdminQuestion,
+  questionDeletionSummary,
+  moveAdminQuestion,
   reactivateAdminQuestion,
   listAdminQuestionLaws,
   listLawQuestionScopes,
@@ -44,7 +47,7 @@ export async function GET(request: Request) {
     const lawSlug = searchParams.get("law_slug");
     const scopes = searchParams.get("recortes") === "1";
     const data = lawSlug && searchParams.get("mode") === "search"
-      ? await searchAdminQuestions({ lawSlug, query: searchParams.get("q"), filter: searchParams.get("filter"), page: searchParams.get("page"), limit: searchParams.get("limit") })
+      ? await searchAdminQuestions({ lawSlug, query: searchParams.get("q"), filter: searchParams.get("filter"), page: searchParams.get("page"), limit: searchParams.get("limit"), structureId: searchParams.get("structure_id"), article: searchParams.get("article") })
       : lawSlug && searchParams.get("question_id")
         ? await getAdminQuestion(lawSlug, searchParams.get("question_id"))
         : lawSlug ? scopes ? await listLawQuestionScopes(lawSlug) : await listAdminQuestions(lawSlug) : { laws: await listAdminQuestionLaws() };
@@ -71,6 +74,9 @@ export async function POST(request: Request) {
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
     else if (body.action === "atualizar_rapido") data = await updateQuickAdminQuestion(body);
     else if (body.action === "desativar") data = await deactivateAdminQuestion(body);
+    else if (body.action === "resumo_exclusao_questao") data = await questionDeletionSummary(body);
+    else if (body.action === "excluir_questao") data = await deleteAdminQuestion(body);
+    else if (body.action === "mover_questao") data = await moveAdminQuestion(body);
     else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);
     else if (body.action === "atualizar_estrutura") data = await updateStructureNode(body);
