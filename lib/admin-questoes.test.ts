@@ -220,12 +220,12 @@ describe("administração de Legis Questões", () => {
     expect(ankiPersist).toContain("planQuestionDeckStructure(newRows, before)");
   });
 
-  it("protege a exclusão de estrutura quando houver questões e oferece confirmação administrativa", () => {
+  it("remove estrutura com suas questões e oferece confirmação administrativa", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
     expect(server).toContain("structureDeletionSummary");
-    expect(server).toContain('rpc("admin_delete_law_content"');
+    expect(server).toContain('rpc("admin_delete_law_content_v2"');
     expect(server).toContain("structureDeletionSummary");
     expect(route).toContain('action === "resumo_exclusao_estrutura"');
     expect(route).toContain('action === "excluir_estrutura"');

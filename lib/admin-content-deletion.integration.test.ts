@@ -35,12 +35,15 @@ suite("exclusão administrativa definitiva em PostgreSQL descartável", () => {
   }
 
   async function rpc(questionId: string | null, structureId: number | null, execute: boolean, confirmation: string | null = null) {
-    return (await db.query<{ result: Record<string, unknown> }>("select public.admin_delete_law_content($1,$2,$3,$4,$5,$6) as result", [lawId, questionId, structureId, actorId, confirmation, execute])).rows[0].result;
+    return (await db.query<{ result: Record<string, unknown> }>("select public.admin_delete_law_content_v2($1,$2,$3,$4,$5,$6) as result", [lawId, questionId ? [questionId] : null, structureId, actorId, confirmation, execute])).rows[0].result;
+  }
+  async function rpcBatch(questionIds: string[], execute: boolean, confirmation: string | null = null) {
+    return (await db.query<{ result: Record<string, unknown> }>("select public.admin_delete_law_content_v2($1,$2,$3,$4,$5,$6) as result", [lawId, questionIds, null, actorId, confirmation, execute])).rows[0].result;
   }
 
   beforeAll(async () => {
     db = await connect();
-    const schema = await db.query("select to_regprocedure('public.admin_delete_law_content(bigint,uuid,bigint,uuid,text,boolean)') as function_name");
+    const schema = await db.query("select to_regprocedure('public.admin_delete_law_content_v2(bigint,uuid[],bigint,uuid,text,boolean)') as function_name");
     if (!schema.rows[0]?.function_name) throw new Error("A migration de exclusão deve ser aplicada previamente no banco local descartável.");
     await db.query("insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values($1,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',$2,'',now(),'{}','{}',now(),now())", [actorId, `admin-${suffix}@example.test`]);
     lawId = Number((await db.query<{ id: string }>("insert into public.leis(slug,titulo) values($1,$2) returning id", [`delete-test-${suffix}`, "Lei para exclusão controlada"])).rows[0].id);
@@ -93,6 +96,17 @@ suite("exclusão administrativa definitiva em PostgreSQL descartável", () => {
     expect(Number((await db.query("select count(*) from public.questions where id=any($1::uuid[])", [[first, second]])).rows[0].count)).toBe(0);
   });
 
+  it("exclui várias questões sem remover suas estruturas", async () => {
+    const structureId = Number((await db.query("insert into public.law_structure(lei_id,tipo,nome,ordem,ativo) values($1,'titulo','Massa',9,true) returning id", [lawId])).rows[0].id);
+    const first = await question(structureId); const second = await question(structureId);
+    await campaign(otherStudentId, first);
+    expect((await rpcBatch([first, second], false)).questions_count).toBe(2);
+    await expect(rpcBatch([first, second], true)).rejects.toThrow(/EXCLUIR/);
+    await rpcBatch([first, second], true, "EXCLUIR");
+    expect(Number((await db.query("select count(*) from public.questions where id=any($1::uuid[])", [[first, second]])).rows[0].count)).toBe(0);
+    expect(Number((await db.query("select count(*) from public.law_structure where id=$1", [structureId])).rows[0].count)).toBe(1);
+  });
+
   it("bloqueia áudio, job e recorte até movimentação ou desvinculação explícita", async () => {
     const structureId = Number((await db.query("insert into public.law_structure(lei_id,tipo,nome,ordem,ativo) values($1,'titulo','Com dependências',2,true) returning id", [lawId])).rows[0].id);
     const audioId = randomUUID(); const jobId = randomUUID();
@@ -124,9 +138,9 @@ suite("exclusão administrativa definitiva em PostgreSQL descartável", () => {
 
   it("nega execução a anon e authenticated e permite somente service_role", async () => {
     const privileges = await db.query(`select
-      has_function_privilege('anon','public.admin_delete_law_content(bigint,uuid,bigint,uuid,text,boolean)','EXECUTE') as anon,
-      has_function_privilege('authenticated','public.admin_delete_law_content(bigint,uuid,bigint,uuid,text,boolean)','EXECUTE') as authenticated,
-      has_function_privilege('service_role','public.admin_delete_law_content(bigint,uuid,bigint,uuid,text,boolean)','EXECUTE') as service_role`);
+      has_function_privilege('anon','public.admin_delete_law_content_v2(bigint,uuid[],bigint,uuid,text,boolean)','EXECUTE') as anon,
+      has_function_privilege('authenticated','public.admin_delete_law_content_v2(bigint,uuid[],bigint,uuid,text,boolean)','EXECUTE') as authenticated,
+      has_function_privilege('service_role','public.admin_delete_law_content_v2(bigint,uuid[],bigint,uuid,text,boolean)','EXECUTE') as service_role`);
     expect(privileges.rows[0]).toEqual({ anon: false, authenticated: false, service_role: true });
   });
 });

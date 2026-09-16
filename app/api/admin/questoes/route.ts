@@ -9,6 +9,8 @@ import {
   deactivateAdminQuestion,
   deleteAdminQuestion,
   questionDeletionSummary,
+  bulkQuestionDeletionSummary,
+  deleteBulkAdminQuestions,
   moveAdminQuestion,
   reactivateAdminQuestion,
   listAdminQuestionLaws,
@@ -76,6 +78,8 @@ export async function POST(request: Request) {
     else if (body.action === "desativar") data = await deactivateAdminQuestion(body);
     else if (body.action === "resumo_exclusao_questao") data = await questionDeletionSummary(body);
     else if (body.action === "excluir_questao") data = await deleteAdminQuestion(body);
+    else if (body.action === "resumo_exclusao_questoes") data = await bulkQuestionDeletionSummary(body);
+    else if (body.action === "excluir_questoes") data = await deleteBulkAdminQuestions(body);
     else if (body.action === "mover_questao") data = await moveAdminQuestion(body);
     else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);

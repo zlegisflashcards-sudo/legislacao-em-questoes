@@ -8,6 +8,7 @@ const route = read("app/api/admin/questoes/route.ts");
 const central = read("components/admin/admin-law-questions.tsx");
 const structureAdmin = read("components/admin/law-structure-admin.tsx");
 const migration = read("supabase/migrations/20260916130000_add_admin_content_deletion.sql");
+const bulkMigration = read("supabase/migrations/20260916140000_add_admin_bulk_content_deletion.sql");
 const nodes = [{ id: 1, parent_id: null }, { id: 2, parent_id: 1 }, { id: 3, parent_id: 2 }, { id: 4, parent_id: null }];
 
 describe("gestão definitiva de questões e estruturas", () => {
@@ -22,4 +23,6 @@ describe("gestão definitiva de questões e estruturas", () => {
   it("bloqueia dependências externas sem apagá-las", () => { for (const table of ["legiscast_audios", "legiscast_audio_jobs", "recortes_leis_estrutura"]) expect(migration).toContain(`public.${table}`); expect(migration).toContain("Mova ou desvincule"); expect(structureAdmin).toContain("Exclusão bloqueada"); });
   it("expõe exclusão definitiva nos dois editores", () => { expect(central).toContain("Excluir ${targetLabel} e campanhas afetadas"); expect(structureAdmin).toContain("Excluir estrutura e campanhas afetadas"); expect(`${central}\n${structureAdmin}`).not.toMatch(/action: "restaurar|action: "arquivar|>Lixeira</); });
   it("restringe a RPC ao service_role", () => { expect(migration).toContain("from public,anon,authenticated"); expect(migration).toContain("to service_role"); });
+  it("materializa subárvore e questões antes de apagar uma estrutura", () => { expect(bulkMigration).toContain("with recursive descendants"); expect(bulkMigration).toContain("q.structure_id = any(v_structure_ids)"); expect(bulkMigration).toContain("delete from public.questions"); expect(bulkMigration).toContain("delete from public.law_structure"); expect(bulkMigration).toContain("admin_delete_law_content_v2"); });
+  it("oferece exclusão em massa limitada à lei, com confirmação obrigatória", () => { expect(server).toContain("bulkQuestionIds"); expect(server).toContain("body.confirmation !== \"EXCLUIR\""); expect(route).toContain('action === "resumo_exclusao_questoes"'); expect(route).toContain('action === "excluir_questoes"'); expect(central).toContain("Excluir questões"); expect(central).toContain("Todas as questões desta lei"); expect(central).toContain("Do resultado atual dos filtros"); });
 });
