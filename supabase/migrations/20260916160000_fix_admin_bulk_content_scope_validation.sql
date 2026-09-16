@@ -15,7 +15,7 @@ begin
   if v_definition is null then
     raise exception 'A função admin_delete_law_content_v2 não foi encontrada.' using errcode = 'P0002';
   end if;
-  if pg_catalog.position(v_old_guard in v_definition) = 0 then
+  if pg_catalog.strpos(v_definition, v_old_guard) = 0 then
     raise exception 'A guarda de escopo esperada da função admin_delete_law_content_v2 não foi encontrada.' using errcode = 'P0001';
   end if;
   execute pg_catalog.replace(v_definition, v_old_guard, v_new_guard);
