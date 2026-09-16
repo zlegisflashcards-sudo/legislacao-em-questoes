@@ -124,6 +124,16 @@ describe("player Legis Questões", () => {
     expect(styles).toContain('.legisbot-question-action { display: block;');
   });
 
+  it("revela a explicação do LegisBot como uma conversa curta e sem repetir a animação", () => {
+    expect(legisBotPage).toContain('type ConversationPhase = "idle" | "asking" | "typing" | "revealed";');
+    expect(legisBotPage).toContain('👤 Clique aqui para perguntar sobre este artigo');
+    expect(legisBotPage).toContain('CONVERSATION_QUESTION = "LegisBot, pode me explicar este artigo?"');
+    expect(legisBotPage).toContain('🤖 LegisBot está digitando...');
+    expect(legisBotPage).toContain('legisBotContent={conversationContent}');
+    expect(legisBotPage).toContain('window.matchMedia("(prefers-reduced-motion: reduce)")');
+    expect(styles).toContain('@media(prefers-reduced-motion:reduce){.legisbot-typing-cursor');
+  });
+
   it("usa assunto como título do trecho legal e reserva Legislação para o fallback", () => {
     const feedback = player.slice(player.indexOf("function AnswerFeedback"), player.indexOf("function isPlayerFormTarget"));
     expect(feedback).toContain('const assunto = question.assunto?.trim() || "Legislação";');

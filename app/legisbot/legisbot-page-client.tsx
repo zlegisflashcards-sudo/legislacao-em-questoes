@@ -30,6 +30,12 @@ type AnswerState =
   | "limited"
   | "error";
 
+type ConversationPhase = "idle" | "asking" | "typing" | "revealed";
+
+const CONVERSATION_QUESTION = "LegisBot, pode me explicar este artigo?";
+const QUESTION_CHARACTER_DELAY_MS = 20;
+const BOT_TYPING_DELAY_MS = 420;
+
 type LegisBotPageClientProps = {
   slug: string;
   ordem: string;
@@ -116,6 +122,9 @@ export default function LegisBotPageClient({
   const [activeStudyTab, setActiveStudyTab] = useState<LegisBotStudyTab>(initialTab);
   const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
   const [selectedHighlight, setSelectedHighlight] = useState<LegisBotHighlight | null>(null);
+  const [conversationPhase, setConversationPhase] = useState<ConversationPhase>("idle");
+  const [typedQuestion, setTypedQuestion] = useState("");
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
@@ -151,6 +160,37 @@ export default function LegisBotPageClient({
       data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+    return () => mediaQuery.removeEventListener("change", updatePreference);
+  }, []);
+
+  useEffect(() => {
+    if (conversationPhase !== "asking") return;
+    if (prefersReducedMotion) {
+      setTypedQuestion(CONVERSATION_QUESTION);
+      setConversationPhase("revealed");
+      return;
+    }
+    if (typedQuestion.length >= CONVERSATION_QUESTION.length) {
+      setConversationPhase("typing");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setTypedQuestion(CONVERSATION_QUESTION.slice(0, typedQuestion.length + 1));
+    }, QUESTION_CHARACTER_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [conversationPhase, prefersReducedMotion, typedQuestion]);
+
+  useEffect(() => {
+    if (conversationPhase !== "typing") return;
+    const timer = window.setTimeout(() => setConversationPhase("revealed"), BOT_TYPING_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [conversationPhase]);
 
   useEffect(() => {
     let active = true;
@@ -266,6 +306,19 @@ export default function LegisBotPageClient({
     }
   }
 
+  function beginConversation() {
+    if (conversationPhase !== "idle") return;
+    if (prefersReducedMotion) {
+      setTypedQuestion(CONVERSATION_QUESTION);
+      setConversationPhase("revealed");
+    } else {
+      setConversationPhase("asking");
+    }
+    if (answerState === "not_found" && authenticated === true) {
+      void gerarComentario();
+    }
+  }
+
   const updateCommunityCount = useCallback((count: number) => {
     setCommunityCount(Math.max(0, count));
   }, []);
@@ -321,6 +374,26 @@ export default function LegisBotPageClient({
     <footer className="legisbot-footer"><div className="ai-notice"><span aria-hidden="true">⚠️</span><p>Este conteúdo foi gerado com auxílio de inteligência artificial e pode conter imprecisões. Sempre confirme as informações com os professores da Legisflashcards.</p></div></footer>
   </>;
 
+  const conversationContent = conversationPhase === "idle" ? (
+    <section className="question-block legisbot-conversation-start" aria-label="Iniciar conversa com o LegisBot">
+      <span className="question-label">LegisBot:</span>
+      <button className="question-card legisbot-question-action" type="button" onClick={beginConversation}>
+        👤 Clique aqui para perguntar sobre este artigo
+      </button>
+    </section>
+  ) : conversationPhase === "asking" ? (
+    <section className="question-block legisbot-conversation-question" aria-label="Pergunta ao LegisBot">
+      <span className="question-label" aria-hidden="true">👤</span>
+      <div className="question-card" aria-label={CONVERSATION_QUESTION}>
+        <span aria-hidden="true">{typedQuestion}</span><span className="legisbot-typing-cursor" aria-hidden="true" />
+      </div>
+    </section>
+  ) : conversationPhase === "typing" ? (
+    <p className="legisbot-conversation-typing" role="status">🤖 LegisBot está digitando...</p>
+  ) : (
+    <div className="legisbot-conversation-revealed">{legisBotContent}</div>
+  );
+
   return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
@@ -335,7 +408,7 @@ export default function LegisBotPageClient({
         communityCount={communityCount}
         initialTab={initialTab}
         onActiveTabChange={changeStudyTab}
-        legisBotContent={legisBotContent}
+        legisBotContent={conversationContent}
         communityContent={
           <LegisBotCommunity
             slug={slugNormalizado}

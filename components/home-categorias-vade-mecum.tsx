@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo } from "react";
 import { LegislacaoSearch } from "@/components/legislacao-search";
+import { SiteHeroCarousel } from "@/components/site-hero-carousel";
 import {
   type Legislacao,
 } from "@/lib/legislacoes";
@@ -99,15 +99,15 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
           <h3 className="text-xl font-extrabold leading-snug text-[#0868ed] sm:text-2xl">
             {produto.nome}
           </h3>
-          <div className="space-y-3 text-sm font-bold text-[#062a5f]">
+          <div className="min-w-0 space-y-3 text-sm font-bold text-[#062a5f]">
             {[
-              ["✓", "Acesso vitalício"],
-              ["✓", "Atualizado"],
-              ["✓", "Ilimitado"],
-            ].map(([indicador, beneficio]) => (
-              <span key={beneficio} className="flex items-center gap-2">
-                <span className="text-base font-black text-[#0868ed]">{indicador}</span>
-                {beneficio}
+              "Legis Questões",
+              "Flashcards do Anki",
+              "LegisCast + PDF",
+            ].map((recurso) => (
+              <span key={recurso} className="flex min-w-0 items-start gap-2">
+                <span aria-hidden="true" className="shrink-0 text-base font-black text-[#0868ed]">•</span>
+                <span className="min-w-0 break-words">{recurso}</span>
               </span>
             ))}
           </div>
@@ -163,17 +163,7 @@ export function HomeCategoriasVadeMecum({
         </h1>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-blue-300/20 bg-slate-950/70">
-        <Image
-          src="/images/legis-questoes-catalog-banner.png"
-          alt="Legis Questões — Domine a legislação resolvendo questões"
-          width={1672}
-          height={941}
-          sizes="(min-width: 1152px) 1152px, calc(100vw - 40px)"
-          priority
-          className="h-auto w-full"
-        />
-      </div>
+      <SiteHeroCarousel />
 
       <section className="space-y-4 rounded-[22px] border border-blue-300/20 bg-slate-950/70 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.26)] sm:p-6">
         <div className="space-y-1">

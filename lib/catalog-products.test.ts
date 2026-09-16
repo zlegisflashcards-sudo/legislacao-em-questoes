@@ -25,9 +25,12 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("produto.totalFlashcards !== null");
     expect(cards).toContain("Legislação em Questões");
     expect(cards).toContain("4.0");
-    expect(cards).toContain("Acesso vitalício");
-    expect(cards).toContain("Atualizado");
-    expect(cards).toContain("Ilimitado");
+    expect(cards).toContain("Legis Questões");
+    expect(cards).toContain("Flashcards do Anki");
+    expect(cards).toContain("LegisCast + PDF");
+    for (const antigo of ["Acesso vitalício", "Atualizado", "Ilimitado"]) expect(cards).not.toContain(antigo);
+    expect(cards).toContain("min-w-0 space-y-3 text-sm font-bold");
+    expect(cards).toContain('className="min-w-0 break-words"');
     expect(cards).toContain("Saber mais");
     expect(cards).not.toContain("Ver produto");
     expect(cards).toContain("/leisflashcards/${produto.slug}");
