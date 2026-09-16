@@ -9,6 +9,7 @@ const central = read("components/admin/admin-law-questions.tsx");
 const structureAdmin = read("components/admin/law-structure-admin.tsx");
 const migration = read("supabase/migrations/20260916130000_add_admin_content_deletion.sql");
 const bulkMigration = read("supabase/migrations/20260916140000_add_admin_bulk_content_deletion.sql");
+const bulkScopeFix = read("supabase/migrations/20260916160000_fix_admin_bulk_content_scope_validation.sql");
 const nodes = [{ id: 1, parent_id: null }, { id: 2, parent_id: 1 }, { id: 3, parent_id: 2 }, { id: 4, parent_id: null }];
 
 describe("gestão definitiva de questões e estruturas", () => {
@@ -25,4 +26,6 @@ describe("gestão definitiva de questões e estruturas", () => {
   it("restringe a RPC ao service_role", () => { expect(migration).toContain("from public,anon,authenticated"); expect(migration).toContain("to service_role"); });
   it("materializa subárvore e questões antes de apagar uma estrutura", () => { expect(bulkMigration).toContain("with recursive descendants"); expect(bulkMigration).toContain("q.structure_id = any(v_structure_ids)"); expect(bulkMigration).toContain("delete from public.questions"); expect(bulkMigration).toContain("delete from public.law_structure"); expect(bulkMigration).toContain("admin_delete_law_content_v2"); });
   it("oferece exclusão em massa limitada à lei, com confirmação obrigatória", () => { expect(server).toContain("bulkQuestionIds"); expect(server).toContain("body.confirmation !== \"EXCLUIR\""); expect(route).toContain('action === "resumo_exclusao_questoes"'); expect(route).toContain('action === "excluir_questoes"'); expect(central).toContain("Excluir questões"); expect(central).toContain("Todas as questões desta lei"); expect(central).toContain("Do resultado atual dos filtros"); });
+  it("aceita todas as questões sem estrutura ou IDs do cliente", () => { expect(server).toContain('scope === "all"'); expect(server).toContain('eq("lei_id", current.id).eq("ativo", true)'); expect(bulkScopeFix).toContain("v_old_guard"); expect(bulkScopeFix).toContain("v_new_guard"); expect(bulkScopeFix).toContain("cardinality(p_question_ids), 0) = 0"); });
+  it("exige estrutura para o escopo estrutural e IDs para questões específicas", () => { expect(server).toContain('scope === "structure"'); expect(server).toContain("const nodeId = id(body.structure_id)"); expect(server).toContain('scope === "questions"'); expect(server).toContain("Informe uma lista não vazia de questões"); });
 });
