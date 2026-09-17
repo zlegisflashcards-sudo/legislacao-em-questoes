@@ -225,7 +225,7 @@ describe("administração de Legis Questões", () => {
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
     expect(server).toContain("structureDeletionSummary");
-    expect(server).toContain('rpc("admin_delete_law_content_v2"');
+    expect(server).toContain('rpc("admin_delete_law_content_v3"');
     expect(server).toContain("structureDeletionSummary");
     expect(route).toContain('action === "resumo_exclusao_estrutura"');
     expect(route).toContain('action === "excluir_estrutura"');

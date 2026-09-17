@@ -68,7 +68,7 @@ describe("LegisCast em áudio", () => {
     expect(admin).not.toContain("Título obrigatório.");
     expect(adminClient).toContain("Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.");
     expect(adminClient).not.toContain('name="titulo" required');
-    expect(worker).toContain("titulo: job.titulo");
+    expect(worker).toContain("publish_legiscast_audio_job");
     expect(worker).not.toContain("job.titulo.trim");
   });
 
@@ -118,7 +118,7 @@ describe("LegisCast em áudio", () => {
     for (const field of ["original_bucket", "original_path", "final_path", "final_size_bytes", "tentativas", "erro_codigo", "erro_mensagem"]) expect(jobsMigration).toContain(field);
     expect(jobsMigration).toContain("claim_legiscast_audio_job");
     expect(jobsMigration).toContain("status = 'pendente'");
-    for (const expected of ["ffprobe", "-ac", "-c:a", "aac", "-b:a", "64k", "loudnorm", "+faststart", "FINAL_MAX_BYTES", "storage_path", "status: \"concluido\""]) expect(worker).toContain(expected);
+    for (const expected of ["ffprobe", "-ac", "-c:a", "aac", "-b:a", "64k", "loudnorm", "+faststart", "FINAL_MAX_BYTES", "publish_legiscast_audio_job", "processingToken"]) expect(worker).toContain(expected);
     expect(worker).not.toContain("process.argv[3]");
   });
 

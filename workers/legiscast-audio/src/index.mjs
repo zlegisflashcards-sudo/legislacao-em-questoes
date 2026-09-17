@@ -14,7 +14,7 @@ const supabase = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVI
 const originals = new Storage().bucket(required("GCP_LEGISCAST_ORIGINAL_BUCKET"));
 
 function safeMessage(error) { return error instanceof Error ? error.message.slice(0, 500) : "Erro técnico sem mensagem."; }
-async function fail(id, code, error) { await supabase.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: code, erro_mensagem: safeMessage(error), finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id).neq("status", "concluido"); }
+async function fail(id, processingToken, code, error) { await supabase.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: code, erro_mensagem: safeMessage(error), finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id).eq("status", "processando").eq("processing_token", processingToken); }
 async function probe(file) { const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name", "-of", "json", file]); const result = JSON.parse(stdout); const audio = result.streams?.find((stream) => stream.codec_type === "audio"); const duration = Math.round(Number(result.format?.duration)); if (!audio || !Number.isFinite(duration) || duration < 1) throw new Error("invalid_audio"); return { duration, codec: audio.codec_name }; }
 
 async function main() {
@@ -23,6 +23,7 @@ async function main() {
   if (claimError) throw claimError;
   const job = Array.isArray(claimed) ? claimed[0] : claimed;
   if (!job) return; // outro worker já assumiu, foi concluído ou esgotou tentativas
+  const processingToken = job.processing_token;
   const directory = join(tmpdir(), `legiscast-${job.id}`); const input = join(directory, "original"); const output = join(directory, "optimized.m4a");
   try {
     await mkdir(directory, { recursive: true });
@@ -37,16 +38,13 @@ async function main() {
     await probe(input);
     await execFileAsync("ffmpeg", ["-y", "-i", input, "-vn", "-map", "0:a:0", "-ac", "1", "-c:a", "aac", "-b:a", "64k", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-movflags", "+faststart", output], { maxBuffer: 1024 * 1024 });
     const outputProbe = await probe(output); if (outputProbe.codec !== "aac") throw new Error("invalid_final_codec"); const outputSize = (await stat(output)).size; if (outputSize < 1 || outputSize > FINAL_MAX_BYTES) throw Object.assign(new Error("final_size_limit"), { code: "final_size_limit" });
-    const { data: existing, error: existingError } = await supabase.from("legiscast_audios").select("id").eq("storage_path", job.final_path).maybeSingle(); if (existingError) throw existingError;
-    if (!existing) {
-      const file = await readFile(output);
-      const upload = await supabase.storage.from("legiscast-audio").upload(job.final_path, file, { contentType: "audio/mp4", upsert: true }); if (upload.error) throw Object.assign(upload.error, { code: "supabase_upload_failed" });
-      const insert = await supabase.from("legiscast_audios").insert({ lei_id: job.lei_id, structure_id: job.structure_id ?? null, titulo: job.titulo, descricao: job.descricao, storage_path: job.final_path, duracao_segundos: outputProbe.duration, ordem: job.ordem, ativo: job.ativo });
-      if (insert.error) { await supabase.storage.from("legiscast-audio").remove([job.final_path]); throw Object.assign(insert.error, { code: "publish_failed" }); }
-    }
-    const complete = await supabase.from("legiscast_audio_jobs").update({ status: "concluido", final_mime: "audio/mp4", final_size_bytes: outputSize, duracao_segundos: outputProbe.duration, erro_codigo: null, erro_mensagem: null, finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "processando"); if (complete.error) throw complete.error;
+    const file = await readFile(output);
+    const upload = await supabase.storage.from("legiscast-audio").upload(job.final_path, file, { contentType: "audio/mp4", upsert: true }); if (upload.error) throw Object.assign(upload.error, { code: "supabase_upload_failed" });
+    const published = await supabase.rpc("publish_legiscast_audio_job", { p_job_id: job.id, p_processing_token: processingToken, p_duration: outputProbe.duration, p_final_size: outputSize });
+    if (published.error) throw Object.assign(published.error, { code: "publish_failed" });
+    if (!published.data) { await supabase.storage.from("legiscast-audio").remove([job.final_path]); return; }
     await originals.file(job.original_path).delete({ ignoreNotFound: true });
-  } catch (error) { await fail(job.id, error?.code || (String(error?.message).includes("ffmpeg") ? "ffmpeg_failed" : "processing_failed"), error); }
+  } catch (error) { await fail(job.id, processingToken, error?.code || (String(error?.message).includes("ffmpeg") ? "ffmpeg_failed" : "processing_failed"), error); }
   finally { await rm(directory, { recursive: true, force: true }); }
 }
 
