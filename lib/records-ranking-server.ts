@@ -69,6 +69,9 @@ async function personalizedRecordsLaws(rows: unknown, studentId: string): Promis
   return resolved.laws.map((law) => { const hasAccess = accessible.has(law.lawId); return { slug: law.slug, name: law.name, score: law.score, hasAccess, href: hasAccess ? `/estudar/lei/${encodeURIComponent(law.slug)}` : resolved.purchaseHrefByLaw.get(law.lawId) ?? "/", actionLabel: hasAccess ? "Estudar" : "Adquirir" }; });
 }
 
+export function loadRecordsRanking(slug: string): Promise<RecordsPublicRankingData | null>;
+export function loadRecordsRanking(slug: string, studentId: string): Promise<RecordsRankingData | null>;
+export function loadRecordsRanking(slug: string, studentId: string | null): Promise<RecordsPublicRankingData | RecordsRankingData | null>;
 export async function loadRecordsRanking(slug: string, studentId: string | null = null): Promise<RecordsPublicRankingData | RecordsRankingData | null> {
   const supabase = getSupabaseServerClient(); const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("records_enabled", true).maybeSingle();
   if (productError) throw new Error(`Não foi possível carregar o produto do ranking: ${productError.message}`); if (!product) return null;
