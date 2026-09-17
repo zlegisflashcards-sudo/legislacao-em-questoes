@@ -9,10 +9,16 @@ type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: st
 type RawLawScore = { lei_id: number | string; slug: string; titulo: string; score: number | string };
 type DetailsPayload = { top10?: RankingRow[]; current_user?: RankingRow | null; nearby?: RankingRow[]; laws?: RawLawScore[] };
 export type RecordsEntry = { position: number; publicName: string; score: number; isCurrentUser: boolean };
-export type RecordsLaw = { slug: string; name: string; score: number; hasAccess: boolean; href: string; actionLabel: "Estudar" | "Adquirir" };
-export type RecordsRankingData = {
+export type RecordsPublicLaw = { slug: string; name: string; href: string; actionLabel: "Adquirir" };
+export type RecordsLaw = Omit<RecordsPublicLaw, "actionLabel"> & { score: number; hasAccess: boolean; actionLabel: "Estudar" | "Adquirir" };
+type RecordsRankingBase = {
   contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string; productHref: string };
   ranking: RecordsEntry[];
+};
+export type RecordsPublicRankingData = RecordsRankingBase & {
+  laws: RecordsPublicLaw[];
+};
+export type RecordsRankingData = RecordsRankingBase & {
   personal: RecordsEntry | null;
   nearby: RecordsEntry[];
   laws: RecordsLaw[];
@@ -39,27 +45,39 @@ async function hydrateEntries(rows: RankingRow[], studentId: string | null) {
   return parsed.map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(String(studentById.get(entry.studentId)?.user_id ?? "")), nome: studentById.get(entry.studentId)?.nome }), score: entry.score, isCurrentUser: entry.studentId === studentId }));
 }
 
-async function personalizedLaws(rows: unknown, studentId: string | null): Promise<RecordsLaw[]> {
-  if (!studentId || !Array.isArray(rows)) return [];
+type ResolvedLaw = { lawId: number; slug: string; name: string; score: number };
+
+async function lawsWithProducts(rows: unknown): Promise<{ laws: ResolvedLaw[]; purchaseHrefByLaw: Map<number, string> }> {
+  if (!Array.isArray(rows)) return { laws: [], purchaseHrefByLaw: new Map() };
   const laws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score }] : []; });
-  const lawIds = laws.map((law) => law.lawId); const supabase = getSupabaseServerClient();
-  const [releasesResult, productsResult] = await Promise.all([
-    lawIds.length ? supabase.from("liberacoes_leis").select("lei_id").eq("aluno_id", studentId).eq("status", "ativo").in("lei_id", lawIds) : Promise.resolve({ data: [], error: null }),
-    lawIds.length ? supabase.from("produto_leis").select("lei_id,produtos(slug,tipo_produto,ativo)").in("lei_id", lawIds) : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (releasesResult.error) throw new Error(`Não foi possível verificar os acessos: ${releasesResult.error.message}`); if (productsResult.error) throw new Error(`Não foi possível localizar os produtos das leis: ${productsResult.error.message}`);
-  const accessible = new Set((releasesResult.data ?? []).map((release) => Number(release.lei_id))); const directProductByLaw = new Map<number, string>();
-  for (const link of productsResult.data ?? []) { const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos; if (product?.ativo && product.tipo_produto === "lei_avulsa" && typeof product.slug === "string" && !directProductByLaw.has(Number(link.lei_id))) directProductByLaw.set(Number(link.lei_id), product.slug); }
-  return laws.map((law) => { const hasAccess = accessible.has(law.lawId); return { slug: law.slug, name: law.name, score: law.score, hasAccess, href: hasAccess ? `/estudar/lei/${encodeURIComponent(law.slug)}` : directProductByLaw.has(law.lawId) ? `/leisflashcards/${encodeURIComponent(directProductByLaw.get(law.lawId)!)}` : "/", actionLabel: hasAccess ? "Estudar" : "Adquirir" }; });
+  const lawIds = laws.map((law) => law.lawId); const supabase = getSupabaseServerClient(); const { data: products, error } = lawIds.length ? await supabase.from("produto_leis").select("lei_id,produtos(slug,tipo_produto,ativo)").in("lei_id", lawIds) : { data: [], error: null };
+  if (error) throw new Error(`Não foi possível localizar os produtos das leis: ${error.message}`);
+  const purchaseHrefByLaw = new Map<number, string>();
+  for (const link of products ?? []) { const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos; if (product?.ativo && product.tipo_produto === "lei_avulsa" && typeof product.slug === "string" && !purchaseHrefByLaw.has(Number(link.lei_id))) purchaseHrefByLaw.set(Number(link.lei_id), `/leisflashcards/${encodeURIComponent(product.slug)}`); }
+  return { laws, purchaseHrefByLaw };
 }
 
-export async function loadRecordsRanking(slug: string, studentId: string | null = null): Promise<RecordsRankingData | null> {
+async function recordsLaws(rows: unknown): Promise<RecordsPublicLaw[]> {
+  const resolved = await lawsWithProducts(rows);
+  return resolved.laws.map((law) => ({ slug: law.slug, name: law.name, href: resolved.purchaseHrefByLaw.get(law.lawId) ?? "/", actionLabel: "Adquirir" }));
+}
+
+async function personalizedRecordsLaws(rows: unknown, studentId: string): Promise<RecordsLaw[]> {
+  const resolved = await lawsWithProducts(rows); const lawIds = resolved.laws.map((law) => law.lawId); const releasesResult = lawIds.length ? await getSupabaseServerClient().from("liberacoes_leis").select("lei_id").eq("aluno_id", studentId).eq("status", "ativo").in("lei_id", lawIds) : { data: [], error: null };
+  if (releasesResult.error) throw new Error(`Não foi possível verificar os acessos: ${releasesResult.error.message}`);
+  const accessible = new Set((releasesResult.data ?? []).map((release) => Number(release.lei_id)));
+  return resolved.laws.map((law) => { const hasAccess = accessible.has(law.lawId); return { slug: law.slug, name: law.name, score: law.score, hasAccess, href: hasAccess ? `/estudar/lei/${encodeURIComponent(law.slug)}` : resolved.purchaseHrefByLaw.get(law.lawId) ?? "/", actionLabel: hasAccess ? "Estudar" : "Adquirir" }; });
+}
+
+export async function loadRecordsRanking(slug: string, studentId: string | null = null): Promise<RecordsPublicRankingData | RecordsRankingData | null> {
   const supabase = getSupabaseServerClient(); const { data: product, error: productError } = await supabase.from("produtos").select("*").eq("slug", slug).eq("ativo", true).eq("records_enabled", true).maybeSingle();
   if (productError) throw new Error(`Não foi possível carregar o produto do ranking: ${productError.message}`); if (!product) return null;
   const typedProduct = product as ProductRow; const { data, error: detailsError } = await supabase.rpc("obter_detalhes_records_produto", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId });
   if (detailsError) throw new Error(`Não foi possível carregar o ranking do produto: ${detailsError.message}`);
-  const details = (data ?? {}) as DetailsPayload; const topRows = asRows(details.top10); const currentRow = details.current_user && typeof details.current_user === "object" ? [details.current_user] : [];
-  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedLaws(details.laws, studentId)]); const contest = recordsContestForProduct(typedProduct);
+  const details = (data ?? {}) as DetailsPayload; const topRows = asRows(details.top10); const contest = recordsContestForProduct(typedProduct);
+  if (!studentId) { const [ranking, laws] = await Promise.all([hydrateEntries(topRows, null), recordsLaws(details.laws)]); return { contest, ranking, laws }; }
+  const currentRow = details.current_user && typeof details.current_user === "object" ? [details.current_user] : [];
+  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedRecordsLaws(details.laws, studentId)]);
   return { contest, ranking, personal: current[0] ?? null, nearby, laws };
 }
 

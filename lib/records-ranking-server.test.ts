@@ -8,6 +8,7 @@ const admin = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 const upload = readFileSync("app/api/admin/comercial/produtos/[id]/imagem/route.ts", "utf8");
 const personalMigration = readFileSync("supabase/migrations/20260910150000_create_records_personalization.sql", "utf8");
 const recordsPage = readFileSync("components/records-ranking-page.tsx", "utf8");
+const recordsApi = readFileSync("app/api/recordes/[slug]/route.ts", "utf8");
 
 describe("Records por produto habilitado", () => {
   it("cria uma RPC própria sem alterar a RPC legada", () => {
@@ -27,6 +28,8 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain('rpc("obter_detalhes_records_produto"');
     expect(loader).toContain("resolveRecordsContestImage");
     expect(loader).toContain("productHref: `/leisflashcards/");
+    expect(loader).toContain("async function recordsLaws");
+    expect(loader).not.toContain("if (!studentId || !Array.isArray(rows)) return []");
     expect(loader).not.toContain('from("ligas")');
     expect(loader).not.toContain("legacyLeagueForProduct");
     expect(loader).not.toContain("LeagueRow");
@@ -50,8 +53,18 @@ describe("Records por produto habilitado", () => {
     expect(personalMigration).toContain("l.inicio + 9");
     expect(personalMigration).toContain("coalesce((select m.melhor_score");
     expect(loader).toContain('rpc("obter_detalhes_records_produto"');
-    expect(recordsPage).toContain("Pontuação por lei");
+    expect(recordsPage).toContain("Leis deste Records");
+    expect(recordsPage).toContain('<RecordsLaws laws={data.laws} showScores={personalStatus === "ready"} />');
     expect(recordsPage).toContain("Posições próximas");
     expect(recordsPage).toContain("data.contest.productHref");
+  });
+
+  it("separa as leis públicas das informações personalizadas", () => {
+    expect(loader).toContain("export type RecordsPublicLaw");
+    expect(loader).toContain("async function recordsLaws");
+    expect(loader).toContain("if (!studentId)");
+    expect(loader).toContain('actionLabel: "Adquirir"');
+    expect(recordsPage).toContain('"score" in law');
+    expect(recordsApi).toContain('"Cache-Control": "private, no-store"');
   });
 });
