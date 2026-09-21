@@ -98,9 +98,9 @@ describe("persistência privada aluno × lei", () => {
   });
 });
 
-describe("checkboxes da lei", () => {
-  it("exibe o status de campanha como fonte de progresso", () => {
-    expect(client).toContain('campaign.status === "concluida"'); expect(client).toContain('campaign.status === "em_andamento"'); expect(client).toContain('const progress = completed ? 100 : campaign.progress');
+describe("progresso atual da lei", () => {
+  it("deriva o progresso do universo atual e mostra pendências sem estado de questão nova", () => {
+    expect(client).toContain('campaign.lawProgress?.completed'); expect(client).toContain('const progress = campaign.lawProgress?.progress'); expect(client).toContain('Novas questões podem ser adicionadas a esta lei ao longo do tempo.'); expect(client).not.toContain('Você tem {campaign.lawProgress.unanswered}');
     expect(client).not.toContain("Progresso nesta lei"); expect(client).not.toContain("Lei em estudo"); expect(client).not.toContain("Finalizei todas as questões da lei");
   });
 });

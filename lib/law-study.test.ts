@@ -184,7 +184,7 @@ describe("interface de estudo", () => {
   it("mantém a árvore do Estudo Livre navegável", () => {
     const tree = client.slice(client.indexOf('function StructureTreeNode'), client.indexOf('function RootDeck'));
     expect(tree).toContain('<Link href={href} className="flex min-w-0 flex-1');
-    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} framed={false} />');
+    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} newCount={node.newCount} framed={false} />');
   });
 
   it("inicia todos os níveis expansíveis recolhidos", () => {
@@ -197,7 +197,7 @@ describe("interface de estudo", () => {
     expect(tree).toContain('function FreeStudyLabel');
     expect(tree).toContain('border border-blue-100 bg-white');
     expect(tree).toContain('group-hover:border-blue-300 group-hover:bg-blue-50');
-    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} framed={false} />');
+    expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} newCount={node.newCount} framed={false} />');
     expect(tree).toContain('<Link href={href} className="flex min-w-0 flex-1');
     expect(tree).not.toContain('FreeStudyLabel name={node.nome} count={node.count} phase=');
   });

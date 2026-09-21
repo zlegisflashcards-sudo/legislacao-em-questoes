@@ -24,7 +24,7 @@ describe("player Legis Questões", () => {
   });
 
   it("separa explicitamente campanha, estudo livre e teste", () => {
-    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} recorteId={recorteId} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={recorteId} />'); expect(player).toContain('searchParams.get("teste") === "1"'); expect(player).toContain('<TestStudy slug={slug} recorteId={recorteId} />');
+    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} recorteId={recorteId} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={recorteId} />'); expect(player).toContain('searchParams.get("teste") === "1"'); expect(player).toContain('<TestStudy slug={slug} recorteId={recorteId} initialFilter={searchParams.get("filtro") === "unanswered" ? "unanswered" : "all"} />');
   });
 
   it("retorna do player para a central da lei atual em qualquer modo", () => {
