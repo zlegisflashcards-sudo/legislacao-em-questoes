@@ -546,7 +546,7 @@ function allowedUpdate(data: unknown, allowed: readonly string[]): JsonObject {
 
 function validateLawData(raw: unknown, update = false) {
   const allowed = [
-    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "ordem", "thumbnail_url",
+    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "acesso_gratuito", "ordem", "thumbnail_url",
     "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa",
     "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao",
   ] as const;
@@ -562,6 +562,7 @@ function validateLawData(raw: unknown, update = false) {
     }
   }
   if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
+  if (!update || "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito ?? false, "Acesso gratuito");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
   if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = optionalString(data.norma_originaria_referencia, "Norma originária", 500) ?? null;
   if (!update || "norma_originaria_data" in data) result.norma_originaria_data = optionalIsoDate(data.norma_originaria_data, "Data da norma originária") ?? null;

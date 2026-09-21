@@ -90,7 +90,7 @@ export async function authorizeLawStudy(request: Request, slug: string) {
 
   const [{ data: studentData, error: studentError }, { data: lawData, error: lawError }] = await Promise.all([
     supabase.from("alunos").select("id").eq("user_id", userData.user.id).maybeSingle(),
-    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo").eq("slug", slug).eq("ativo", true).maybeSingle(),
+    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito").eq("slug", slug).eq("ativo", true).maybeSingle(),
   ]);
   if (studentError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
   const student = record(studentData);
@@ -110,7 +110,7 @@ export async function authorizeLawStudy(request: Request, slug: string) {
   if (passwordStatus?.deve_trocar_senha === true) throw new LawStudyApiError(403, "Crie sua nova senha antes de acessar suas leis.");
 
   if (accessError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
-  if (!Array.isArray(accessData) || accessData.length === 0) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
+  if ((!Array.isArray(accessData) || accessData.length === 0) && law?.acesso_gratuito !== true) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
 
   return { supabase, lawId, title, law, studentId };
 }

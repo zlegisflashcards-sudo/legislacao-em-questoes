@@ -28,6 +28,9 @@ type StructureLink = { recorte_id: string; structure_id: number };
  */
 export async function listLawStudyContexts(studentId: string, lawId: number): Promise<LawStudyContext[]> {
   const db = getSupabaseServerClient();
+  const freeLawResult = await db.from("leis").select("acesso_gratuito").eq("id", lawId).eq("ativo", true).maybeSingle();
+  if (freeLawResult.error) throw new Error(`Não foi possível verificar os contextos de estudo: ${freeLawResult.error.message}`);
+  if (freeLawResult.data?.acesso_gratuito === true) { const questions = await mainQuestions(lawId); return [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }]; }
   const releasesResult = await db.from("liberacoes_leis").select("produto_id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("status", "ativo");
   if (releasesResult.error) throw new Error(`Não foi possível verificar os contextos de estudo: ${releasesResult.error.message}`);
   const releases = (releasesResult.data ?? []) as Release[];
@@ -85,14 +88,16 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
   if (activeScopesResult.error) throw new Error(`Não foi possível carregar os recortes liberados: ${activeScopesResult.error.message}`);
   const scopes = (activeScopesResult.data ?? []) as BatchScope[];
   const activeScopeIds = new Set(scopes.map((scope) => scope.id));
-  const [questionsResult, structureResult, scopeLinksResult] = await Promise.all([
+  const [questionsResult, structureResult, scopeLinksResult, freeLawsResult] = await Promise.all([
     db.from("questions").select("id,lei_id,structure_id").in("lei_id", uniqueLawIds).eq("ativo", true),
     db.from("law_structure").select("id,lei_id,parent_id").in("lei_id", uniqueLawIds).eq("ativo", true),
     activeScopeIds.size ? db.from("recortes_leis_estrutura").select("recorte_id,structure_id").in("recorte_id", [...activeScopeIds]) : Promise.resolve({ data: [] as StructureLink[], error: null }),
+    db.from("leis").select("id,acesso_gratuito").in("id", uniqueLawIds).eq("ativo", true),
   ]);
   if (questionsResult.error) throw new Error(`Não foi possível carregar as questões dos contextos de estudo: ${questionsResult.error.message}`);
   if (structureResult.error) throw new Error(`Não foi possível carregar a estrutura dos contextos de estudo: ${structureResult.error.message}`);
-  if (scopeLinksResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error.message}`);
+  if (scopeLinksResult.error || freeLawsResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error?.message ?? freeLawsResult.error?.message}`);
+  const freeLawIds = new Set((freeLawsResult.data ?? []).flatMap((law) => law.acesso_gratuito === true ? [law.id] : []));
   const questionsByLaw = new Map<number, Array<{ id: string; structure_id: number | null }>>();
   for (const question of questionsResult.data ?? []) questionsByLaw.set(question.lei_id, [...(questionsByLaw.get(question.lei_id) ?? []), question]);
   const structureByLaw = new Map<number, Array<{ id: number; parent_id: number | null }>>();
@@ -106,7 +111,7 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
   for (const lawId of uniqueLawIds) {
     const releasesForLaw = releases.filter((release) => release.lei_id === lawId);
     const productLinks = linksByLaw.get(lawId) ?? [];
-    const access = availableLawStudyAccess(releasesForLaw, productLinks);
+    const access = freeLawIds.has(lawId) ? { full: true, recorteIds: [] } : availableLawStudyAccess(releasesForLaw, productLinks);
     const questions = questionsByLaw.get(lawId) ?? [];
     const structure = structureByLaw.get(lawId) ?? [];
     const contexts: LawStudyContext[] = access.full ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }] : [];

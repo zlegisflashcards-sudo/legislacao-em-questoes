@@ -54,9 +54,26 @@ describe("Central administrativa por lei", () => {
     const newPanel = read("components/admin/law-data-admin.tsx");
     const fields = read("components/admin/law-data-fields.tsx");
     expect(oldPanel).toContain("<LawDataFields law={editing} />");
-    expect(newPanel).toContain("<LawDataFields law={law} />");
+    expect(newPanel).toContain("<LawDataFields law={law} showFreeAccess={Boolean(law)} />");
     expect(newPanel).toContain('fetch("/api/admin/comercial/leis"');
-    for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "ativo", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
+    for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "ativo", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
+  });
+
+  it("permite configurar acesso gratuito somente na edição contextual da lei e pelo contrato administrativo", () => {
+    const fields = read("components/admin/law-data-fields.tsx");
+    const form = read("components/admin/law-data-admin.tsx");
+    const server = read("lib/commercial-admin-server.ts");
+    const freeMigration = read("supabase/migrations/20260921090000_add_free_law_access.sql");
+    expect(fields).toContain("showFreeAccess");
+    expect(fields).toContain("Acesso gratuito");
+    expect(fields).toContain("Permite que qualquer aluno autenticado acesse esta lei sem liberação comercial.");
+    expect(form).toContain("showFreeAccess={Boolean(law)}");
+    expect(form).toContain('...(law ? { acesso_gratuito: raw.acesso_gratuito === "true" } : {})');
+    expect(server).toContain('"acesso_gratuito"');
+    expect(server).toContain('booleanValue(data.acesso_gratuito ?? false, "Acesso gratuito")');
+    expect(freeMigration).toContain("create or replace function public.admin_atualizar_lei");
+    expect(freeMigration).toContain("acesso_gratuito=case when p_dados?'acesso_gratuito'");
+    expect(freeMigration).toContain("admin_comercial_validar_contexto");
   });
 
   it("cadastra uma lei pela Central e redireciona para a nova Visão Geral", () => {
