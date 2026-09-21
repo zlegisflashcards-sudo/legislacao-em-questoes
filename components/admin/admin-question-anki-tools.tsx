@@ -2,10 +2,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import { sanitizeLegisQuestoesHtml } from "@/lib/legis-questoes-html";
+import type { CreatableQuestionStructureType } from "@/lib/questoes-structure";
 
-type StructureType = "titulo" | "capitulo" | "secao" | "subsecao";
 type AnkiItem = { line: number; deck: string; structure_id: number | null; status: "nova" | "duplicada" | "erro"; motivo: string | null };
-type AnkiStructure = { path: string; tipo: StructureType; status: "nova" | "existente" };
+type AnkiStructure = { path: string; tipo: CreatableQuestionStructureType; status: "nova" | "existente" };
 type ImportDiagnostic = { line: number; deck: string; ordem: string; pergunta: string; field: string; received: string; expected: string; motivo: string };
 type AnkiPreview = { total: number; issues: unknown[]; errors: ImportDiagnostic[]; items: AnkiItem[]; structure: { items: AnkiStructure[]; existentes: number; novas: number }; summary: { novas: number; duplicadas: number; erros: number } };
 type AnkiResult = { lidas: number; importadas: number; duplicadas: number; erros: number };

@@ -1,19 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { compareQuestionStructureNames } from "@/lib/questoes-structure";
+import { compareQuestionStructureNames, creatableQuestionStructureTypes, validQuestionStructureParent, type CreatableQuestionStructureType, type QuestionStructureType } from "@/lib/questoes-structure";
 
-export type AdminLawStructureKind = "titulo" | "capitulo" | "secao" | "subsecao";
+export type AdminLawStructureKind = QuestionStructureType;
 export type AdminLawStructureNode = { id: number; parent_id: number | null; tipo: AdminLawStructureKind; nome: string; ordem: number; pdf_page?: number | null };
-type Creation = { tipo: AdminLawStructureKind; parentId: number | null; nome: string };
-type Edition = { id: number; nome: string; pdfPage: string };
+type Creation = { tipo: CreatableQuestionStructureType; parentId: number | null; nome: string; ordem: string };
+type Edition = { id: number; nome: string; ordem: string; pdfPage: string };
 type DeletionCampaign = { id: string; aluno_id: string; nome: string | null; email: string | null; is_requesting_admin: boolean };
 type DeletionDependency = { id: string | number; title?: string | null; name?: string | null; status?: string | null };
 type DeletionSummary = { id: number; name: string; type: AdminLawStructureKind; questions_count: number; structures_count: number; substructures_count: number; campaigns_count: number; answers_count: number; progresses_count: number; campaigns: DeletionCampaign[]; requires_confirmation: boolean; dependencies_count: number; job_action_required?: "detach_completed" | "cancel_active" | null; jobs?: DeletionDependency[]; dependencies: { audios: DeletionDependency[]; jobs: DeletionDependency[]; recortes: DeletionDependency[]; cross_law: Array<DeletionDependency & { kind?: string; lei_id?: number }> } };
 type StructureImportPreview = { items: Array<{ key: string; parent_key: string | null; line: number; path: string; nome: string; tipo: AdminLawStructureKind; status: "novo" | "existente" }>; conflicts: Array<{ line: number; path: string; message: string }>; summary: { novos: number; existentes: number; conflitos: number }; can_import: boolean };
 
-const labels: Record<AdminLawStructureKind, string> = { titulo: "Título", capitulo: "Capítulo", secao: "Seção", subsecao: "Subseção" };
-const next: Partial<Record<AdminLawStructureKind, AdminLawStructureKind>> = { titulo: "capitulo", capitulo: "secao", secao: "subsecao" };
+const labels: Record<AdminLawStructureKind, string> = { parte: "Parte", livro: "Livro", titulo: "Título", capitulo: "Capítulo", secao: "Seção", subsecao: "Subseção", artigo: "Artigo" };
+const creatableLabels = creatableQuestionStructureTypes;
 
 async function api<T>(body: Record<string, unknown>) {
   const response = await fetch("/api/admin/questoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -31,6 +31,7 @@ export function LawStructureAdmin({ lawSlug, nodes, onReload, onSelectNode, onDe
   const [importText, setImportText] = useState("");
   const [importFileName, setImportFileName] = useState("");
   const [importPreview, setImportPreview] = useState<StructureImportPreview | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -38,15 +39,15 @@ export function LawStructureAdmin({ lawSlug, nodes, onReload, onSelectNode, onDe
   const editingRequest = useRef(false);
   const kids = (parentId: number | null) => nodes.filter((node) => node.parent_id === parentId).sort(compareQuestionStructureNames);
 
-  function startCreation(tipo: AdminLawStructureKind, parentId: number | null) {
-    if (!saving && !creating && !editing) { setError(""); setCreating({ tipo, parentId, nome: "" }); }
+  function startCreation(tipo: CreatableQuestionStructureType, parentId: number | null) {
+    if (!saving && !creating && !editing) { setError(""); if (parentId) setCollapsed((current) => { const next = new Set(current); next.delete(parentId); return next; }); setCreating({ tipo, parentId, nome: "", ordem: String((kids(parentId).reduce((max, node) => Math.max(max, node.ordem), 0) || 0) + 1) }); }
   }
   async function saveCreation() {
     const pending = creating; const nome = pending?.nome.trim();
     if (!pending || !nome || saving || creatingRequest.current) return;
     creatingRequest.current = true; setSaving(true); setError("");
     try {
-      await api({ action: "criar_estrutura", law_slug: lawSlug, tipo: pending.tipo, parent_id: pending.parentId, nome, ordem: nodes.length + 1 });
+      await api({ action: "criar_estrutura", law_slug: lawSlug, tipo: pending.tipo, parent_id: pending.parentId, nome, ordem: pending.ordem });
       await onReload(); setCreating(null);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível salvar a estrutura."); }
     finally { creatingRequest.current = false; setSaving(false); }
@@ -58,7 +59,9 @@ export function LawStructureAdmin({ lawSlug, nodes, onReload, onSelectNode, onDe
     if (pdfPage !== null && (!Number.isSafeInteger(pdfPage) || pdfPage < 1)) { setError("A página do PDF deve ser um inteiro positivo."); return; }
     editingRequest.current = true; setSaving(true); setError("");
     try {
-      await api({ action: "atualizar_estrutura", law_slug: lawSlug, id: pending.id, nome, pdf_page: pdfPage });
+      const ordem = Number(pending.ordem);
+      if (!Number.isSafeInteger(ordem) || ordem < 0) { setError("A posição deve ser um inteiro maior ou igual a zero."); return; }
+      await api({ action: "atualizar_estrutura", law_slug: lawSlug, id: pending.id, nome, ordem, pdf_page: pdfPage });
       await onReload(); setEditing(null);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a estrutura."); }
     finally { editingRequest.current = false; setSaving(false); }
@@ -106,34 +109,37 @@ export function LawStructureAdmin({ lawSlug, nodes, onReload, onSelectNode, onDe
     <p>A estrutura pertence à lei e pode ser cadastrada antes de questões ou arquivos Anki.</p>
     {message ? <p className="admin-alert success" role="status">{message}</p> : null}
     {error ? <p className="admin-alert error" role="alert">{error}</p> : null}
-    <div className="flex flex-wrap gap-3"><button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => startCreation("titulo", null)}>+ Título</button><button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => startCreation("capitulo", null)}>+ Capítulo</button><button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => { setImportOpen((value) => !value); setImportPreview(null); setError(""); }}>Importar estrutura por TXT</button></div>
+    <div className="flex flex-wrap gap-3">{creatableLabels.map((kind) => <button key={kind} type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => startCreation(kind, null)}>+ {labels[kind]}</button>)}<button type="button" className="admin-link-button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => { setImportOpen((value) => !value); setImportPreview(null); setError(""); }}>Importar estrutura por TXT</button></div>
     {importOpen ? <section className="structure-txt-import" aria-labelledby="structure-txt-title"><div><h3 id="structure-txt-title">Importar estrutura por TXT</h3><p>Uma linha por caminho. Separe os níveis com <code>::</code>. A prévia não altera o banco.</p></div><label>Arquivo .txt<input type="file" accept=".txt,text/plain" disabled={saving} onChange={(event) => void chooseImportFile(event)} /></label>{importFileName ? <p><strong>Arquivo:</strong> {importFileName}</p> : null}<label>Conteúdo TXT<textarea value={importText} disabled={saving} placeholder={"TÍTULO I\nTÍTULO I::CAPÍTULO I\nTÍTULO I::CAPÍTULO I::SEÇÃO I"} onChange={(event) => { setImportText(event.target.value); setImportPreview(null); setImportFileName(""); }} /></label><div className="flex flex-wrap gap-2"><button type="button" className="admin-button secondary" disabled={saving || !importText.trim()} onClick={() => void previewImport()}>{saving ? "Analisando…" : "Gerar prévia"}</button><button type="button" className="admin-button secondary" disabled={saving} onClick={() => { setImportOpen(false); setImportPreview(null); }}>Cancelar</button></div>{importPreview ? <section className="anki-import-preview" aria-live="polite"><h3>Prévia da estrutura</h3><div className="anki-import-summary"><p className="new"><strong>Novos:</strong> {importPreview.summary.novos}</p><p className="duplicate"><strong>Existentes:</strong> {importPreview.summary.existentes}</p><p className="error"><strong>Conflitos:</strong> {importPreview.summary.conflitos}</p></div>{importPreview.conflicts.length ? <div><h4>Conflitos encontrados</h4><ul>{importPreview.conflicts.map((conflict, index) => <li key={`${conflict.line}-${index}`}><strong>{conflict.line ? `Linha ${conflict.line}` : "Arquivo"}:</strong> {conflict.message}{conflict.path ? ` — ${conflict.path}` : ""}</li>)}</ul></div> : null}{importPreview.items.length ? <details open><summary>Hierarquia resultante ({importPreview.items.length} nós)</summary><ul>{importPreview.items.map((item) => <li key={item.key}>{item.status === "novo" ? "+" : "✓"} {item.path} — {item.status === "novo" ? "será criado" : "já existe"}</li>)}</ul></details> : null}<button type="button" className="admin-button primary" disabled={saving || !importPreview.can_import} onClick={() => void confirmImport()}>{saving ? "Importando…" : importPreview.summary.novos ? `Confirmar importação de ${importPreview.summary.novos} nó(s)` : "Nenhum nó novo"}</button></section> : null}</section> : null}
-    <StructureTree nodes={kids(null)} kids={kids} creating={creating} editing={editing} saving={saving} add={startCreation} changeCreation={setCreating} saveCreation={saveCreation} changeEdition={setEditing} saveEdition={saveEdition} selectNode={onSelectNode} selectNodeLabel={selectNodeLabel} onDelete={askDelete} />
-    {!nodes.length && !creating && !importOpen ? <div className="admin-empty law-center-empty"><h3>Comece pela estrutura da lei</h3><p>Crie um Título ou Capítulo agora. Questões, áudios e recortes podem ser vinculados depois.</p><div className="flex flex-wrap gap-2"><button type="button" className="admin-button primary" onClick={() => startCreation("titulo", null)}>Criar primeiro Título</button><button type="button" className="admin-button secondary" onClick={() => startCreation("capitulo", null)}>Criar primeiro Capítulo</button><button type="button" className="admin-button secondary" onClick={() => setImportOpen(true)}>Importar TXT</button></div></div> : null}
+    <StructureTree nodes={kids(null)} kids={kids} creating={creating} editing={editing} saving={saving} add={startCreation} changeCreation={setCreating} saveCreation={saveCreation} changeEdition={setEditing} saveEdition={saveEdition} selectNode={onSelectNode} selectNodeLabel={selectNodeLabel} onDelete={askDelete} collapsed={collapsed} toggleCollapsed={(nodeId) => setCollapsed((current) => { const next = new Set(current); if (next.has(nodeId)) next.delete(nodeId); else next.add(nodeId); return next; })} />
+    {!nodes.length && !creating && !importOpen ? <div className="admin-empty law-center-empty"><h3>Comece pela estrutura da lei</h3><p>Crie uma Parte, Livro, Título ou Capítulo. Questões, áudios e recortes podem ser vinculados depois.</p><div className="flex flex-wrap gap-2"><button type="button" className="admin-button primary" onClick={() => startCreation("parte", null)}>Criar primeira Parte</button><button type="button" className="admin-button secondary" onClick={() => startCreation("titulo", null)}>Criar primeiro Título</button><button type="button" className="admin-button secondary" onClick={() => setImportOpen(true)}>Importar TXT</button></div></div> : null}
     {deleting ? <DeletionDialog summary={deleting} confirmation={deleteConfirmation} saving={saving} onConfirmation={setDeleteConfirmation} onCancel={() => setDeleting(null)} onConfirm={() => void confirmDelete()} /> : null}
   </article>;
 }
 
-function StructureTree({ nodes, kids, parentId = null, creating, editing, saving, add, changeCreation, saveCreation, changeEdition, saveEdition, selectNode, selectNodeLabel, onDelete, depth = 0 }: { nodes: AdminLawStructureNode[]; kids: (id: number | null) => AdminLawStructureNode[]; parentId?: number | null; creating: Creation | null; editing: Edition | null; saving: boolean; add: (kind: AdminLawStructureKind, parent: number | null) => void; changeCreation: React.Dispatch<React.SetStateAction<Creation | null>>; saveCreation: () => Promise<void>; changeEdition: React.Dispatch<React.SetStateAction<Edition | null>>; saveEdition: () => Promise<void>; selectNode?: (node: AdminLawStructureNode) => void; selectNodeLabel: string; onDelete: (node: AdminLawStructureNode) => void; depth?: number }) {
+function StructureTree({ nodes, kids, parentId = null, creating, editing, saving, add, changeCreation, saveCreation, changeEdition, saveEdition, selectNode, selectNodeLabel, onDelete, collapsed, toggleCollapsed, depth = 0 }: { nodes: AdminLawStructureNode[]; kids: (id: number | null) => AdminLawStructureNode[]; parentId?: number | null; creating: Creation | null; editing: Edition | null; saving: boolean; add: (kind: CreatableQuestionStructureType, parent: number | null) => void; changeCreation: React.Dispatch<React.SetStateAction<Creation | null>>; saveCreation: () => Promise<void>; changeEdition: React.Dispatch<React.SetStateAction<Edition | null>>; saveEdition: () => Promise<void>; selectNode?: (node: AdminLawStructureNode) => void; selectNodeLabel: string; onDelete: (node: AdminLawStructureNode) => void; collapsed: Set<number>; toggleCollapsed: (nodeId: number) => void; depth?: number }) {
   const inputForCurrentParent = creating?.parentId === parentId ? creating : null;
   return <ul className="admin-questoes-structure">
-    {nodes.map((node) => { const current = editing?.id === node.id ? editing : null; return <li key={node.id} style={{ marginLeft: depth * 18 }}>
+    {nodes.map((node) => { const current = editing?.id === node.id ? editing : null; const hasChildren = kids(node.id).length > 0 || creating?.parentId === node.id; const isCollapsed = collapsed.has(node.id); return <li key={node.id} style={{ marginLeft: depth * 18 }}>
       {current ? <div className="flex flex-wrap items-end gap-2">
         <label><strong>{labels[node.tipo]}</strong><input autoFocus aria-label={`Nome do ${labels[node.tipo]}`} value={current.nome} disabled={saving} onChange={(event) => changeEdition((value) => value ? { ...value, nome: event.target.value } : value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); changeEdition(null); } if (event.key === "Enter") { event.preventDefault(); if (current.nome.trim() && !saving) void saveEdition(); } }} /></label>
+        <label>Posição<input type="number" min="0" inputMode="numeric" value={current.ordem} disabled={saving} onChange={(event) => changeEdition((value) => value ? { ...value, ordem: event.target.value } : value)} /></label>
         <label>Página PDF<input type="number" min="1" inputMode="numeric" value={current.pdfPage} disabled={saving} onChange={(event) => changeEdition((value) => value ? { ...value, pdfPage: event.target.value } : value)} /></label>
         <button type="button" disabled={saving || !current.nome.trim()} onClick={() => void saveEdition()}>{saving ? "Salvando…" : "Salvar"}</button>
         <button type="button" disabled={saving} onClick={() => changeEdition(null)}>Cancelar</button>
       </div> : <>
         <strong>{labels[node.tipo]}:</strong> {node.nome}{node.pdf_page ? ` · PDF p. ${node.pdf_page}` : ""}{" "}
-        <button type="button" className="admin-link-button" aria-label={`Editar ${labels[node.tipo]} ${node.nome}`} disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => changeEdition({ id: node.id, nome: node.nome, pdfPage: node.pdf_page ? String(node.pdf_page) : "" })}>✎</button>{" "}
+        <button type="button" className="admin-link-button" aria-label={`Editar ${labels[node.tipo]} ${node.nome}`} disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => changeEdition({ id: node.id, nome: node.nome, ordem: String(node.ordem), pdfPage: node.pdf_page ? String(node.pdf_page) : "" })}>✎</button>{" "}
         {selectNode ? <button type="button" disabled={Boolean(editing)} onClick={() => selectNode(node)}>{selectNodeLabel}</button> : null}
       </>}
-      {next[node.tipo] ? <button type="button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => add(next[node.tipo]!, node.id)}>+ {labels[next[node.tipo]!]}</button> : null}
+      {hasChildren ? <button type="button" className="admin-link-button" aria-expanded={!isCollapsed} onClick={() => toggleCollapsed(node.id)}>{isCollapsed ? "Expandir" : "Recolher"}</button> : null}
+      {creatableLabels.filter((kind) => validQuestionStructureParent(kind, node.tipo)).map((kind) => <button key={kind} type="button" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => add(kind, node.id)}>+ {labels[kind]}</button>)}
       <button type="button" className="admin-link-button danger" disabled={saving || Boolean(creating) || Boolean(editing)} onClick={() => onDelete(node)}>Excluir estrutura</button>
-      <StructureTree nodes={kids(node.id)} kids={kids} parentId={node.id} creating={creating} editing={editing} saving={saving} add={add} changeCreation={changeCreation} saveCreation={saveCreation} changeEdition={changeEdition} saveEdition={saveEdition} selectNode={selectNode} selectNodeLabel={selectNodeLabel} onDelete={onDelete} depth={depth + 1} />
+      {!isCollapsed ? <StructureTree nodes={kids(node.id)} kids={kids} parentId={node.id} creating={creating} editing={editing} saving={saving} add={add} changeCreation={changeCreation} saveCreation={saveCreation} changeEdition={changeEdition} saveEdition={saveEdition} selectNode={selectNode} selectNodeLabel={selectNodeLabel} onDelete={onDelete} collapsed={collapsed} toggleCollapsed={toggleCollapsed} depth={depth + 1} /> : null}
     </li>; })}
     {inputForCurrentParent ? <li style={{ marginLeft: depth * 18 }}>
       <input autoFocus aria-label={`Nome do ${labels[inputForCurrentParent.tipo]}`} value={inputForCurrentParent.nome} disabled={saving} placeholder={`Nome do ${labels[inputForCurrentParent.tipo].toLowerCase()}...`} onChange={(event) => changeCreation((current) => current ? { ...current, nome: event.target.value } : current)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); changeCreation(null); } if (event.key === "Enter") { event.preventDefault(); if (inputForCurrentParent.nome.trim() && !saving) void saveCreation(); } }} />
+      <label>Posição<input type="number" min="0" inputMode="numeric" aria-label={`Posição do ${labels[inputForCurrentParent.tipo]}`} value={inputForCurrentParent.ordem} disabled={saving} onChange={(event) => changeCreation((current) => current ? { ...current, ordem: event.target.value } : current)} /></label>
       <button type="button" disabled={saving || !inputForCurrentParent.nome.trim()} onClick={() => void saveCreation()}>{saving ? "Salvando…" : "Salvar"}</button>
       <button type="button" disabled={saving} onClick={() => changeCreation(null)}>Cancelar</button>
     </li> : null}

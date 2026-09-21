@@ -3,14 +3,12 @@
 import { useMemo } from "react";
 import { QuestionRichEditor } from "@/components/admin/question-rich-editor";
 import { QUESTION_ANSWERS, type QuestionAnswer, type QuestionDraft } from "@/lib/admin-questoes";
-import { compareQuestionStructureNames } from "@/lib/questoes-structure";
+import { compareQuestionStructureNames, type QuestionStructureType } from "@/lib/questoes-structure";
 import { plainQuestionText } from "@/lib/admin-question-search";
 
-export type AdminQuestionStructureNode = { id: number; parent_id: number | null; tipo: "titulo" | "capitulo" | "secao" | "subsecao"; nome: string; ordem: number };
+export type AdminQuestionStructureNode = { id: number; parent_id: number | null; tipo: QuestionStructureType; nome: string; ordem: number };
 export type AdminQuestionForm = QuestionDraft;
 
-const kinds = ["titulo", "capitulo", "secao", "subsecao"] as const;
-const labels = { titulo: "Título", capitulo: "Capítulo", secao: "Seção", subsecao: "Subseção" } as const;
 
 export const blankAdminQuestionForm = (): AdminQuestionForm => ({ structure_id: null, pergunta: "", resposta: "Certo", ordem: "1", justificativa: "", assunto: "", legislacao: "", titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" });
 
@@ -19,10 +17,10 @@ export function adminQuestionFormFrom(question: AdminQuestionForm): AdminQuestio
 }
 
 export function AdminQuestionEditor({ lawName, nodes, value, original, editing, saving, error, onChange, onSubmit, onCancel, onPrevious, onNext, onDuplicate, onMove, onDelete, showPreview = false }: { lawName: string; nodes: AdminQuestionStructureNode[]; value: AdminQuestionForm; original: AdminQuestionForm | null; editing: boolean; saving: boolean; error?: string; onChange: (value: AdminQuestionForm) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel?: () => void; onPrevious?: () => void; onNext?: () => void; onDuplicate?: () => void; onMove?: () => void; onDelete?: () => void; showPreview?: boolean }) {
-  const map = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const path = (id: number | null) => { const result: AdminQuestionStructureNode[] = []; for (let node = id ? map.get(id) : undefined; node; node = node.parent_id ? map.get(node.parent_id) : undefined) result.unshift(node); return result; };
-  const level = (kind: AdminQuestionStructureNode["tipo"]) => path(value.structure_id).find((node) => node.tipo === kind)?.id ?? null;
-  const kids = (parentId: number | null, kind: AdminQuestionStructureNode["tipo"]) => nodes.filter((node) => node.parent_id === parentId && node.tipo === kind).sort(compareQuestionStructureNames);
+  const options = useMemo(() => {
+    const visit = (parentId: number | null, prefix: string): Array<{ id: number; label: string }> => nodes.filter((node) => node.parent_id === parentId).sort(compareQuestionStructureNames).flatMap((node) => [{ id: node.id, label: `${prefix}${node.nome}` }, ...visit(node.id, `${prefix}— `)]);
+    return visit(null, "");
+  }, [nodes]);
   const update = <K extends keyof AdminQuestionForm>(key: K, next: AdminQuestionForm[K]) => onChange({ ...value, [key]: next });
   const dirty = JSON.stringify(value) !== JSON.stringify(original ?? blankAdminQuestionForm());
 
@@ -32,7 +30,7 @@ export function AdminQuestionEditor({ lawName, nodes, value, original, editing, 
 	    {editing && (onPrevious || onNext || onDuplicate || onMove || onDelete) ? <nav className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 sm:px-6" aria-label="Ações da questão"><button type="button" className="admin-button secondary" disabled={saving || !onPrevious} onClick={onPrevious}>← Questão anterior</button><button type="button" className="admin-button secondary" disabled={saving || !onNext} onClick={onNext}>Próxima questão →</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onDuplicate}>Duplicar</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onMove}>Mover para outra estrutura</button><button type="button" className="admin-button danger ml-auto" disabled={saving} onClick={onDelete}>Excluir questão</button></nav> : null}
 	    <form onSubmit={onSubmit} className="question-editor-form">
       <section><h3>Estrutura da questão</h3><div className="question-structure-grid">
-        {kinds.map((kind, index) => { const parent = index ? level(kinds[index - 1]) : null; return <label key={kind}>{labels[kind]}<select value={level(kind) ?? ""} onChange={(event) => update("structure_id", event.target.value ? Number(event.target.value) : parent)}><option value="">Selecionar</option>{kids(parent, kind).map((node) => <option key={node.id} value={node.id}>{node.nome}</option>)}</select></label>; })}
+        <label>Estrutura<select value={value.structure_id ?? ""} onChange={(event) => update("structure_id", event.target.value ? Number(event.target.value) : null)}><option value="">Sem estrutura</option>{options.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
         <label>Ordem<input required inputMode="decimal" value={value.ordem} onChange={(event) => update("ordem", event.target.value)} /></label>
         <label>Resposta<select value={value.resposta} onChange={(event) => update("resposta", event.target.value as QuestionAnswer)}>{QUESTION_ANSWERS.map((answer) => <option key={answer}>{answer}</option>)}</select></label>
       </div></section>

@@ -53,6 +53,19 @@ describe("recortes de questões canônicas", () => {
     expect(tree[2].children[0].children.map((node) => node.id)).toEqual([42]);
     expect(tree[3].children.map((node) => node.id)).toEqual([51]);
   });
+  it("inclui questões do Título dentro da Parte Geral do Código Penal", () => {
+    const codigoPenal = [
+      { id: 100, parent_id: null, nome: "PARTE GERAL" },
+      { id: 101, parent_id: 100, nome: "TÍTULO I — DA APLICAÇÃO DA LEI PENAL" },
+      { id: 102, parent_id: 101, nome: "CAPÍTULO I" },
+    ];
+    const questionsCp = [
+      { id: "titulo", structure_id: 101 },
+      { id: "capitulo", structure_id: 102 },
+    ];
+    expect(descendantsForScope(codigoPenal, [100]).sort()).toEqual([100, 101, 102]);
+    expect(questionsInScope(questionsCp, descendantsForScope(codigoPenal, [100])).map((question) => question.id)).toEqual(["titulo", "capitulo"]);
+  });
   it("marca filhos como incluídos pelo pai e não persiste seleção redundante", () => {
     expect(normalizeScopeSelection(nodes, [1, 2, 3])).toEqual([1]);
     expect(descendantsForScope(nodes, normalizeScopeSelection(nodes, [1, 2, 3])).sort()).toEqual([1, 2, 3]);

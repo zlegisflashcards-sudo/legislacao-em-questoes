@@ -1,16 +1,25 @@
-export type QuestionStructureType = "titulo" | "capitulo" | "secao" | "subsecao";
+/** `artigo` continua sendo aceito para ler a base legada, mas não é criado pelo
+ * editor de hierarquia. A numeração oficial permanece no campo `nome`. */
+export type QuestionStructureType = "parte" | "livro" | "titulo" | "capitulo" | "secao" | "subsecao" | "artigo";
+export type CreatableQuestionStructureType = Exclude<QuestionStructureType, "artigo">;
+export const creatableQuestionStructureTypes: CreatableQuestionStructureType[] = ["parte", "livro", "titulo", "capitulo", "secao", "subsecao"];
 export type QuestionStructureNode = { id: number; parent_id: number | null; tipo: QuestionStructureType; nome: string; ordem?: number };
-export type PlannedQuestionStructure = { key: string; parentKey: string | null; tipo: QuestionStructureType; nome: string; path: string; existingId: number | null };
+export type PlannedQuestionStructure = { key: string; parentKey: string | null; tipo: CreatableQuestionStructureType; nome: string; path: string; existingId: number | null };
 export type QuestionDeckPlan = { line: number; structureKey: string | null; error: string | null };
 export type StructureTxtIssue = { line: number; path: string; message: string };
 
 const collator = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
 
-export function compareQuestionStructureNames<T extends { nome: string }>(left: T, right: T) { return collator.compare(left.nome, right.nome); }
+export function compareQuestionStructureNames<T extends { nome: string; ordem?: number }>(left: T, right: T) {
+  const order = (Number(left.ordem) || 0) - (Number(right.ordem) || 0);
+  return order || collator.compare(left.nome, right.nome);
+}
 export function normalizeQuestionStructureName(value: string) { return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR"); }
 
-export function inferQuestionStructureType(value: string): QuestionStructureType | null {
+export function inferQuestionStructureType(value: string): CreatableQuestionStructureType | null {
   const prefix = value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
+  if (/^parte\b/.test(prefix)) return "parte";
+  if (/^livro\b/.test(prefix)) return "livro";
   if (/^titulo\b/.test(prefix)) return "titulo";
   if (/^capitulo\b/.test(prefix)) return "capitulo";
   if (/^secao\b/.test(prefix)) return "secao";
@@ -18,11 +27,15 @@ export function inferQuestionStructureType(value: string): QuestionStructureType
   return null;
 }
 
-export function validQuestionStructureParent(type: QuestionStructureType, parentType: QuestionStructureType | null) {
-  return (type === "titulo" && parentType === null)
-    || (type === "capitulo" && (parentType === null || parentType === "titulo"))
-    || (type === "secao" && parentType === "capitulo")
-    || (type === "subsecao" && parentType === "secao");
+/**
+ * A legislação não precisa declarar níveis vazios: um nível pode ser raiz ou
+ * filho de qualquer nível oficialmente superior. Nunca aceita ciclos, irmãos
+ * como pai ou o tipo legado `artigo` como contêiner.
+ */
+export function validQuestionStructureParent(type: CreatableQuestionStructureType, parentType: QuestionStructureType | null) {
+  if (parentType === null) return true;
+  const rank: Record<QuestionStructureType, number> = { parte: 0, livro: 1, titulo: 2, capitulo: 3, secao: 4, subsecao: 5, artigo: 6 };
+  return parentType !== "artigo" && rank[parentType] < rank[type];
 }
 
 export function parseQuestionStructureTxt(value: string) {
@@ -36,7 +49,6 @@ export function parseQuestionStructureTxt(value: string) {
     const line = index + 1;
     const segments = raw.split("::").map((segment) => segment.trim());
     if (segments.some((segment) => !segment)) { issues.push({ line, path: raw, message: "O caminho possui um nível vazio." }); continue; }
-    if (segments.length > 4) { issues.push({ line, path: raw, message: "A profundidade máxima suportada é Título, Capítulo, Seção e Subseção." }); continue; }
     const key = segments.map(normalizeQuestionStructureName).join("\u0000");
     const firstLine = known.get(key);
     if (firstLine) { issues.push({ line, path: raw, message: `Caminho duplicado; ele já foi informado na linha ${firstLine}.` }); continue; }

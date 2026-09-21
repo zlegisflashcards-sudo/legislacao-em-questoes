@@ -1,7 +1,7 @@
 export type QuestionStructurePathNode = {
   id: number;
   parent_id: number | null;
-  tipo?: "titulo" | "capitulo" | "secao" | "subsecao";
+  tipo?: "parte" | "livro" | "titulo" | "capitulo" | "secao" | "subsecao" | "artigo";
   nome: string;
 };
 

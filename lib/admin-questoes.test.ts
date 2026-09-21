@@ -252,13 +252,12 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("confirmDelete");
   });
 
-  it("renomeia nós estruturais sem modificar identidade, hierarquia ou ordem", () => {
+  it("edita nome, posição e PDF sem modificar identidade, hierarquia ou tipo", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const update = server.slice(server.indexOf("export async function updateStructureNode"), server.indexOf("export async function deactivateStructureNode"));
-    expect(update).toContain('const patch: { nome: string; pdf_page?: number | null }');
+    expect(update).toContain('const patch: { nome: string; ordem?: number; pdf_page?: number | null }');
     expect(update).toContain(".update(patch)");
-    expect(update).not.toContain("ordem:");
     expect(update).not.toContain("parent_id:");
     expect(update).not.toContain("tipo:");
     expect(update).toContain('.eq("id", id(body.id))');
@@ -266,9 +265,9 @@ describe("administração de Legis Questões", () => {
     expect(route).toContain('action === "atualizar_estrutura"');
   });
 
-  it("oferece renomeação inline genérica para título, capítulo, seção e subseção", () => {
+  it("oferece edição inline genérica para todos os níveis estruturais", () => {
     const panel = readFileSync("components/admin/law-structure-admin.tsx", "utf8");
-    expect(panel).toContain('type Edition = { id: number; nome: string; pdfPage: string }');
+    expect(panel).toContain('type Edition = { id: number; nome: string; ordem: string; pdfPage: string }');
     expect(panel).toContain("async function saveEdition()");
     expect(panel).toContain('action: "atualizar_estrutura"');
     expect(panel).toContain("changeEdition({ id: node.id, nome: node.nome");
@@ -278,5 +277,7 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("await onReload(); setEditing(null)");
     expect(panel).toContain("labels[node.tipo]");
     expect(panel).toContain("changeEdition(null)");
+    expect(panel).toContain("Criar primeira Parte");
+    expect(panel).toContain("creatableQuestionStructureTypes");
   });
 });

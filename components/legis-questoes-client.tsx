@@ -8,7 +8,7 @@ import {
   type StudentLaw,
 } from "@/lib/student-laws";
 import { supabase } from "@/lib/supabase";
-import { compareQuestionStructureNames } from "@/lib/questoes-structure";
+import { compareQuestionStructureNames, type QuestionStructureType } from "@/lib/questoes-structure";
 
 type StructureQuestion = {
   id: string;
@@ -22,7 +22,7 @@ type StructureQuestion = {
   structure_id: number | null;
 };
 
-type StoredStructureNode = { id: number; parent_id: number | null; tipo: TreeLevel; nome: string; ordem: number };
+type StoredStructureNode = { id: number; parent_id: number | null; tipo: QuestionStructureType; nome: string; ordem: number };
 
 type QuestionLaw = StudentLaw & {
   questionsAvailable: boolean;
@@ -35,22 +35,24 @@ type StructureResponse = {
   message?: string;
 };
 
-type TreeLevel =
+type LegacyTreeLevel =
   | "titulo"
   | "capitulo"
   | "secao"
   | "subsecao";
+
+type TreeLevel = QuestionStructureType;
 
 type TreeNode = {
   level: TreeLevel;
   label: string;
   count: number;
   children: TreeNode[];
-  filters: Partial<Record<TreeLevel, string>>;
+  filters: Partial<Record<LegacyTreeLevel, string>>;
   structureId?: number;
 };
 
-const LEVELS: TreeLevel[] = [
+const LEVELS: LegacyTreeLevel[] = [
   "titulo",
   "capitulo",
   "secao",
@@ -348,7 +350,7 @@ function StudyDeckLink({
   slug: string;
   label: string;
   count: number;
-  filters: Partial<Record<TreeLevel, string>>;
+  filters: Partial<Record<LegacyTreeLevel, string>>;
   prominent?: boolean;
 }) {
   const params = new URLSearchParams();
@@ -408,7 +410,7 @@ function buildStoredTree(nodes: StoredStructureNode[], questions: StructureQuest
 function buildLevel(
   questions: StructureQuestion[],
   levelIndex: number,
-  parentFilters: Partial<Record<TreeLevel, string>>
+  parentFilters: Partial<Record<LegacyTreeLevel, string>>
 ): TreeNode[] {
   if (levelIndex >= LEVELS.length) {
     return [];
