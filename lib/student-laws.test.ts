@@ -203,7 +203,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignStatus", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
@@ -225,7 +225,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("exibe apenas barra e percentual real de progresso, sem score", () => {
-    expect(card).toContain("const progress = law.campaignStatus === \"concluida\" ? 100");
+    expect(card).toContain("const progress = Math.max(0, Math.min(100, law.campaignProgress ?? 0));");
     expect(card).toContain('aria-label={`${progress}% concluído`}');
     expect(card).toContain('>{progress}%</p>');
     expect(card).not.toContain('score');

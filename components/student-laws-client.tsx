@@ -88,7 +88,7 @@ function StudentLawCard({ law }: { law: StudentLaw }) {
   const scopeId = typeof law.studyContextId === "string" ? law.studyContextId : null;
   const isScope = law.studyContextKind === "recorte" && scopeId !== null;
   const lawHref = isScope ? `/estudar/lei/${encodeURIComponent(law.slug)}?recorte_id=${encodeURIComponent(scopeId)}` : `/estudar/lei/${encodeURIComponent(law.slug)}?contexto=completo`;
-  const progress = law.campaignStatus === "concluida" ? 100 : Math.max(0, Math.min(100, law.campaignProgress ?? 0));
+  const progress = Math.max(0, Math.min(100, law.campaignProgress ?? 0));
   const title = isScope ? studentLawMotherTitle(law.titulo, law.studyContextName) : law.titulo;
   const contextLabel = law.totalFlashcards === 1 ? "1 questão disponível" : `${law.totalFlashcards} questões disponíveis`;
   const ankiHref = `/estudar/lei/${encodeURIComponent(law.slug)}/anki${scopeId ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`;
