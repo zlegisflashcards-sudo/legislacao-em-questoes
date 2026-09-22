@@ -2,6 +2,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { mainQuestions, mainStructure } from "@/lib/questions-main-server";
 import { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
 import { availableLawStudyAccess } from "@/lib/law-question-scope-context";
+import { collectPages } from "@/lib/law-question-pagination";
 
 export { availableLawStudyAccess } from "@/lib/law-question-scope-context";
 
@@ -20,6 +21,23 @@ type BatchRelease = Release & { lei_id: number };
 type BatchProductLaw = ProductLaw & { lei_id: number };
 type BatchScope = Scope & { lei_id: number };
 type StructureLink = { recorte_id: string; structure_id: number };
+
+const QUESTION_PAGE_SIZE = 200;
+
+/**
+ * A listagem de Minhas Leis pode abranger muitas leis. O PostgREST aplica um
+ * teto de linhas à resposta, portanto uma única consulta em lote pode omitir
+ * questões das leis posteriores. Paginar com uma ordenação estável mantém a
+ * contagem do card no mesmo universo ativo do estudo.
+ */
+async function activeQuestionsForLaws(lawIds: number[]) {
+  const db = getSupabaseServerClient();
+  return collectPages<{ id: string; lei_id: number; structure_id: number | null }>(async (from, to) => {
+    const result = await db.from("questions").select("id,lei_id,structure_id").in("lei_id", lawIds).eq("ativo", true).order("id").range(from, to);
+    if (result.error) throw new Error(`Não foi possível carregar as questões dos contextos de estudo: ${result.error.message}`);
+    return result.data ?? [];
+  }, QUESTION_PAGE_SIZE);
+}
 
 /**
  * Resolve somente os contextos comerciais que o aluno realmente recebeu.
@@ -88,18 +106,17 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
   if (activeScopesResult.error) throw new Error(`Não foi possível carregar os recortes liberados: ${activeScopesResult.error.message}`);
   const scopes = (activeScopesResult.data ?? []) as BatchScope[];
   const activeScopeIds = new Set(scopes.map((scope) => scope.id));
-  const [questionsResult, structureResult, scopeLinksResult, freeLawsResult] = await Promise.all([
-    db.from("questions").select("id,lei_id,structure_id").in("lei_id", uniqueLawIds).eq("ativo", true),
+  const [questions, structureResult, scopeLinksResult, freeLawsResult] = await Promise.all([
+    activeQuestionsForLaws(uniqueLawIds),
     db.from("law_structure").select("id,lei_id,parent_id").in("lei_id", uniqueLawIds).eq("ativo", true),
     activeScopeIds.size ? db.from("recortes_leis_estrutura").select("recorte_id,structure_id").in("recorte_id", [...activeScopeIds]) : Promise.resolve({ data: [] as StructureLink[], error: null }),
     db.from("leis").select("id,acesso_gratuito").in("id", uniqueLawIds).eq("ativo", true),
   ]);
-  if (questionsResult.error) throw new Error(`Não foi possível carregar as questões dos contextos de estudo: ${questionsResult.error.message}`);
   if (structureResult.error) throw new Error(`Não foi possível carregar a estrutura dos contextos de estudo: ${structureResult.error.message}`);
   if (scopeLinksResult.error || freeLawsResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error?.message ?? freeLawsResult.error?.message}`);
   const freeLawIds = new Set((freeLawsResult.data ?? []).flatMap((law) => law.acesso_gratuito === true ? [law.id] : []));
   const questionsByLaw = new Map<number, Array<{ id: string; structure_id: number | null }>>();
-  for (const question of questionsResult.data ?? []) questionsByLaw.set(question.lei_id, [...(questionsByLaw.get(question.lei_id) ?? []), question]);
+  for (const question of questions) questionsByLaw.set(question.lei_id, [...(questionsByLaw.get(question.lei_id) ?? []), question]);
   const structureByLaw = new Map<number, Array<{ id: number; parent_id: number | null }>>();
   for (const node of structureResult.data ?? []) structureByLaw.set(node.lei_id, [...(structureByLaw.get(node.lei_id) ?? []), node]);
   const linksByLaw = new Map<number, BatchProductLaw[]>();
