@@ -19,6 +19,7 @@ type StructureQuestion = { id: string; structure_id: number | null };
 type StructureNode = { id: number; parent_id: number | null; nome: string; ordem: number };
 type QuestionSourceLaw = { slug: string; questions: StructureQuestion[]; structure?: StructureNode[] };
 type StudyContext = { recorteId: string | null; nome: string; questionCount: number; structureIds: number[] | null };
+type ReviewCounts = { errors: number; favorites: number; unanswered: number };
 
 export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null; publicStudy?: LawStudyData }) {
   const searchParams = useSearchParams();
@@ -31,6 +32,7 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
   const [error, setError] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [reviewCounts, setReviewCounts] = useState<ReviewCounts | null>(null);
 
   async function request(path: string, method = "GET") {
     const { data } = await supabase.auth.getSession();
@@ -46,12 +48,13 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
     if (publicStudy) return;
     void (async () => {
       try {
-        const [law, state, structure, availableContexts, newQuestions] = await Promise.all([
+        const [law, state, structure, availableContexts, newQuestions, reviews] = await Promise.all([
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha`),
           request(`/api/questoes/estrutura?slug=${encodeURIComponent(slug)}`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/contextos`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/novas-por-bloco`),
+          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/revisao`),
         ]);
         if (law?.study) setStudy(law.study);
         if (state) setCampaign(state);
@@ -60,6 +63,7 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
         setSourceLaw(found);
         setContexts(Array.isArray(availableContexts?.contexts) ? availableContexts.contexts : []);
         setNewQuestionsByStructure(newQuestions?.counts && typeof newQuestions.counts === "object" ? newQuestions.counts : {});
+        if (reviews?.counts) setReviewCounts(reviews.counts);
         setContextsLoaded(true);
       } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta lei."); }
     })();
@@ -98,6 +102,7 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
       {study.law.shortName ? <p className="mt-2 text-slate-500">{study.law.shortName}</p> : null}
       <section className="law-study-toolbar mt-5 grid min-w-0 gap-4 rounded-2xl bg-blue-50 p-4 sm:mt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5" aria-label="Estudo ativo"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]">Estudo ativo</p>{selectedContext ? <p className="mt-1 text-sm font-semibold text-slate-600">{selectedContext.recorteId ? `Estudo: ${selectedContext.nome}` : "Modo campanha com ranking e desempenho"}</p> : null}<p className="mt-1 text-sm text-slate-600">Status: {statusLabel}</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-blue-100"><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-bold text-slate-700">{progress}% concluído</p>{completed ? <p className="mt-3 text-xs text-slate-600">Novas questões podem ser adicionadas a esta lei ao longo do tempo. Se quiser estudar apenas o conteúdo que ainda não respondeu, use o filtro {`"Não respondidas"`} no modo Teste.</p> : null}{selectedContext?.recorteId ? <p className="mt-3 text-xs font-semibold text-slate-600">O Estudo Ativo da Lei continua usando a campanha geral, sem limitar-se ao recorte selecionado.</p> : null}</div>{!completed ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar${selectedContext?.recorteId ? `?recorte_id=${encodeURIComponent(selectedContext.recorteId)}` : ""}`} className="law-study-button-primary inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white hover:bg-blue-600 sm:w-auto">{campaign.status === "em_andamento" ? "Continuar estudo" : "Começar estudo"}</Link> : null}</section>
       {hasCampaignSummary ? <section className="mt-5 border-t border-slate-200 pt-5"><div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]">Desempenho</p><p className="mt-1 text-sm text-slate-600">{completed ? "Seu Estudo Ativo da Lei foi concluído. O estudo livre não altera score, ranking ou progresso histórico." : campaign.record ? "Seu recorde permanece disponível durante novas tentativas e após o reset." : "O score é exibido somente ao concluir a lei."}</p>{campaign.record ? <div className="mt-3 grid gap-1 text-sm font-black text-[#062a5f]"><p>Melhor score: {campaign.record.score.toLocaleString("pt-BR")}</p>{completed ? <p>Posição no ranking: {typeof campaign.result?.position === "number" ? `${campaign.result.position}º lugar` : "Ainda sem posição no ranking"}</p> : null}</div> : null}</div>{campaign.record ? <CampaignPerformanceDonut compact {...competitiveCampaignPerformance(campaign.record.correct, campaign.record.errors)} /> : null}</div></section> : null}
+      {!publicStudy ? <ReviewHub slug={slug} counts={reviewCounts} /> : null}
       {!publicStudy && hasCampaignSummary ? <footer className="mt-5 border-t border-slate-200 pt-4"><button type="button" onClick={() => setResetOpen(true)} className="text-sm font-bold text-blue-700 underline underline-offset-4">Resetar Estudo Ativo da Lei</button></footer> : null}
     </header>
     {!publicStudy && showContextSelector && !activeCampaign ? <StudyContextSelector slug={slug} contexts={contexts} selected={selectedContext} /> : null}
@@ -106,6 +111,14 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
 }
 
 function Frame({ children, publicMode }: { children: React.ReactNode; publicMode: boolean }) { return <main className="law-study-page mx-auto w-full max-w-6xl overflow-x-hidden px-3 py-5 sm:px-6 sm:py-8">{!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}{children}</main>; }
+function ReviewHub({ slug, counts }: { slug: string; counts: ReviewCounts | null }) {
+  const reviews = [
+    { kind: "errors", icon: "⚠", title: "Caderno de erros", description: "Questões erradas na campanha atual.", count: counts?.errors ?? 0, action: "Revisar erros", tone: "bg-red-50 text-red-600", countTone: "bg-red-50 text-red-700" },
+    { kind: "favorites", icon: "★", title: "Caderno de favoritos", description: "Questões salvas para revisar depois.", count: counts?.favorites ?? 0, action: "Ver favoritos", tone: "bg-amber-50 text-amber-500", countTone: "bg-amber-50 text-amber-700" },
+    { kind: "unanswered", icon: "▣", title: "Caderno de pendências", description: "Questões adicionadas aos níveis anteriores ao seu progresso atual.", count: counts?.unanswered ?? 0, action: "Estudar pendentes", tone: "bg-blue-50 text-blue-700", countTone: "bg-blue-50 text-blue-800" },
+  ] as const;
+  return <section className="mt-5 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-[#f6f9ff] p-4 sm:p-5" aria-labelledby="review-hub-title"><h2 id="review-hub-title" className="text-sm font-black text-[#062a5f]">Meus cadernos</h2><p className="mt-2 text-sm text-slate-600">Organize sua revisão com base no seu desempenho. Aqui você encontra as questões que precisam de mais atenção.</p><div className="mt-5 grid gap-3">{reviews.map((review) => <article key={review.kind} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:flex sm:items-center"><div className={`grid h-14 w-14 shrink-0 place-items-center rounded-xl text-3xl ${review.tone}`} aria-hidden="true">{review.icon}</div><div className="min-w-0 flex-1"><h3 className="font-black text-[#062a5f]">{review.title}</h3><p className="mt-1 text-sm text-slate-600">{review.description}</p></div><div className="col-span-2 flex items-center gap-3 sm:ml-auto sm:col-auto"><span className={`grid h-11 min-w-11 place-items-center rounded-xl px-3 text-xl font-black sm:h-14 sm:min-w-14 sm:text-2xl ${review.countTone}`}>{review.count}</span><Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1&revisao=${review.kind}`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-blue-600 px-4 text-sm font-black text-blue-700 hover:bg-blue-700 hover:text-white" aria-label={`${review.action}: ${review.title}`}>{review.action} <span className="ml-2 text-lg" aria-hidden="true">›</span></Link></div></article>)}</div></section>;
+}
 type TreeNode = { id: number; nome: string; count: number; newCount: number; children: TreeNode[] };
 function StudyContextSelector({ slug, contexts, selected }: { slug: string; contexts: StudyContext[]; selected: StudyContext | null }) {
   const hrefFor = (context: StudyContext) => context.recorteId ? `/estudar/lei/${encodeURIComponent(slug)}?recorte_id=${encodeURIComponent(context.recorteId)}` : `/estudar/lei/${encodeURIComponent(slug)}?contexto=completo`;

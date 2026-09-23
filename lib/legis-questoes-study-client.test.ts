@@ -241,7 +241,7 @@ describe("player Legis Questões", () => {
     expect(freeStudy).toContain('const params = new URLSearchParams();');
     expect(freeStudy).toContain('params.set("structure_id", structureId);');
     expect(freeStudy).toContain('const available = review ? revision.questions : result.questions;');
-    expect(freeStudy).toContain('setQuestions(available); setCounts(revision.counts ?? null); setStructure(Array.isArray(result.structure) ? result.structure : []);');
+    expect(freeStudy).toContain('setQuestions(available); setStructure(Array.isArray(result.structure) ? result.structure : []);');
     expect(freeStudy).toContain('setScopeName(review ? null : typeof result.recorte?.nome === "string" ? result.recorte.nome : null); setIndex(0); setAnswer(null);');
   });
 
@@ -251,6 +251,7 @@ describe("player Legis Questões", () => {
     expect(freeStudy).not.toContain('totalLawQuestions');
     expect(freeStudy).not.toContain('globalPosition');
     expect(freeStudy).not.toContain('progress={Math.round((index + 1) / questions.length * 100)}');
+    expect(freeStudy).not.toContain('lf-review-back');
   });
 
   it("reconstrói e exibe o caminho estrutural da questão sem usar a lei como raiz", () => {
@@ -266,7 +267,10 @@ describe("player Legis Questões", () => {
   it("renderiza somente a questão atual no estudo livre", () => {
     const freeStudy = player.slice(player.indexOf('function FreeStudy'));
     expect(freeStudy).toContain('const currentQuestion = questions[index];');
-    expect(freeStudy).toContain('<div key={currentQuestion.id} className="lf-question-stage"><div className="lf-question-tools"><FavoriteButton slug={slug} questionId={currentQuestion.id} /></div><QuestionContent question={currentQuestion} />');
+    expect(player).toContain('function QuestionContent({ question }: { question: Question })');
+    expect(player).toContain('{slug && favoriteQuestionId ? <FavoriteButton slug={slug} questionId={favoriteQuestionId} /> : <small>{label}</small>}');
+    expect(player).not.toContain('<div className="lf-question-tools">');
+    expect(freeStudy).toContain('<div key={currentQuestion.id} className="lf-question-stage"><QuestionContent question={currentQuestion} />');
     expect(freeStudy.match(/<QuestionContent/g)).toHaveLength(1);
     expect(freeStudy).not.toContain('questions.map(');
   });
