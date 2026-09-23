@@ -4,6 +4,7 @@ import { authorizeLawStudy, LawStudyApiError } from "@/lib/law-study-server";
 import { bestCompletedCampaignForRecord, effectiveCampaignScore, personalRecordForAttempt } from "@/lib/law-campaign-personal-record";
 import { campaignScore } from "@/lib/law-campaign-score";
 import { buildCampaignSnapshot } from "@/lib/law-campaign-snapshot";
+import { reconcileOpenCampaignLevels } from "@/lib/law-campaign-reconciliation";
 import { mainQuestionById, mainQuestions, mainQuestionsByIds, mainStructure } from "@/lib/questions-main-server";
 
 type Question = { id: string; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: string; titulo: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null; ultima_alteracao_legislativa: string | null; structure_id: number | null };
@@ -122,6 +123,29 @@ async function reopenCompletedCampaign(context: StudyContext, campaignId: string
   if (campaignError || progressError) throw new LawStudyApiError(503, "Não foi possível retomar seu Estudo Ativo da Lei.");
 }
 
+/** Corrige snapshots que ficaram sem próximo bloco após conteúdo novo/reimportado. */
+async function reconcileOpenCampaign(context: StudyContext, campaignId: string) {
+  const snapshot = await loadQuestionSnapshot(context.lawId, context.title);
+  const [{ data: rawLevels, error: levelsError }, { data: answers, error: answersError }] = await Promise.all([
+    context.supabase.from("campanhas_leis_niveis").select("id,ordem,chave_origem,questoes_ids,proxima_posicao,pendencias_ids,concluido").eq("campanha_id", campaignId).order("ordem"),
+    context.supabase.from("campanhas_leis_respostas").select("questao_id").eq("campanha_id", campaignId),
+  ]);
+  if (levelsError || answersError) throw new LawStudyApiError(503, "Não foi possível retomar seu Estudo Ativo da Lei.");
+  const levels = (rawLevels ?? []).map((level) => ({ ...level, chave_origem: typeof level.chave_origem === "string" ? level.chave_origem : null, questoes_ids: arrayOfStrings(level.questoes_ids), pendencias_ids: arrayOfStrings(level.pendencias_ids) }));
+  const answered = new Set((answers ?? []).flatMap((answer) => typeof answer.questao_id === "string" ? [answer.questao_id] : []));
+  const { repairs, additions } = reconcileOpenCampaignLevels(levels, snapshot.levels, answered);
+  if (!repairs.length && !additions.length) return false;
+  for (const repair of repairs) {
+    const { error } = await context.supabase.from("campanhas_leis_niveis").update({ questoes_ids: repair.questoesIds, pendencias_ids: repair.pendenciasIds, concluido: repair.concluido }).eq("id", repair.id).eq("campanha_id", campaignId);
+    if (error) throw new LawStudyApiError(503, "Não foi possível retomar seu Estudo Ativo da Lei.");
+  }
+  if (additions.length) {
+    const { error } = await context.supabase.from("campanhas_leis_niveis").insert(additions.map((level) => ({ campanha_id: campaignId, ...level })));
+    if (error) throw new LawStudyApiError(503, "Não foi possível retomar seu Estudo Ativo da Lei.");
+  }
+  return true;
+}
+
 async function campaignStateFor(context: StudyContext) {
   const { supabase, lawId, studentId } = context;
   const state = await getCampaignFor(context);
@@ -137,6 +161,7 @@ async function campaignStateFor(context: StudyContext) {
     record = { score: bestScore, correct: winningCampaign.score_competitivo_acertos ?? 0, errors: winningCampaign.score_competitivo_erros ?? 0 };
   }
   const lawProgress = await currentLawProgress(context, state);
+  if (state.status === "em_andamento" && state.campaignId && await reconcileOpenCampaign(context, state.campaignId)) return campaignStateFor(context);
   if (state.status === "concluida" && state.campaignId === null && !lawProgress.completed) {
     const campaignId = await referenceCampaignId(context, state);
     if (campaignId) { await reopenCompletedCampaign(context, campaignId); return campaignStateFor(context); }
