@@ -17,11 +17,7 @@ export type CampaignLevelRepair = {
   concluido: boolean;
 };
 
-/**
- * Reabre somente blocos cuja questão ativa ainda não recebeu resposta nesta
- * campanha. Mantém posição, score e histórico; a questão reaparece na revisão
- * quando o bloco já tinha sido encerrado.
- */
+/** Mantém a campanha em curso na posição atual; conteúdo novo de bloco concluído vira pendência de revisão. */
 export function reconcileOpenCampaignLevels(levels: CampaignLevelState[], snapshot: CampaignSnapshotLevel[], answeredIds: Set<string>) {
   const repairs: CampaignLevelRepair[] = [];
   const known = new Map(levels.map((level) => [level.chave_origem, level]));
@@ -41,8 +37,15 @@ export function reconcileOpenCampaignLevels(levels: CampaignLevelState[], snapsh
     const hasCurrentQuestion = current.proxima_posicao < current.questoes_ids.length || current.pendencias_ids.length > 0;
     if (!unanswered.length || hasCurrentQuestion) continue;
 
-    // Questões anexadas após a posição atual seguem na primeira passagem.
-    // UUIDs substituídos em um bloco já esgotado precisam entrar em revisão.
+    // Um bloco já ultrapassado não pode voltar a ser o nível atual. As novas
+    // questões ficam no snapshot para o Caderno de pendências, sem alterar
+    // posição, score ou a progressão da campanha principal.
+    if (current.concluido) {
+      repairs.push({ id: current.id, questoesIds, pendenciasIds: current.pendencias_ids, concluido: true });
+      continue;
+    }
+
+    // Questões anexadas ao nível atual seguem na primeira passagem.
     const pendenciasIds = current.proxima_posicao < questoesIds.length
       ? current.pendencias_ids
       : [...new Set([...current.pendencias_ids, ...unanswered])];

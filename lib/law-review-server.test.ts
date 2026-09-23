@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { reviewQuestionIds } from "@/lib/law-review-rules";
+import { pendingQuestionIds, reviewQuestionIds } from "@/lib/law-review-rules";
 
 describe("revisões do Estudo Livre", () => {
   const questions = ["q1", "q2", "q3", "q4"];
@@ -27,6 +27,34 @@ describe("revisões do Estudo Livre", () => {
   it("não reapresenta como não feita questão respondida em campanha arquivada", () => {
     const result = reviewQuestionIds(questions, ["q1", "q2"], [], []);
     expect([...result.unanswered]).toEqual(["q3", "q4"]);
+  });
+
+  it("inclui somente questões não respondidas dos níveis anteriores à posição atual", () => {
+    const pending = pendingQuestionIds([
+      { ordem: 30, questoesIds: ["q4"], concluido: false },
+      { ordem: 10, questoesIds: ["q1", "q2"], concluido: true },
+      { ordem: 20, questoesIds: ["q3"], concluido: true },
+      { ordem: 40, questoesIds: ["q5"], concluido: false },
+    ], false);
+    const result = reviewQuestionIds(["q1", "q2", "q3", "q4", "q5"], ["q1"], [], [], pending);
+    expect([...result.unanswered]).toEqual(["q2", "q3"]);
+  });
+
+  it("não inclui níveis atual ou futuros e atualiza o contador depois da resposta", () => {
+    const pending = pendingQuestionIds([
+      { ordem: 0, questoesIds: ["q1", "q2"], concluido: true },
+      { ordem: 1, questoesIds: ["q3"], concluido: false },
+      { ordem: 2, questoesIds: ["q4"], concluido: false },
+    ], false);
+    expect([...reviewQuestionIds(questions, [], [], [], pending).unanswered]).toEqual(["q1", "q2"]);
+    expect([...reviewQuestionIds(questions, ["q2"], [], [], pending).unanswered]).toEqual(["q1"]);
+  });
+
+  it("fica vazio no primeiro nível após reset e considera níveis percorridos apenas em campanha concluída", () => {
+    const firstLevel = [{ ordem: 0, questoesIds: ["q1"], concluido: false }, { ordem: 1, questoesIds: ["q2"], concluido: false }];
+    expect(pendingQuestionIds(firstLevel, false).size).toBe(0);
+    const completed = pendingQuestionIds([{ ordem: 0, questoesIds: ["q1", "q2"], concluido: true }], true);
+    expect([...reviewQuestionIds(questions, ["q1"], [], [], completed).unanswered]).toEqual(["q2"]);
   });
 });
 
