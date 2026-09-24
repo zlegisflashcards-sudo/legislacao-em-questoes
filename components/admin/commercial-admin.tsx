@@ -5,14 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { createStudentEmailChangePayload } from "@/lib/admin-student-email-change";
 import { MaterialPanel } from "@/components/admin/admin-materials";
 import { CommercialDataTable as DataTable, CommercialEditForm as EditForm } from "@/components/admin/commercial-admin-ui";
-import { LawDataFields } from "@/components/admin/law-data-fields";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number; resumo_acessos?: Row };
-type Tab = "leis" | "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "anki_tutoriais" | "auditoria";
+type Tab = "materiais" | "produtos" | "aquisicoes" | "liberacoes" | "atualizacoes" | "anki_tutoriais" | "auditoria";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "leis", label: "Leis" }, { id: "materiais", label: "Materiais" },
+  { id: "materiais", label: "Materiais" },
   { id: "produtos", label: "Produtos" }, { id: "aquisicoes", label: "Aquisições" },
   { id: "liberacoes", label: "Liberações" }, { id: "atualizacoes", label: "Atualizações" },
   { id: "anki_tutoriais", label: "Anki e tutoriais" },
@@ -77,7 +76,7 @@ function StudentSearch({ onSelect }: { onSelect: (student: Row) => void }) {
 export default function CommercialAdmin() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
-  const [tab, setTab] = useState<Tab>(() => TABS.some((item) => item.id === initialTab) ? initialTab as Tab : "leis");
+  const [tab, setTab] = useState<Tab>(() => TABS.some((item) => item.id === initialTab) ? initialTab as Tab : "produtos");
   const [result, setResult] = useState<PageResult>({ items: [], page: 1, pages: 1, total: 0 });
   const [laws, setLaws] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
@@ -143,13 +142,11 @@ export default function CommercialAdmin() {
       {tab !== "liberacoes" && tab !== "anki_tutoriais" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
       {tab === "materiais" ? <label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : null}
       {tab === "atualizacoes" ? <><label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label><label>Tipo<select value={filters.tipo ?? ""} onChange={(event) => setFilters({ ...filters, tipo: event.target.value })}><option value="">Todos</option>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label><label>Importância<select value={filters.importancia ?? ""} onChange={(event) => setFilters({ ...filters, importancia: event.target.value })}><option value="">Todas</option>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
-      {tab === "leis" ? <label>Estado<select value={filters.ativo ?? ""} onChange={(event) => setFilters({ ...filters, ativo: event.target.value })}><option value="">Todas</option><option value="true">Ativas</option><option value="false">Inativas</option></select></label> : null}
       {tab === "aquisicoes" ? <><label>Status<select value={filters.status ?? ""} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="ativo">Ativo</option><option value="reembolso_solicitado">Reembolso solicitado</option><option value="cancelado">Cancelado</option><option value="reembolsado">Reembolsado</option></select></label><label>Origem<select value={filters.origem ?? ""} onChange={(event) => setFilters({ ...filters, origem: event.target.value })}><option value="">Todas</option>{ORIGENS.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "auditoria" ? <><label>Ator (UUID)<input value={filters.ator_user_id ?? ""} onChange={(event) => setFilters({ ...filters, ator_user_id: event.target.value })} /></label><label>Ação<input value={filters.acao ?? ""} onChange={(event) => setFilters({ ...filters, acao: event.target.value })} /></label><label>Entidade<input value={filters.entidade ?? ""} onChange={(event) => setFilters({ ...filters, entidade: event.target.value })} /></label><label>De<input type="datetime-local" value={filters.de ?? ""} onChange={(event) => setFilters({ ...filters, de: event.target.value })} /></label><label>Até<input type="datetime-local" value={filters.ate ?? ""} onChange={(event) => setFilters({ ...filters, ate: event.target.value })} /></label></> : null}
       {tab !== "liberacoes" && tab !== "anki_tutoriais" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
     </form>
 
-    {tab === "leis" ? <LawPanel rows={result.items} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "materiais" ? <MaterialPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "aquisicoes" ? <AcquisitionPanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ ...filters, aluno_id: text(item.id) }); setPage(1); }} products={products} filters={filters} setFilters={setFilters} lawCount={selectedProductLawCount} busy={busy} mutate={mutate} /> : null}
@@ -361,13 +358,6 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
       <button type="button" className="admin-button secondary" disabled={exportBusy} onClick={() => void exportStudents()}>{exportBusy ? "Exportando…" : "Exportar CSV"}</button>
     </div>
   </section></>;
-}
-
-function LawPanel({ rows, editing, setEditing, busy, mutate }: PanelProps) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("leis", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ordem: Number(data.ordem), ativo: data.ativo === "true", houve_alteracao_legislativa: data.houve_alteracao_legislativa === "true" } }, "Lei salva com sucesso."); if (!editing) event.currentTarget.reset(); }
-  return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar lei" : "Cadastrar lei"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
-    <LawDataFields law={editing} />
-  </EditForm><DataTable headers={["Lei", "Referência normativa", "Situação", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small>{text(row.slug)}</small></td><td><strong>{row.houve_alteracao_legislativa ? "Última alteração incorporada" : "Norma originária"}</strong><small>{text(row.houve_alteracao_legislativa ? row.ultima_alteracao_referencia : row.norma_originaria_referencia) || "—"}</small></td><td>{text(row.situacao_atualizacao)}</td><td>{row.ativo ? "Ativa" : "Inativa"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("leis", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado da lei atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
 }
 
 function ProductPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[] }) {

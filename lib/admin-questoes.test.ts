@@ -58,7 +58,7 @@ describe("administração de Legis Questões", () => {
     expect(route).toContain('action === "atualizar_rapido"');
     expect(player).toContain('fetch("/api/admin/session"');
     expect(player).toContain("✏️ Editar questão");
-    expect(player).toContain("Abrir no painel administrativo ↗");
+    expect(player).toContain("Abrir na Central da Lei ↗");
     expect(player).not.toContain(">Editar aqui<");
   });
 
@@ -151,14 +151,14 @@ describe("administração de Legis Questões", () => {
   });
 
   it("permite editar questões importadas com estrutura e HTML no formulário", () => {
-    const panel = readFileSync("components/admin/admin-questoes.tsx", "utf8");
+    const panel = readFileSync("components/admin/admin-law-questions.tsx", "utf8");
     const sharedEditor = readFileSync("components/admin/admin-question-editor.tsx", "utf8");
-    expect(panel).toContain("function editQuestion(question: Q)");
-    expect(panel).toContain("setForm(adminQuestionFormFrom(question))");
-    expect(panel).toContain('action: editing ? "atualizar" : "criar"');
+    expect(panel).toContain("async function editQuestion(id: string)");
+    expect(panel).toContain("const next = adminQuestionFormFrom(body.question)");
+    expect(panel).toContain('action: savedId ? "atualizar" : "criar"');
     expect(panel).toContain("<AdminQuestionEditor");
     expect(sharedEditor).toContain('input required inputMode="decimal" value={value.ordem}');
-    expect(panel).toContain("onClick={() => onEdit(question)}");
+    expect(panel).toContain("onClick={() => void editQuestion(question.id)}");
   });
 
   it("edita cada campo rico visualmente sem sanitizar ou reserializar o HTML armazenado", () => {

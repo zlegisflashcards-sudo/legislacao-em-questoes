@@ -4,13 +4,12 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("LegisCast na Central da Lei", () => {
-  it("usa a rota contextual e o mesmo componente do Admin antigo", () => {
+  it("usa a rota contextual como única interface de LegisCast", () => {
     const centralPath = "app/admin/leis/[slug]/legiscast/page.tsx";
     expect(existsSync(centralPath)).toBe(true);
     const central = read(centralPath);
-    const legacy = read("app/admin/legiscast-audios/page.tsx");
     expect(central).toContain("<LegiscastAudiosAdmin lawContext=");
-    expect(legacy).toContain("<LegiscastAudiosAdmin />");
+    expect(read("app/admin/legiscast-audios/page.tsx")).toContain('redirect("/admin/leis")');
     expect(central).toContain("getAdminLawBySlug");
   });
 

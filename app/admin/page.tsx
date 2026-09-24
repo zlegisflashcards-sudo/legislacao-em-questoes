@@ -19,7 +19,7 @@ const panels = [
     href: "/admin/comercial",
     icon: "🧾",
     title: "Gestão comercial",
-    description: "Gerencie o catálogo interno, aquisições, liberações e a trilha de auditoria.",
+    description: "Gerencie produtos, aquisições, liberações e a trilha de auditoria.",
   },
   {
     href: "/admin/comunicacao",
@@ -27,13 +27,6 @@ const panels = [
     title: "Comunicação",
     description: "Revise avisos de atualização antes de entregá-los aos alunos.",
   },
-  {
-    href: "/admin/questoes",
-    icon: "✅",
-    title: "Legis Questões",
-    description: "Cadastre e gerencie as questões vinculadas às leis ativas da plataforma.",
-  },
-  { href: "/admin/legiscast-audios", icon: "🎧", title: "Áudios do LegisCast", description: "Envie e organize as faixas de áudio por legislação." },
   {
     href: "/admin/legisbot",
     icon: "🤖",

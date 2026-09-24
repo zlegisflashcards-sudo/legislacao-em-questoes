@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
-const legacy = read("components/admin/admin-questoes.tsx");
 const scopes = read("components/admin/admin-question-scopes.tsx");
 const anki = read("components/admin/admin-question-anki-tools.tsx");
 
@@ -18,11 +17,9 @@ describe("organização de Recortes e Anki na Central da Lei", () => {
     expect(read(ankiPage)).not.toContain("LawSearchSelect");
   });
 
-  it("faz Admin antigo e Central consumirem os mesmos componentes", () => {
-    expect(legacy).toContain('from "@/components/admin/admin-question-scopes"');
-    expect(legacy).toContain('from "@/components/admin/admin-question-anki-tools"');
-    expect(legacy).toContain("<LawScopesPanel lawSlug={law.slug}");
-    expect(legacy).toContain("<AdminQuestionAnkiTools lawSlug={law.slug}");
+  it("concentra Recortes e Anki na Central usando os componentes compartilhados", () => {
+    expect(existsSync("components/admin/admin-question-scopes.tsx")).toBe(true);
+    expect(existsSync("components/admin/admin-question-anki-tools.tsx")).toBe(true);
   });
 
   it("preserva o fluxo e as regras existentes de Recortes", () => {

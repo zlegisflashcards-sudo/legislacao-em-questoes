@@ -84,18 +84,13 @@ describe("Questões na Central da Lei", () => {
     expect(central).toContain("law_slug: law.slug");
   });
 
-  it("reutiliza o editor completo no Admin antigo e na Central", () => {
-    expect(read("components/admin/admin-questoes.tsx")).toContain("<AdminQuestionEditor");
+  it("reutiliza o editor completo na Central", () => {
     expect(central).toContain("<AdminQuestionEditor");
     for (const field of ["pergunta", "resposta", "justificativa", "assunto", "legislacao", "artigo", "ordem", "structure_id", "titulo", "total_artigos", "capitulo", "secao", "subsecao"]) expect(editor).toContain(field);
     expect(editor).toContain("<QuestionRichEditor");
   });
 
-  it("mantém o Admin antigo, seu seletor e os fluxos Anki/Recortes", () => {
-    const legacy = read("components/admin/admin-questoes.tsx");
-    expect(legacy).toContain("<LawSearchSelect");
-    expect(legacy).toContain("<LawScopesPanel");
-    expect(legacy).toContain("<AdminQuestionAnkiTools");
+  it("mantém os fluxos Anki e Recortes pelos componentes da Central", () => {
     const anki = read("components/admin/admin-question-anki-tools.tsx");
     expect(anki).toContain("<AnkiImport");
     expect(anki).toContain("<ApkgImport");

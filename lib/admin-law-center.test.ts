@@ -49,11 +49,11 @@ describe("Central administrativa por lei", () => {
     expect(read("components/admin/legiscast-audios-admin.tsx")).toContain("primeiro áudio da lei");
   });
 
-  it("reutiliza os mesmos campos e a mesma API comercial no painel antigo e no novo", () => {
-    const oldPanel = read("components/admin/commercial-admin.tsx");
+  it("mantém os campos e a API comercial de leis concentrados na Central", () => {
+    const commercial = read("components/admin/commercial-admin.tsx");
     const newPanel = read("components/admin/law-data-admin.tsx");
     const fields = read("components/admin/law-data-fields.tsx");
-    expect(oldPanel).toContain("<LawDataFields law={editing} />");
+    expect(commercial).not.toContain("LawDataFields");
     expect(newPanel).toContain("<LawDataFields law={law} showFreeAccess={Boolean(law)} />");
     expect(newPanel).toContain('fetch("/api/admin/comercial/leis"');
     for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "ativo", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
@@ -86,15 +86,13 @@ describe("Central administrativa por lei", () => {
     expect(form).toContain('action: law ? "atualizar" : "criar"');
     expect(form).toContain('fetch("/api/admin/comercial/leis"');
     expect(form).toContain('router.replace(`/admin/leis/${encodeURIComponent(nextSlug)}`)');
-    expect(read("components/admin/commercial-admin.tsx")).toContain("<LawDataFields law={editing} />");
+    expect(read("components/admin/commercial-admin.tsx")).not.toContain("LawDataFields");
   });
 
   it("compartilha o editor estrutural e permite pdf_page sem reparentear ou reordenar", () => {
-    const oldPanel = read("components/admin/admin-questoes.tsx");
     const central = read("components/admin/law-structure-page-client.tsx");
     const editor = read("components/admin/law-structure-admin.tsx");
     const server = read("lib/admin-questoes-server.ts");
-    expect(oldPanel).toContain("<LawStructureAdmin");
     expect(central).toContain("<LawStructureAdmin");
     expect(editor).toContain("A estrutura pertence à lei e pode ser cadastrada antes de questões ou arquivos Anki.");
     expect(editor).toContain("Página PDF");
