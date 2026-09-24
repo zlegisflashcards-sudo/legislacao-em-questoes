@@ -11,9 +11,16 @@ describe("central de revisão da página da lei", () => {
     expect(lawPage).toContain('title: "Caderno de erros"');
     expect(lawPage).toContain('title: "Caderno de favoritos"');
     expect(lawPage).toContain('title: "Caderno de pendências"');
-    expect(lawPage).toContain('action: "Revisar erros"');
-    expect(lawPage).toContain('action: "Ver favoritos"');
-    expect(lawPage).toContain('action: "Estudar pendentes"');
+    expect(lawPage).toContain('const router = useRouter()');
+    expect(lawPage).toContain('const available = review.count > 0;');
+    expect(lawPage).toContain('type="button" disabled={!available} onClick={() => router.push(href)}');
+    expect(lawPage).toContain('aria-describedby={statusId}');
+    expect(lawPage).toContain('Sem questões disponíveis.');
+    expect(lawPage).toContain('rounded-full px-2 py-0.5 text-xs font-black');
+    expect(lawPage).not.toContain('Link href={`/questoes/${encodeURIComponent(slug)}/estudar?livre=1&revisao=${review.kind}`}');
+    expect(lawPage).not.toContain('Revisar erros');
+    expect(lawPage).not.toContain('Ver favoritos');
+    expect(lawPage).not.toContain('Estudar pendentes');
     expect(lawPage.indexOf('<ReviewHub slug={slug} counts={reviewCounts} />')).toBeLessThan(lawPage.indexOf('Resetar Estudo Ativo da Lei'));
   });
 
