@@ -284,6 +284,7 @@ async function rpc(name: string, params: JsonObject) {
       throw new CommercialHttpError(500, "Não foi possível mesclar. Consulte o log administrativo com os UUIDs informados.");
     }
     if (code === "23505") throw new CommercialHttpError(409, "Já existe um registro com esses dados.");
+    if (code === "42883" || code === "PGRST202") throw new CommercialHttpError(503, "A rotina administrativa necessária não está disponível. Nenhum registro foi criado.");
     if (["22023", "23503", "23514", "P0002"].includes(code)) {
       throw new CommercialHttpError(422, "Os dados informados não são válidos para esta operação.");
     }
@@ -545,11 +546,12 @@ function allowedUpdate(data: unknown, allowed: readonly string[]): JsonObject {
 }
 
 function validateLawData(raw: unknown, update = false) {
-  const allowed = [
-    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "acesso_gratuito", "ordem", "thumbnail_url",
+  const commonAllowed = [
+    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "ordem", "thumbnail_url",
     "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa",
     "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao",
   ] as const;
+  const allowed = update ? [...commonAllowed, "acesso_gratuito"] : commonAllowed;
   const data = update ? allowedUpdate(raw, allowed) : asObject(raw);
   rejectUnknownKeys(data, allowed);
   const result: JsonObject = {};
@@ -562,7 +564,7 @@ function validateLawData(raw: unknown, update = false) {
     }
   }
   if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
-  if (!update || "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito ?? false, "Acesso gratuito");
+  if (update && "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito, "Acesso gratuito");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
   if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = optionalString(data.norma_originaria_referencia, "Norma originária", 500) ?? null;
   if (!update || "norma_originaria_data" in data) result.norma_originaria_data = optionalIsoDate(data.norma_originaria_data, "Data da norma originária") ?? null;

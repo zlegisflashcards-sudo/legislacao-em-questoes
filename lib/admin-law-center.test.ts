@@ -70,7 +70,7 @@ describe("Central administrativa por lei", () => {
     expect(form).toContain("showFreeAccess={Boolean(law)}");
     expect(form).toContain('...(law ? { acesso_gratuito: raw.acesso_gratuito === "true" } : {})');
     expect(server).toContain('"acesso_gratuito"');
-    expect(server).toContain('booleanValue(data.acesso_gratuito ?? false, "Acesso gratuito")');
+    expect(server).toContain('if (update && "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito, "Acesso gratuito")');
     expect(freeMigration).toContain("create or replace function public.admin_atualizar_lei");
     expect(freeMigration).toContain("acesso_gratuito=case when p_dados?'acesso_gratuito'");
     expect(freeMigration).toContain("admin_comercial_validar_contexto");

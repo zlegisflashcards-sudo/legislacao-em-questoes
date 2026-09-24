@@ -94,6 +94,14 @@ describe("fronteira administrativa comercial", () => {
     expect(client).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 
+  it("não envia acesso gratuito para a RPC legada de criação e informa indisponibilidade de RPC", () => {
+    const validation = server.slice(server.indexOf("function validateLawData"), server.indexOf("function validateMaterialData"));
+    expect(validation).toContain('const allowed = update ? [...commonAllowed, "acesso_gratuito"] : commonAllowed;');
+    expect(validation).toContain('if (update && "acesso_gratuito" in data)');
+    expect(server).toContain('code === "42883" || code === "PGRST202"');
+    expect(server).toContain("A rotina administrativa necessária não está disponível. Nenhum registro foi criado.");
+  });
+
   it("expõe somente os oito recursos administrativos previstos", () => {
     for (const resource of ["leis", "materiais", "produtos", "aquisicoes", "liberacoes", "atualizacoes", "auditoria", "alunos"]) {
       expect(readFileSync(`app/api/admin/comercial/${resource}/route.ts`, "utf8")).toContain("handleCommercialGet");
