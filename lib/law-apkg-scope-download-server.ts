@@ -10,7 +10,10 @@ export async function downloadAuthorizedLawScopeApkg(request: Request, slug: str
   const context = await authorizeLawQuestionScope(request, slug, recorteId);
   const [questions, structure] = await Promise.all([resolveQuestionsForLawScope(context.lawId, recorteId), mainStructure(context.lawId)]);
   if (!questions.length) throw new LawStudyApiError(422, "Nenhum flashcard disponível para este conteúdo.");
-  const title = context.recorte ? `LegisFlashcards - ${context.title} - ${context.recorte.nome}` : `LegisFlashcards - ${context.title}`;
+  // O escopo apenas decide quais questões entram no arquivo. A raiz do deck
+  // permanece canônica para que lei completa, recortes e futuras seleções
+  // personalizadas usem a mesma hierarquia legislativa no Anki.
+  const title = context.title;
   const exported = await buildLawApkg({ slug, titulo: title }, questions, structure, { fileName: fileName(slug, recorteId) });
   const body = exported.bytes.buffer.slice(exported.bytes.byteOffset, exported.bytes.byteOffset + exported.bytes.byteLength) as ArrayBuffer;
   return new Response(body, { headers: { "Cache-Control": "private, no-store, max-age=0", "Content-Type": "application/vnd.anki", "Content-Disposition": `attachment; filename="${exported.filename}"`, "X-Content-Type-Options": "nosniff" } });
