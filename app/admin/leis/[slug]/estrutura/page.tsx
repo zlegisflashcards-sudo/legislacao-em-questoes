@@ -13,5 +13,5 @@ export default async function AdminLawStructurePage({ params }: { params: Promis
     <Link href={`/admin/leis/${encodeURIComponent(law.slug)}/dados`}>Abrir Dados da lei</Link>
   </article>;
   const nodes = await getAdminLawStructure(law.id);
-  return <div data-law-area="estrutura"><LawStructurePageClient lawSlug={law.slug} initialNodes={nodes as AdminLawStructureNode[]} /></div>;
+  return <div data-law-area="estrutura"><LawStructurePageClient lawSlug={law.slug} lawName={law.titulo} initialNodes={nodes as AdminLawStructureNode[]} /></div>;
 }

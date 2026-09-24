@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareQuestionStructureNames, inferQuestionStructureType, parseQuestionStructureTxt, planQuestionDeckStructure, validQuestionStructureParent } from "./questoes-structure";
+import { allAnkiPathsForQuestionStructure, ankiPathForQuestionStructure, compareQuestionStructureNames, inferQuestionStructureType, parseQuestionStructureTxt, planQuestionDeckStructure, validQuestionStructureParent } from "./questoes-structure";
 
 describe("estrutura dos decks de questões", () => {
   it("infere todos os níveis legislativos sem alterar a numeração oficial no nome", () => {
@@ -65,6 +65,21 @@ describe("estrutura dos decks de questões", () => {
     const plan = planQuestionDeckStructure(parsed.rows, existing);
     expect(plan.nodes.map((node) => node.existingId)).toEqual([1, 2, 3]);
     expect(plan.nodes).toHaveLength(3);
+  });
+
+  it("gera caminhos Anki com o deck da lei, ancestrais e nomes cadastrados", () => {
+    const nodes = [{ id: 1, parent_id: null, tipo: "parte" as const, nome: "Parte Geral", ordem: 2 }, { id: 2, parent_id: 1, tipo: "titulo" as const, nome: "Título I — Aplicação", ordem: 1 }, { id: 3, parent_id: null, tipo: "titulo" as const, nome: "Título II", ordem: 1 }];
+    expect(ankiPathForQuestionStructure(2, "Código Penal", nodes)).toBe("Código Penal::Parte Geral::Título I — Aplicação");
+    expect(allAnkiPathsForQuestionStructure("Código Penal", nodes)).toEqual(["Código Penal::Título II", "Código Penal::Parte Geral", "Código Penal::Parte Geral::Título I — Aplicação"]);
+  });
+
+  it("só sugere mapeamento manual para nome semelhante no mesmo pai e tipo", () => {
+    const existing = [{ id: 1, parent_id: null, tipo: "titulo" as const, nome: "Título I" }, { id: 2, parent_id: 1, tipo: "capitulo" as const, nome: "Capítulo I" }, { id: 3, parent_id: null, tipo: "titulo" as const, nome: "Título II" }, { id: 4, parent_id: 3, tipo: "capitulo" as const, nome: "Capítulo I" }];
+    const plan = planQuestionDeckStructure([{ line: 1, deck: ["Lei X", "Título I", "Capítulo 01"] }], existing);
+    expect(plan.nodes.at(-1)).toMatchObject({ existingId: null, requiresMapping: true, candidates: [{ id: 2, nome: "Capítulo I" }] });
+    const mapped = planQuestionDeckStructure([{ line: 1, deck: ["Lei X", "Título I", "Capítulo 01"] }], existing, { [plan.nodes.at(-1)!.key]: 2 });
+    expect(mapped.nodes.at(-1)).toMatchObject({ existingId: 2, mappingError: null });
+    expect(planQuestionDeckStructure([{ line: 1, deck: ["Lei X", "Título I", "Capítulo 01"] }], existing, { [plan.nodes.at(-1)!.key]: 4 }).nodes.at(-1)?.mappingError).toContain("não pertence");
   });
 
   it("rejeita nível vazio sem alterar o restante do TXT", () => {

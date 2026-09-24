@@ -89,7 +89,7 @@ describe("Central administrativa por lei", () => {
     expect(read("components/admin/commercial-admin.tsx")).not.toContain("LawDataFields");
   });
 
-  it("compartilha o editor estrutural e permite pdf_page sem reparentear ou reordenar", () => {
+  it("compartilha o editor estrutural, permite pdf_page e reordena apenas irmãos", () => {
     const central = read("components/admin/law-structure-page-client.tsx");
     const editor = read("components/admin/law-structure-admin.tsx");
     const server = read("lib/admin-questoes-server.ts");
@@ -99,6 +99,11 @@ describe("Central administrativa por lei", () => {
     expect(server).toContain("pdf_page");
     const update = server.slice(server.indexOf("export async function updateStructureNode"), server.indexOf("export async function deactivateStructureNode"));
     expect(update).not.toContain("parent_id:");
-    expect(update).not.toContain("ordem:");
+    expect(server).toContain('export async function reorderStructureNodes');
+    expect(server).toContain('"A reordenação só é permitida entre estruturas irmãs."');
+    expect(server).toContain('"A ordem deve conter exatamente todas as estruturas irmãs."');
+    expect(editor).toContain('action: "reordenar_estruturas"');
+    expect(editor).toContain("pendingSiblingOrders");
+    expect(editor).toContain("A posição anterior foi restaurada.");
   });
 });

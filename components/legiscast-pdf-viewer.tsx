@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { legiscastPdfPositionKey, normalizeLegiscastPdfPage } from "@/lib/legiscast-pdf-position";
 import { authorizedLegiscastPdfPath, LegiscastPdfError, pdfFailureForHttpStatus, validateLegiscastPdfBytes } from "@/lib/legiscast-pdf";
 import { supabase } from "@/lib/supabase";
+import pdfjsWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 
 type OutlineItem = { title: string; dest: unknown; items?: OutlineItem[] };
 type PdfViewport = { width: number; height: number; scale?: number };
@@ -64,7 +65,7 @@ export function LegiscastPdfViewer({ slug, materialId, recorteId, title, targetP
   useEffect(() => { let active = true; let objectUrl = ""; const render = async () => {
     setStatus("loading"); setOutline([]); setTotal(0); documentRef.current = null;
     try {
-      objectUrl = URL.createObjectURL(await fetchAuthorizedLegiscastPdf(slug, materialId, recorteId)); objectUrlRef.current = objectUrl; const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs") as unknown as PdfJs; pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString(); let pdf: PdfDocument; try { pdf = await pdfjs.getDocument(objectUrl).promise; } catch (error) { throw new LegiscastPdfError("pdfjs_load_failed", "O PDF não pôde ser aberto.", { message: error instanceof Error ? error.message : "unknown" }); }
+      objectUrl = URL.createObjectURL(await fetchAuthorizedLegiscastPdf(slug, materialId, recorteId)); objectUrlRef.current = objectUrl; const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs") as unknown as PdfJs; pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl; let pdf: PdfDocument; try { pdf = await pdfjs.getDocument(objectUrl).promise; } catch (error) { throw new LegiscastPdfError("pdfjs_load_failed", "O PDF não pôde ser aberto.", { message: error instanceof Error ? error.message : "unknown" }); }
       if (!active) return; documentRef.current = pdf; setTotal(pdf.numPages); setOutline((await pdf.getOutline()) ?? []);
       const holder = pagesRef.current; const viewport = viewportRef.current; if (!holder || !viewport) throw new Error("Visor não disponível."); holder.replaceChildren();
       const desiredWidth = Math.max(280, viewport.clientWidth - 24);

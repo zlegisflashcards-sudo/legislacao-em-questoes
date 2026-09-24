@@ -79,11 +79,11 @@ describe("administração de Legis Questões", () => {
   it("oferece o fluxo visual de análise e confirmação do TXT sem alterar o servidor", () => {
     const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     expect(panel).toContain('type="file" accept=".txt,text/plain"');
-    expect(panel).toContain("await file.text()");
+    expect(panel).toContain("file.text().then");
     expect(panel).toContain('action: "previsualizar_anki"');
     expect(panel).toContain('action: "importar_anki"');
     expect(panel).toContain("Existem problemas que precisam ser corrigidos antes da importação.");
-    expect(panel).toContain("Importar outro TXT");
+    expect(panel).toContain("Destinos estruturais");
     expect(panel).toContain("await onImported?.()");
     expect(panel).toContain("Duplicadas:");
   });
@@ -113,8 +113,8 @@ describe("administração de Legis Questões", () => {
     const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
     const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     expect(server).toContain("async function persist(");
-    expect(server).toContain("return persist(slug(body.law_slug), parsed.rows, data)");
-    expect(server).toContain("return persist(slug(body.lawSlug), parsed.rows, data, parsed.unrecognizedModels");
+    expect(server).toContain("return persist(slug(body.law_slug), parsed.rows, data, mappings)");
+    expect(server).toContain("return persist(slug(body.lawSlug), parsed.rows, data, mappings, parsed.unrecognizedModels");
     expect(route).toContain('action !== "importar_apkg"');
     expect(panel).toContain('action", "importar_apkg"');
     expect(panel).toContain("notas ignoradas por modelo");
@@ -145,7 +145,7 @@ describe("administração de Legis Questões", () => {
 
   it("renderiza detalhes de erros impeditivos nas prévias TXT e APKG", () => {
     const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
-    expect(panel).toContain('<ImportErrors errors={preview.errors ?? []} expectedCount={preview.summary.erros} />');
+    expect(panel).toContain('<ImportErrors errors={preview.errors} expectedCount={preview.summary.erros} />');
     expect(panel).toContain("A prévia informou {expectedCount} erro(s) impeditivo(s)");
     expect(panel).toContain("Erros impeditivos");
   });
@@ -176,7 +176,7 @@ describe("administração de Legis Questões", () => {
   it("bloqueia TXT de outra legislação antes de planejar ou persistir questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const preview = server.slice(server.indexOf("async function preview("), server.indexOf("export async function previewAnkiImport"));
-    expect(preview.indexOf("validateImportSlug(parsed.rows, current.slug)")).toBeLessThan(preview.indexOf("planQuestionDeckStructure(rows, nodes)"));
+    expect(preview.indexOf("validateImportSlug(parsed.rows, current.slug)")).toBeLessThan(preview.indexOf("planQuestionDeckStructure(rows, nodes, mappings)"));
   });
 
   it("aplica o slug efetivo no servidor tanto na prévia quanto na importação", () => {
@@ -190,9 +190,9 @@ describe("administração de Legis Questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const panel = readFileSync("components/admin/admin-question-anki-tools.tsx", "utf8");
     const decks = readFileSync("components/legis-questoes-client.tsx", "utf8");
-    expect(server).toContain("planQuestionDeckStructure(rows, nodes)");
+    expect(server).toContain("planQuestionDeckStructure(rows, nodes, mappings)");
     expect(server).toContain('db().from("law_structure").insert');
-    expect(panel).toContain("Estrutura:");
+    expect(panel).toContain("Destinos estruturais");
     expect(panel).toContain("será criada");
     expect(decks).toContain("compareQuestionStructureNames");
   });
@@ -216,8 +216,8 @@ describe("administração de Legis Questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     const ankiPreview = server.slice(server.indexOf("async function preview("), server.indexOf("export async function previewAnkiImport"));
     const ankiPersist = server.slice(server.indexOf("async function persist("), server.indexOf("export async function importAnkiTxt"));
-    expect(ankiPreview).toContain("planQuestionDeckStructure(rows, nodes)");
-    expect(ankiPersist).toContain("planQuestionDeckStructure(newRows, before)");
+    expect(ankiPreview).toContain("planQuestionDeckStructure(rows, nodes, mappings)");
+    expect(ankiPersist).toContain("planQuestionDeckStructure(newRows, before, mappings)");
   });
 
   it("remove estrutura com suas questões e oferece confirmação administrativa", () => {

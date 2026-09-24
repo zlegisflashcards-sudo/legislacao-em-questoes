@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { LawStructureAdmin, type AdminLawStructureNode } from "@/components/admin/law-structure-admin";
 
-export function LawStructurePageClient({ lawSlug, initialNodes }: { lawSlug: string; initialNodes: AdminLawStructureNode[] }) {
+export function LawStructurePageClient({ lawSlug, lawName, initialNodes }: { lawSlug: string; lawName: string; initialNodes: AdminLawStructureNode[] }) {
   const [nodes, setNodes] = useState(initialNodes);
   async function reload() {
     const response = await fetch(`/api/admin/questoes?law_slug=${encodeURIComponent(lawSlug)}`, { cache: "no-store" });
@@ -11,5 +11,5 @@ export function LawStructurePageClient({ lawSlug, initialNodes }: { lawSlug: str
     if (!response.ok || !Array.isArray(body.structure)) throw new Error(body.error || "Não foi possível recarregar a estrutura.");
     setNodes(body.structure);
   }
-  return <LawStructureAdmin lawSlug={lawSlug} nodes={nodes} onReload={reload} />;
+  return <LawStructureAdmin lawSlug={lawSlug} lawName={lawName} nodes={nodes} onReload={reload} />;
 }

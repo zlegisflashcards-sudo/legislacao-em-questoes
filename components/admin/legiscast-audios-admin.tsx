@@ -541,7 +541,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
     }
   }
   async function audioOperation(
-    operation: "update" | "preview" | "delete",
+    operation: "update" | "preview" | "download" | "delete",
     audioId: string,
     payload: Record<string, unknown> = {},
   ) {
@@ -562,6 +562,16 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
         if (!url) throw new Error("Não foi possível gerar a prévia do áudio.");
         setPreviewAudioId(audioId);
         setPreviewUrl(url);
+        return;
+      }
+      if (operation === "download") {
+        const url = typeof body.url === "string" ? body.url : "";
+        if (!url) throw new Error("Não foi possível preparar o download do áudio.");
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "";
+        link.click();
+        setMessage("Download iniciado.");
         return;
       }
       setPreviewAudioId(null);
@@ -846,6 +856,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <button
                             type="button"
                             className="admin-button"
+                            disabled={actionId === audio.id}
+                            onClick={() => void audioOperation("download", audio.id)}
+                          >
+                            Baixar
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-button"
                             onClick={() => setEditingAudio(audio)}
                           >
                             Editar
@@ -958,6 +976,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           }
                         >
                           Ouvir
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-button"
+                          disabled={actionId === audio.id}
+                          onClick={() => void audioOperation("download", audio.id)}
+                        >
+                          Baixar
                         </button>
                         <button
                           type="button"

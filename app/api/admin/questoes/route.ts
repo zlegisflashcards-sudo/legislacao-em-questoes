@@ -25,6 +25,7 @@ import {
   importStructureTxt,
   updateAdminQuestion,
   updateQuickAdminQuestion,
+  reorderStructureNodes,
   updateStructureNode,
   saveLawQuestionScope,
   previewStructureTxtImport,
@@ -67,7 +68,13 @@ export async function POST(request: Request) {
       if (action !== "previsualizar_apkg" && action !== "importar_apkg") throw new AdminQuestoesError(400, "Ação de questões inválida.");
       const file = form.get("file");
       if (!(file instanceof File)) throw new AdminQuestoesError(400, "Arquivo APKG ausente.");
-      const data = action === "previsualizar_apkg" ? await previewApkgImport(form.get("law_slug"), file) : await importApkg({ lawSlug: form.get("law_slug"), file });
+      const mappingValue = form.get("structure_mappings");
+      let structureMappings: unknown = undefined;
+      if (typeof mappingValue === "string" && mappingValue) {
+        try { structureMappings = JSON.parse(mappingValue); }
+        catch { throw new AdminQuestoesError(400, "Mapeamento estrutural inválido."); }
+      }
+      const data = action === "previsualizar_apkg" ? await previewApkgImport(form.get("law_slug"), file, structureMappings as Record<string, number | "new">) : await importApkg({ lawSlug: form.get("law_slug"), file, structureMappings });
       return NextResponse.json(data, { headers });
     }
     const body = await request.json() as Record<string, unknown>;
@@ -84,6 +91,7 @@ export async function POST(request: Request) {
     else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);
     else if (body.action === "atualizar_estrutura") data = await updateStructureNode(body);
+    else if (body.action === "reordenar_estruturas") data = await reorderStructureNodes(body);
     else if (body.action === "desativar_estrutura") data = await deactivateStructureNode(body);
     else if (body.action === "excluir_estrutura") data = await deleteStructureNode(body);
     else if (body.action === "resumo_exclusao_estrutura") data = await structureDeletionSummary(body);
