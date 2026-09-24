@@ -37,8 +37,25 @@ describe("Central administrativa por lei", () => {
     expect(shell).toContain("law-center-nav-mobile");
     expect(shell).toContain("Trocar lei");
     expect(overview).toContain("overview.structure");
-    expect(overview).toContain("law-center-operation-card");
+    expect(overview).toContain("LawOverviewCards");
+    expect(read("components/admin/law-overview-cards.tsx")).toContain("law-center-operation-card");
     expect(overview).not.toContain("Math.random");
+  });
+
+  it("ordena os cards e mantém checklist administrativo isolado por lei", () => {
+    const overview = read("app/admin/leis/[slug]/page.tsx");
+    const cards = read("components/admin/law-overview-cards.tsx");
+    const checks = read("supabase/migrations/20260924122000_add_admin_law_overview_checks.sql");
+    expect(overview.indexOf('id: "estrutura"')).toBeLessThan(overview.indexOf('id: "materiais"'));
+    expect(overview.indexOf('id: "materiais"')).toBeLessThan(overview.indexOf('id: "legiscast"'));
+    expect(overview.indexOf('id: "legiscast"')).toBeLessThan(overview.indexOf('id: "anki"'));
+    expect(overview.indexOf('id: "anki"')).toBeLessThan(overview.indexOf('id: "questoes"'));
+    expect(overview.indexOf('id: "questoes"')).toBeLessThan(overview.indexOf('id: "recortes"'));
+    expect(overview).toContain("law-center-editorial-warning");
+    expect(cards).toContain("aria-pressed");
+    expect(checks).toContain("admin_law_overview_checks");
+    expect(checks).toContain("row level security");
+    expect(checks).toContain("to service_role");
   });
 
   it("oferece próximos passos nos vazios sem criar fluxos paralelos", () => {
@@ -87,6 +104,32 @@ describe("Central administrativa por lei", () => {
     expect(form).toContain('fetch("/api/admin/comercial/leis"');
     expect(form).toContain('router.replace(`/admin/leis/${encodeURIComponent(nextSlug)}`)');
     expect(read("components/admin/commercial-admin.tsx")).not.toContain("LawDataFields");
+  });
+
+  it("oferece exclusão integral da lei com prévia, confirmação e RPC restrita", () => {
+    const form = read("components/admin/law-data-admin.tsx");
+    const server = read("lib/commercial-admin-server.ts");
+    const deletion = read("supabase/migrations/20260924120000_add_admin_full_law_deletion.sql");
+    expect(form).toContain("Excluir lei definitivamente");
+    expect(form).toContain('action: "resumo_exclusao"');
+    expect(form).toContain('action: "excluir_definitivamente"');
+    expect(form).toContain("Digite <strong>EXCLUIR</strong>");
+    expect(server).toContain('rpc("admin_delete_law_definitively"');
+    expect(server).toContain("20260924120000_add_admin_full_law_deletion.sql");
+    expect(server).toContain("Identificador da operação");
+    expect(server).toContain("operationId");
+    for (const item of ["produto_leis", "liberacoes_leis", "recortes_leis", "materiais_leis", "historico_atualizacoes_leis", "editais_personalizados_leis", "ligas_leis"]) expect(deletion).toContain(`delete from public.${item}`);
+    expect(deletion).toContain("pg_advisory_xact_lock");
+    expect(deletion).toContain("set search_path = ''");
+    expect(deletion).toContain("to service_role");
+  });
+
+  it("mantém a RPC de exclusão compatível antes e depois do campo MP3 opcional", () => {
+    const correction = read("supabase/migrations/20260924121000_fix_admin_law_deletion_mp3_compatibility.sql");
+    expect(correction).toContain("pg_catalog.to_jsonb(j) ->> 'mp3_path'");
+    expect(correction).not.toContain("select j.mp3_path");
+    expect(correction).toContain("set search_path = ''");
+    expect(correction).toContain("to service_role");
   });
 
   it("compartilha o editor estrutural, permite pdf_page e reordena apenas irmãos", () => {

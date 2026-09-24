@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import type { User } from "@supabase/supabase-js";
 import { obterAdministrador } from "@/lib/admin-auth";
@@ -250,18 +250,21 @@ async function rpc(name: string, params: JsonObject) {
     const code = String(result.error.code ?? "");
     const technical = String(result.error.message ?? "Erro de banco sem mensagem.").replace(/[\r\n]+/g, " ").slice(0, 500);
     const isStudentDeletion = name === "admin_excluir_aluno_definitivamente" || name === "admin_resumo_exclusao_aluno";
-    if (isStudentDeletion) {
-      console.error("Falha na exclusão administrativa de aluno", {
+    const isLawDeletion = name === "admin_delete_law_definitively";
+    if (isStudentDeletion || isLawDeletion) {
+      const operationId = isLawDeletion ? randomUUID() : null;
+      console.error(isLawDeletion ? "Falha na exclusão administrativa de lei" : "Falha na exclusão administrativa de aluno", {
         rpc: name,
-        alunoId: params.p_aluno_id ?? null,
-        etapa: name === "admin_resumo_exclusao_aluno" ? "preflight" : "transacao_banco",
+        alvoId: isLawDeletion ? params.p_lei_id ?? null : params.p_aluno_id ?? null,
+        etapa: name === "admin_resumo_exclusao_aluno" || (isLawDeletion && params.p_execute === false) ? "preflight" : "transacao_banco",
+        operationId,
         code,
         message: technical,
         details: result.error.details ?? null,
         hint: result.error.hint ?? null,
       });
       if (code === "42883" || code === "PGRST202") {
-        throw new CommercialHttpError(503, "Não foi possível excluir: a rotina de banco necessária ainda não está disponível.");
+        throw new CommercialHttpError(503, isLawDeletion ? "A exclusão de lei requer a migration 20260924120000_add_admin_full_law_deletion.sql no Supabase antes de ser usada." : "Não foi possível excluir: a rotina de banco necessária ainda não está disponível.");
       }
       if (code === "23503") {
         throw new CommercialHttpError(422, `Não foi possível excluir: existe vínculo pendente ou referência não suportada. ${technical}`);
@@ -270,7 +273,9 @@ async function rpc(name: string, params: JsonObject) {
         throw new CommercialHttpError(422, `Não foi possível excluir: ${technical}`);
       }
       if (code === "42501") throw new CommercialHttpError(403, "Não foi possível excluir: operação administrativa não autorizada.");
-      throw new CommercialHttpError(500, "Não foi possível excluir: a transação no banco falhou. Consulte o log administrativo pelo UUID do aluno.");
+      throw new CommercialHttpError(500, isLawDeletion
+        ? `Não foi possível excluir a lei. Identificador da operação: ${operationId}.`
+        : "Não foi possível excluir: a transação no banco falhou. Consulte o log administrativo pelo UUID do aluno.");
     }
     if (name === "admin_mesclar_alunos") {
       console.error("Falha na mesclagem administrativa de alunos", {
@@ -1254,6 +1259,8 @@ export async function mutateCommercialResource(resource: CommercialResource, req
       return rpc("admin_criar_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
     if (action === "atualizar") { const lawId=positiveIntegerId(body.id,"Lei"); const data=validateLawData(body.data,true); return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: lawId, p_dados: data }); }
+    if (action === "resumo_exclusao") { const lawId=positiveIntegerId(body.id,"Lei"); return rpc("admin_delete_law_definitively", { p_lei_id: lawId, p_actor_user_id: actor, p_confirmation: null, p_execute: false }); }
+    if (action === "excluir_definitivamente") { const lawId=positiveIntegerId(body.id,"Lei"); const data=asObject(body.data); if (data.confirmacao !== "EXCLUIR") throw new CommercialHttpError(400, "Digite EXCLUIR para confirmar a exclusão definitiva da lei."); return rpc("admin_delete_law_definitively", { p_lei_id: lawId, p_actor_user_id: actor, p_confirmation: "EXCLUIR", p_execute: true }); }
   }
 
   if (resource === "materiais") {

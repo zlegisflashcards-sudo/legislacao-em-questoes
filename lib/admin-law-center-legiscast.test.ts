@@ -62,6 +62,6 @@ describe("LegisCast na Central da Lei", () => {
 
   it("atualiza navegação e atalho da visão geral para a rota contextual", () => {
     expect(read("app/admin/leis/[slug]/layout.tsx")).toContain('href={`${base}/legiscast`}');
-    expect(read("app/admin/leis/[slug]/page.tsx")).toContain('href={`${base}/legiscast`}');
+    expect(read("app/admin/leis/[slug]/page.tsx")).toContain('href: `${base}/legiscast`');
   });
 });

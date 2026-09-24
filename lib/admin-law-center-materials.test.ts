@@ -63,6 +63,6 @@ describe("Materiais na Central da Lei", () => {
 
   it("atualiza a navegação e o atalho da visão geral", () => {
     expect(read("app/admin/leis/[slug]/layout.tsx")).toContain('href={`${base}/materiais`}');
-    expect(read("app/admin/leis/[slug]/page.tsx")).toContain('href={`${base}/materiais`}');
+    expect(read("app/admin/leis/[slug]/page.tsx")).toContain('href: `${base}/materiais`');
   });
 });

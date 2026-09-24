@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync("supabase/migrations/20260817110000_add_material_delivery_forecast.sql", "utf8");
-const admin = readFileSync("components/admin/commercial-admin.tsx", "utf8");
+const admin = readFileSync("components/admin/admin-materials.tsx", "utf8");
 const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 
 describe("previsão de entrega de materiais", () => {

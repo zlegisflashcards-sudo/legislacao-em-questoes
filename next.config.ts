@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // Permite validar uma compilação de produção sem disputar `.next` com o
   // servidor de desenvolvimento que pode estar aberto no painel local.
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  serverExternalPackages: ["sql.js", "ankipack"],
+  serverExternalPackages: ["sql.js", "ankipack", "pdfjs-dist"],
   // A rota gera o arquivo APKG sob demanda. Como sql.js permanece externo ao
   // bundle, o rastreador não descobre o WebAssembly carregado dinamicamente.
   // Incluí-lo explicitamente evita que a função serverless seja publicada sem
@@ -17,18 +17,9 @@ const nextConfig: NextConfig = {
       // arquivo físico é o que `require.resolve` encontra no runtime pnpm.
       "./node_modules/.pnpm/sql.js@1.14.2/node_modules/sql.js/dist/sql-wasm.wasm",
     ],
-  },
-  webpack(config) {
-    // O PDF.js disponibiliza o worker como módulo ESM. Tratá-lo como asset
-    // quando solicitado com `?url` gera uma URL estática, sem tentar executar
-    // o worker no bundle da página.
-    config.module.rules.push({
-      test: /pdf\.worker\.mjs$/,
-      resourceQuery: /url/,
-      type: "asset/resource",
-      generator: { filename: "static/media/[name].[contenthash][ext]" },
-    });
-    return config;
+    "/api/legiscast/pdf-worker": [
+      "./node_modules/.pnpm/pdfjs-dist@5.4.624/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ],
   },
 };
 

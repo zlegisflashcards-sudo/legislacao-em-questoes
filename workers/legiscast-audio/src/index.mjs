@@ -24,7 +24,7 @@ async function main() {
   const job = Array.isArray(claimed) ? claimed[0] : claimed;
   if (!job) return; // outro worker já assumiu, foi concluído ou esgotou tentativas
   const processingToken = job.processing_token;
-  const directory = join(tmpdir(), `legiscast-${job.id}`); const input = join(directory, "original"); const output = join(directory, "optimized.m4a");
+  const directory = join(tmpdir(), `legiscast-${job.id}`); const input = join(directory, "original"); const output = join(directory, "optimized.m4a"); const mp3Output = join(directory, "optimized.mp3"); const uploadedPaths = [];
   try {
     await mkdir(directory, { recursive: true });
     const [exists] = await originals.file(job.original_path).exists(); if (!exists) throw Object.assign(new Error("original_not_found"), { code: "original_not_found" });
@@ -40,11 +40,19 @@ async function main() {
     const outputProbe = await probe(output); if (outputProbe.codec !== "aac") throw new Error("invalid_final_codec"); const outputSize = (await stat(output)).size; if (outputSize < 1 || outputSize > FINAL_MAX_BYTES) throw Object.assign(new Error("final_size_limit"), { code: "final_size_limit" });
     const file = await readFile(output);
     const upload = await supabase.storage.from("legiscast-audio").upload(job.final_path, file, { contentType: "audio/mp4", upsert: true }); if (upload.error) throw Object.assign(upload.error, { code: "supabase_upload_failed" });
-    const published = await supabase.rpc("publish_legiscast_audio_job", { p_job_id: job.id, p_processing_token: processingToken, p_duration: outputProbe.duration, p_final_size: outputSize });
+    uploadedPaths.push(job.final_path);
+    let mp3Size = null;
+    if (job.mp3_path) {
+      await execFileAsync("ffmpeg", ["-y", "-i", input, "-vn", "-map", "0:a:0", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "64k", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", mp3Output], { maxBuffer: 1024 * 1024 });
+      mp3Size = (await stat(mp3Output)).size; if (mp3Size < 1 || mp3Size > FINAL_MAX_BYTES) throw Object.assign(new Error("mp3_size_limit"), { code: "mp3_size_limit" });
+      const mp3Upload = await supabase.storage.from("legiscast-audio").upload(job.mp3_path, await readFile(mp3Output), { contentType: "audio/mpeg", upsert: true }); if (mp3Upload.error) throw Object.assign(mp3Upload.error, { code: "mp3_upload_failed" });
+      uploadedPaths.push(job.mp3_path);
+    }
+    const published = await supabase.rpc("publish_legiscast_audio_job", { p_job_id: job.id, p_processing_token: processingToken, p_duration: outputProbe.duration, p_final_size: outputSize, p_mp3_path: job.mp3_path ?? null, p_mp3_size: mp3Size });
     if (published.error) throw Object.assign(published.error, { code: "publish_failed" });
-    if (!published.data) { await supabase.storage.from("legiscast-audio").remove([job.final_path]); return; }
+    if (!published.data) { await supabase.storage.from("legiscast-audio").remove(uploadedPaths); return; }
     await originals.file(job.original_path).delete({ ignoreNotFound: true });
-  } catch (error) { await fail(job.id, processingToken, error?.code || (String(error?.message).includes("ffmpeg") ? "ffmpeg_failed" : "processing_failed"), error); }
+  } catch (error) { if (uploadedPaths.length) await supabase.storage.from("legiscast-audio").remove(uploadedPaths); await fail(job.id, processingToken, error?.code || (String(error?.message).includes("ffmpeg") ? "ffmpeg_failed" : "processing_failed"), error); }
   finally { await rm(directory, { recursive: true, force: true }); }
 }
 

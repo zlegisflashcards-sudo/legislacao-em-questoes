@@ -52,7 +52,7 @@ describe("organização de Recortes e Anki na Central da Lei", () => {
     const overview = read("app/admin/leis/[slug]/page.tsx");
     expect(layout).toContain('href={`${base}/recortes`}');
     expect(layout).toContain('href={`${base}/anki`}');
-    expect(overview).toContain('href={`${base}/recortes`}');
-    expect(overview).toContain('href={`${base}/anki`}');
+    expect(overview).toContain('href: `${base}/recortes`');
+    expect(overview).toContain('href: `${base}/anki`');
   });
 });

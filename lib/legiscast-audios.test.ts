@@ -18,6 +18,7 @@ const lawLegiscastPage = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx
 const lawLegiscastClient = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
 const pdfViewer = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
 const jobsMigration = readFileSync("supabase/migrations/20260904140000_create_legiscast_audio_jobs.sql", "utf8");
+const mp3Migration = readFileSync("supabase/migrations/20260924110000_add_legiscast_mp3_admin_download.sql", "utf8");
 const worker = readFileSync("workers/legiscast-audio/src/index.mjs", "utf8");
 
 describe("LegisCast em áudio", () => {
@@ -109,8 +110,10 @@ describe("LegisCast em áudio", () => {
     expect(isAcceptedLegiscastOriginal("voz.m4a", "audio/x-m4a")).toBe(true);
     expect(isAcceptedLegiscastOriginal("voz.wav", "audio/wav")).toBe(true);
     expect(isAcceptedLegiscastOriginal("voz.wav", "audio/mp4")).toBe(false);
+    expect(isAcceptedLegiscastOriginal("aula.mp4", "video/mp4")).toBe(true);
+    expect(isAcceptedLegiscastOriginal("aula.mp4", "video/quicktime")).toBe(false);
     for (const expected of ["authorizeAdminLegiscastOriginal", "confirmAdminLegiscastOriginal", "operationToken", "getLegiscastOriginalMetadata", "runLegiscastCloudRunJob"]) expect(admin).toContain(expected);
-    for (const expected of ["operation: \"authorize-original\"", "operation: \"confirm-original\"", "uploadUrl", "method: \"PUT\""]) expect(adminClient).toContain(expected);
+    for (const expected of ["operation: \"authorize-original\"", "operation: \"confirm-original\"", "uploadUrl", "method: \"PUT\"", "video/mp4", "Baixar áudio", "Baixar MP3", "download-mp3"]) expect(adminClient).toContain(expected);
     expect(adminRoute).not.toContain("formData()");
   });
 
@@ -120,6 +123,12 @@ describe("LegisCast em áudio", () => {
     expect(jobsMigration).toContain("status = 'pendente'");
     for (const expected of ["ffprobe", "-ac", "-c:a", "aac", "-b:a", "64k", "loudnorm", "+faststart", "FINAL_MAX_BYTES", "publish_legiscast_audio_job", "processingToken"]) expect(worker).toContain(expected);
     expect(worker).not.toContain("process.argv[3]");
+  });
+
+  it("mantém downloads privados administrativos e gera MP3 apenas no worker", () => {
+    for (const expected of ["downloadAdminLegiscastAudio", "downloadAdminLegiscastMp3", "createSignedUrl", "downloadFileName", "requireAdmin", "mp3_path"]) expect(admin).toContain(expected);
+    for (const expected of ["libmp3lame", "audio/mpeg", "p_mp3_path", "uploadedPaths", "-map", "0:a:0"]) expect(worker).toContain(expected);
+    for (const expected of ["add column if not exists mp3_path", "legiscast_audio_jobs_mp3_fields_check", "set search_path = ''", "revoke all on function", "to service_role"]) expect(mp3Migration).toContain(expected);
   });
 
   it("persiste a página do PDF por lei e recorte somente no LegisCast", () => {

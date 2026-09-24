@@ -36,6 +36,7 @@ type Audio = {
   duracao_segundos?: number | null;
   ordem: number;
   ativo: boolean;
+  mp3_available?: boolean;
   final_size_bytes?: number | null;
   updated_at?: string | null;
   leis?: { titulo?: string } | null;
@@ -44,11 +45,12 @@ type Job = {
   id: string;
   structure_id: number | null;
   titulo: string | null;
-  status: "pendente" | "processando" | "concluido" | "erro";
+  status: "pendente" | "processando" | "concluido" | "erro" | "cancelado";
   statusLabel: string;
   original_size_bytes: number;
   final_size_bytes?: number | null;
   duracao_segundos?: number | null;
+  erro_mensagem?: string | null;
   tentativas: number;
   leis?: { titulo?: string } | null;
 };
@@ -413,9 +415,9 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
     try {
       if (!uploadLawId) throw new Error("Selecione uma lei.");
       if (!(file instanceof File) || !file.size)
-        throw new Error("Selecione um arquivo MP3, M4A ou WAV.");
+        throw new Error("Selecione um arquivo MP3, M4A, WAV ou MP4 com faixa de áudio.");
       if (!isAcceptedLegiscastOriginal(file.name, file.type))
-        throw new Error("Aceitamos somente arquivos MP3, M4A ou WAV.");
+        throw new Error("Aceitamos somente arquivos MP3, M4A, WAV ou MP4.");
       if (file.size > LEGISCAST_ORIGINAL_MAX_BYTES)
         throw new Error(
           `O original possui ${formatLegiscastAudioSize(file.size)} e ultrapassa o limite de 500 MB.`,
@@ -541,7 +543,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
     }
   }
   async function audioOperation(
-    operation: "update" | "preview" | "download" | "delete",
+    operation: "update" | "preview" | "download" | "download-mp3" | "delete",
     audioId: string,
     payload: Record<string, unknown> = {},
   ) {
@@ -564,14 +566,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
         setPreviewUrl(url);
         return;
       }
-      if (operation === "download") {
+      if (operation === "download" || operation === "download-mp3") {
         const url = typeof body.url === "string" ? body.url : "";
         if (!url) throw new Error("Não foi possível preparar o download do áudio.");
         const link = document.createElement("a");
         link.href = url;
         link.download = "";
         link.click();
-        setMessage("Download iniciado.");
+        setMessage(operation === "download-mp3" ? "Download MP3 iniciado." : "Download do áudio iniciado.");
         return;
       }
       setPreviewAudioId(null);
@@ -657,8 +659,9 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
     <section className="commercial-card">
       <h2>Áudios do LegisCast</h2>
       <p>
-        Envie o original em MP3, M4A ou WAV (até 500 MB). O sistema converte
-        para voz em M4A otimizado antes de publicar.
+        Envie MP3, M4A, WAV ou MP4 com faixa de áudio (até 500 MB). O envio é
+        direto ao armazenamento temporário; o processamento gera M4A para o
+        player e MP3 para download administrativo.
       </p>
       <form
         className="mt-5 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
@@ -687,11 +690,11 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
         <label className="grid min-w-0 gap-1 font-bold lg:col-span-2">Descrição<textarea name="descricao" placeholder="Descrição opcional" /></label>
         <label className="grid min-w-0 gap-1 font-bold">Ordem<input name="ordem" type="number" min="0" defaultValue="0" /></label>
         <label className="grid min-w-0 gap-1 font-bold">
-          Original MP3, M4A ou WAV
+          Original MP3, M4A, WAV ou MP4
           <input
             name="file"
             type="file"
-            accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,.mp3,.m4a,.wav"
+            accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,video/mp4,application/mp4,.mp3,.m4a,.wav,.mp4"
             required
           />
         </label>
@@ -735,7 +738,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
             {job.status === "erro" ? (
               <>
                 <p className="text-sm text-red-700">
-                  Não foi possível processar este áudio.
+                  {job.erro_mensagem || "Não foi possível processar este arquivo."}
                 </p>
                 {job.tentativas < 3 ? (
                   <button
@@ -859,8 +862,16 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                             disabled={actionId === audio.id}
                             onClick={() => void audioOperation("download", audio.id)}
                           >
-                            Baixar
+                            Baixar áudio
                           </button>
+                          {audio.mp3_available ? <button
+                            type="button"
+                            className="admin-button"
+                            disabled={actionId === audio.id}
+                            onClick={() => void audioOperation("download-mp3", audio.id)}
+                          >
+                            Baixar MP3
+                          </button> : null}
                           <button
                             type="button"
                             className="admin-button"
@@ -983,8 +994,16 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           disabled={actionId === audio.id}
                           onClick={() => void audioOperation("download", audio.id)}
                         >
-                          Baixar
+                          Baixar áudio
                         </button>
+                        {audio.mp3_available ? <button
+                          type="button"
+                          className="admin-button"
+                          disabled={actionId === audio.id}
+                          onClick={() => void audioOperation("download-mp3", audio.id)}
+                        >
+                          Baixar MP3
+                        </button> : null}
                         <button
                           type="button"
                           className="admin-button"

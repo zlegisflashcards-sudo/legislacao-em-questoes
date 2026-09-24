@@ -108,8 +108,8 @@ describe("página autenticada do Anki", () => {
 
   it("reutiliza as abas sem botão Voltar e direciona para Meu edital", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
-    expect(tabs).toContain("Legis Questões");
-    expect(tabs).toContain("Meu edital");
+    expect(tabs).toContain("Avulsas");
+    expect(tabs).toContain("Por edital");
     expect(tabs).toContain('href="/meu-edital"');
     expect(client).not.toContain("Voltar");
   });

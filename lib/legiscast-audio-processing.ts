@@ -12,6 +12,7 @@ export const LEGISCAST_ORIGINAL_TYPES = new Map<string, readonly string[]>([
   ["mp3", ["audio/mpeg"]],
   ["m4a", ["audio/mp4", "audio/x-m4a"]],
   ["wav", ["audio/wav", "audio/x-wav", "audio/wave"]],
+  ["mp4", ["video/mp4", "audio/mp4", "application/mp4"]],
 ]);
 
 export function extensionOfLegiscastAudio(fileName: string) {
