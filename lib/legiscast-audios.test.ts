@@ -19,6 +19,7 @@ const lawLegiscastClient = readFileSync("components/law-legiscast-page-client.ts
 const pdfViewer = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
 const jobsMigration = readFileSync("supabase/migrations/20260904140000_create_legiscast_audio_jobs.sql", "utf8");
 const mp3Migration = readFileSync("supabase/migrations/20260924110000_add_legiscast_mp3_admin_download.sql", "utf8");
+const mp3ReservationMigration = readFileSync("supabase/migrations/20260924123000_fix_legiscast_mp3_job_reservation.sql", "utf8");
 const worker = readFileSync("workers/legiscast-audio/src/index.mjs", "utf8");
 
 describe("LegisCast em áudio", () => {
@@ -129,6 +130,16 @@ describe("LegisCast em áudio", () => {
     for (const expected of ["downloadAdminLegiscastAudio", "downloadAdminLegiscastMp3", "createSignedUrl", "downloadFileName", "requireAdmin", "mp3_path"]) expect(admin).toContain(expected);
     for (const expected of ["libmp3lame", "audio/mpeg", "p_mp3_path", "uploadedPaths", "-map", "0:a:0"]) expect(worker).toContain(expected);
     for (const expected of ["add column if not exists mp3_path", "legiscast_audio_jobs_mp3_fields_check", "set search_path = ''", "revoke all on function", "to service_role"]) expect(mp3Migration).toContain(expected);
+  });
+
+  it("permite reservar o destino MP3 antes de o worker conhecer o tamanho final", () => {
+    expect(admin).toContain("mp3_path: mp3Path");
+    expect(admin).toContain('stage: "job_create"');
+    expect(admin).toContain("logLegiscastJobCreationFailure(created.error, payload, id)");
+    expect(admin).toContain("operationId");
+    expect(mp3ReservationMigration).toContain("drop constraint if exists legiscast_audio_jobs_mp3_fields_check");
+    expect(mp3ReservationMigration).toContain("mp3_size_bytes is null");
+    expect(mp3ReservationMigration).toContain("mp3_size_bytes > 0");
   });
 
   it("persiste a página do PDF por lei e recorte somente no LegisCast", () => {

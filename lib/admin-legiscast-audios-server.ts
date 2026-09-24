@@ -15,12 +15,34 @@ type StructurePdfPageInput = { structureId: unknown; lawId?: unknown; pdfPage?: 
 
 export class AdminLegiscastAudioError extends Error { constructor(public status: number, message: string) { super(message); } }
 function safeAuthorizationErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? "Erro técnico sem mensagem.");
+  const message = error && typeof error === "object" && "message" in error && typeof error.message === "string"
+    ? error.message
+    : error instanceof Error ? error.message : String(error ?? "Erro técnico sem mensagem.");
   return message
     .replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]")
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted-jwt]")
     .replace(/([?&](?:access_token|token|signature|authorization)=)[^&\s]+/gi, "$1[redacted]")
     .slice(0, 500);
+}
+function safeErrorField(error: unknown, field: "code" | "details" | "hint") {
+  if (!error || typeof error !== "object" || !(field in error)) return undefined;
+  const value = (error as Record<string, unknown>)[field];
+  return value === undefined || value === null ? undefined : safeAuthorizationErrorMessage({ message: String(value) });
+}
+function logLegiscastJobCreationFailure(error: unknown, payload: ReturnType<typeof fields>, operationId: string) {
+  console.error("[legiscast-audio-v2] job-create-failed", {
+    stage: "job_create",
+    operationId,
+    code: safeErrorField(error, "code"),
+    message: safeAuthorizationErrorMessage(error),
+    details: safeErrorField(error, "details"),
+    hint: safeErrorField(error, "hint"),
+    lawId: payload.lawId,
+    structureId: payload.structureId,
+    originalMime: payload.mime,
+    originalExtension: payload.extension,
+    originalSizeBytes: payload.sizeBytes,
+  });
 }
 function logLegiscastUploadAuthorizationFailure(error: unknown) {
   const details = error && typeof error === "object" ? error as Record<string, unknown> : {};
@@ -80,7 +102,7 @@ export async function updateAdminLegiscastStructurePdfPage(input: StructurePdfPa
 export async function authorizeAdminLegiscastOriginal(input: AuthorizeInput) {
   await requireAdmin(); const payload = fields(input); const { db, law } = await activeLaw(payload.lawId); if (payload.structureId) { const structure = await db.from("law_structure").select("id").eq("id", payload.structureId).eq("lei_id", payload.lawId).maybeSingle(); if (structure.error || !structure.data) throw new AdminLegiscastAudioError(400, "Estrutura inválida para esta lei."); } const id = randomUUID(); const originalPath = `legiscast-audio-original/${id}/original.${payload.extension}`; const finalPath = `${law.slug}/${id}.m4a`; const mp3Path = `${law.slug}/${id}.mp3`;
   const created = await db.from("legiscast_audio_jobs").insert({ id, lei_id: payload.lawId, structure_id: payload.structureId, titulo: payload.title, descricao: payload.description, ordem: payload.order, ativo: payload.active, original_bucket: getLegiscastOriginalBucketName(), original_path: originalPath, original_mime: payload.mime, original_size_bytes: payload.sizeBytes, final_path: finalPath, mp3_path: mp3Path }).select("id").single();
-  if (created.error) throw new AdminLegiscastAudioError(503, "Não foi possível criar o processamento do áudio.");
+  if (created.error) { logLegiscastJobCreationFailure(created.error, payload, id); throw new AdminLegiscastAudioError(503, "Não foi possível criar o processamento do áudio."); }
   try { const uploadUrl = await createLegiscastOriginalUploadUrl(originalPath, payload.mime, id); return { jobId: id, uploadUrl, originalPath, operationToken: createOperationToken({ jobId: id, originalPath, expiresAt: Date.now() + LEGISCAST_ORIGINAL_UPLOAD_TTL_MS }) }; }
   catch (error) { logLegiscastUploadAuthorizationFailure(error); await db.from("legiscast_audio_jobs").update({ status: "erro", erro_codigo: "upload_authorization_failed", erro_mensagem: safeAuthorizationErrorMessage(error), finished_at: new Date().toISOString() }).eq("id", id); throw new AdminLegiscastAudioError(502, "Não foi possível autorizar o envio do original."); }
 }
