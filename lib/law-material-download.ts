@@ -19,9 +19,9 @@ export function googleDriveFileId(value: string) {
 }
 
 export function isDownloadableMaterialReference(provider: string | null, action: string | null, value: string | null) {
-  // Alguns PDFs históricos foram cadastrados como "abrir", embora a central
-  // os apresente como download. Ambos usam o mesmo arquivo do Google Drive.
-  return provider === "google_drive" && (action === "baixar" || action === "abrir") && value !== null && googleDriveFileId(value) !== null;
+  // A ação só define o rótulo/interação exibida ao aluno. Um arquivo do Drive
+  // continua sendo baixável pelo proxy para qualquer ação válida da Central.
+  return provider === "google_drive" && (action === "baixar" || action === "abrir" || action === "assistir") && value !== null && googleDriveFileId(value) !== null;
 }
 
 export function isAccessibleMaterialReference(_provider: string | null, value: string | null) {
