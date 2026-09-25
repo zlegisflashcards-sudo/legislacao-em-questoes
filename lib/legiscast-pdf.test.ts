@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { authorizedLegiscastPdfPath, LegiscastPdfError, pdfFailureForHttpStatus, validateLegiscastPdfBytes } from "./legiscast-pdf";
+
+const workerRoute = readFileSync("app/api/legiscast/pdf-worker/route.ts", "utf8");
 
 function bytes(value: string) { return new TextEncoder().encode(value).buffer; }
 
 describe("PDF autorizado do LegisCast", () => {
+  it("lê o worker físico rastreado pela função serverless", () => {
+    expect(workerRoute).toContain('".pnpm", "pdfjs-dist@5.4.624", "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"');
+  });
+
   it("preserva recorte_id no endpoint autorizado", () => {
     expect(authorizedLegiscastPdfPath("lei teste", 42, "recorte-1")).toBe("/api/aluno/estudar/lei/lei%20teste/materiais/42/download?recorte_id=recorte-1");
     expect(authorizedLegiscastPdfPath("lei", 42, null)).toBe("/api/aluno/estudar/lei/lei/materiais/42/download");
