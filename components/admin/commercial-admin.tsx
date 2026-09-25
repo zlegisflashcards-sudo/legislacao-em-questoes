@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createStudentEmailChangePayload } from "@/lib/admin-student-email-change";
+import { isCompositeLawProduct } from "@/lib/product-types";
 import { MaterialPanel } from "@/components/admin/admin-materials";
 import { CommercialDataTable as DataTable, CommercialEditForm as EditForm } from "@/components/admin/commercial-admin-ui";
 
@@ -443,10 +444,10 @@ function CompositionEditor({ product, laws, busy, mutate }: { product: Row; laws
     await mutate("produtos", { action: "sincronizar_liberacoes_editais", id: product.id }, "Liberações de compras ativas sincronizadas.");
   }
   return <form className="commercial-composition" onSubmit={save}>
-    <h3>Leis do produto</h3><p>Ordene com as setas. Em produtos do tipo edital, novas leis são sincronizadas para compras ativas.</p>
+    <h3>Leis do produto</h3><p>Ordene com as setas. Em produtos compostos, novas leis são sincronizadas para compras ativas.</p>
     <div className="commercial-composition-add"><select value={candidate} onChange={(event) => setCandidate(event.target.value)}><option value="">Adicionar lei…</option>{laws.filter((law) => !selected.includes(text(law.id))).map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select><button type="button" className="admin-button secondary" disabled={!candidate} onClick={() => { setSelected([...selected, candidate]); setCandidate(""); }}>Adicionar</button></div>
     <ol>{selected.map((id, index) => <li key={id}><span>{title(id)}<label>Escopo das questões<select value={scopeByLaw[id] || ""} onChange={(event) => setScopeByLaw((current) => ({ ...current, [id]: event.target.value }))}><option value="">Lei completa</option>{(scopes[id] ?? []).map((scope) => <option key={scope.id} value={scope.id}>{scope.nome}</option>)}</select></label></span><div><button type="button" disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Mover ${title(id)} para cima`}>↑</button><button type="button" disabled={index === selected.length - 1} onClick={() => move(index, 1)} aria-label={`Mover ${title(id)} para baixo`}>↓</button><button type="button" onClick={() => { setSelected(selected.filter((item) => item !== id)); setScopeByLaw((current) => { const next = { ...current }; delete next[id]; return next; }); }}>Remover</button></div></li>)}</ol>
-    <div className="commercial-form-actions"><button className="admin-button primary" disabled={busy}>Salvar composição</button>{text(product.tipo_produto) === "edital" ? <button type="button" className="admin-button secondary" disabled={busy} onClick={() => void reconcile()}>Sincronizar compras ativas</button> : null}</div>
+    <div className="commercial-form-actions"><button className="admin-button primary" disabled={busy}>Salvar composição</button>{isCompositeLawProduct(product.tipo_produto) ? <button type="button" className="admin-button secondary" disabled={busy} onClick={() => void reconcile()}>Sincronizar compras ativas</button> : null}</div>
   </form>;
 }
 
