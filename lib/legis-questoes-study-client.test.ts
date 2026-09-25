@@ -17,10 +17,13 @@ describe("player Legis Questões", () => {
     expect(player).toContain('Carregando Estudo Ativo da Lei…'); expect(player).toContain('if (error)'); expect(player).toContain('Nenhuma questão disponível neste Estudo Ativo da Lei.');
   });
 
-  it("usa o estado retornado pelo POST inicial e não faz GET duplicado", () => {
+  it("consulta a campanha existente antes de iniciar uma nova e não deixa a tela carregar indefinidamente", () => {
     const campaignStudy = player.slice(player.indexOf("function CampaignStudy"), player.indexOf("function FreeStudy"));
-    expect(campaignStudy).toContain('const state = await api(start ? "POST" : "GET");');
-    expect(campaignStudy).not.toContain('const state = initial.status === "concluida"');
+    expect(campaignStudy).toContain('let state = await api("GET");');
+    expect(campaignStudy).toContain('if (state?.status === "nao_iniciada") state = await api("POST");');
+    expect(campaignStudy).toContain("const controller = new AbortController();");
+    expect(campaignStudy).toContain("window.setTimeout(() => controller.abort(), 20_000)");
+    expect(campaignStudy).toContain('"O carregamento demorou mais que o esperado. Tente novamente."');
   });
 
   it("separa explicitamente campanha, estudo livre e teste", () => {
