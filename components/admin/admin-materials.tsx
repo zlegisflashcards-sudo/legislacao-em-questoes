@@ -22,16 +22,14 @@ export function LawMaterialsAdmin({ law }: { law: { id: number; slug: string; ti
 }
 
 export function MaterialPanel({ rows, laws, fixedLaw, editing, setEditing, busy, mutate }: { rows: Row[]; laws: Row[]; fixedLaw?: Row; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: MaterialMutation }) {
-  const [kind, setKind] = useState(text(editing?.tipo) || "flashcards");
-  useEffect(() => setKind(text(editing?.tipo) || "flashcards"), [editing]);
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("materiais", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ...(editing ? {} : { lei_id: fixedLaw ? Number(fixedLaw.id) : Number(data.lei_id) }), ordem: Number(data.ordem), ativo: data.ativo === "true", quantidade_itens: data.quantidade_itens === "" ? null : Number(data.quantidade_itens) } }, "Material salvo com sucesso."); }
   return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar material" : "Cadastrar material"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
     {!editing && !fixedLaw ? <select name="lei_id" required defaultValue=""><option value="" disabled>Selecione a lei</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select> : null}
-    <select name="tipo" value={kind} onChange={(event) => setKind(event.target.value)}>{["flashcards","video","pdf","tutorial","audio","outro"].map((item) => <option key={item}>{item}</option>)}</select>
+    <input name="tipo" type="hidden" value="pdf" />
     <input name="titulo" defaultValue={text(editing?.titulo)} placeholder="Título" required /><textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" />
     <select name="provedor" defaultValue={text(editing?.provedor) || "google_drive"}>{["google_drive","youtube","externo","supabase_storage"].map((item) => <option key={item}>{item}</option>)}</select>
     <input name="url_externa" type="url" defaultValue={text(editing?.url_externa)} placeholder="URL externa (opcional)" /><input name="acao" type="hidden" value="abrir" />
-    <label>{kind === "flashcards" ? "Quantidade de flashcards" : "Quantidade de itens"}<input name="quantidade_itens" type="number" min="0" defaultValue={text(editing?.quantidade_itens)} /></label>
+    <label>Quantidade de itens<input name="quantidade_itens" type="number" min="0" defaultValue={text(editing?.quantidade_itens)} /></label>
     <label>Versão do material<input name="versao_material" defaultValue={text(editing?.versao_material)} /></label><label>Data de revisão<input name="revisado_em" type="date" defaultValue={text(editing?.revisado_em)} /></label><label>Data de publicação<input name="publicado_em" type="date" defaultValue={text(editing?.publicado_em)} /></label><label>Entrega prevista<input name="data_entrega_prevista" type="date" defaultValue={text(editing?.data_entrega_prevista)} /></label>
     <textarea name="observacao_interna" defaultValue={text(editing?.observacao_interna)} placeholder="Observação interna — nunca exibida ao aluno ou catálogo" />
     <input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required /><select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>

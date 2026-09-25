@@ -39,8 +39,10 @@ describe("Materiais na Central da Lei", () => {
 
   it("envia a ação padrão única para materiais", () => {
     for (const field of ["tipo", "titulo", "descricao", "provedor", "url_externa", "acao", "quantidade_itens", "versao_material", "revisado_em", "publicado_em", "data_entrega_prevista", "observacao_interna", "ordem", "ativo"]) expect(client).toContain(`name="${field}"`);
-    for (const value of ["flashcards", "video", "pdf", "tutorial", "audio", "outro", "google_drive", "youtube", "externo", "supabase_storage"]) expect(client).toContain(value);
+    for (const value of ["google_drive", "youtube", "externo", "supabase_storage"]) expect(client).toContain(value);
+    expect(client).toContain('name="tipo" type="hidden" value="pdf"');
     expect(client).toContain('name="acao" type="hidden" value="abrir"');
+    expect(client).not.toContain('["flashcards","video","pdf","tutorial","audio","outro"].map');
     expect(client).not.toContain('["abrir","baixar","assistir"].map');
   });
 
