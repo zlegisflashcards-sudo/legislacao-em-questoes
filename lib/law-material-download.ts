@@ -35,7 +35,7 @@ export function isAccessibleMaterialReference(_provider: string | null, value: s
 }
 
 export function materialAccessReference(provider: string | null, action: string | null, value: string | null) {
-  if (action === "baixar") return { available: isDownloadableMaterialReference(provider, action, value), directUrl: null };
+  if (provider === "google_drive") return { available: isDownloadableMaterialReference(provider, action, value), directUrl: null };
   const directUrl = isAccessibleMaterialReference(provider, value) ? value : null;
   return { available: directUrl !== null, directUrl };
 }

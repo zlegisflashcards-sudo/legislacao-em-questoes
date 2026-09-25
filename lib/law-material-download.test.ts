@@ -29,9 +29,9 @@ describe("referências seguras de material", () => {
     expect(isAccessibleMaterialReference("google_drive", "https://drive.google.com/drive/folders/abc123")).toBe(true);
     expect(isAccessibleMaterialReference("externo", "https://example.com/material")).toBe(true);
     expect(isAccessibleMaterialReference("externo", "http://example.com/material")).toBe(true);
-    expect(materialAccessReference("google_drive", "abrir", `https://drive.google.com/file/d/${id}/view`)).toEqual({ available: true, directUrl: `https://drive.google.com/file/d/${id}/view` });
+    expect(materialAccessReference("google_drive", "abrir", `https://drive.google.com/file/d/${id}/view`)).toEqual({ available: true, directUrl: null });
     expect(materialAccessReference("google_drive", "baixar", `https://drive.google.com/file/d/${id}/view`)).toEqual({ available: true, directUrl: null });
-    expect(materialAccessReference("google_drive", "abrir", "https://drive.google.com/drive/folders/abc123")).toEqual({ available: true, directUrl: "https://drive.google.com/drive/folders/abc123" });
+    expect(materialAccessReference("google_drive", "abrir", "https://drive.google.com/drive/folders/abc123")).toEqual({ available: false, directUrl: null });
     expect(materialAccessReference("externo", "abrir", "https://example.com/material")).toEqual({ available: true, directUrl: "https://example.com/material" });
     expect(materialAccessReference("google_drive", "abrir", null)).toEqual({ available: false, directUrl: null });
   });
