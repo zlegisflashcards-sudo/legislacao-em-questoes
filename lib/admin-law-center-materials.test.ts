@@ -37,9 +37,11 @@ describe("Materiais na Central da Lei", () => {
     expect(client).toContain('action: "atualizar", id: row.id, data: { ativo: !row.ativo }');
   });
 
-  it("preserva todos os campos e enumerações do formulário existente", () => {
+  it("envia a ação padrão única para materiais", () => {
     for (const field of ["tipo", "titulo", "descricao", "provedor", "url_externa", "acao", "quantidade_itens", "versao_material", "revisado_em", "publicado_em", "data_entrega_prevista", "observacao_interna", "ordem", "ativo"]) expect(client).toContain(`name="${field}"`);
-    for (const value of ["flashcards", "video", "pdf", "tutorial", "audio", "outro", "google_drive", "youtube", "externo", "supabase_storage", "abrir", "baixar", "assistir"]) expect(client).toContain(value);
+    for (const value of ["flashcards", "video", "pdf", "tutorial", "audio", "outro", "google_drive", "youtube", "externo", "supabase_storage"]) expect(client).toContain(value);
+    expect(client).toContain('name="acao" type="hidden" value="abrir"');
+    expect(client).not.toContain('["abrir","baixar","assistir"].map');
   });
 
   it("mantém Admin Comercial e Central no mesmo MaterialPanel", () => {
