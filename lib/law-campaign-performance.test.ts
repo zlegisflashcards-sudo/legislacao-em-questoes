@@ -71,18 +71,25 @@ describe("performance do Estudo Ativo da Lei", () => {
     const summary = campaign.slice(campaign.indexOf("export async function campaignSummaryState"), campaign.indexOf("export async function answerCampaign"));
     expect(lawStudyPage).toContain('/campanha?resumo=1');
     expect(campaignRoute).toContain('summary ? await campaignSummaryState(request, slug) : await campaignState(request, slug)');
-    expect(summary).toContain('campaignSummaryStep(slug, "autorizacao"');
-    expect(summary).toContain('campaignSummaryStep(slug, "niveis"');
+    expect(summary).toContain('campaignReadStep("summary", slug, "autorizacao"');
+    expect(summary).toContain('campaignReadStep("summary", slug, "niveis"');
     expect(summary).not.toContain("reconcileOpenCampaign(");
     expect(summary).not.toContain("mainQuestionsByIds(");
     expect(summary).not.toContain("mainStructure(");
   });
 
   it("limita uma dependência travada e registra a etapa sem dados de sessão", () => {
-    expect(campaign).toContain("const campaignSummaryTimeoutMs = 15_000;");
-    expect(campaign).toContain('console.error("law_campaign_summary_failed"');
+    expect(campaign).toContain("const campaignReadTimeoutMs = 15_000;");
+    expect(campaign).toContain('console.error("law_campaign_read_failed"');
     expect(campaign).toContain('stage,');
     expect(campaign).toContain('throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei. Tente novamente.");');
+  });
+
+  it("mantém o jogador em leitura leve, sem reconciliação ou cálculo global em cada abertura", () => {
+    expect(campaign).toContain('campaignReadStep("player", slug, "estado", () => campaignStateFor(context, { reconcile: false, includeLawProgress: false }))');
+    expect(campaign).toContain("const { reconcile = true, includeLawProgress = true } = options;");
+    expect(campaign).toContain("const lawProgress = includeLawProgress ? await currentLawProgress(context, state) : null;");
+    expect(campaign).toContain("if (reconcile && state.status === \"em_andamento\"");
   });
 
   it("mantém histórico, ranking e recorde fora das respostas intermediárias", () => {
