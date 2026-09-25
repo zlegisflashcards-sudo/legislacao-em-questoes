@@ -1,11 +1,15 @@
-import { answerCampaign, cacheHeaders, campaignState, resetCampaign, startCampaign } from "@/lib/law-campaign-server";
+import { answerCampaign, cacheHeaders, campaignState, campaignSummaryState, resetCampaign, startCampaign } from "@/lib/law-campaign-server";
 import { lawStudyErrorResponse } from "@/lib/law-study-server";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ slug: string }> };
 
 export async function GET(request: Request, context: Context) {
-  try { return Response.json({ success: true, ...(await campaignState(request, (await context.params).slug)) }, { headers: cacheHeaders }); }
+  try {
+    const slug = (await context.params).slug;
+    const summary = new URL(request.url).searchParams.get("resumo") === "1";
+    return Response.json({ success: true, ...(summary ? await campaignSummaryState(request, slug) : await campaignState(request, slug)) }, { headers: cacheHeaders });
+  }
   catch (error) { return lawStudyErrorResponse(error); }
 }
 export async function POST(request: Request, context: Context) {

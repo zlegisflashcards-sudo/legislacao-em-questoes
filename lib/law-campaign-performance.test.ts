@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const campaign = readFileSync("lib/law-campaign-server.ts", "utf8");
+const campaignRoute = readFileSync("app/api/aluno/estudar/lei/[slug]/campanha/route.ts", "utf8");
+const lawStudyPage = readFileSync("components/law-study-page-client.tsx", "utf8");
 const questions = readFileSync("lib/questions-main-server.ts", "utf8");
 const lawStudy = readFileSync("lib/law-study-server.ts", "utf8");
 const snapshot = readFileSync("lib/law-campaign-snapshot.ts", "utf8");
@@ -63,6 +65,24 @@ describe("performance do Estudo Ativo da Lei", () => {
     const campaignClient = player.slice(player.indexOf("function CampaignStudy"), player.indexOf("function FreeStudy"));
     expect(campaignClient).toContain("const question = campaign?.question;");
     expect(campaignClient).not.toContain("campaign?.level?.questions.sort");
+  });
+
+  it("usa um resumo somente de leitura na página da lei, sem carregar o payload do jogador", () => {
+    const summary = campaign.slice(campaign.indexOf("export async function campaignSummaryState"), campaign.indexOf("export async function answerCampaign"));
+    expect(lawStudyPage).toContain('/campanha?resumo=1');
+    expect(campaignRoute).toContain('summary ? await campaignSummaryState(request, slug) : await campaignState(request, slug)');
+    expect(summary).toContain('campaignSummaryStep(slug, "autorizacao"');
+    expect(summary).toContain('campaignSummaryStep(slug, "niveis"');
+    expect(summary).not.toContain("reconcileOpenCampaign(");
+    expect(summary).not.toContain("mainQuestionsByIds(");
+    expect(summary).not.toContain("mainStructure(");
+  });
+
+  it("limita uma dependência travada e registra a etapa sem dados de sessão", () => {
+    expect(campaign).toContain("const campaignSummaryTimeoutMs = 15_000;");
+    expect(campaign).toContain('console.error("law_campaign_summary_failed"');
+    expect(campaign).toContain('stage,');
+    expect(campaign).toContain('throw new LawStudyApiError(503, "Não foi possível carregar seu Estudo Ativo da Lei. Tente novamente.");');
   });
 
   it("mantém histórico, ranking e recorde fora das respostas intermediárias", () => {

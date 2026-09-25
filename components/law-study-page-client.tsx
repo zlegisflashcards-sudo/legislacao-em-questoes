@@ -50,7 +50,7 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
       try {
         const [law, state, structure, availableContexts, newQuestions, reviews] = await Promise.all([
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}`),
-          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha`),
+          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha?resumo=1`),
           request(`/api/questoes/estrutura?slug=${encodeURIComponent(slug)}`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/contextos`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/novas-por-bloco`),
