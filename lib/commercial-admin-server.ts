@@ -44,6 +44,7 @@ import {
   uuid,
   type JsonObject,
 } from "@/lib/commercial-admin-validation";
+import { PUBLICATION_STATUSES } from "@/lib/publication-status";
 
 export type CommercialResource =
   | "leis"
@@ -552,7 +553,7 @@ function allowedUpdate(data: unknown, allowed: readonly string[]): JsonObject {
 
 function validateLawData(raw: unknown, update = false) {
   const commonAllowed = [
-    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "ordem", "thumbnail_url",
+    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "status_publicacao", "ordem", "thumbnail_url",
     "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa",
     "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao",
   ] as const;
@@ -568,7 +569,10 @@ function validateLawData(raw: unknown, update = false) {
       result[key] = update ? value : value ?? null;
     }
   }
-  if (!update || "ativo" in data) result.ativo = booleanValue(data.ativo ?? true, "Ativo");
+  if (!update || "status_publicacao" in data || "ativo" in data) result.status_publicacao = "status_publicacao" in data
+    ? enumValue(data.status_publicacao, PUBLICATION_STATUSES, "Status de publicação")
+    : booleanValue(data.ativo ?? true, "Ativo") ? "ativa" : "inativa";
+  if (!update) result.ativo = result.status_publicacao !== "inativa";
   if (update && "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito, "Acesso gratuito");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
   if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = optionalString(data.norma_originaria_referencia, "Norma originária", 500) ?? null;

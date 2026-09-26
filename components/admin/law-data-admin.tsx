@@ -14,7 +14,7 @@ export function LawDataAdmin({ law }: { law: (AdminLawData & { id: number }) | n
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setMessage(""); setError("");
     const raw = Object.fromEntries(new FormData(event.currentTarget));
-    const data = { ...raw, ordem: Number(raw.ordem), ativo: raw.ativo === "true", ...(law ? { acesso_gratuito: raw.acesso_gratuito === "true" } : {}), houve_alteracao_legislativa: raw.houve_alteracao_legislativa === "true" };
+    const data = { ...raw, ordem: Number(raw.ordem), ...(law ? { acesso_gratuito: raw.acesso_gratuito === "true" } : {}), houve_alteracao_legislativa: raw.houve_alteracao_legislativa === "true" };
     try {
       const response = await fetch("/api/admin/comercial/leis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: law ? "atualizar" : "criar", id: law?.id, data }) });
       const result = await response.json().catch(() => ({}));

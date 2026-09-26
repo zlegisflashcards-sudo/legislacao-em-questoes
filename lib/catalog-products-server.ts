@@ -32,7 +32,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
     const productIds = products.map((product) => product.id);
     const { data: links, error: linksError } = await supabase
       .from("produto_leis")
-      .select("produto_id,lei_id,leis(slug)")
+      .select("produto_id,lei_id,leis(slug,status_publicacao)")
       .in("produto_id", productIds);
 
     if (linksError) return [];
@@ -40,14 +40,15 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
     const lawSlugById = new Map<string, string>();
     for (const link of links ?? []) {
       const law = Array.isArray(link.leis) ? link.leis[0] : link.leis;
-      if (law?.slug) lawSlugById.set(link.lei_id, law.slug);
+      if (law?.slug && law.status_publicacao === "ativa") lawSlugById.set(link.lei_id, law.slug);
     }
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
 
     return products.map((product) => {
       const productLawIds = (links ?? [])
         .filter((link) => link.produto_id === product.id)
-        .map((link) => link.lei_id);
+        .map((link) => link.lei_id)
+        .filter((lawId) => lawSlugById.has(lawId));
 
       return {
         id: product.id,

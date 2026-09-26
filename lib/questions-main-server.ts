@@ -5,7 +5,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 export type MainQuestion = { id: string; lei_id: number; structure_id: number | null; pergunta: string; resposta: string; justificativa: string | null; assunto: string | null; legislacao: string | null; ordem: string; titulo: string | null; total_artigos: number | null; slug: string; ultima_alteracao_legislativa: string | null; capitulo: string | null; secao: string | null; subsecao: string | null; artigo: string | null; ativo: boolean };
 
 export async function mainLawBySlug(slug: string) {
-  const result = await getSupabaseServerClient().from("leis").select("id,slug,titulo,nome_curto,codigo,ativo").eq("slug", slug).eq("ativo", true).maybeSingle();
+  const result = await getSupabaseServerClient().from("leis").select("id,slug,titulo,nome_curto,codigo,ativo").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();
   if (result.error) throw new Error(`Não foi possível localizar a lei: ${result.error.message}`);
   return result.data;
 }
@@ -47,7 +47,7 @@ export async function mainActiveQuestionCountsBySlug(slugs: string[]) {
   const unique = [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))];
   const counts = new Map(unique.map((slug) => [slug, 0]));
   if (!unique.length) return counts;
-  const { data: laws, error: lawsError } = await getSupabaseServerClient().from("leis").select("id,slug").in("slug", unique).eq("ativo", true);
+  const { data: laws, error: lawsError } = await getSupabaseServerClient().from("leis").select("id,slug").in("slug", unique).eq("ativo", true).eq("status_publicacao", "ativa");
   if (lawsError) throw new Error(`Não foi possível localizar as leis: ${lawsError.message}`);
   const results = await Promise.all((laws ?? []).map(async (law) => {
     const result = await getSupabaseServerClient().from("questions").select("id", { count: "exact", head: true }).eq("lei_id", law.id).eq("ativo", true);

@@ -46,7 +46,7 @@ async function activeQuestionsForLaws(lawIds: number[]) {
  */
 export async function listLawStudyContexts(studentId: string, lawId: number): Promise<LawStudyContext[]> {
   const db = getSupabaseServerClient();
-  const freeLawResult = await db.from("leis").select("acesso_gratuito").eq("id", lawId).eq("ativo", true).maybeSingle();
+  const freeLawResult = await db.from("leis").select("acesso_gratuito").eq("id", lawId).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();
   if (freeLawResult.error) throw new Error(`Não foi possível verificar os contextos de estudo: ${freeLawResult.error.message}`);
   if (freeLawResult.data?.acesso_gratuito === true) { const questions = await mainQuestions(lawId); return [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }]; }
   const releasesResult = await db.from("liberacoes_leis").select("produto_id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("status", "ativo");
@@ -110,7 +110,7 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
     activeQuestionsForLaws(uniqueLawIds),
     db.from("law_structure").select("id,lei_id,parent_id").in("lei_id", uniqueLawIds).eq("ativo", true),
     activeScopeIds.size ? db.from("recortes_leis_estrutura").select("recorte_id,structure_id").in("recorte_id", [...activeScopeIds]) : Promise.resolve({ data: [] as StructureLink[], error: null }),
-    db.from("leis").select("id,acesso_gratuito").in("id", uniqueLawIds).eq("ativo", true),
+    db.from("leis").select("id,acesso_gratuito").in("id", uniqueLawIds).eq("ativo", true).eq("status_publicacao", "ativa"),
   ]);
   if (structureResult.error) throw new Error(`Não foi possível carregar a estrutura dos contextos de estudo: ${structureResult.error.message}`);
   if (scopeLinksResult.error || freeLawsResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error?.message ?? freeLawsResult.error?.message}`);

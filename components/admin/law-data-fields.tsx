@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PUBLICATION_STATUSES, publicationStatusFromActive } from "@/lib/publication-status";
 
 export type AdminLawData = Record<string, unknown>;
 
@@ -21,7 +22,7 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
     <input name="thumbnail_url" defaultValue={text(law?.thumbnail_url)} placeholder="URL da miniatura" />
     <textarea name="descricao" defaultValue={text(law?.descricao)} placeholder="Descrição" />
     <input name="ordem" type="number" min="0" defaultValue={text(law?.ordem) || "0"} required />
-    <select name="ativo" defaultValue={law?.ativo === false ? "false" : "true"}><option value="true">Ativa</option><option value="false">Inativa</option></select>
+    <label>Status de publicação<select name="status_publicacao" defaultValue={typeof law?.status_publicacao === "string" ? law.status_publicacao : publicationStatusFromActive(law?.ativo !== false)}>{PUBLICATION_STATUSES.map((status) => <option key={status} value={status}>{status === "ativa" ? "Ativa" : status === "em_breve" ? "Em breve" : "Inativa"}</option>)}</select></label>
     {showFreeAccess ? <label className="admin-questoes-wide flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><input type="hidden" name="acesso_gratuito" value="false" /><input className="mt-1 h-5 w-5 shrink-0" type="checkbox" name="acesso_gratuito" value="true" defaultChecked={law?.acesso_gratuito === true} /><span><strong className="block text-base text-slate-900">Acesso gratuito</strong><span className="mt-1 block">Permite que qualquer aluno autenticado acesse esta lei sem liberação comercial.</span></span></label> : null}
     <label>Norma originária<input name="norma_originaria_referencia" defaultValue={text(law?.norma_originaria_referencia)} placeholder="Ex.: Lei nº 10.230/2015" /></label>
     <label>Data da norma originária<input name="norma_originaria_data" type="date" defaultValue={text(law?.norma_originaria_data)} /></label>

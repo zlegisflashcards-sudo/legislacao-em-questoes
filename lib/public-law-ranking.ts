@@ -40,7 +40,7 @@ export async function loadPublicLawRanking(slug: string): Promise<PublicLawRanki
 
   try {
     const supabase = getSupabaseServerClient();
-    const { data: law, error: lawError } = await supabase.from("leis").select("id").eq("slug", slug).eq("ativo", true).maybeSingle();
+    const { data: law, error: lawError } = await supabase.from("leis").select("id").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();
     if (lawError || !law) return [];
 
     const { data: campaigns, error: campaignsError } = await supabase
