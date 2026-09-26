@@ -45,6 +45,12 @@ describe("Central administrativa por lei", () => {
     expect(overview).not.toContain("Math.random");
   });
 
+  it("mantém a navegação desktop e mobile na ordem operacional dos cards", () => {
+    const shell = read("app/admin/leis/[slug]/layout.tsx");
+    for (const [before, after] of [["estrutura", "materiais"], ["materiais", "legiscast"], ["legiscast", "anki"], ["anki", "questoes"], ["questoes", "recortes"]]) expect(shell.indexOf(`data-law-nav=\"${before}\"`)).toBeLessThan(shell.indexOf(`data-law-nav=\"${after}\"`));
+    expect(shell).toContain("law-center-nav-mobile");
+  });
+
   it("ordena os cards e mantém checklist administrativo isolado por lei", () => {
     const overview = read("app/admin/leis/[slug]/page.tsx");
     const cards = read("components/admin/law-overview-cards.tsx");
