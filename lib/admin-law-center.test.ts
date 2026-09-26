@@ -10,6 +10,9 @@ describe("Central administrativa por lei", () => {
     const shell = read("app/admin/leis/[slug]/layout.tsx");
     expect(list).toContain("listAdminLawCenterLaws(query)");
     expect(list).toContain("Abrir central");
+    expect(list).toContain("publicationStatusLabel(law.status_publicacao)");
+    expect(list).not.toContain("{law.slug} ·");
+    expect(read("lib/admin-law-center-server.ts")).toContain("status_publicacao");
     expect(shell).toContain("await exigirAdministrador()");
     expect(shell).toContain("Central da Lei");
     expect(shell).toContain("Visão geral");
@@ -73,7 +76,7 @@ describe("Central administrativa por lei", () => {
     expect(commercial).not.toContain("LawDataFields");
     expect(newPanel).toContain("<LawDataFields law={law} showFreeAccess={Boolean(law)} />");
     expect(newPanel).toContain('fetch("/api/admin/comercial/leis"');
-    for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "ativo", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
+    for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "status_publicacao", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
   });
 
   it("permite configurar acesso gratuito somente na edição contextual da lei e pelo contrato administrativo", () => {

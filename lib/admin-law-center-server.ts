@@ -3,7 +3,7 @@ import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
-export type AdminLaw = Record<string, unknown> & { id: number; slug: string; titulo: string; ativo: boolean };
+export type AdminLaw = Record<string, unknown> & { id: number; slug: string; titulo: string; ativo: boolean; status_publicacao: "ativa" | "em_breve" | "inativa" };
 
 async function requireAdmin() {
   if (!await obterAdministrador()) throw new Error("Autenticação administrativa obrigatória.");
@@ -12,7 +12,7 @@ async function requireAdmin() {
 export async function listAdminLawCenterLaws(query = "") {
   await requireAdmin();
   const db = getSupabaseServerClient();
-  let request = db.from("leis").select("id,slug,titulo,nome_curto,codigo,categoria,ativo,ordem");
+  let request = db.from("leis").select("id,slug,titulo,nome_curto,codigo,categoria,ativo,status_publicacao,ordem");
   const normalized = query.trim().slice(0, 120).replace(/[%_,()]/g, " ").replace(/\s+/g, " ");
   if (normalized) request = request.or(`slug.ilike.%${normalized}%,titulo.ilike.%${normalized}%,nome_curto.ilike.%${normalized}%,codigo.ilike.%${normalized}%`);
   const result = await request.order("ordem").order("titulo").limit(100);
