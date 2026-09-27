@@ -1,0 +1,3 @@
+import { studentCenterAction, studentCenterList } from "@/lib/student-center-server";
+export async function GET(request: Request) { try { return Response.json(await studentCenterList(new URL(request.url))); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Falha ao carregar alunos." }, { status: 500 }); } }
+export async function POST(request: Request) { try { return Response.json(await studentCenterAction(await request.json())); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Falha ao executar ação." }, { status: 400 }); } }

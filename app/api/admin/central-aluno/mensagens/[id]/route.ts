@@ -1,0 +1,3 @@
+import { mutateSavedStudentMessage } from "@/lib/student-center-server";
+export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){try{return Response.json(await mutateSavedStudentMessage("PATCH",(await params).id,await request.json()));}catch(error){return Response.json({error:error instanceof Error?error.message:"Falha ao atualizar mensagem."},{status:400});}}
+export async function DELETE(_:Request,{params}:{params:Promise<{id:string}>}){try{return Response.json(await mutateSavedStudentMessage("DELETE",(await params).id,{}));}catch(error){return Response.json({error:error instanceof Error?error.message:"Falha ao excluir mensagem."},{status:400});}}

@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 const panels = [
   { href: "/admin/leis", icon: "📚", title: "Central das Leis", description: "Gerencie dados, estrutura e conteúdos mantendo a lei selecionada." },
+  { href: "/admin/central-aluno", icon: "🎓", title: "Central do Aluno", description: "Pesquisa, comportamento, pós-venda e ações operacionais por grupo." },
   { href: "/admin/coach", icon: "🧭", title: "Painel de Coach", description: "Acompanhe alunos e campanhas." },
   {
     href: "/admin/alunos",
