@@ -51,7 +51,7 @@ const forEditor = (fields: Fields): Fields => ({
   comentario: prepararComentarioParaEditor(fields.comentario),
 });
 
-export default function LegisBotEditor({ record }: { record?: LegisBotComentario }) {
+export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" }: { record?: LegisBotComentario; returnHref?: string }) {
   const storedInitial = useMemo(() => fromRecord(record), [record]);
   const initial = useMemo(() => forEditor(storedInitial), [storedInitial]);
   const [fields, setFields] = useState(initial);
@@ -127,7 +127,7 @@ export default function LegisBotEditor({ record }: { record?: LegisBotComentario
       <input ref={identifiersConfirmedRef} type="hidden" name="identifiers_confirmed" defaultValue="" />
       <header className="admin-detail-header">
         <div>
-          <Link href="/admin/legisbot" className="admin-back">← Voltar para a listagem</Link>
+          <Link href={returnHref} className="admin-back">← Voltar para a Central</Link>
           <div className="admin-detail-title-row">
             <h1>{savedRecord ? fields.titulo || "Comentário sem título" : "Adicionar comentário"}</h1>
             <span className={`admin-status status-${fields.status}`}>{statusLabels[fields.status]}</span>
@@ -213,7 +213,7 @@ export default function LegisBotEditor({ record }: { record?: LegisBotComentario
 
       <div className="admin-bottom-actions">
         <div>
-          <Link className="admin-button secondary" href="/admin/legisbot">Voltar para a listagem</Link>
+          <Link className="admin-button secondary" href={returnHref}>Voltar para a Central</Link>
           {canOpenPublic ? <Link className="admin-button secondary" href={publicUrl} target="_blank">Abrir página pública</Link> : null}
         </div>
         <div>
@@ -234,7 +234,7 @@ export default function LegisBotEditor({ record }: { record?: LegisBotComentario
         <p className="admin-danger-note">Esta exclusão não poderá ser desfeita.</p>
         <div className="admin-modal-actions">
           <button className="admin-button secondary" onClick={() => setConfirmDelete(false)}>Cancelar</button>
-          <form action={excluirComentario}><input type="hidden" name="id" value={savedRecord.id} /><DeleteButton /></form>
+          <form action={excluirComentario}><input type="hidden" name="id" value={savedRecord.id} /><input type="hidden" name="return_to" value={returnHref} /><DeleteButton /></form>
         </div>
       </div>
     </div> : null}

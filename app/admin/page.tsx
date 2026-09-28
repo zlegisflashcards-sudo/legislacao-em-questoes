@@ -7,24 +7,13 @@ export const dynamic = "force-dynamic";
 
 const panels = [
   { href: "/admin/leis", icon: "📚", title: "Central das Leis", description: "Gerencie dados, estrutura e conteúdos mantendo a lei selecionada." },
+  { href: "/admin/artigos", icon: "📍", title: "Central do Artigo", description: "Consulte o LegisBot e a comunidade no contexto de cada artigo." },
   { href: "/admin/central-aluno", icon: "🎓", title: "Central do Aluno", description: "Pesquisa, comportamento, pós-venda e ações operacionais por grupo." },
   {
     href: "/admin/comercial",
     icon: "🧾",
     title: "Gestão comercial",
     description: "Gerencie produtos, aquisições, liberações e a trilha de auditoria.",
-  },
-  {
-    href: "/admin/legisbot",
-    icon: "🤖",
-    title: "Painel do LegisBot",
-    description: "Gerencie, revise e edite os comentários produzidos pelo LegisBot.",
-  },
-  {
-    href: "/admin/comunidade",
-    icon: "👥",
-    title: "Painel da Comunidade",
-    description: "Modere os comentários, respostas e denúncias publicadas pelos alunos.",
   },
 ] as const;
 

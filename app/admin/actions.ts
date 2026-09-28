@@ -171,7 +171,10 @@ export async function excluirComentario(formData: FormData) {
   const id = Number(formData.get("id"));
   if (!Number.isSafeInteger(id) || id < 1) return;
   const { error } = await getSupabaseServerClient().from("legisbot_comentarios").delete().eq("id", id);
-  if (error) redirect(`/admin/legisbot/${id}?erro=exclusao`);
+  const returnTo = String(formData.get("return_to") ?? "");
+  const safeReturnTo = returnTo.startsWith("/admin/artigos/") ? returnTo : "/admin/legisbot";
+  if (error) redirect(`${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}erro=exclusao`);
   revalidatePath("/admin/legisbot");
-  redirect("/admin/legisbot?excluido=1");
+  revalidatePath("/admin/artigos");
+  redirect(`${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}excluido=1`);
 }

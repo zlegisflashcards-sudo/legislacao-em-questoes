@@ -1,0 +1,17 @@
+import Link from "next/link";
+import { getLatestArticleInteractions, searchArticleContexts } from "@/lib/admin-article-center-server";
+import { exigirAdministrador } from "@/lib/admin-auth";
+
+export const dynamic = "force-dynamic";
+const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
+const fmt = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+
+export default async function AdminArticlesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = one((await searchParams).q);
+  await exigirAdministrador();
+  const [results, interactions] = await Promise.all([query.trim() ? searchArticleContexts(query) : Promise.resolve([]), query.trim() ? Promise.resolve([]) : getLatestArticleInteractions()]);
+  return <main className="admin-shell article-center-shell"><Link className="admin-central-link" href="/admin">← Central Administrativa</Link><header className="admin-header"><div><div className="admin-eyebrow">Central do Artigo</div><h1>Artigos e interações</h1><p>Consulte o conteúdo editorial do LegisBot e a moderação da comunidade no mesmo contexto.</p></div></header>
+    <form className="article-search"><label htmlFor="article-search">Buscar artigo</label><div><input id="article-search" name="q" defaultValue={query} placeholder="Buscar por lei, artigo, ordem ou código..." autoComplete="off"/><button className="admin-button primary">Buscar</button></div></form>
+    {query.trim() ? <section aria-live="polite"><h2 className="article-section-title">Resultados para “{query}”</h2>{results.length ? <div className="article-result-list">{results.map((item) => <article className="article-result" key={item.id}><div><strong>{item.lawTitle ?? item.titulo}</strong><p>{item.assunto || `Art. ${item.ordem}`} · ordem {item.ordem}</p><small>{item.lawCode ? `${item.lawCode} · ` : ""}{item.slug} · {item.commentsCount} comentário(s) · <span className={`admin-status status-${item.status}`}>{item.status}</span></small></div><Link className="admin-button secondary" href={`/admin/artigos/${encodeURIComponent(item.slug.toLowerCase())}/${encodeURIComponent(item.ordem)}`}>Abrir</Link></article>)}</div> : <div className="admin-empty"><h2>Nenhum artigo encontrado</h2><p>Pesquise por lei, código, slug, artigo ou ordem.</p></div>}</section> : <section><h2 className="article-section-title">Últimas interações dos alunos</h2><p className="article-interaction-note">Solicitações do LegisBot são anônimas: o modelo atual não registra qual aluno as iniciou.</p>{interactions.length ? <div className="article-interaction-list">{interactions.map((item) => <Link className="article-interaction" href={`/admin/artigos/${encodeURIComponent(item.slug.toLowerCase())}/${encodeURIComponent(item.ordem)}${item.kind === "comentario" ? `?aba=comentarios&comentario=${encodeURIComponent(item.id)}` : "?aba=legisbot"}`} key={`${item.kind}-${item.id}`}><span className="article-kind">{item.kind === "comentario" ? "Comentário" : "LegisBot"}</span><div><strong>{item.author ?? "Solicitação anônima"}</strong><p>{item.slug} · ordem {item.ordem} · {item.summary}</p></div><small>{item.status} · {fmt(item.createdAt)}</small></Link>)}</div> : <div className="admin-empty"><h2>Ainda não há interações de alunos</h2><p>Comentários e solicitações do LegisBot aparecerão aqui.</p></div>}</section>}
+  </main>;
+}

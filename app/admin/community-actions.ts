@@ -20,4 +20,5 @@ export async function moderateCommunityComment(formData: FormData) {
     await supabase.from("legisbot_comentarios_denuncias").update({ status: "resolvida" }).eq("comentario_id", id).in("status", ["pendente", "em_analise"]);
   }
   revalidatePath("/admin/comunidade");
+  revalidatePath("/admin/artigos");
 }
