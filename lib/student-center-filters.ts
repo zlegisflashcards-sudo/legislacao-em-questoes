@@ -1,7 +1,9 @@
-export type StudentCenterFilterRow = { primeiro_acesso_em: string | null; ultimo_acesso_em: string | null; lastStudy: string | null; products: number; laws: string[]; productIds: string[]; purchaseDates: string[]; origin: string | null; postSalePending: boolean; postSaleStatus: string };
-export type StudentCenterFilters = { quick: string; origin: string; lawId: string; productId: string; access: string; commercial: string; purchasePeriod: string; purchaseStart: string; purchaseEnd: string; study: string; postSale: string };
+import { matchesStudentTags } from "@/lib/student-center-tags";
+export type StudentCenterFilterRow = { primeiro_acesso_em: string | null; ultimo_acesso_em: string | null; lastStudy: string | null; products: number; laws: string[]; productIds: string[]; purchaseDates: string[]; origin: string | null; postSalePending: boolean; postSaleStatus: string; tagIds?:number[] };
+export type StudentCenterFilters = { quick: string; origin: string; lawId: string; productId: string; access: string; commercial: string; purchasePeriod: string; purchaseStart: string; purchaseEnd: string; study: string; postSale: string; tagIds?:number[] };
 
 export function matchesStudentCenterFilters(row: StudentCenterFilterRow, filters: StudentCenterFilters, now = Date.now()) {
+  if (!matchesStudentTags(row.tagIds, filters.tagIds)) return false;
   if (filters.origin && row.origin !== filters.origin) return false;
   if (filters.lawId && !row.laws.includes(filters.lawId)) return false;
   if (filters.productId && !row.productIds.includes(filters.productId)) return false;
