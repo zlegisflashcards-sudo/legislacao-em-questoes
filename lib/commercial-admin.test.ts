@@ -143,6 +143,19 @@ describe("fronteira administrativa comercial", () => {
     expect(client).toContain('remainingLaws.flatMap((page) => page.items ?? [])');
   });
 
+  it("oferece pesquisa de lei tanto na composição quanto na liberação manual", () => {
+    expect(client).toContain('import { LawSearchSelect } from "@/components/law-search-select"');
+    expect(client).toContain('emptyLabel="Adicionar lei ao produto"');
+    expect(client).toContain('emptyLabel="Selecionar lei para liberar"');
+    expect(client).toContain('disabled={busy || !lawId}');
+  });
+
+  it("identifica ao lado da lei o recorte selecionado na composição", () => {
+    expect(client).toContain("const initialScopeNames = useMemo");
+    expect(client).toContain("const scopeName = (id: string)");
+    expect(client).toContain("· {scopeName(id)}");
+  });
+
   it("mantém a fila por compra resiliente a compras órfãs e ao identificador real do e-mail", () => {
     expect(server).toContain('.not("aluno_id", "is", null)');
     expect(server).toContain("function accessEmailForPurchase");
