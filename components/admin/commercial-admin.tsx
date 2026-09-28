@@ -109,11 +109,13 @@ export default function CommercialAdmin() {
   const loadReferences = useCallback(async () => {
     try {
       const [lawData, productData, materialData] = await Promise.all([
-        requestJson("/api/admin/comercial/leis?limit=50&ativo=true"),
+        requestJson("/api/admin/comercial/leis?limit=50"),
         requestJson("/api/admin/comercial/produtos?limit=50"),
         requestJson("/api/admin/comercial/materiais?limit=50"),
       ]);
-      setLaws(lawData.items ?? []); setProducts(productData.items ?? []); setMaterials(materialData.items ?? []);
+      const lawPages = Math.min(Number(lawData.pages ?? 1), 20);
+      const remainingLaws = await Promise.all(Array.from({ length: Math.max(0, lawPages - 1) }, (_, index) => requestJson(`/api/admin/comercial/leis?limit=50&page=${index + 2}`)));
+      setLaws([...(lawData.items ?? []), ...remainingLaws.flatMap((page) => page.items ?? [])]); setProducts(productData.items ?? []); setMaterials(materialData.items ?? []);
     } catch { /* A consulta principal exibira falhas relevantes. */ }
   }, []);
 

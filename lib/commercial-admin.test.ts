@@ -135,6 +135,14 @@ describe("fronteira administrativa comercial", () => {
     expect(client).toContain('name="destaque"');
   });
 
+  it("carrega todas as páginas de leis para a composição de produtos, sem filtrar o estado", () => {
+    expect(client).toContain('requestJson("/api/admin/comercial/leis?limit=50")');
+    expect(client).toContain('const lawPages = Math.min(Number(lawData.pages ?? 1), 20)');
+    expect(client).toContain('leis?limit=50&page=${index + 2}');
+    expect(client).not.toContain('leis?limit=50&ativo=true');
+    expect(client).toContain('remainingLaws.flatMap((page) => page.items ?? [])');
+  });
+
   it("mantém a fila por compra resiliente a compras órfãs e ao identificador real do e-mail", () => {
     expect(server).toContain('.not("aluno_id", "is", null)');
     expect(server).toContain("function accessEmailForPurchase");
