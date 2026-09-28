@@ -33,8 +33,12 @@ export async function studentCenterList(url: URL) {
   }).filter((row) => matchesStudentCenterFilters({ ...row, laws: [...row.lawIds, ...row.laws] }, { quick, origin, lawId, productId, access, commercial, purchasePeriod, purchaseStart, purchaseEnd, study, postSale: postSaleFilter }, now));
   if (quick === "post_sale") items.sort((a, b) => String(b.lastPurchase).localeCompare(String(a.lastPurchase)));
   const [laws, products] = await Promise.all([supabase.from("leis").select("id,titulo").eq("ativo", true).order("titulo"), supabase.from("produtos").select("id,nome").eq("ativo", true).order("nome")]);
-  const notices = await supabase.from("law_update_notices").select("id,title,message,law_id,created_at,leis(titulo)").eq("status", "draft").order("created_at", { ascending: false });
-  return { items, laws: laws.data ?? [], products: products.data ?? [], notices: notices.data ?? [] };
+  const actor = await admin();
+  const [notices, savedFilters] = await Promise.all([
+    supabase.from("law_update_notices").select("id,title,message,law_id,created_at,leis(titulo)").eq("status", "draft").order("created_at", { ascending: false }),
+    supabase.from("filtros_alunos_salvos").select("id,nome,filtros,created_at").eq("ator_user_id", actor.id).order("created_at", { ascending: false }),
+  ]);
+  return { items, laws: laws.data ?? [], products: products.data ?? [], notices: notices.data ?? [], savedFilters: savedFilters.data ?? [] };
 }
 
 export async function studentCenterDetail(id: string) {
@@ -59,6 +63,21 @@ export async function studentCenterDetail(id: string) {
 
 export async function studentCenterAction(body: Record<string, unknown>) {
   const actor = await admin(); const action = clean(body.action); const supabase = db();
+  if (action === "save_filter") {
+    const nome = clean(body.nome);
+    const filtros = body.filtros;
+    if (!nome || nome.length > 80 || !filtros || typeof filtros !== "object" || Array.isArray(filtros)) throw new Error("Informe um nome e filtros válidos.");
+    const result = await supabase.from("filtros_alunos_salvos").upsert({ ator_user_id: actor.id, nome, filtros }, { onConflict: "ator_user_id,nome" }).select("id,nome,filtros,created_at").single();
+    if (result.error) throw new Error(result.error.message);
+    return result.data;
+  }
+  if (action === "delete_saved_filter") {
+    const id = Number(body.id);
+    if (!Number.isSafeInteger(id) || id < 1) throw new Error("Filtro inválido.");
+    const result = await supabase.from("filtros_alunos_salvos").delete().eq("id", id).eq("ator_user_id", actor.id);
+    if (result.error) throw new Error(result.error.message);
+    return { ok: true };
+  }
   if (action === "mark_post_sale") {
     const alunoId = clean(body.aluno_id); const compraId = clean(body.compra_id);
     if (!/^[0-9a-f-]{36}$/i.test(alunoId) || !/^[0-9a-f-]{36}$/i.test(compraId)) throw new Error("Aluno ou compra inválidos.");
