@@ -156,6 +156,11 @@ describe("fronteira administrativa comercial", () => {
     expect(client).toContain("· {scopeName(id)}");
   });
 
+  it("disponibiliza todos os recortes da lei escolhida na composição", () => {
+    expect(client).toContain("(body.recortes ?? []).map");
+    expect(client).not.toContain("(body.recortes ?? []).filter((item: { ativo?: boolean }) => item.ativo)");
+  });
+
   it("mantém a fila por compra resiliente a compras órfãs e ao identificador real do e-mail", () => {
     expect(server).toContain('.not("aluno_id", "is", null)');
     expect(server).toContain("function accessEmailForPurchase");
