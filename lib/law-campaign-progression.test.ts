@@ -46,7 +46,7 @@ describe("reabertura ao entrar conteúdo novo", () => {
 
   it("reativa a mesma campanha concluída somente para questões ativas ainda não respondidas", () => {
     const reopen = server.slice(server.indexOf("async function reopenCompletedCampaign"), server.indexOf("async function campaignStateFor"));
-    expect(server).toContain('if (state.status === "concluida" && state.campaignId === null && !lawProgress.completed)');
+    expect(server).toContain('if (reconcile && state.status === "concluida" && state.campaignId === null && lawProgress && !lawProgress.completed)');
     expect(server).toContain('await reopenCompletedCampaign(context, campaignId)');
     expect(reopen).toContain('const additions = level.ids.filter((id) => !current?.ids.includes(id) && !answered.has(id));');
     expect(reopen).toContain('update({ concluida: false, concluida_em: null }).eq("id", campaignId).eq("concluida", true)');

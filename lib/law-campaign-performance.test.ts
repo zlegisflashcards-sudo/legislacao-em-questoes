@@ -21,9 +21,10 @@ describe("performance do Estudo Ativo da Lei", () => {
     expect(campaign).toContain("return campaignStateFor(context);");
   });
 
-  it("paraleliza as consultas independentes de autorização", () => {
+  it("separa a autenticação base da autorização do contexto de estudo", () => {
     expect(lawStudy).toContain("const [{ data: studentData, error: studentError }, { data: lawData, error: lawError }] = await Promise.all([");
-    expect(lawStudy).toContain("const [{ data: passwordStatus, error: passwordStatusError }, { data: accessData, error: accessError }] = await Promise.all([");
+    expect(lawStudy).toContain("export async function authenticateLawStudent");
+    expect(lawStudy).toContain("export async function authorizeLawStudy");
   });
 
   it("busca apenas as questões necessárias após a abertura", () => {
@@ -37,7 +38,7 @@ describe("performance do Estudo Ativo da Lei", () => {
   });
 
   it("mantém a montagem do snapshot baseada no slug canônico e em descendentes", () => {
-    expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(lawId, context.title);");
+    expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(context);");
     expect(snapshot).toContain("const descendants = (id: number): number[] => [id, ...(children.get(id) ?? []).flatMap(descendants)];");
     expect(snapshot).toContain("ids.has(question.structure_id)");
     expect(snapshot).toContain("left.ordem.localeCompare(right.ordem) || left.id.localeCompare(right.id)");
@@ -49,7 +50,7 @@ describe("performance do Estudo Ativo da Lei", () => {
     expect(campaign).toContain('update({ abandonada: true }).eq("id", current.campanha_ativa_id).eq("concluida", false).eq("abandonada", false)');
     expect(campaign).toContain('status_campanha: "nao_iniciada", campanha_ativa_id: null');
     expect(campaign).toContain("if (!current.campaignId) {");
-    expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(lawId, context.title);");
+    expect(campaign).toContain("const snapshot = await loadQuestionSnapshot(context);");
     expect(campaign).toContain("score_competitivo_acertos: 0, score_competitivo_erros: 0");
     expect(campaign).toContain("score_competitivo_iniciado_em: competitiveStartedAt");
   });

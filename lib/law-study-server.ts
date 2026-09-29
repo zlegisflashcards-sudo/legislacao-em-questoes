@@ -76,7 +76,13 @@ function parseHistory(value: unknown): LawStudyHistoryItem[] {
   });
 }
 
-export async function authorizeLawStudy(request: Request, slug: string) {
+/**
+ * Resolve a sessão, o aluno e a lei publicada sem decidir ainda se o acesso é
+ * à lei inteira ou a um recorte. Consumidores de recorte devem usar esta base
+ * e então validar o contexto explicitamente; nunca usar a liberação integral
+ * como atalho para um recorte.
+ */
+export async function authenticateLawStudent(request: Request, slug: string) {
   if (!isValidLawSlug(slug)) throw new LawStudyApiError(400, "Identificador de lei inválido.");
   const url = new URL(request.url);
   if (url.searchParams.has("aluno_id") || url.searchParams.has("lei_id")) throw new LawStudyApiError(400, "Parâmetro não permitido.");
@@ -102,26 +108,28 @@ export async function authorizeLawStudy(request: Request, slug: string) {
   const title = text(law?.titulo);
   if (lawId === null || !title) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
 
-  const [{ data: passwordStatus, error: passwordStatusError }, { data: accessData, error: accessError }] = await Promise.all([
-    supabase.from("alunos").select("deve_trocar_senha").eq("id", studentId).single(),
-    supabase.from("liberacoes_leis").select("id").eq("aluno_id", studentId).eq("lei_id", lawId).eq("status", "ativo").limit(1),
-  ]);
+  const { data: passwordStatus, error: passwordStatusError } = await supabase.from("alunos").select("deve_trocar_senha").eq("id", studentId).single();
   if (passwordStatusError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
   if (passwordStatus?.deve_trocar_senha === true) throw new LawStudyApiError(403, "Crie sua nova senha antes de acessar suas leis.");
-
-  if (accessError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
-  if ((!Array.isArray(accessData) || accessData.length === 0) && law?.acesso_gratuito !== true) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
-
   return { supabase, lawId, title, law, studentId };
 }
 
-export async function loadLawStudy(request: Request, slug: string): Promise<LawStudyData> {
-  const { supabase, lawId, title, law, studentId } = await authorizeLawStudy(request, slug);
+export async function authorizeLawStudy(request: Request, slug: string) {
+  const context = await authenticateLawStudent(request, slug);
+  const { data: accessData, error: accessError } = await context.supabase.from("liberacoes_leis").select("id").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("status", "ativo").limit(1);
+  if (accessError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
+  if ((!Array.isArray(accessData) || accessData.length === 0) && context.law?.acesso_gratuito !== true) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
+  return context;
+}
+
+export async function loadLawStudy(request: Request, slug: string, authorizedContext?: Awaited<ReturnType<typeof authenticateLawStudent>> & { recorte?: { id: string; nome: string } | null; questionIds?: string[] }): Promise<LawStudyData> {
+  const { supabase, lawId, title, law, studentId } = authorizedContext ?? await authorizeLawStudy(request, slug);
+  const scoped = authorizedContext?.recorte?.id ?? null;
   const [materialsResult, historyResult, progressResult, totalFlashcards] = await Promise.all([
-    supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true }),
-    supabase.from("historico_atualizacoes_leis").select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at").eq("lei_id", lawId).eq("visivel_aluno", true).order("data_publicacao", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }),
-    supabase.from("progresso_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle(),
-    activeQuestionCountBySlug(slug),
+    scoped ? Promise.resolve({ data: [], error: null }) : supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true }),
+    scoped ? Promise.resolve({ data: [], error: null }) : supabase.from("historico_atualizacoes_leis").select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at").eq("lei_id", lawId).eq("visivel_aluno", true).order("data_publicacao", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }),
+    scoped ? supabase.from("progresso_recortes_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).eq("recorte_id", scoped).maybeSingle() : supabase.from("progresso_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle(),
+    scoped ? Promise.resolve(authorizedContext?.questionIds?.length ?? 0) : activeQuestionCountBySlug(slug),
   ]);
   if (materialsResult.error || historyResult.error || progressResult.error) throw new LawStudyApiError(503, "Não foi possível carregar os dados de estudo agora.");
 

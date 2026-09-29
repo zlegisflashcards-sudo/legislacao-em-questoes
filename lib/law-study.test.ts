@@ -207,7 +207,7 @@ describe("interface de estudo", () => {
   });
 
   it("reseta somente a campanha sem localStorage", () => {
-    expect(client).toContain('}/campanha`, "DELETE"'); expect(client).toContain('record: current?.record');
+    expect(client).toContain('}/campanha${recorteId ?'); expect(client).toContain('record: current?.record');
     expect(client).not.toContain("localStorage");
     expect(client).toContain('Resetar Estudo Ativo da Lei');
   });

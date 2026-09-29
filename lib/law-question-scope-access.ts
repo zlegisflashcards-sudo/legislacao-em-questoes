@@ -16,7 +16,7 @@ export type LawStudyContext = {
 
 type Release = { produto_id: string | null };
 type ProductLaw = { produto_id: string; recorte_id: string | null };
-type Scope = { id: string; nome: string };
+type Scope = { id: string; nome: string; acesso_gratuito?: boolean };
 type BatchRelease = Release & { lei_id: number };
 type BatchProductLaw = ProductLaw & { lei_id: number };
 type BatchScope = Scope & { lei_id: number };
@@ -61,9 +61,7 @@ export async function listLawStudyContexts(studentId: string, lawId: number): Pr
   const access = availableLawStudyAccess(releases, productLinks);
   const fullAccess = access.full;
   const requestedScopeIds = access.recorteIds;
-  const scopesResult = requestedScopeIds.length
-    ? await db.from("recortes_leis").select("id,nome").eq("lei_id", lawId).eq("ativo", true).in("id", requestedScopeIds)
-    : { data: [] as Scope[], error: null };
+  const scopesResult = await db.from("recortes_leis").select("id,nome,acesso_gratuito").eq("lei_id", lawId).eq("ativo", true).or(requestedScopeIds.length ? `id.in.(${requestedScopeIds.join(",")}),acesso_gratuito.eq.true` : "acesso_gratuito.eq.true");
   if (scopesResult.error) throw new Error(`Não foi possível carregar os recortes liberados: ${scopesResult.error.message}`);
   const scopes = (scopesResult.data ?? []) as Scope[];
   const [questions, structure, scopeLinksResult] = await Promise.all([
@@ -76,6 +74,7 @@ export async function listLawStudyContexts(studentId: string, lawId: number): Pr
   for (const link of scopeLinksResult.data ?? []) linksByScope.set(link.recorte_id, [...(linksByScope.get(link.recorte_id) ?? []), link.structure_id]);
   const contexts: LawStudyContext[] = fullAccess ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }] : [];
   for (const scope of scopes) {
+    if (!scope.acesso_gratuito && !requestedScopeIds.includes(scope.id)) continue;
     const selected = linksByScope.get(scope.id) ?? [];
     const structureIds = descendantsForScope(structure, selected);
     const scopedQuestions = questionsInScope(questions, structureIds);
@@ -102,7 +101,7 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
   if (linksResult.error) throw new Error(`Não foi possível verificar os contextos de estudo: ${linksResult.error.message}`);
   const links = (linksResult.data ?? []) as BatchProductLaw[];
   const scopeIds = [...new Set(links.flatMap((link) => typeof link.recorte_id === "string" ? [link.recorte_id] : []))];
-  const activeScopesResult = scopeIds.length ? await db.from("recortes_leis").select("id,lei_id,nome").eq("ativo", true).in("id", scopeIds).order("nome") : { data: [] as BatchScope[], error: null };
+  const activeScopesResult = await db.from("recortes_leis").select("id,lei_id,nome,acesso_gratuito").eq("ativo", true).in("lei_id", uniqueLawIds).or(scopeIds.length ? `id.in.(${scopeIds.join(",")}),acesso_gratuito.eq.true` : "acesso_gratuito.eq.true").order("nome");
   if (activeScopesResult.error) throw new Error(`Não foi possível carregar os recortes liberados: ${activeScopesResult.error.message}`);
   const scopes = (activeScopesResult.data ?? []) as BatchScope[];
   const activeScopeIds = new Set(scopes.map((scope) => scope.id));
@@ -133,7 +132,7 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
     const structure = structureByLaw.get(lawId) ?? [];
     const contexts: LawStudyContext[] = access.full ? [{ recorteId: null, nome: "Lei completa", questionCount: questions.length, structureIds: null, questionIds: questions.map((question) => question.id) }] : [];
     for (const scope of scopesByLaw.get(lawId) ?? []) {
-      if (!access.recorteIds.includes(scope.id)) continue;
+      if (!scope.acesso_gratuito && !access.recorteIds.includes(scope.id)) continue;
       const structureIds = descendantsForScope(structure, scopeLinksById.get(scope.id) ?? []);
       const scopedQuestions = questionsInScope(questions, structureIds);
       contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: scopedQuestions.length, structureIds, questionIds: scopedQuestions.map((question) => question.id) });
