@@ -18,7 +18,7 @@ export type AdminActionState = {
   ok: boolean;
   message: string;
   record?: LegisBotComentario;
-  existing?: { id: number; publicUrl: string };
+  existing?: { id: number; publicUrl: string; articleUrl: string };
   fieldErrors?: Partial<Record<"slug" | "ordem" | "titulo" | "assunto" | "legislacao" | "comentario" | "status", string>>;
 };
 
@@ -121,6 +121,7 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
       existing: {
         id: Number(duplicate.data.id),
         publicUrl: `/legisbot/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(ordem)}`,
+        articleUrl: `/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(ordem)}`,
       },
       fieldErrors: { slug: "Combinação já utilizada.", ordem: "Combinação já utilizada." },
     };

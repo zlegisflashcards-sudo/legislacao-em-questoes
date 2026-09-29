@@ -69,6 +69,12 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
   ));
   const canOpenPublic = Boolean(savedRecord && savedRecord.status === "concluido");
 
+  function duplicate() {
+    setSavedRecord(undefined);
+    setSavedFields(fields);
+    setConfirmDelete(false);
+  }
+
   useEffect(() => {
     if (!state.ok || !state.record) return;
     const effective = fromRecord(state.record);
@@ -132,10 +138,11 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
             <h1>{savedRecord ? fields.titulo || "Comentário sem título" : "Adicionar comentário"}</h1>
             <span className={`admin-status status-${fields.status}`}>{statusLabels[fields.status]}</span>
           </div>
-          <p>{savedRecord ? `${savedFields.slug} · ordem ${savedFields.ordem} · ID ${savedRecord.id}` : "Crie, revise e publique um comentário manualmente."}</p>
+          <p>{savedRecord ? `${savedFields.slug} · ordem ${savedFields.ordem} · ID ${savedRecord.id}` : "Crie uma cópia e altere slug e ordem antes de salvar."}</p>
         </div>
         <div className="admin-save-actions">
           {canOpenPublic ? <Link className="admin-button secondary" href={publicUrl} target="_blank">Abrir página pública</Link> : null}
+          {savedRecord ? <button type="button" className="admin-button secondary" disabled={pending} onClick={duplicate}>Duplicar</button> : null}
           <button name="intent" value="draft" type="submit" className="admin-button secondary" disabled={pending}>
             {pending ? "Carregando…" : "Salvar como rascunho"}
           </button>
@@ -152,7 +159,7 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
       {state.message ? <div className={`admin-alert ${state.ok ? "success" : "error"}`} role="status">
         {state.message}
         {state.existing ? <span className="admin-alert-actions">
-          <Link href={`/admin/legisbot/${state.existing.id}`}>Abrir comentário existente</Link>
+          <Link href={state.existing.articleUrl}>Abrir comentário existente</Link>
         </span> : null}
       </div> : null}
 

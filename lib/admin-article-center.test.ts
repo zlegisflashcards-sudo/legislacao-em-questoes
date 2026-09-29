@@ -19,6 +19,7 @@ describe("Central do Artigo administrativa", () => {
     expect(server).toContain("ordem.ilike");
     expect(server).toContain("assunto.ilike");
     expect(index).toContain("searchArticleContexts(query)");
+    expect(index).toContain('href="/admin/legisbot/novo"');
   });
 
   it("mantém resultados ambíguos como uma lista para escolha", () => {
@@ -40,9 +41,12 @@ describe("Central do Artigo administrativa", () => {
 
   it("mantém o editor completo do LegisBot no contexto do artigo", () => {
     const editor = read("components/admin/legisbot-editor.tsx");
+    const actions = read("app/admin/actions.ts");
     expect(editor).toContain("excluirComentario");
     expect(editor).toContain("salvarComentario");
     expect(editor).toContain("returnHref");
+    expect(editor).toContain("Duplicar");
+    expect(actions).toContain("articleUrl");
   });
 
   it("filtra comentários pelo par slug + ordem", () => {
