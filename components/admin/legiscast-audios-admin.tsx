@@ -655,53 +655,65 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const selectedTracks = selectedLaw
     ? tracksForLaw(audios, selectedLaw.id)
     : [];
+  const uploadStructure = structures.find(
+    (structure) => String(structure.id) === uploadStructureId,
+  );
   return (
     <section className="commercial-card">
-      <h2>Áudios do LegisCast</h2>
-      <p>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
+        <div>
+          <p className="law-center-kicker">LegisCast</p>
+          <h2 className="mb-1">Adicionar áudio</h2>
+          <p className="max-w-3xl text-sm text-slate-600">
         Envie MP3, M4A, WAV ou MP4 com faixa de áudio (até 500 MB). O envio é
         direto ao armazenamento temporário; o processamento gera M4A para o
         player e MP3 para download administrativo.
-      </p>
+          </p>
+        </div>
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">Até 500 MB</span>
+      </div>
       <form
-        className="mt-5 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
+        className="mt-5 grid min-w-0 gap-4"
         onSubmit={(event) => void submit(event)}
       >
-        {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <LawSearchSelect laws={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} />}
-        <label className="grid min-w-0 gap-1 font-bold">
-          Estrutura
-          <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => { const structureId = event.target.value; setUploadStructureId(structureId); const selectedStructure = structures.find((structure) => String(structure.id) === structureId); setUploadPdfPage(selectedStructure?.pdf_page ? String(selectedStructure.pdf_page) : ""); }}>
-            <option value="">{uploadLawId ? "Sem estrutura" : "Selecione uma lei primeiro"}</option>
-            {uploadLawId ? structureOptions(structures, Number(uploadLawId)).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>) : null}
-          </select>
-        </label>
-        <label className="grid min-w-0 gap-1 font-bold">
-          Página no PDF
-          <input name="pdf_page" type="number" min="1" step="1" inputMode="numeric" value={uploadPdfPage} disabled={!uploadStructureId} onChange={(event) => setUploadPdfPage(event.target.value)} aria-describedby="upload-pdf-page-help" />
-          <small id="upload-pdf-page-help" className="font-normal text-slate-500">Página onde esta estrutura começa no PDF.</small>
-        </label>
-        <label className="grid min-w-0 gap-1 font-bold">
-          Título
-          <input name="titulo" placeholder="Título da faixa" />
-          <small className="font-normal text-slate-500">
-            Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.
-          </small>
-        </label>
-        <label className="grid min-w-0 gap-1 font-bold lg:col-span-2">Descrição<textarea name="descricao" placeholder="Descrição opcional" /></label>
-        <label className="grid min-w-0 gap-1 font-bold">Ordem<input name="ordem" type="number" min="0" defaultValue="0" /></label>
-        <label className="grid min-w-0 gap-1 font-bold">
-          Original MP3, M4A, WAV ou MP4
-          <input
-            name="file"
-            type="file"
-            accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,video/mp4,application/mp4,.mp3,.m4a,.wav,.mp4"
-            required
-          />
-        </label>
-        <label className="grid min-w-0 gap-1 font-bold">Publicação<select name="ativo" defaultValue="true"><option value="true">Publicar ao concluir</option><option value="false">Manter inativo ao concluir</option></select></label>
-        <button className="admin-button primary min-h-12 lg:self-end" disabled={busy}>
-          {busy ? "Enviando…" : "Enviar e processar"}
-        </button>
+        <fieldset className="grid gap-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4 lg:grid-cols-2">
+          <legend className="px-1 text-sm font-black text-[#062a5f]">1. Vincular ao trecho da lei</legend>
+          {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <LawSearchSelect laws={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} />}
+          <label className="grid min-w-0 gap-1 font-bold">
+            Trecho da estrutura
+            <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => { const structureId = event.target.value; setUploadStructureId(structureId); const selectedStructure = structures.find((structure) => String(structure.id) === structureId); setUploadPdfPage(selectedStructure?.pdf_page ? String(selectedStructure.pdf_page) : ""); }}>
+              <option value="">{uploadLawId ? "Sem estrutura" : "Selecione uma lei primeiro"}</option>
+              {uploadLawId ? structureOptions(structures, Number(uploadLawId)).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>) : null}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 font-bold">
+            Página inicial no PDF
+            <input name="pdf_page" type="number" min="1" step="1" inputMode="numeric" value={uploadPdfPage} disabled={!uploadStructureId} onChange={(event) => setUploadPdfPage(event.target.value)} aria-describedby="upload-pdf-page-help" />
+            <small id="upload-pdf-page-help" className="font-normal text-slate-500">Página onde o trecho começa no PDF.</small>
+          </label>
+          <aside className="rounded-lg border border-blue-200 bg-white px-3 py-3 text-sm" aria-live="polite">
+            <p className="font-black text-[#062a5f]">Destino do áudio</p>
+            <p className="mt-1 font-semibold text-slate-700">{uploadStructure ? `${uploadStructure.tipo}: ${uploadStructure.nome}` : "Sem trecho vinculado"}</p>
+            <p className="mt-1 text-slate-500">{uploadPdfPage ? `PDF · página ${uploadPdfPage}` : "Informe a página inicial para facilitar a localização."}</p>
+          </aside>
+        </fieldset>
+        <fieldset className="grid gap-4 rounded-xl border border-slate-200 p-4 lg:grid-cols-2">
+          <legend className="px-1 text-sm font-black text-[#062a5f]">2. Arquivo e publicação</legend>
+          <label className="grid min-w-0 gap-1 font-bold">
+            Arquivo original
+            <input name="file" type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,video/mp4,application/mp4,.mp3,.m4a,.wav,.mp4" required />
+            <small className="font-normal text-slate-500">MP3, M4A, WAV ou MP4 com faixa de áudio.</small>
+          </label>
+          <label className="grid min-w-0 gap-1 font-bold">Publicação<select name="ativo" defaultValue="true"><option value="true">Publicar ao concluir</option><option value="false">Manter inativo ao concluir</option></select></label>
+          <label className="grid min-w-0 gap-1 font-bold">
+            Título
+            <input name="titulo" placeholder="Título da faixa" />
+            <small className="font-normal text-slate-500">Opcional. Usa o nome do trecho se ficar vazio.</small>
+          </label>
+          <label className="grid min-w-0 gap-1 font-bold">Ordem<input name="ordem" type="number" min="0" defaultValue="0" /></label>
+          <label className="grid min-w-0 gap-1 font-bold lg:col-span-2">Descrição<textarea name="descricao" placeholder="Descrição opcional" /></label>
+          <button className="admin-button primary min-h-12 lg:col-span-2" disabled={busy}>{busy ? "Enviando…" : "Enviar e processar áudio"}</button>
+        </fieldset>
       </form>
       {lawContext && !structures.length ? <p className="admin-alert mt-4">Esta lei ainda não possui estrutura. Você pode cadastrar o áudio sem estrutura ou <a className="font-bold underline" href={`/admin/leis/${encodeURIComponent(lawContext.slug)}/estrutura`}>criar a estrutura da lei</a>.</p> : null}
       {error ? (
@@ -786,10 +798,20 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                     className="grid gap-2"
                     style={{ marginLeft: `${depth * 12}px` }}
                   >
-                    <div className="flex flex-wrap items-end justify-between gap-3">
-                      <h5 className="font-bold text-slate-700">
-                        {structure.tipo}: {structure.nome}
-                      </h5>
+                    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="min-w-0">
+                        <h5 className="font-bold text-slate-800">
+                          {structure.tipo}: {structure.nome}
+                        </h5>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+                          <span className={tracks.length ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : "rounded-full bg-slate-200 px-2 py-1 text-slate-600"}>
+                            {tracks.length ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"}` : "Sem áudio"}
+                          </span>
+                          <span className={structure.pdf_page ? "rounded-full bg-blue-100 px-2 py-1 text-blue-800" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
+                            {structure.pdf_page ? `PDF · página ${structure.pdf_page}` : "Página do PDF não informada"}
+                          </span>
+                        </div>
+                      </div>
                       <form
                         className="flex flex-wrap items-end gap-2"
                         onSubmit={(event) =>
@@ -828,13 +850,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                     {tracks.map((audio) => (
                       <article
                         key={audio.id}
-                        className="grid gap-2 rounded-lg border border-slate-200 p-3"
+                        className="grid gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3"
                       >
                         <div>
-                          <strong>
-                            {audio.ordem}.{" "}
-                            {audioDisplayTitle(audio, structures)}
-                          </strong>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-blue-700 px-2 py-1 text-xs font-black text-white">Áudio {audio.ordem}</span>
+                            <strong>{audioDisplayTitle(audio, structures)}</strong>
+                            {structure.pdf_page ? <span className="text-xs font-bold text-blue-800">PDF · página {structure.pdf_page}</span> : null}
+                          </div>
                           <p className="text-sm text-slate-600">
                             {audio.descricao || "Sem descrição"}
                           </p>
