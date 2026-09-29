@@ -16,6 +16,11 @@ export function adminQuestionSearchTerms(value: unknown) {
   return normalizeAdminQuestionSearchQuery(value).split(" ").filter((term) => /[\p{L}\p{N}]/u.test(term)).slice(0, 6);
 }
 
+export function adminQuestionSearchId(value: unknown) {
+  const query = String(value ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(query) ? query : null;
+}
+
 export function parseAdminQuestionSearchFilter(value: unknown): AdminQuestionSearchFilter {
   return (["certo", "errado", "unstructured"] as const).includes(value as never) ? value as AdminQuestionSearchFilter : "all";
 }
