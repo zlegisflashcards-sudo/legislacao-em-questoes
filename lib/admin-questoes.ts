@@ -18,6 +18,9 @@ export type QuestionDraft = {
   artigo: string | null;
 };
 
+export const QUESTION_EDITABLE_FIELDS = ["structure_id", "pergunta", "resposta", "justificativa", "assunto", "legislacao", "ordem", "titulo", "total_artigos", "capitulo", "secao", "subsecao", "artigo"] as const;
+export type QuestionEditableField = (typeof QUESTION_EDITABLE_FIELDS)[number];
+
 type DraftInput = Record<string, unknown>;
 
 function text(value: unknown, field: string, required = false, max = 12000) {
@@ -48,28 +51,43 @@ function order(value: unknown) {
   return value.trim();
 }
 
-export function parseQuestionDraft(input: DraftInput): QuestionDraft {
-  const resposta = text(input.resposta, "Resposta", true, 20);
-  if (!QUESTION_ANSWERS.includes(resposta as QuestionAnswer)) {
-    throw new Error("Resposta deve ser Certo ou Errado.");
+export function parseQuestionFieldChange(field: QuestionEditableField, value: unknown): QuestionDraft[QuestionEditableField] {
+  switch (field) {
+    case "structure_id": return optionalInteger(value, "Estrutura");
+    case "pergunta": return text(value, "Pergunta", true)!;
+    case "resposta": {
+      const resposta = text(value, "Resposta", true, 20);
+      if (!QUESTION_ANSWERS.includes(resposta as QuestionAnswer)) throw new Error("Resposta deve ser Certo ou Errado.");
+      return resposta as QuestionAnswer;
+    }
+    case "ordem": return order(value);
+    case "justificativa": return text(value, "Justificativa");
+    case "assunto": return text(value, "Assunto", false, 500);
+    case "legislacao": return text(value, "Legislação");
+    case "titulo": return text(value, "Título", false, 500);
+    case "total_artigos": return optionalInteger(value, "Total de artigos");
+    case "capitulo": return text(value, "Capítulo", false, 500);
+    case "secao": return text(value, "Seção", false, 500);
+    case "subsecao": return text(value, "Subseção", false, 500);
+    case "artigo": return text(value, "Artigo", false, 500);
   }
+}
 
-  const ordem = order(input.ordem);
-
+export function parseQuestionDraft(input: DraftInput): QuestionDraft {
   return {
-    structure_id: optionalInteger(input.structure_id, "Estrutura"),
-    pergunta: text(input.pergunta, "Pergunta", true)!,
-    resposta: resposta as QuestionAnswer,
-    justificativa: text(input.justificativa, "Justificativa"),
-    assunto: text(input.assunto, "Assunto", false, 500),
-    legislacao: text(input.legislacao, "Legislação"),
-    ordem,
-    titulo: text(input.titulo, "Título", false, 500),
-    total_artigos: optionalInteger(input.total_artigos, "Total de artigos"),
-    capitulo: text(input.capitulo, "Capítulo", false, 500),
-    secao: text(input.secao, "Seção", false, 500),
-    subsecao: text(input.subsecao, "Subseção", false, 500),
-    artigo: text(input.artigo, "Artigo", false, 500),
+    structure_id: parseQuestionFieldChange("structure_id", input.structure_id) as QuestionDraft["structure_id"],
+    pergunta: parseQuestionFieldChange("pergunta", input.pergunta) as QuestionDraft["pergunta"],
+    resposta: parseQuestionFieldChange("resposta", input.resposta) as QuestionDraft["resposta"],
+    justificativa: parseQuestionFieldChange("justificativa", input.justificativa) as QuestionDraft["justificativa"],
+    assunto: parseQuestionFieldChange("assunto", input.assunto) as QuestionDraft["assunto"],
+    legislacao: parseQuestionFieldChange("legislacao", input.legislacao) as QuestionDraft["legislacao"],
+    ordem: parseQuestionFieldChange("ordem", input.ordem) as QuestionDraft["ordem"],
+    titulo: parseQuestionFieldChange("titulo", input.titulo) as QuestionDraft["titulo"],
+    total_artigos: parseQuestionFieldChange("total_artigos", input.total_artigos) as QuestionDraft["total_artigos"],
+    capitulo: parseQuestionFieldChange("capitulo", input.capitulo) as QuestionDraft["capitulo"],
+    secao: parseQuestionFieldChange("secao", input.secao) as QuestionDraft["secao"],
+    subsecao: parseQuestionFieldChange("subsecao", input.subsecao) as QuestionDraft["subsecao"],
+    artigo: parseQuestionFieldChange("artigo", input.artigo) as QuestionDraft["artigo"],
   };
 }
 

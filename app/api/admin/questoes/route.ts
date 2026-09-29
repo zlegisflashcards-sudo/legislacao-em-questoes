@@ -11,6 +11,8 @@ import {
   questionDeletionSummary,
   bulkQuestionDeletionSummary,
   deleteBulkAdminQuestions,
+  previewBulkQuestionEdit,
+  applyBulkQuestionEdit,
   moveAdminQuestion,
   reactivateAdminQuestion,
   listAdminQuestionLaws,
@@ -87,6 +89,8 @@ export async function POST(request: Request) {
     else if (body.action === "excluir_questao") data = await deleteAdminQuestion(body);
     else if (body.action === "resumo_exclusao_questoes") data = await bulkQuestionDeletionSummary(body);
     else if (body.action === "excluir_questoes") data = await deleteBulkAdminQuestions(body);
+    else if (body.action === "previsualizar_edicao_lote") data = await previewBulkQuestionEdit(body);
+    else if (body.action === "aplicar_edicao_lote") data = await applyBulkQuestionEdit(body);
     else if (body.action === "mover_questao") data = await moveAdminQuestion(body);
     else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);

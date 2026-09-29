@@ -1,6 +1,7 @@
 import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { parseQuestionDraft, type QuestionDraft } from "@/lib/admin-questoes";
+import { parseBulkQuestionEdit, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
@@ -62,6 +63,39 @@ async function bulkQuestionIds(current: Law, body: Record<string, unknown>) {
   if (scope === "questions") { const ids = Array.isArray(body.question_ids) ? body.question_ids.map(qid) : []; if (!ids.length || new Set(ids).size !== ids.length) throw new AdminQuestoesError(400, "Informe uma lista não vazia de questões sem duplicidades."); return ids; }
   if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
   throw new AdminQuestoesError(400, "Escopo de exclusão em massa inválido.");
+}
+
+async function bulkQuestionEditIds(current: Law, body: Record<string, unknown>, scope: BulkQuestionEditScope) {
+  if (scope === "all") { const result = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true); if (result.error) fail("selecionar_todas_questoes_edicao", result.error); return (result.data ?? []).map((row) => String(row.id)); }
+  if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
+  const ids = Array.isArray(body.question_ids) ? body.question_ids.map(qid) : [];
+  if (!ids.length || new Set(ids).size !== ids.length) throw new AdminQuestoesError(400, "Selecione uma ou mais questões sem duplicidades.");
+  return ids;
+}
+
+type BulkQuestionEditPreview = { field: string; value: unknown; selection_count: number; changed_count: number; unchanged_count: number; sample: Array<{ id: string; before: unknown; after: unknown }>; expected: Array<{ id: string; before: unknown }> };
+async function resolveBulkQuestionEdit(body: Record<string, unknown>): Promise<{ current: Law; user: { id: string }; parsed: ReturnType<typeof parseBulkQuestionEdit>; ids: string[]; preview: BulkQuestionEditPreview }> {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); let parsed: ReturnType<typeof parseBulkQuestionEdit>;
+  try { parsed = parseBulkQuestionEdit(body); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "Edição em lote inválida."); }
+  if (parsed.field === "structure_id") await validateStructure(current.id, parsed.value as number | null);
+  const ids = await bulkQuestionEditIds(current, body, parsed.scope);
+  if (!ids.length) throw new AdminQuestoesError(422, "Não há questões nesta abrangência.");
+  const selected = await db().from("questions").select(`id,${parsed.field}`).eq("lei_id", current.id).eq("ativo", true).in("id", ids).order("id");
+  if (selected.error) fail("carregar_edicao_lote", selected.error);
+  if ((selected.data?.length ?? 0) !== ids.length) throw new AdminQuestoesError(409, "A seleção mudou ou contém questão de outra lei. Gere uma nova prévia.");
+  const rows = (selected.data ?? []) as Array<Record<string, unknown> & { id: string }>;
+  const changed = rows.filter((row) => row[parsed.field] !== parsed.value);
+  return { current, user, parsed, ids: rows.map((row) => String(row.id)), preview: { field: parsed.field, value: parsed.value, selection_count: rows.length, changed_count: changed.length, unchanged_count: rows.length - changed.length, sample: changed.slice(0, 8).map((row) => ({ id: String(row.id), before: row[parsed.field], after: parsed.value })), expected: rows.map((row) => ({ id: String(row.id), before: row[parsed.field] })) } };
+}
+
+export async function previewBulkQuestionEdit(body: Record<string, unknown>) { const resolved = await resolveBulkQuestionEdit(body); return { law: { id: resolved.current.id, slug: resolved.current.slug, titulo: resolved.current.titulo }, ...resolved.preview }; }
+export async function applyBulkQuestionEdit(body: Record<string, unknown>) {
+  const resolved = await resolveBulkQuestionEdit(body);
+  const expected = Array.isArray(body.expected) ? body.expected : [];
+  if (JSON.stringify(expected) !== JSON.stringify(resolved.preview.expected)) throw new AdminQuestoesError(409, "As questões mudaram desde a prévia. Gere uma nova prévia.");
+  const result = await db().rpc("admin_bulk_update_law_questions", { p_lei_id: resolved.current.id, p_question_ids: resolved.ids, p_field: resolved.parsed.field, p_value: resolved.parsed.value, p_expected: resolved.preview.expected, p_actor_user_id: resolved.user.id });
+  if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : result.error.code === "40001" ? 409 : 422, result.error.message);
+  return result.data;
 }
 export async function bulkQuestionDeletionSummary(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const ids = await bulkQuestionIds(current, body); if (!ids.length) throw new AdminQuestoesError(422, "Não há questões para excluir neste escopo."); return deleteContentRpc(current, user.id, ids, null, false); }
 export async function deleteBulkAdminQuestions(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); if (body.confirmation !== "EXCLUIR") throw new AdminQuestoesError(422, "Digite EXCLUIR para confirmar a exclusão em massa."); const ids = await bulkQuestionIds(current, body); if (!ids.length) throw new AdminQuestoesError(422, "Não há questões para excluir neste escopo."); return deleteContentRpc(current, user.id, ids, null, true, body.confirmation); }

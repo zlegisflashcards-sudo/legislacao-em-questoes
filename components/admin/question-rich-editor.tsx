@@ -7,6 +7,7 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
 };
 
 /**
@@ -14,7 +15,7 @@ type Props = {
  * o valor ao abrir ou salvar sem edição; o player continua sendo responsável pela
  * sanitização de exibição ao aluno.
  */
-export function QuestionRichEditor({ label, value, onChange, required = false }: Props) {
+export function QuestionRichEditor({ label, value, onChange, required = false, disabled = false }: Props) {
   const [htmlMode, setHtmlMode] = useState(false);
   const visualRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +31,7 @@ export function QuestionRichEditor({ label, value, onChange, required = false }:
   }
 
   return <section className="question-rich-field">
-    <header><label>{label}{required ? " *" : ""}</label><button type="button" onClick={toggleMode} aria-label={`Alternar ${label} entre visual e HTML`} title="Alternar visual/HTML">&lt;&gt;</button></header>
-    {htmlMode ? <textarea className="question-rich-html" value={value} required={required} spellCheck={false} onChange={(event) => onChange(event.target.value)} /> : <div ref={visualRef} className="question-rich-visual" contentEditable suppressContentEditableWarning role="textbox" aria-label={`Editor visual: ${label}`} aria-multiline="true" onInput={(event) => onChange(event.currentTarget.innerHTML)} />}
+    <header><label>{label}{required ? " *" : ""}</label><button type="button" disabled={disabled} onClick={toggleMode} aria-label={`Alternar ${label} entre visual e HTML`} title="Alternar visual/HTML">&lt;&gt;</button></header>
+    {htmlMode ? <textarea className="question-rich-html" value={value} required={required} disabled={disabled} spellCheck={false} onChange={(event) => onChange(event.target.value)} /> : <div ref={visualRef} className="question-rich-visual" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-label={`Editor visual: ${label}`} aria-multiline="true" onInput={(event) => onChange(event.currentTarget.innerHTML)} />}
   </section>;
 }
