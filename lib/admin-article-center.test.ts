@@ -56,3 +56,14 @@ describe("Central do Artigo administrativa", () => {
     expect(detail).toContain('name="status"');
   });
 });
+
+describe("filtro do painel legado do LegisBot", () => {
+  it("filtra por lei e preserva a seleção ao abrir o editor", () => {
+    const listing = read("app/admin/legisbot/page.tsx");
+    const detail = read("app/admin/legisbot/[id]/page.tsx");
+    expect(listing).toContain('name="lei"');
+    expect(listing).toContain('request = request.eq("slug", law.toUpperCase())');
+    expect(listing).toContain("retorno=");
+    expect(detail).toContain("returnHref");
+  });
+});

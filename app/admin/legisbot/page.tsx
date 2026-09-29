@@ -21,9 +21,15 @@ function queryString(query: Query, changes: Record<string, string>) {
 }
 
 export default async function AdminLegisBotPage({ searchParams }: { searchParams: Promise<Query> }) {
-  const [query, user] = await Promise.all([searchParams, exigirAdministrador()]);
+  const [query, user, lawsResult] = await Promise.all([
+    searchParams,
+    exigirAdministrador(),
+    getSupabaseServerClient().from("leis").select("slug,titulo,codigo").order("ordem").order("titulo").limit(500),
+  ]);
+  if (lawsResult.error) throw new Error("Não foi possível carregar as leis para o filtro.");
   const search = one(query.q).trim().replace(/[,%()]/g, " ");
   const status = one(query.status);
+  const law = one(query.lei).trim().toLowerCase();
   const page = Math.max(1, Number(one(query.page)) || 1);
   const start = (page - 1) * PAGE_SIZE;
 
@@ -35,6 +41,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
   if (status && LEGISBOT_COMENTARIO_STATUS.includes(status as (typeof LEGISBOT_COMENTARIO_STATUS)[number])) {
     request = request.eq("status", status);
   }
+  if (/^[a-z0-9-]{1,160}$/.test(law)) request = request.eq("slug", law.toUpperCase());
   const { data, error, count } = await request.order("ordem", { ascending: true }).order("id", { ascending: true }).range(start, start + PAGE_SIZE - 1);
   if (error) throw new Error(error.message);
   const records = (data ?? []) as LegisBotComentario[];
@@ -68,6 +75,12 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
           {LEGISBOT_COMENTARIO_STATUS.map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}
         </select>
       </label>
+      <label>Lei
+        <select name="lei" defaultValue={law}>
+          <option value="">Todas as leis</option>
+          {(lawsResult.data ?? []).map((item) => <option key={String(item.slug)} value={String(item.slug)}>{item.codigo ? `${String(item.codigo)} — ` : ""}{String(item.titulo)}</option>)}
+        </select>
+      </label>
       <div className="admin-filter-actions">
         <button className="admin-button primary">Buscar</button>
         <Link className="admin-button secondary" href="/admin/legisbot">Limpar</Link>
@@ -89,7 +102,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
             <td><span className={`admin-status status-${item.status}`}>{statusLabels[item.status]}</span></td>
             <td>{fmt(item.updated_at)}</td>
             <td><div className="admin-row-actions">
-              <Link href={`/admin/legisbot/${item.id}`}>Editar</Link>
+              <Link href={`/admin/legisbot/${item.id}?retorno=${encodeURIComponent(`/admin/legisbot${queryString(query, { page: String(page) })}`)}`}>Editar</Link>
               {item.status === "concluido" ? <Link href={publicUrl} target="_blank">Abrir página pública</Link> : null}
               <CopyButton value={publicUrl} label="Copiar link" />
               <form action={alterarStatusComentario}>
