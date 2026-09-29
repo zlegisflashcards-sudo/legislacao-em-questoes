@@ -67,6 +67,16 @@ describe("Central administrativa por lei", () => {
     expect(checks).toContain("to service_role");
   });
 
+  it("inclui Questões no checklist administrativo da Central", () => {
+    const cards = read("components/admin/law-overview-cards.tsx");
+    const route = read("app/api/admin/law-overview-checks/route.ts");
+    const migration = read("supabase/migrations/20260929130000_add_questions_law_overview_check.sql");
+    expect(cards).toContain('"questoes"');
+    expect(route).toContain('"questoes"');
+    expect(migration).toContain("admin_law_overview_checks_item_check");
+    expect(migration).toContain("'questoes'");
+  });
+
   it("oferece próximos passos nos vazios sem criar fluxos paralelos", () => {
     expect(read("components/admin/law-structure-admin.tsx")).toContain("Criar primeiro Título");
     expect(read("components/admin/admin-question-scopes.tsx")).toContain("Criar primeiro recorte");

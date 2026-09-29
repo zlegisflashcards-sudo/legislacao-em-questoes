@@ -1,7 +1,7 @@
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
-const items = new Set(["estrutura", "materiais", "legiscast", "anki"]);
+const items = new Set(["estrutura", "materiais", "legiscast", "anki", "questoes"]);
 const headers = { "Cache-Control": "no-store, max-age=0" };
 function parseLawId(value: unknown) { const id = Number(value); return Number.isSafeInteger(id) && id > 0 ? id : null; }
 function failure(message: string, status = 400) { return Response.json({ error: message }, { status, headers }); }

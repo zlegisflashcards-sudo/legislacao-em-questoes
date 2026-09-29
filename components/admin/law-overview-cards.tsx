@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 
-type CheckItem = "estrutura" | "materiais" | "legiscast" | "anki";
+type CheckItem = "estrutura" | "materiais" | "legiscast" | "anki" | "questoes";
 type Card = { id: "estrutura" | "materiais" | "legiscast" | "anki" | "questoes" | "recortes"; label: string; value: number | string; description: string; action: string; href: string; tool?: boolean };
-const checkable = new Set<CheckItem>(["estrutura", "materiais", "legiscast", "anki"]);
+const checkable = new Set<CheckItem>(["estrutura", "materiais", "legiscast", "anki", "questoes"]);
 
 async function updateCheck(lawId: number, item: CheckItem, completed: boolean) {
   const response = await fetch("/api/admin/law-overview-checks", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lawId, item, completed }) });
