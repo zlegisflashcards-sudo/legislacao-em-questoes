@@ -6,8 +6,9 @@ import type { LegisBotComentario } from "@/lib/legisbot-comentario";
 
 const LIMIT = 40;
 
-export type ArticleContext = LegisBotComentario & { lawTitle: string | null; lawCode: string | null; commentsCount: number };
+export type ArticleContext = LegisBotComentario & { lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number };
 export type ArticleInteraction = { id: string; kind: "comentario" | "legisbot"; slug: string; ordem: string; author: string | null; summary: string; status: string; createdAt: string };
+export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
 
 export function normalizeArticleSearch(value: string) {
   return value.trim().slice(0, 120).replace(/[,%()]/g, " ").replace(/\s+/g, " ");
@@ -26,6 +27,17 @@ async function commentCounts(contexts: Array<Pick<LegisBotComentario, "slug" | "
   await Promise.all(contexts.map(async (item) => {
     const result = await db.from("legisbot_comentarios_comunidade").select("id", { count: "exact", head: true }).eq("slug", item.slug).eq("ordem", item.ordem);
     if (result.error) throw new Error("Não foi possível contar os comentários da comunidade.");
+    counts.set(`${item.slug}:${item.ordem}`, result.count ?? 0);
+  }));
+  return counts;
+}
+
+async function questionCounts(contexts: Array<Pick<LegisBotComentario, "slug" | "ordem">>) {
+  const db = getSupabaseServerClient();
+  const counts = new Map<string, number>();
+  await Promise.all(contexts.map(async (item) => {
+    const result = await db.from("questions").select("id", { count: "exact", head: true }).eq("slug", item.slug.toLowerCase()).eq("ordem", item.ordem).eq("ativo", true);
+    if (result.error) throw new Error("Não foi possível contar as questões vinculadas.");
     counts.set(`${item.slug}:${item.ordem}`, result.count ?? 0);
   }));
   return counts;
@@ -56,8 +68,8 @@ export async function getArticleContext(slug: string, ordem: string): Promise<Ar
 }
 
 async function enrichContexts(records: LegisBotComentario[]): Promise<ArticleContext[]> {
-  const [laws, counts] = await Promise.all([lawMetadata([...new Set(records.map((item) => item.slug))]), commentCounts(records)]);
-  return records.map((item) => ({ ...item, lawTitle: laws.get(item.slug)?.title ?? null, lawCode: laws.get(item.slug)?.code ?? null, commentsCount: counts.get(`${item.slug}:${item.ordem}`) ?? 0 }));
+  const [laws, counts, questions] = await Promise.all([lawMetadata([...new Set(records.map((item) => item.slug))]), commentCounts(records), questionCounts(records)]);
+  return records.map((item) => ({ ...item, lawTitle: laws.get(item.slug)?.title ?? null, lawCode: laws.get(item.slug)?.code ?? null, commentsCount: counts.get(`${item.slug}:${item.ordem}`) ?? 0, questionsCount: questions.get(`${item.slug}:${item.ordem}`) ?? 0 }));
 }
 
 export async function getLatestArticleInteractions(): Promise<ArticleInteraction[]> {
@@ -111,4 +123,18 @@ export async function getArticleCommunityComments(slug: string, ordem: string, f
   const reported = new Map<string, number>();
   for (const report of reports.data ?? []) if (["pendente", "em_analise"].includes(String(report.status))) reported.set(String(report.comentario_id), (reported.get(String(report.comentario_id)) ?? 0) + 1);
   return rows.map((row) => ({ ...row, author: names.get(String(row.user_id)) ?? "Estudante Legis", reports: reported.get(String(row.id)) ?? 0 }));
+}
+
+export async function getArticleQuestions(slug: string, ordem: string): Promise<ArticleQuestion[]> {
+  await exigirAdministrador();
+  const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,pergunta,resposta,assunto,titulo,structure_id,ativo,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true).order("updated_at", { ascending: false }).limit(100);
+  if (result.error) throw new Error("Não foi possível carregar as questões do artigo.");
+  return (result.data ?? []) as ArticleQuestion[];
+}
+
+export async function getRecentArticleContexts() {
+  const interactions = await getLatestArticleInteractions();
+  const unique = [...new Map(interactions.map((item) => [`${item.slug}:${item.ordem}`, item])).values()].slice(0, 12);
+  const contexts = await Promise.all(unique.map((item) => getArticleContext(item.slug, item.ordem)));
+  return contexts.flatMap((context, index) => context ? [{ ...context, lastInteraction: unique[index] }] : []);
 }

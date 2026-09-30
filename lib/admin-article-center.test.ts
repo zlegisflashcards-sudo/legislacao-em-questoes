@@ -29,7 +29,7 @@ describe("Central do Artigo administrativa", () => {
 
   it("abre a aba de comentários e destaca a interação pela URL", () => {
     expect(index).toContain("?aba=comentarios&comentario=");
-    expect(detail).toContain('one(query.aba) === "comentarios"');
+    expect(detail).toContain('tab === "comentarios"');
     expect(community).toContain("highlightedId === item.id");
   });
 
