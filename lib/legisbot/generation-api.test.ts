@@ -137,4 +137,20 @@ describe("contrato do POST autenticado", () => {
     expect(repository.reserve).not.toHaveBeenCalled();
     expect(generate).not.toHaveBeenCalled();
   });
+
+  it("não reserva nem chama OpenAI quando a fonte está em conflito editorial", async () => {
+    const repository = repo();
+    const generate = vi.fn();
+    const response = await handleLegisBotGenerationPost(request(), { slug: "L123", ordem: "1" }, {
+      authenticate: vi.fn().mockResolvedValue(user),
+      getRepository: () => repository,
+      resolveSource: vi.fn().mockRejectedValue(new LegisBotSourceError("conflict", "Este conteúdo está temporariamente indisponível enquanto passa por revisão.")),
+      reconcileSource: vi.fn(),
+      generate,
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ reason: "source_conflict" });
+    expect(repository.reserve).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
 });

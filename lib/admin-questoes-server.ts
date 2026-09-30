@@ -10,7 +10,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, plainQuestionText } from "@/lib/admin-question-search";
 import { descendantStructureIds, sameImportIdentity } from "@/lib/admin-question-management";
-import { conflictingImportSourceGroups, importSourceKey, normalizedImportSource, validateImportSource } from "@/lib/legisbot/import-source";
+import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
@@ -203,22 +203,18 @@ async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issu
     const key = importSourceKey(item as { slug: string; ordem: string });
     existingByPair.set(key, [...(existingByPair.get(key) ?? []), item]);
   }
-  const conflictingIncoming = conflictingImportSourceGroups(rows);
-  const conflictingStored = new Set([...existingByPair].filter(([, items]) => new Set((items ?? []).map((item) => normalizedImportSource({ titulo: item.titulo ?? "", assunto: item.assunto ?? "", legislacao: item.legislacao ?? "" }))).size > 1).map(([key]) => key));
   const plan = planQuestionDeckStructure(rows, nodes, mappings);
   const decks = new Map(plan.decks.map((deck) => [deck.line, deck]));
   const items = rows.map((row) => {
     const deck = decks.get(row.line);
     const key = importSourceKey(row);
     const invalid = validateImportSource(row);
-    const pairConflict = conflictingIncoming.has(key) || conflictingStored.has(key);
     const stored = existingByPair.get(key) ?? [];
     const matching = (row.id_questao && /^[0-9a-f-]{36}$/i.test(row.id_questao)
       ? stored.find((item) => item.id === row.id_questao)
       : undefined) ?? stored.find((item) => item.pergunta.trim() === row.pergunta.trim());
     const sourceChanged = Boolean(matching) && normalizedImportSource(row) !== normalizedImportSource({ titulo: matching!.titulo ?? "", assunto: matching!.assunto ?? "", legislacao: matching!.legislacao ?? "" });
-    const newSourceConflict = !matching && stored.length > 0 && normalizedImportSource(row) !== normalizedImportSource({ titulo: stored[0].titulo ?? "", assunto: stored[0].assunto ?? "", legislacao: stored[0].legislacao ?? "" });
-    const reason = deck?.error ?? invalid ?? (pairConflict || newSourceConflict ? "Conflito em slug + ordem: os dados-base do LegisBot são diferentes." : null);
+    const reason = deck?.error ?? invalid;
     return {
       line: row.line,
       deck: row.deck.join("::"),
@@ -229,12 +225,37 @@ async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issu
       motivo: reason,
     };
   });
+  const replacementById = new Map<string, ImportedQuestion>();
+  const incomingWithoutMatch: ImportedQuestion[] = [];
+  const itemByLine = new Map(items.map((item) => [item.line, item]));
+  for (const row of rows) {
+    const item = itemByLine.get(row.line);
+    if (!item || item.status === "erro") continue;
+    if (item.existing_id) replacementById.set(item.existing_id, row);
+    else incomingWithoutMatch.push(row);
+  }
+  const asSource = (value: { slug: string; ordem: string; titulo?: string | null; assunto?: string | null; legislacao?: string | null }): ImportSourceFields => ({
+    slug: value.slug,
+    ordem: value.ordem,
+    titulo: value.titulo ?? "",
+    assunto: value.assunto ?? "",
+    legislacao: value.legislacao ?? "",
+  });
+  const effectiveSources = (existing.data ?? []).map((stored) => asSource(replacementById.get(stored.id) ?? stored));
+  effectiveSources.push(...incomingWithoutMatch.map(asSource));
+  const warnings = groupImportSourceWarnings(effectiveSources);
   const errors = [...diagnostics(parsed.issues, items), ...plan.nodes.filter((node) => node.mappingError).map((node) => ({ severity: "erro", line: 0, deck: node.path, ordem: "", pergunta: "", field: "mapeamento", received: node.path, expected: "Destino sugerido do mesmo caminho", motivo: node.mappingError! }))];
   const structurePreview = plan.nodes.map((node) => ({ key: node.key, path: node.path, tipo: node.tipo, status: node.mappingError ? "erro" as const : node.requiresMapping ? "revisao" as const : node.existingId === null ? "nova" as const : "existente" as const, destination_id: node.existingId, candidates: node.candidates }));
-  return { law: current, slug: check, total: rows.length, issues: parsed.issues, errors, items, structure: { items: structurePreview, existentes: structurePreview.filter((node) => node.status === "existente").length, novas: structurePreview.filter((node) => node.status === "nova").length, revisoes: structurePreview.filter((node) => node.status === "revisao").length }, summary: { novas: items.filter((item) => item.status === "nova").length, atualizadas: items.filter((item) => item.status === "atualizada").length, duplicadas: items.filter((item) => item.status === "duplicada").length, erros: errors.length }, ...(apkg ? { apkg } : {}) };
+  return { law: current, slug: check, total: rows.length, issues: parsed.issues, errors, warnings, items, structure: { items: structurePreview, existentes: structurePreview.filter((node) => node.status === "existente").length, novas: structurePreview.filter((node) => node.status === "nova").length, revisoes: structurePreview.filter((node) => node.status === "revisao").length }, summary: { novas: items.filter((item) => item.status === "nova").length, atualizadas: items.filter((item) => item.status === "atualizada").length, duplicadas: items.filter((item) => item.status === "duplicada").length, conflitos: warnings.filter((warning) => warning.kind === "legislacao").length, avisos: warnings.length, erros: errors.length }, ...(apkg ? { apkg } : {}) };
 }
 export async function previewAnkiImport(body: Record<string, unknown>) { await requireAdmin(); if (typeof body.text !== "string" || body.text.length > 20_000_000) throw new AdminQuestoesError(400, "Arquivo TXT inválido ou grande demais."); try { return preview(slug(body.law_slug), parseAnkiTxt(body.text), structureMappings(body.structure_mappings)); } catch (error) { if (error instanceof AdminQuestoesError) throw error; throw new AdminQuestoesError(400, error instanceof Error ? error.message : "TXT inválido."); } }
 export async function previewApkgImport(lawSlug: unknown, file: File, mappings: unknown = {}) { await requireAdmin(); if (!file.name.toLowerCase().endsWith(".apkg") || !file.size || file.size > 100_000_000) throw new AdminQuestoesError(400, "Arquivo APKG inválido ou grande demais."); let parsed; try { parsed = await parseLegisApkg(new Uint8Array(await file.arrayBuffer())); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "APKG inválido."); } if (parsed.media.some((media) => media.referenced)) throw new AdminQuestoesError(422, "O APKG possui mídia referenciada. O suporte a mídia ainda não faz parte desta etapa."); return preview(slug(lawSlug), { rows: parsed.rows, issues: parsed.issues }, structureMappings(mappings), { rootDecks: parsed.rootDecks ?? [], subdecks: parsed.subdecks ?? [], notes: parsed.notes ?? 0, cards: parsed.cards ?? 0, recognizedModels: parsed.recognizedModels ?? [], unrecognizedModels: parsed.unrecognizedModels ?? [], media: parsed.media ?? [], samples: parsed.rows.slice(0, 5) }); }
+async function markImportConflictsForReview(warnings: Array<{ kind: string; slug: string; ordem: string }>) {
+  for (const warning of warnings.filter((item) => item.kind === "legislacao")) {
+    const review = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", warning.slug).eq("ordem", warning.ordem);
+    if (review.error) fail("sinalizar_conflito_importacao", review.error);
+  }
+}
 async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: Awaited<ReturnType<typeof preview>>, mappings: StructureImportMapping, ignored = 0) {
   if (!previewData.slug.valid || previewData.errors.length || previewData.structure.revisoes) throw new AdminQuestoesError(422, "A importação possui linhas inválidas ou destinos estruturais ainda não revisados.");
   const current = await law(lawSlug);
@@ -244,17 +265,17 @@ async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: A
   const newRows = normalizedRows.filter((row) => statusByLine.get(row.line) === "nova");
   const updatedRows = normalizedRows.filter((row) => statusByLine.get(row.line) === "atualizada");
   for (const row of updatedRows) {
-    const sharedSource = { titulo: row.titulo, assunto: row.assunto, legislacao: row.legislacao };
-    const sourceUpdate = await db().from("questions").update(sharedSource).eq("lei_id", current.id).eq("slug", row.slug).eq("ordem", row.ordem).eq("ativo", true);
-    if (sourceUpdate.error) fail("atualizar_fonte_legisbot", sourceUpdate.error);
     const existingId = previewByLine.get(row.line)?.existing_id;
     if (!existingId) throw new AdminQuestoesError(422, "A questão que seria atualizada não pôde ser identificada com segurança.");
-    const questionUpdate = await db().from("questions").update({ pergunta: row.pergunta, resposta: row.resposta, justificativa: row.justificativa || null, total_artigos: /^\d+$/.test(row.total_artigos) ? Number(row.total_artigos) : null, ultima_alteracao_legislativa: row.ultima_alteracao_legislativa || null }).eq("id", existingId).eq("lei_id", current.id).eq("ativo", true);
+    const questionUpdate = await db().from("questions").update({ titulo: row.titulo, assunto: row.assunto, legislacao: row.legislacao, pergunta: row.pergunta, resposta: row.resposta, justificativa: row.justificativa || null, total_artigos: /^\d+$/.test(row.total_artigos) ? Number(row.total_artigos) : null, ultima_alteracao_legislativa: row.ultima_alteracao_legislativa || null }).eq("id", existingId).eq("lei_id", current.id).eq("ativo", true);
     if (questionUpdate.error) fail("atualizar_questao_importada", questionUpdate.error);
     const review = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", row.slug.toUpperCase()).eq("ordem", row.ordem);
     if (review.error) fail("sinalizar_revisao_legisbot", review.error);
   }
-  if (!newRows.length) return { lidas: rows.length, importadas: 0, atualizadas: updatedRows.length, duplicadas: previewData.summary.duplicadas, ignoradas: ignored, erros: 0, estruturas_criadas: 0, estruturas_reutilizadas: (await structure(current.id)).length };
+  if (!newRows.length) {
+    await markImportConflictsForReview(previewData.warnings);
+    return { lidas: rows.length, importadas: 0, atualizadas: updatedRows.length, duplicadas: previewData.summary.duplicadas, ignoradas: ignored, conflitos: previewData.summary.conflitos, avisos: previewData.warnings, erros: 0, estruturas_criadas: 0, estruturas_reutilizadas: (await structure(current.id)).length };
+  }
   const before = await structure(current.id);
   const plan = planQuestionDeckStructure(newRows, before, mappings);
   const ids = new Map(plan.nodes.filter((node) => node.existingId !== null).map((node) => [node.key, node.existingId!]));
@@ -264,7 +285,8 @@ async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: A
   const byLine = new Map(plan.decks.map((deck) => [deck.line, deck.structureKey ? ids.get(deck.structureKey) ?? null : null]));
   const inserted = await db().from("questions").insert(newRows.map((row) => ({ lei_id: current.id, structure_id: byLine.get(row.line) ?? null, pergunta: row.pergunta, resposta: row.resposta, justificativa: row.justificativa || null, assunto: row.assunto || null, legislacao: row.legislacao || null, ordem: row.ordem, titulo: row.titulo || null, total_artigos: /^\d+$/.test(row.total_artigos) ? Number(row.total_artigos) : null, slug: row.slug, ultima_alteracao_legislativa: row.ultima_alteracao_legislativa || null, ativo: true }))).select("id");
   if (inserted.error) fail("importar_anki", inserted.error);
-  return { lidas: rows.length, importadas: inserted.data?.length ?? 0, atualizadas: updatedRows.length, duplicadas: previewData.summary.duplicadas, ignoradas: ignored, erros: 0, estruturas_criadas: plan.nodes.filter((node) => node.existingId === null).length, estruturas_reutilizadas: plan.nodes.filter((node) => node.existingId !== null).length };
+  await markImportConflictsForReview(previewData.warnings);
+  return { lidas: rows.length, importadas: inserted.data?.length ?? 0, atualizadas: updatedRows.length, duplicadas: previewData.summary.duplicadas, ignoradas: ignored, conflitos: previewData.summary.conflitos, avisos: previewData.warnings, erros: 0, estruturas_criadas: plan.nodes.filter((node) => node.existingId === null).length, estruturas_reutilizadas: plan.nodes.filter((node) => node.existingId !== null).length };
 }
 export async function importAnkiTxt(body: Record<string, unknown>) { await requireAdmin(); const parsed = parseAnkiTxt(String(body.text)); const mappings = structureMappings(body.structure_mappings); const data = await preview(slug(body.law_slug), parsed, mappings); return persist(slug(body.law_slug), parsed.rows, data, mappings); }
 export async function importApkg(body: { lawSlug: unknown; file: File; structureMappings?: unknown }) { await requireAdmin(); const parsed = await parseLegisApkg(new Uint8Array(await body.file.arrayBuffer())); const mappings = structureMappings(body.structureMappings); const data = await previewApkgImport(body.lawSlug, body.file, mappings); return persist(slug(body.lawSlug), parsed.rows, data, mappings, parsed.unrecognizedModels.reduce((sum, model) => sum + model.notes, 0)); }

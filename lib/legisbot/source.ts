@@ -71,6 +71,22 @@ function buildSource(row: QuestionSourceRow, identifiers: LegisBotIdentifiers, f
   return { ...source, signature: createLegisBotSourceSignature(source) };
 }
 
+export function resolveLegisBotSourceRows(
+  rows: QuestionSourceRow[],
+  identifiers: LegisBotIdentifiers,
+  fallbackTitle: string | null,
+) {
+  const sources = rows.map((row) => buildSource(row, identifiers, fallbackTitle));
+  const legislationVersions = new Set(sources.map((source) => normalizedLegisBotLegislation(source.legislacao)));
+  if (legislationVersions.size > 1) {
+    throw new LegisBotSourceError(
+      "conflict",
+      "Este conteúdo está temporariamente indisponível enquanto passa por revisão.",
+    );
+  }
+  return sources[0];
+}
+
 /** Resolve a fonte canônica exclusivamente no servidor, pela identidade slug + ordem. */
 export async function findLegisBotSource(
   supabase: SupabaseClient,
@@ -95,30 +111,5 @@ export async function findLegisBotSource(
     .maybeSingle();
   if (lawError) throw new LegisBotSourceError("unavailable", "Não foi possível consultar a legislação.");
 
-  const sources = rows.map((row) => buildSource(row, identifiers, law?.titulo ? String(law.titulo) : null));
-  const signatures = new Set(sources.map((source) => source.signature));
-  if (signatures.size > 1) {
-    // Comentários legados podem desambiguar o flashcard que originou a geração
-    // sem aceitar qualquer dado fornecido pelo navegador.
-    const legacy = await supabase
-      .from("legisbot_comentarios")
-      .select("titulo,assunto,legislacao")
-      .eq("slug", identifiers.slug)
-      .eq("ordem", identifiers.ordem)
-      .maybeSingle();
-    if (!legacy.error && legacy.data) {
-      const legacySignature = createLegisBotSourceSignature({
-        titulo: String(legacy.data.titulo ?? ""),
-        assunto: String(legacy.data.assunto ?? ""),
-        promptLegislacao: legalHtmlToStructuredText(String(legacy.data.legislacao ?? "")),
-      });
-      const matches = sources.filter((source) => source.signature === legacySignature);
-      if (matches.length) return matches[0];
-    }
-    throw new LegisBotSourceError(
-      "conflict",
-      "Há mais de um flashcard diferente com estes identificadores. Revise o conflito na importação.",
-    );
-  }
-  return sources[0];
+  return resolveLegisBotSourceRows(rows, identifiers, law?.titulo ? String(law.titulo) : null);
 }

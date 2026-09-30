@@ -28,6 +28,13 @@ describe("conflitos da fonte do LegisBot", () => {
     expect(conflicts[0].questions.map((item) => item.id)).not.toContain("inactive");
   });
 
+  it("remove automaticamente a pendência quando as versões são corrigidas", () => {
+    const before = [row("a", "<p>Texto A</p>"), row("b", "<p>Texto B</p>")];
+    expect(groupLegisBotSourceConflicts(before)).toHaveLength(1);
+    const after = before.map((item) => ({ ...item, legislacao: "<div><strong>Texto A</strong></div>" }));
+    expect(groupLegisBotSourceConflicts(after)).toHaveLength(0);
+  });
+
   it("destaca somente o trecho textual divergente", () => {
     const parts = compareLegislationText("<p>O agente deve agir com dolo.</p>", "<p>O agente deve agir com culpa.</p>");
     expect(parts.some((part) => part.changed && part.text.includes("dolo"))).toBe(true);
@@ -78,6 +85,11 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("precisa_revisao: true");
     expect(server).not.toMatch(/openai|gerarComentario|requestLegisBotGeneration/i);
     expect(server).not.toMatch(/comentario:\s*null|delete\(\).*legisbot_comentarios/);
+  });
+
+  it("calcula pendências diretamente dos flashcards ativos e ignora HTML visual equivalente", () => {
+    expect(server).toContain("groupLegisBotSourceConflicts(await loadQuestions(true))");
+    expect(server).toContain("getArticleSourceConflict(preview.slug, preview.ordem)) === null");
   });
 
   it("inativa com confirmação, reavalia o conflito e exige administrador no servidor", () => {

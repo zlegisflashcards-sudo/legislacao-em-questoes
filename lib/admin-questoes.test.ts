@@ -86,6 +86,9 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("Destinos estruturais");
     expect(panel).toContain("await onImported?.()");
     expect(panel).toContain("Duplicadas:");
+    expect(panel).toContain("Conflitos de legislação para revisão");
+    expect(panel).toContain("Ver conflitos na Central do Artigo");
+    expect(panel).toContain("Importação concluída com pendências.");
   });
 
   it("oferece prévia APKG sem rota de persistência", () => {
@@ -183,8 +186,18 @@ describe("administração de Legis Questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     expect(server).toContain("withSlug(parsed.rows, current.slug)");
     expect(server).toContain("const key = importSourceKey(row)");
-    expect(server).toContain("Conflito em slug + ordem");
+    expect(server).toContain("groupImportSourceWarnings(effectiveSources)");
+    expect(server).toContain('status: reason ? "erro" : matching ? sourceChanged ? "atualizada" : "duplicada" : "nova"');
     expect(server).toContain("slug: row.slug");
+  });
+
+  it("mantém conflitos editoriais fora dos erros impeditivos e atualiza apenas o flashcard identificado", () => {
+    const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
+    expect(server).toContain("warnings.filter((warning) => warning.kind === \"legislacao\").length");
+    expect(server).toContain("conflitos: previewData.summary.conflitos");
+    expect(server).toContain("previewData.errors.length");
+    expect(server).toContain('.eq("id", existingId)');
+    expect(server).not.toContain('update(sharedSource).eq("lei_id", current.id).eq("slug", row.slug).eq("ordem", row.ordem)');
   });
 
   it("planeja a estrutura na prévia e só a cria na confirmação", () => {

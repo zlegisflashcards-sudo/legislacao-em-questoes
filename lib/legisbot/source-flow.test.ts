@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { conflictingImportSourceGroups, normalizedImportSource, validateImportSource } from "./import-source";
+import { conflictingImportSourceGroups, groupImportSourceWarnings, normalizedImportSource, validateImportSource } from "./import-source";
 import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
-import { createLegisBotSourceSignature } from "./source";
+import { createLegisBotSourceSignature, LegisBotSourceError, resolveLegisBotSourceRows } from "./source";
 
 describe("fonte canônica do LegisBot", () => {
   it("preserva HTML estrutural seguro e remove conteúdo perigoso e atributos visuais", () => {
@@ -33,6 +33,27 @@ describe("fonte canônica do LegisBot", () => {
     expect(validateImportSource({ ...base, legislacao: "<script>x()</script>" })).toContain("legislacao");
     expect(conflictingImportSourceGroups([base, { ...base, legislacao: "<p>Texto B</p>" }]).size).toBe(1);
     expect(conflictingImportSourceGroups([base, { ...base, legislacao: "<div><strong>Texto A</strong></div>" }]).size).toBe(0);
+    expect(conflictingImportSourceGroups([base, { ...base, assunto: "Artigo primeiro" }]).size).toBe(0);
+  });
+
+  it("agrupa divergências como aviso único e não confunde metadados com legislação", () => {
+    const base = { slug: "cp", ordem: "0013.0.00.00", titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto A</p>" };
+    const conflicts = groupImportSourceWarnings([base, { ...base, legislacao: "<p>Texto B</p>" }, { ...base, legislacao: "<div><strong>Texto B</strong></div>" }]);
+    expect(conflicts).toEqual([expect.objectContaining({ kind: "legislacao", slug: "CP", ordem: base.ordem, flashcards: 3, versions: 2 })]);
+    const metadata = groupImportSourceWarnings([base, { ...base, titulo: "CP", assunto: "Artigo 13" }]);
+    expect(metadata).toEqual([expect.objectContaining({ kind: "metadados", versions: 2 })]);
+  });
+
+  it("bloqueia o LegisBot somente diante de legislação realmente divergente", () => {
+    const identifiers = { slug: "CP", ordem: "0013.0.00.00" };
+    const row = { id: "a", slug: "cp", ordem: identifiers.ordem, titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto legal</p>", updated_at: "2026-09-30T00:00:00Z" };
+    expect(resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: "Artigo 13", legislacao: "<div><strong>Texto legal</strong></div>" }], identifiers, null).questionId).toBe("a");
+    expect(() => resolveLegisBotSourceRows([row, { ...row, id: "b", legislacao: "<p>Texto legal diferente</p>" }], identifiers, null)).toThrow(LegisBotSourceError);
+    try {
+      resolveLegisBotSourceRows([row, { ...row, id: "b", legislacao: "<p>Texto legal diferente</p>" }], identifiers, null);
+    } catch (error) {
+      expect(error).toMatchObject({ kind: "conflict", publicMessage: "Este conteúdo está temporariamente indisponível enquanto passa por revisão." });
+    }
   });
 
   it("usa somente slug + ordem no cliente, ignora query legada e gera URL canônica no Anki", () => {
@@ -73,6 +94,9 @@ describe("fonte canônica do LegisBot", () => {
     expect(importer).toContain('sourceChanged ? "atualizada" : "duplicada"');
     expect(importer).toContain("existing_id: matching?.id ?? null");
     expect(importer).toContain('update({ precisa_revisao: true })');
+    expect(importer).toContain("groupImportSourceWarnings(effectiveSources)");
+    expect(importer).toContain("conflitos: previewData.summary.conflitos");
+    expect(importer).not.toContain("const pairConflict");
     expect(importer).not.toMatch(/gerarComentarioLegisBot|openai\.responses|OPENAI_API_KEY/);
   });
 });

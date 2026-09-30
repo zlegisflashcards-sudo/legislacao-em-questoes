@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { LegisBotComentario } from "../legisbot-comentario";
 import { readLegisBotComment } from "./read-service";
 import { handleLegisBotRead } from "./read-api";
+import { LegisBotSourceError } from "./source";
 
 const item: LegisBotComentario = {
   id: 1,
@@ -55,6 +56,16 @@ describe("contrato de leitura pública do LegisBot", () => {
   it("GET de item inexistente retorna HTTP 404", async () => {
     const response = await handleLegisBotRead({ slug: "CF", ordem: "0001" }, dependencies(null));
     expect(response.status).toBe(404);
+  });
+
+  it("GET de fonte conflitante retorna mensagem controlada sem expor conteúdo", async () => {
+    const response = await handleLegisBotRead({ slug: "CF", ordem: "0001" }, {
+      find: vi.fn(),
+      resolveSource: vi.fn().mockRejectedValue(new LegisBotSourceError("conflict", "Este conteúdo está temporariamente indisponível enquanto passa por revisão.")),
+      reconcileSource: vi.fn(),
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ success: false, error: "Este conteúdo está temporariamente indisponível enquanto passa por revisão.", reason: "source_conflict" });
   });
 
   it("o Route Handler GET não contém mutação, RPC, OpenAI ou alerta", () => {
