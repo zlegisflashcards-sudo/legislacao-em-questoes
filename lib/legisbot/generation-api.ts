@@ -4,16 +4,19 @@ import { GenerationRepositoryError, type LegisBotGenerationRepository } from "./
 import {
   LegisBotRequestError,
   normalizeLegisBotIdentifiers,
-  readLegisBotGenerationBody,
+  assertLegisBotIdentifiersOnlyBody,
   validateLegisBotRequestOrigin,
 } from "./request-validation";
 import { sanitizarComentarioHtml } from "./sanitize-comment-html";
 import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import type { DetalhesErroOpenAI } from "./openai-error";
+import { LegisBotSourceError, type LegisBotSource } from "./source";
 
 type GenerationApiDependencies = {
   authenticate: (request: Request) => Promise<User | null>;
   getRepository: () => LegisBotGenerationRepository;
+  resolveSource: (identifiers: ReturnType<typeof normalizeLegisBotIdentifiers>) => Promise<LegisBotSource>;
+  reconcileSource: (source: LegisBotSource) => Promise<unknown>;
   generate?: Parameters<typeof requestLegisBotGeneration>[0]["generate"];
   alertQuota?: (
     context: { slug: string; ordem: string; titulo?: string; assunto?: string },
@@ -33,7 +36,16 @@ export async function handleLegisBotGenerationPost(
     if (!user) return json({ success: false, error: "Entre na sua conta para gerar o comentário." }, 401);
 
     const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
-    const input = await readLegisBotGenerationBody(request);
+    await assertLegisBotIdentifiersOnlyBody(request);
+    const source = await dependencies.resolveSource(identifiers);
+    await dependencies.reconcileSource(source);
+    const input = {
+      titulo: source.titulo,
+      assunto: source.assunto,
+      legislacao: source.legislacao,
+      promptLegislacao: source.promptLegislacao,
+      sourceSignature: source.signature,
+    };
     const outcome = await requestLegisBotGeneration(
       {
         repository: dependencies.getRepository(),
@@ -51,10 +63,11 @@ export async function handleLegisBotGenerationPost(
         source: outcome.kind === "generated" ? "generated" : "database",
         status: "gerado",
         comment: sanitizarComentarioHtml(outcome.comment),
-        titulo: outcome.item.titulo,
-        assunto: outcome.item.assunto,
-        legislacao: sanitizeLegalHtmlCore(outcome.item.legislacao),
+        titulo: source.titulo,
+        assunto: source.assunto,
+        legislacao: sanitizeLegalHtmlCore(source.legislacao),
         modelo_ia: outcome.item.modelo_ia,
+        precisa_revisao: outcome.item.precisa_revisao,
       });
     }
     if (outcome.kind === "processing") {
@@ -86,6 +99,10 @@ export async function handleLegisBotGenerationPost(
     return json({ success: false, error: "Não foi possível gerar o comentário no momento." },
       outcome.kind === "temporary_failure" ? 503 : 500);
   } catch (error) {
+    if (error instanceof LegisBotSourceError) {
+      const status = error.kind === "not_found" ? 404 : error.kind === "conflict" ? 409 : error.kind === "incomplete" ? 422 : 503;
+      return json({ success: false, error: error.publicMessage, reason: `source_${error.kind}` }, status);
+    }
     if (error instanceof LegisBotRequestError) {
       return json({ success: false, error: error.publicMessage, reason: error.reason }, error.status);
     }

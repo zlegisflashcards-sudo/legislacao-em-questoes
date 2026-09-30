@@ -156,6 +156,7 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
       </header>
 
       {dirty ? <div className="admin-unsaved">● Existem alterações ainda não salvas.</div> : null}
+      {savedRecord?.precisa_revisao ? <div className="admin-alert error" role="status">A fonte deste flashcard mudou. O comentário anterior foi preservado e precisa de revisão.</div> : null}
       {state.message ? <div className={`admin-alert ${state.ok ? "success" : "error"}`} role="status">
         {state.message}
         {state.existing ? <span className="admin-alert-actions">

@@ -55,7 +55,8 @@ type LegisBotApiResponse = {
   assunto?: string;
   legislacao?: string;
   error?: string;
-  reason?: "legisbot_resting" | "rate_limited" | "cooldown" | "attempts_exhausted";
+  reason?: "legisbot_resting" | "rate_limited" | "cooldown" | "attempts_exhausted" | "source_not_found" | "source_incomplete" | "source_conflict" | "source_unavailable";
+  precisa_revisao?: boolean;
 };
 
 type HighlightedLegalTextProps = {
@@ -125,6 +126,7 @@ export default function LegisBotPageClient({
   const [conversationPhase, setConversationPhase] = useState<ConversationPhase>("idle");
   const [typedQuestion, setTypedQuestion] = useState("");
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [needsReview, setNeedsReview] = useState(false);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
@@ -217,6 +219,7 @@ export default function LegisBotPageClient({
           });
         }
         setSource(result.source);
+        setNeedsReview(result.precisa_revisao === true);
         if (response.status === 202 || result.source === "processing") {
           retryAttempts += 1;
           if (retryAttempts >= maxRetryAttempts) {
@@ -228,10 +231,16 @@ export default function LegisBotPageClient({
           return;
         }
         if (response.status === 404) {
+          if (result.reason === "source_not_found") {
+            setStatusMessage(result.error ?? "Trecho não encontrado.");
+            setAnswerState("error");
+            return;
+          }
           setAnswerState("not_found");
           return;
         }
         if (!response.ok || !result.success || !result.comment?.trim()) {
+          setStatusMessage(result.error ?? "Não foi possível carregar a explicação no momento.");
           setAnswerState("error");
           return;
         }
@@ -267,12 +276,17 @@ export default function LegisBotPageClient({
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(dadosIniciais),
+        body: JSON.stringify({}),
       });
       const result = (await response.json()) as LegisBotApiResponse;
       if (response.status === 401) {
         setAuthenticated(false);
         setAnswerState("not_found");
+        return;
+      }
+      if (result.reason?.startsWith("source_")) {
+        setStatusMessage(result.error ?? "Não foi possível localizar o flashcard correspondente.");
+        setAnswerState("error");
         return;
       }
       if (response.status === 202 || result.source === "processing") {
@@ -298,6 +312,7 @@ export default function LegisBotPageClient({
         setDadosLegislacao({ titulo: result.titulo, assunto: result.assunto, legislacao: result.legislacao });
       }
       setSource(result.source);
+      setNeedsReview(result.precisa_revisao === true);
       setAnswer(limparApresentacao(result.comment));
       setAnswerState("ready");
     } catch {
@@ -360,6 +375,7 @@ export default function LegisBotPageClient({
       <div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2 id="legisbot-answer-title">LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
       <div className="answer-content answer-freeform" aria-live="polite">
         {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
+        {answerState === "ready" && needsReview ? <p className="answer-status">⚠️ A legislação deste flashcard foi atualizada e este comentário precisa de revisão.</p> : null}
         {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
         {answerState === "not_found" && authenticated === null ? <p className="answer-status">Verificando sua conta…</p> : null}
         {answerState === "invalid" ? <p className="answer-status answer-error">Os identificadores do trecho são inválidos.</p> : null}
@@ -401,7 +417,7 @@ export default function LegisBotPageClient({
         <h1>{assunto}</h1>
       </header>
 
-      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><HighlightedLegalText text={textoLegal} highlights={highlights} onHighlightClick={selectHighlight} /></section> : null}
+      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2>{highlights.length ? <HighlightedLegalText text={textoLegal} highlights={highlights} onHighlightClick={selectHighlight} /> : <div className="legisbot-legal-html" dangerouslySetInnerHTML={{ __html: dadosLegislacao.legislacao }} />}</section> : null}
       <LegisBotStudyTabs
         slug={slugNormalizado}
         ordem={ordemNormalizada}

@@ -182,7 +182,8 @@ describe("administração de Legis Questões", () => {
   it("aplica o slug efetivo no servidor tanto na prévia quanto na importação", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
     expect(server).toContain("withSlug(parsed.rows, current.slug)");
-    expect(server).toContain("const duplicate = known.has(`${row.slug}");
+    expect(server).toContain("const key = importSourceKey(row)");
+    expect(server).toContain("Conflito em slug + ordem");
     expect(server).toContain("slug: row.slug");
   });
 

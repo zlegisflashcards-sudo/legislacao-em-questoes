@@ -1,24 +1,24 @@
 import "server-only";
 
-import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 import { CommunityApiError } from "@/lib/legisbot-community-server";
 import { normalizeLegalText } from "@/lib/legisbot-highlights";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { findLegisBotSource, LegisBotSourceError } from "@/lib/legisbot/source";
+import { normalizeLegisBotIdentifiers } from "@/lib/legisbot/request-validation";
 
 export async function getStoredLegislationText(slug: string, ordem: string) {
-  const { data, error } = await getSupabaseServerClient()
-    .from("legisbot_comentarios")
-    .select("legislacao")
-    .eq("slug", slug)
-    .eq("ordem", ordem)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) throw new CommunityApiError(404, "Trecho não encontrado.");
-
-  const legislationText = normalizeLegalText(sanitizarHtmlLegislacao(String(data.legislacao ?? "")));
-  if (!legislationText) throw new CommunityApiError(409, "O texto da legislação não está disponível para destaque.");
-  return legislationText;
+  try {
+    const source = await findLegisBotSource(
+      getSupabaseServerClient(),
+      normalizeLegisBotIdentifiers(slug, ordem),
+    );
+    return normalizeLegalText(source.promptLegislacao);
+  } catch (error) {
+    if (error instanceof LegisBotSourceError) {
+      throw new CommunityApiError(error.kind === "not_found" ? 404 : 409, error.publicMessage);
+    }
+    throw error;
+  }
 }
 
 export function highlightJsonError(error: unknown) {

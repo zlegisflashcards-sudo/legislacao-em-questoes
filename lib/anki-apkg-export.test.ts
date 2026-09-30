@@ -17,6 +17,7 @@ describe("exportação APKG", () => {
     expect(exported.decks).toEqual(["Lei nº 14.751::Capítulo 01 – DISPOSIÇÕES GERAIS"]);
     expect(parsed.rows).toHaveLength(1);
     expect(parsed.rows[0]).toMatchObject({ slug: "l14751", ordem: "0002.0.00.00", pergunta: "<strong>Enunciado</strong><br>continuação", resposta: "Certo", justificativa: "<mark>Justificativa</mark>", legislacao: "<div>Art. 1º</div>" });
+    expect(parsed.rows[0].id_questao).toBe("questao-1");
     expect(parsed.rows[0].deck).toEqual(["Lei nº 14.751", "Capítulo 01 – DISPOSIÇÕES GERAIS"]);
   });
 

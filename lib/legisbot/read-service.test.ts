@@ -19,11 +19,15 @@ const item: LegisBotComentario = {
   retry_after: null,
   attempt_count: 1,
   last_error_category: null,
+  source_signature: "a".repeat(64),
+  precisa_revisao: false,
   created_at: "2026-08-04T00:00:00Z",
   updated_at: "2026-08-04T00:00:00Z",
 };
 
 describe("contrato de leitura pública do LegisBot", () => {
+  const source = { questionId: "q1", slug: "CF", ordem: "0001", titulo: "Constituição", assunto: "Art. 1º", legislacao: "<p>Texto</p>", promptLegislacao: "Texto", signature: "a".repeat(64) };
+  const dependencies = (value: LegisBotComentario | null) => ({ find: vi.fn().mockResolvedValue(value), resolveSource: vi.fn().mockResolvedValue(source), reconcileSource: vi.fn().mockResolvedValue(value) });
   it("retorna comentário concluído", async () => {
     const find = vi.fn().mockResolvedValue(item);
     await expect(readLegisBotComment(find)).resolves.toMatchObject({ kind: "completed", item });
@@ -31,7 +35,7 @@ describe("contrato de leitura pública do LegisBot", () => {
   });
 
   it("GET público concluído retorna HTTP 200 e no-store", async () => {
-    const response = await handleLegisBotRead({ slug: "cf", ordem: "0001" }, vi.fn().mockResolvedValue(item));
+    const response = await handleLegisBotRead({ slug: "cf", ordem: "0001" }, dependencies(item));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({ success: true, source: "database" });
@@ -49,7 +53,7 @@ describe("contrato de leitura pública do LegisBot", () => {
   });
 
   it("GET de item inexistente retorna HTTP 404", async () => {
-    const response = await handleLegisBotRead({ slug: "CF", ordem: "0001" }, vi.fn().mockResolvedValue(null));
+    const response = await handleLegisBotRead({ slug: "CF", ordem: "0001" }, dependencies(null));
     expect(response.status).toBe(404);
   });
 

@@ -8,7 +8,7 @@ import type {
 } from "./generation-repository";
 
 const identifiers = { slug: "L11340", ordem: "0004.0.00.00" };
-const input = { titulo: "Lei", assunto: "Art. 4º", legislacao: "Texto legal" };
+const input = { titulo: "Lei", assunto: "Art. 4º", legislacao: "<p>Texto legal</p>", promptLegislacao: "Texto legal", sourceSignature: "a".repeat(64) };
 const item: LegisBotComentario = {
   id: 10,
   ...identifiers,
@@ -20,6 +20,8 @@ const item: LegisBotComentario = {
   retry_after: null,
   attempt_count: 1,
   last_error_category: null,
+  source_signature: null,
+  precisa_revisao: false,
   created_at: "2026-08-04T16:00:00.000Z",
   updated_at: "2026-08-04T17:00:00.000Z",
 };
@@ -72,11 +74,13 @@ describe("orquestração da geração do LegisBot", () => {
     const result = await requestLegisBotGeneration({ repository: repo, generate }, "user-1", identifiers, input);
     expect(result.kind).toBe("generated");
     expect(generate).toHaveBeenCalledOnce();
+    expect(generate).toHaveBeenCalledWith({ titulo: input.titulo, assunto: input.assunto, legislacao: input.promptLegislacao });
     expect(repo.complete).toHaveBeenCalledWith(
       item.id,
       item.processing_started_at,
       "<p>Gerado</p>",
       "gpt-5.4-mini",
+      input.sourceSignature,
     );
   });
 

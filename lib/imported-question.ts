@@ -12,6 +12,8 @@ export type ImportedQuestion = {
   total_artigos: string;
   slug: string;
   ultima_alteracao_legislativa: string;
+  /** Rastreabilidade opcional de APKGs exportados pelo site; não redefine o UUID na importação. */
+  id_questao?: string;
 };
 
 export type ImportIssue = {

@@ -3,6 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LegisBotComentario } from "@/lib/legisbot-comentario";
 import type { LegisBotIdentifiers } from "./request-validation";
+import type { LegisBotSource } from "./source";
+import { createLegisBotSourceSignature } from "./source";
+import { legalHtmlToStructuredText } from "./sanitize-legal-html-core";
 import {
   GenerationRepositoryError,
   type GenerationDecision,
@@ -31,6 +34,29 @@ export async function findLegisBotComment(
     .maybeSingle();
   if (error) throw new GenerationRepositoryError("Falha ao consultar o comentário.");
   return data as LegisBotComentario | null;
+}
+
+export async function reconcileLegisBotCommentSource(
+  supabase: SupabaseClient,
+  source: LegisBotSource,
+): Promise<LegisBotComentario | null> {
+  const current = await findLegisBotComment(supabase, source);
+  if (!current) return null;
+  const storedSignature = current.source_signature || createLegisBotSourceSignature({
+    titulo: current.titulo,
+    assunto: current.assunto,
+    promptLegislacao: legalHtmlToStructuredText(current.legislacao),
+  });
+  const precisaRevisao = storedSignature !== source.signature;
+  if (current.source_signature === storedSignature && current.precisa_revisao === precisaRevisao) return current;
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ source_signature: storedSignature, precisa_revisao: precisaRevisao })
+    .eq("id", current.id)
+    .select("*")
+    .single();
+  if (error) throw new GenerationRepositoryError("Falha ao reconciliar a fonte do comentário.");
+  return data as LegisBotComentario;
 }
 
 export function createSupabaseGenerationRepository(
@@ -72,7 +98,7 @@ export function createSupabaseGenerationRepository(
       return data as LegisBotComentario | null;
     },
 
-    async complete(id, reservationStartedAt, comment, model) {
+    async complete(id, reservationStartedAt, comment, model, sourceSignature) {
       const { data, error } = await supabase
         .from(TABLE)
         .update({
@@ -82,6 +108,8 @@ export function createSupabaseGenerationRepository(
           processing_started_at: null,
           retry_after: null,
           last_error_category: null,
+          source_signature: sourceSignature,
+          precisa_revisao: false,
         })
         .eq("id", id)
         .eq("status", "processando")

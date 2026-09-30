@@ -30,6 +30,6 @@ export interface LegisBotGenerationRepository {
     input: LegisBotGenerationInput,
   ): Promise<GenerationReservation>;
   findById(id: number): Promise<LegisBotComentario | null>;
-  complete(id: number, reservationStartedAt: string, comment: string, model: string): Promise<LegisBotComentario | null>;
+  complete(id: number, reservationStartedAt: string, comment: string, model: string, sourceSignature: string): Promise<LegisBotComentario | null>;
   fail(id: number, reservationStartedAt: string, category: string): Promise<void>;
 }

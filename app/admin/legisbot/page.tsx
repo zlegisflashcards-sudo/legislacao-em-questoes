@@ -99,7 +99,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
             <td>{item.assunto}</td>
             <td><code>{item.slug}</code></td>
             <td>{item.ordem}</td>
-            <td><span className={`admin-status status-${item.status}`}>{statusLabels[item.status]}</span></td>
+            <td><span className={`admin-status status-${item.precisa_revisao ? "erro" : item.status}`}>{item.precisa_revisao ? "Precisa de revisão" : statusLabels[item.status]}</span></td>
             <td>{fmt(item.updated_at)}</td>
             <td><div className="admin-row-actions">
               <Link href={`/admin/legisbot/${item.id}?retorno=${encodeURIComponent(`/admin/legisbot${queryString(query, { page: String(page) })}`)}`}>Editar</Link>

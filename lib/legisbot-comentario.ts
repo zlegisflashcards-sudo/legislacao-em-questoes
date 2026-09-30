@@ -23,6 +23,8 @@ export interface LegisBotComentario {
   retry_after: string | null;
   attempt_count: number;
   last_error_category: string | null;
+  source_signature: string | null;
+  precisa_revisao: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -77,9 +77,6 @@
             <a class="lf-legisbot-link lf-card-action" href="#" data-aba="comunidade" target="_blank" rel="noopener noreferrer">&#128172; Comunidade</a>
             <a class="lf-legisbot-link lf-card-action" href="#" data-aba="destaques" target="_blank" rel="noopener noreferrer">&#128397;&#65039; Destaques</a>
           </div>
-          <span id="lf_legisbot_titulo" hidden>{{titulo}}</span>
-          <span id="lf_legisbot_assunto" hidden>{{assunto}}</span>
-          <textarea id="lf_legisbot_trecho" hidden>{{legislação}}</textarea>
         </div>
       </div>
 
@@ -258,37 +255,17 @@ function alternarComentarioProfessor() {
   var botoesLegisbot = document.querySelectorAll('.lf-card-actions .lf-legisbot-link');
   if (!botoesLegisbot.length) return;
 
-  function valorDoCampo(id, preservarTexto) {
-    var elemento = document.getElementById(id);
-    if (!elemento) return '';
-    var valor = typeof elemento.value === 'string'
-      ? elemento.value
-      : (elemento.textContent || '');
-    return preservarTexto ? valor : valor.trim();
-  }
-
   var slug = '{{slug}}'.trim();
   var ordem = '{{ordem}}'.trim();
-  var titulo = valorDoCampo('lf_legisbot_titulo', false);
-  var assunto = valorDoCampo('lf_legisbot_assunto', false);
-  var legislacao = valorDoCampo('lf_legisbot_trecho', true);
   var base = 'https://www.legisflashcards.com.br/legisbot/';
   var hrefBase = base
     + encodeURIComponent(slug)
     + '/'
-    + encodeURIComponent(ordem)
-    + '?titulo='
-    + encodeURIComponent(titulo)
-    + '&assunto='
-    + encodeURIComponent(assunto)
-    + '&legislacao='
-    + encodeURIComponent(legislacao);
+    + encodeURIComponent(ordem);
 
   for (var i = 0; i < botoesLegisbot.length; i++) {
     var aba = botoesLegisbot[i].getAttribute('data-aba') || 'legisbot';
-    botoesLegisbot[i].href = hrefBase + '&aba=' + encodeURIComponent(aba);
+    botoesLegisbot[i].href = aba === 'legisbot' ? hrefBase : hrefBase + '?tab=' + encodeURIComponent(aba);
   }
 })();
 </script>
-
-

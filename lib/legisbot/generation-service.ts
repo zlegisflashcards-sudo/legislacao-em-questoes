@@ -62,9 +62,9 @@ export async function requestLegisBotGeneration(
   try {
     const generate = dependencies.generate ?? gerarComentarioLegisBot;
     const comment = sanitizarComentarioHtml(await generate({
-      titulo: item.titulo,
-      assunto: item.assunto,
-      legislacao: item.legislacao,
+      titulo: input.titulo,
+      assunto: input.assunto,
+      legislacao: input.promptLegislacao,
     }));
     if (!comment.replace(/<[^>]*>/g, "").trim()) {
       throw new OpenAIServiceError({
@@ -79,6 +79,7 @@ export async function requestLegisBotGeneration(
       reservation.reservationStartedAt,
       comment,
       LEGISBOT_OPENAI_MODEL,
+      input.sourceSignature,
     );
     if (!saved) return { kind: "processing", retryAfter: null };
     return { kind: "generated", item: saved, comment };

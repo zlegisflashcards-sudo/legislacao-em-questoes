@@ -89,6 +89,7 @@ export async function parseLegisApkg(source: Uint8Array): Promise<ApkgParseResul
       rows.push({
         line: id, deck: deckForNote(id, cardDecks, decks), pergunta: value("pergunta"), resposta: answer === "certo" ? "Certo" : "Errado",
         justificativa: value("justificativa"), assunto: value("assunto"), legislacao: value("legislacao"), ordem: value("ordem"), titulo: value("titulo"), total_artigos: value("totalartigos"), slug: value("slug").trim(), ultima_alteracao_legislativa: value("ultimaalteracaolegislativa"),
+        id_questao: value("idquestao").trim() || undefined,
       });
     }
     // O formato atual do Anki armazena a lista de mídia como protobuf compactado.

@@ -8,6 +8,7 @@ import { adminCookieNames, exigirAdministrador, usuarioEhAdministrador } from "@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { sanitizarComentarioHtml } from "@/lib/legisbot/sanitize-comment-html";
 import { possuiTextoLegislacao, sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
+import { findLegisBotSource, LegisBotSourceError } from "@/lib/legisbot/source";
 import {
   LEGISBOT_COMENTARIO_STATUS,
   type LegisBotComentario,
@@ -127,7 +128,28 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
     };
   }
 
-  const payload = { slug, ordem, titulo, assunto, legislacao, comentario, status, modelo_ia: modeloIa || null };
+  let trustedSource: Awaited<ReturnType<typeof findLegisBotSource>> | null = null;
+  try {
+    trustedSource = await findLegisBotSource(supabase, { slug, ordem });
+  } catch (error) {
+    if (error instanceof LegisBotSourceError && error.kind === "conflict") {
+      return { ok: false, message: "Resolva o conflito da fonte do flashcard antes de concluir a revisão." };
+    }
+    // Comentários administrativos legados sem flashcard correspondente continuam
+    // editáveis. A página pública, porém, só usa uma fonte existente em questions.
+  }
+
+  const payload = {
+    slug,
+    ordem,
+    titulo: trustedSource?.titulo ?? titulo,
+    assunto: trustedSource?.assunto ?? assunto,
+    legislacao: trustedSource?.legislacao ?? legislacao,
+    comentario,
+    status,
+    modelo_ia: modeloIa || null,
+    ...(trustedSource ? { source_signature: trustedSource.signature, precisa_revisao: false } : {}),
+  };
   const result = id === null
     ? await supabase.from("legisbot_comentarios").insert(payload).select("*").single()
     : await supabase.from("legisbot_comentarios").update(payload).eq("id", id).select("*").single();

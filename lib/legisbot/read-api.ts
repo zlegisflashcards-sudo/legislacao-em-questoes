@@ -3,14 +3,21 @@ import { normalizeLegisBotIdentifiers, LegisBotRequestError, type LegisBotIdenti
 import { readLegisBotComment } from "./read-service";
 import { sanitizarComentarioHtml } from "./sanitize-comment-html";
 import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
+import { LegisBotSourceError, type LegisBotSource } from "./source";
 
 export async function handleLegisBotRead(
   params: { slug: string; ordem: string },
-  find: (identifiers: LegisBotIdentifiers) => Promise<LegisBotComentario | null>,
+  dependencies: {
+    find: (identifiers: LegisBotIdentifiers) => Promise<LegisBotComentario | null>;
+    resolveSource: (identifiers: LegisBotIdentifiers) => Promise<LegisBotSource>;
+    reconcileSource: (source: LegisBotSource) => Promise<LegisBotComentario | null>;
+  },
 ): Promise<Response> {
   try {
     const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
-    const outcome = await readLegisBotComment(() => find(identifiers));
+    const source = await dependencies.resolveSource(identifiers);
+    const reconciled = await dependencies.reconcileSource(source);
+    const outcome = await readLegisBotComment(() => reconciled ? Promise.resolve(reconciled) : dependencies.find(identifiers));
     if (outcome.kind === "completed") {
       const item = outcome.item;
       return json({
@@ -18,10 +25,11 @@ export async function handleLegisBotRead(
         source: "database",
         status: "gerado",
         comment: sanitizarComentarioHtml(item.comentario ?? ""),
-        titulo: item.titulo,
-        assunto: item.assunto,
-        legislacao: sanitizeLegalHtmlCore(item.legislacao),
+        titulo: source.titulo,
+        assunto: source.assunto,
+        legislacao: sanitizeLegalHtmlCore(source.legislacao),
         modelo_ia: item.modelo_ia,
+        precisa_revisao: item.precisa_revisao,
       });
     }
     if (outcome.kind === "processing") {
@@ -31,14 +39,25 @@ export async function handleLegisBotRead(
         source: "processing",
         status: "pendente",
         comment: null,
-        titulo: item.titulo,
-        assunto: item.assunto,
-        legislacao: sanitizeLegalHtmlCore(item.legislacao),
+        titulo: source.titulo,
+        assunto: source.assunto,
+        legislacao: sanitizeLegalHtmlCore(source.legislacao),
         modelo_ia: item.modelo_ia,
+        precisa_revisao: item.precisa_revisao,
       }, 202);
     }
-    return json({ success: false, error: "Comentário ainda não disponível." }, 404);
+    return json({
+      success: false,
+      error: "Comentário ainda não disponível.",
+      titulo: source.titulo,
+      assunto: source.assunto,
+      legislacao: sanitizeLegalHtmlCore(source.legislacao),
+    }, 404);
   } catch (error) {
+    if (error instanceof LegisBotSourceError) {
+      const status = error.kind === "not_found" ? 404 : error.kind === "conflict" ? 409 : error.kind === "incomplete" ? 422 : 503;
+      return json({ success: false, error: error.publicMessage, reason: `source_${error.kind}` }, status);
+    }
     if (error instanceof LegisBotRequestError) {
       return json({ success: false, error: error.publicMessage }, error.status);
     }

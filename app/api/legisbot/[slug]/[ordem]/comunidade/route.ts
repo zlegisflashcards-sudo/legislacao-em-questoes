@@ -1,8 +1,6 @@
-import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 import {
   COMMUNITY_PAGE_SIZE,
   COMMUNITY_QUOTE_MAX_LENGTH,
-  legalHtmlToPlainText,
   normalizeCommunityIdentifiers,
   validateCommunityContent,
   type CommunityComment,
@@ -19,6 +17,8 @@ import {
 } from "@/lib/legisbot-community-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { usuarioEhAdministrador } from "@/lib/admin-auth";
+import { findLegisBotSource, LegisBotSourceError } from "@/lib/legisbot/source";
+import { normalizeLegisBotIdentifiers } from "@/lib/legisbot/request-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -40,17 +40,17 @@ type DbComment = {
 };
 
 async function getThreadLaw(slug: string, ordem: string) {
-  const { data, error } = await getSupabaseServerClient()
-    .from("legisbot_comentarios")
-    .select("legislacao")
-    .eq("slug", slug)
-    .eq("ordem", ordem)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new CommunityApiError(404, "Trecho não encontrado.");
-  const legislation = legalHtmlToPlainText(sanitizarHtmlLegislacao(String(data.legislacao ?? "")));
-  if (!legislation) throw new CommunityApiError(409, "O texto legal deste trecho está indisponível.");
-  return legislation;
+  try {
+    return (await findLegisBotSource(
+      getSupabaseServerClient(),
+      normalizeLegisBotIdentifiers(slug, ordem),
+    )).promptLegislacao;
+  } catch (error) {
+    if (error instanceof LegisBotSourceError) {
+      throw new CommunityApiError(error.kind === "not_found" ? 404 : 409, error.publicMessage);
+    }
+    throw error;
+  }
 }
 
 function serializeComment(
