@@ -8,7 +8,7 @@ const LIMIT = 40;
 
 export type ArticleContext = LegisBotComentario & { lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number };
 export type ArticleInteraction = { id: string; kind: "comentario" | "legisbot"; slug: string; ordem: string; author: string | null; summary: string; status: string; createdAt: string };
-export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
+export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; legislacao: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
 
 export function normalizeArticleSearch(value: string) {
   return value.trim().slice(0, 120).replace(/[,%()]/g, " ").replace(/\s+/g, " ");
@@ -127,7 +127,7 @@ export async function getArticleCommunityComments(slug: string, ordem: string, f
 
 export async function getArticleQuestions(slug: string, ordem: string): Promise<ArticleQuestion[]> {
   await exigirAdministrador();
-  const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,pergunta,resposta,assunto,titulo,structure_id,ativo,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true).order("updated_at", { ascending: false }).limit(100);
+  const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,pergunta,resposta,assunto,legislacao,titulo,structure_id,ativo,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true).order("updated_at", { ascending: false }).limit(100);
   if (result.error) throw new Error("Não foi possível carregar as questões do artigo.");
   return (result.data ?? []) as ArticleQuestion[];
 }

@@ -86,6 +86,11 @@ async function resolveBulkQuestionEdit(body: Record<string, unknown>): Promise<{
   if (selected.error) fail("carregar_edicao_lote", selected.error);
   if ((selected.data?.length ?? 0) !== ids.length) throw new AdminQuestoesError(409, "A seleção mudou ou contém questão de outra lei. Gere uma nova prévia.");
   const rows = (selected.data ?? []) as Array<Record<string, unknown> & { id: string }>;
+  if (typeof body.context_slug === "string" && typeof body.context_ordem === "string") {
+    const contextRows = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true).eq("slug", body.context_slug.toLowerCase()).eq("ordem", body.context_ordem).in("id", ids);
+    if (contextRows.error) fail("validar_contexto_edicao_lote", contextRows.error);
+    if ((contextRows.data?.length ?? 0) !== ids.length) throw new AdminQuestoesError(409, "A seleção contém questão fora do artigo atual. Gere uma nova prévia.");
+  }
   const changed = rows.filter((row) => row[parsed.field] !== parsed.value);
   return { current, user, parsed, ids: rows.map((row) => String(row.id)), preview: { field: parsed.field, value: parsed.value, selection_count: rows.length, changed_count: changed.length, unchanged_count: rows.length - changed.length, sample: changed.slice(0, 8).map((row) => ({ id: String(row.id), before: row[parsed.field], after: parsed.value })), expected: rows.map((row) => ({ id: String(row.id), before: row[parsed.field] })) } };
 }
