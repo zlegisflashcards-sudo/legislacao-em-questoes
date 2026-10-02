@@ -12,7 +12,7 @@ export default async function AdminLawOverviewPage({ params }: { params: Promise
   const editorialWarning = situation === "desatualizado" ? "Esta lei está marcada como desatualizada. Revise o conteúdo antes de novas publicações." : situation === "revisao_pendente" || situation === "em_revisao" ? "Esta lei está marcada para revisão. Verifique o conteúdo antes de novas publicações." : null;
   const cards = [
     { id: "estrutura" as const, label: "Estrutura", value: overview.structure, description: "nós estruturais", action: "Organizar estrutura", href: `${base}/estrutura` },
-    { id: "materiais" as const, label: "Materiais", value: overview.materials, description: "materiais ativos", action: "Gerenciar materiais", href: `${base}/materiais` },
+    { id: "materiais" as const, label: "Legislação", value: overview.materials, description: "conteúdos legislativos e PDFs ativos", action: "Gerenciar legislação", href: `${base}/materiais` },
     { id: "legiscast" as const, label: "LegisCast", value: overview.audios, description: "áudios ativos", action: "Gerenciar áudios", href: `${base}/legiscast` },
     { id: "anki" as const, label: "Anki", value: "APKG", description: "importação e exportação", action: "Abrir ferramentas", href: `${base}/anki`, tool: true },
     { id: "questoes" as const, label: "Questões", value: overview.questions, description: "questões ativas", action: "Pesquisar questões", href: `${base}/questoes` },

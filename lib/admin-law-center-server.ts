@@ -47,7 +47,7 @@ export async function getAdminLawOverviewChecks(lawId: number) {
   await requireAdmin();
   const result = await getSupabaseServerClient().from("admin_law_overview_checks").select("item").eq("lei_id", lawId);
   if (result.error) throw new Error("Não foi possível carregar as marcações administrativas.");
-  return (result.data ?? []).map((row) => String(row.item)).filter((item): item is "estrutura" | "materiais" | "legiscast" | "anki" => ["estrutura", "materiais", "legiscast", "anki"].includes(item));
+  return (result.data ?? []).map((row) => String(row.item)).filter((item): item is "estrutura" | "materiais" | "legiscast" | "anki" | "questoes" => ["estrutura", "materiais", "legiscast", "anki", "questoes"].includes(item));
 }
 
 export async function getAdminLawStructure(lawId: number) {

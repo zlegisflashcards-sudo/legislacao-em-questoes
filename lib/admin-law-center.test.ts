@@ -18,6 +18,7 @@ describe("Central administrativa por lei", () => {
     expect(shell).toContain("Visão geral");
     expect(shell).toContain("Dados da lei");
     expect(shell).toContain("Estrutura");
+    expect(shell).toContain("Legislação");
     expect(shell).toContain('href={`${base}/recortes`}');
     expect(shell).toContain('href={`${base}/anki`}');
   });
@@ -51,6 +52,15 @@ describe("Central administrativa por lei", () => {
     expect(shell).toContain("law-center-nav-mobile");
   });
 
+  it("apresenta Legislação como nome visual da área técnica de materiais", () => {
+    const overview = read("app/admin/leis/[slug]/page.tsx");
+    const materials = read("components/admin/admin-materials.tsx");
+    expect(overview).toContain('id: "materiais" as const, label: "Legislação"');
+    expect(overview).toContain('href: `${base}/materiais`');
+    expect(materials).toContain("Legislação e PDFs vinculados");
+    expect(materials).toContain("conteúdo legislativo e os PDFs desta lei");
+  });
+
   it("ordena os cards e mantém checklist administrativo isolado por lei", () => {
     const overview = read("app/admin/leis/[slug]/page.tsx");
     const cards = read("components/admin/law-overview-cards.tsx");
@@ -70,9 +80,13 @@ describe("Central administrativa por lei", () => {
   it("inclui Questões no checklist administrativo da Central", () => {
     const cards = read("components/admin/law-overview-cards.tsx");
     const route = read("app/api/admin/law-overview-checks/route.ts");
+    const server = read("lib/admin-law-center-server.ts");
     const migration = read("supabase/migrations/20260929130000_add_questions_law_overview_check.sql");
     expect(cards).toContain('"questoes"');
     expect(route).toContain('"questoes"');
+    expect(server).toContain('"estrutura", "materiais", "legiscast", "anki", "questoes"');
+    expect(server).toContain('.eq("lei_id", lawId)');
+    expect(server).toContain("await requireAdmin()");
     expect(migration).toContain("admin_law_overview_checks_item_check");
     expect(migration).toContain("'questoes'");
   });
@@ -81,7 +95,7 @@ describe("Central administrativa por lei", () => {
     expect(read("components/admin/law-structure-admin.tsx")).toContain("Criar primeiro Título");
     expect(read("components/admin/admin-question-scopes.tsx")).toContain("Criar primeiro recorte");
     expect(read("components/admin/admin-law-questions.tsx")).toContain("Abrir Anki");
-    expect(read("components/admin/admin-materials.tsx")).toContain("primeiro material já vinculado a esta lei");
+    expect(read("components/admin/admin-materials.tsx")).toContain("primeiro conteúdo legislativo ou PDF vinculado a esta lei");
     expect(read("components/admin/legiscast-audios-admin.tsx")).toContain("primeiro áudio da lei");
   });
 

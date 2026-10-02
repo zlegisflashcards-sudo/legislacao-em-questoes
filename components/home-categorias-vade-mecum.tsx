@@ -7,6 +7,7 @@ import {
   type Legislacao,
 } from "@/lib/legislacoes";
 import { siteConfig } from "@/lib/site-config";
+import type { CatalogModuleAvailability } from "@/lib/catalog-module-availability";
 
 type CatalogProduct = {
   id: string;
@@ -14,6 +15,7 @@ type CatalogProduct = {
   slug: string;
   leisIncluidas: number;
   totalFlashcards: number | null;
+  modules: CatalogModuleAvailability;
 };
 
 function isConstituicaoFederal(legislacao: Legislacao) {
@@ -100,16 +102,18 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
             {produto.nome}
           </h3>
           <div className="min-w-0 space-y-3 text-sm font-bold text-[#062a5f]">
-            {[
-              "Legis Questões",
-              "Flashcards do Anki",
-              "LegisCast + PDF",
-            ].map((recurso) => (
-              <span key={recurso} className="flex min-w-0 items-start gap-2">
-                <span aria-hidden="true" className="shrink-0 text-base font-black text-[#0868ed]">•</span>
-                <span className="min-w-0 break-words">{recurso}</span>
+            {([
+              ["questoes", "Legis Questões"],
+              ["anki", "Flashcards Anki"],
+              ["legiscast", "LegisCast"],
+              ["materiais", "PDF"],
+            ] as const).map(([module, label]) => {
+              const available = produto.modules[module];
+              return <span key={module} className="flex min-w-0 items-start gap-2">
+                <span aria-hidden="true" className={`shrink-0 text-base font-black ${available ? "text-emerald-600" : "text-[#0868ed]"}`}>{available ? "✓" : "◷"}</span>
+                <span className="min-w-0 break-words">{label}{available ? null : <span className="text-slate-500"> · Em produção</span>}</span>
               </span>
-            ))}
+            })}
           </div>
         </div>
 

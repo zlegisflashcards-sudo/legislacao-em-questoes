@@ -10,7 +10,10 @@ describe("cards comerciais do catálogo", () => {
   it("busca produtos ativos para pesquisa e limita destaque à vitrine", () => {
     expect(loader).toContain('from("produtos")');
     expect(loader).toContain('from("produto_leis")');
-    expect(loader).toContain('leis(slug)');
+    expect(loader).toContain('leis(slug,status_publicacao)');
+    expect(loader).toContain('select("lei_id,item")');
+    expect(loader).toContain('recorte_id');
+    expect(loader).toContain('aggregateCatalogModuleAvailability');
     expect(loader).toContain("activeQuestionCountsBySlug");
     expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
     expect(loader).toContain('if (destaque) productsQuery = productsQuery.eq("destaque", true)');
@@ -26,8 +29,11 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("Legislação em Questões");
     expect(cards).toContain("4.0");
     expect(cards).toContain("Legis Questões");
-    expect(cards).toContain("Flashcards do Anki");
-    expect(cards).toContain("LegisCast + PDF");
+    expect(cards).toContain("Flashcards Anki");
+    expect(cards).toContain("LegisCast");
+    expect(cards).toContain('"PDF"');
+    expect(cards).toContain("Em produção");
+    expect(cards).not.toContain("LegisCast + PDF");
     for (const antigo of ["Acesso vitalício", "Atualizado", "Ilimitado"]) expect(cards).not.toContain(antigo);
     expect(cards).toContain("min-w-0 space-y-3 text-sm font-bold");
     expect(cards).toContain('className="min-w-0 break-words"');

@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isOfflineBuild } from "@/lib/build-mode";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
+import { aggregateCatalogModuleAvailability, catalogModules, type CatalogModuleAvailability, unavailableCatalogModules } from "@/lib/catalog-module-availability";
 
 export type CatalogProduct = {
   id: string;
@@ -10,6 +11,7 @@ export type CatalogProduct = {
   slug: string;
   leisIncluidas: number;
   totalFlashcards: number | null;
+  modules: CatalogModuleAvailability;
 };
 
 async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> {
@@ -32,7 +34,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
     const productIds = products.map((product) => product.id);
     const { data: links, error: linksError } = await supabase
       .from("produto_leis")
-      .select("produto_id,lei_id,leis(slug,status_publicacao)")
+      .select("produto_id,lei_id,recorte_id,leis(slug,status_publicacao)")
       .in("produto_id", productIds);
 
     if (linksError) return [];
@@ -43,12 +45,28 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
       if (law?.slug && law.status_publicacao === "ativa") lawSlugById.set(link.lei_id, law.slug);
     }
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
+    const activeLawIds = [...lawSlugById.keys()];
+    const checksResult = activeLawIds.length
+      ? await supabase.from("admin_law_overview_checks").select("lei_id,item").in("lei_id", activeLawIds)
+      : { data: [] as Array<{ lei_id: string; item: string }>, error: null };
+    if (checksResult.error) console.warn("[catalog] Não foi possível carregar os checks da Central da Lei.");
+    const checksByLawId = new Map<string, Set<(typeof catalogModules)[number]>>();
+    for (const row of checksResult.data ?? []) {
+      const item = String(row.item);
+      if (!catalogModules.includes(item as (typeof catalogModules)[number])) continue;
+      const lawId = String(row.lei_id);
+      const completed = checksByLawId.get(lawId) ?? new Set<(typeof catalogModules)[number]>();
+      completed.add(item as (typeof catalogModules)[number]);
+      checksByLawId.set(lawId, completed);
+    }
 
     return products.map((product) => {
-      const productLawIds = (links ?? [])
+      const productLinks = (links ?? [])
         .filter((link) => link.produto_id === product.id)
-        .map((link) => link.lei_id)
-        .filter((lawId) => lawSlugById.has(lawId));
+        .filter((link) => lawSlugById.has(String(link.lei_id)));
+      const productLawIds = productLinks.map((link) => String(link.lei_id));
+      const allProductLinks = (links ?? []).filter((link) => link.produto_id === product.id);
+      if (!allProductLinks.length) console.warn(`[catalog] Produto ${product.id} não possui vínculo com lei; módulos exibidos como Em produção.`);
 
       return {
         id: product.id,
@@ -61,6 +79,12 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
               0,
             )
           : null,
+        modules: checksResult.error
+          ? unavailableCatalogModules()
+          : aggregateCatalogModuleAvailability(productLinks.map((link) => ({
+              recorteId: link.recorte_id == null ? null : String(link.recorte_id),
+              completed: checksByLawId.get(String(link.lei_id)) ?? new Set(),
+            }))),
       };
     });
   } catch {
