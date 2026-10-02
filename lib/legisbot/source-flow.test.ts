@@ -44,10 +44,11 @@ describe("fonte canônica do LegisBot", () => {
     expect(metadata).toEqual([expect.objectContaining({ kind: "metadados", versions: 2 })]);
   });
 
-  it("bloqueia o LegisBot somente diante de legislação realmente divergente", () => {
+  it("bloqueia o LegisBot diante de conflito real de assunto ou legislação", () => {
     const identifiers = { slug: "CP", ordem: "0013.0.00.00" };
     const row = { id: "a", slug: "cp", ordem: identifiers.ordem, titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto legal</p>", updated_at: "2026-09-30T00:00:00Z" };
-    expect(resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: "Artigo 13", legislacao: "<div><strong>Texto legal</strong></div>" }], identifiers, null).questionId).toBe("a");
+    expect(resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: " art. 13 ", legislacao: "<div><strong>Texto legal</strong></div>" }], identifiers, null).questionId).toBe("a");
+    expect(() => resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: "Artigo 13" }], identifiers, null)).toThrow(LegisBotSourceError);
     expect(() => resolveLegisBotSourceRows([row, { ...row, id: "b", legislacao: "<p>Texto legal diferente</p>" }], identifiers, null)).toThrow(LegisBotSourceError);
     try {
       resolveLegisBotSourceRows([row, { ...row, id: "b", legislacao: "<p>Texto legal diferente</p>" }], identifiers, null);
@@ -64,7 +65,7 @@ describe("fonte canônica do LegisBot", () => {
     expect(page).not.toMatch(/query\.(titulo|assunto|legislacao)/);
     expect(page).toContain("query.aba");
     expect(client).toContain("body: JSON.stringify({})");
-    expect(overlay).toContain('dadosIniciais={{ titulo: "", assunto: "", legislacao: "" }}');
+    expect(overlay).toContain('dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }}');
     expect(template).not.toMatch(/encodeURIComponent\((titulo|assunto|legislacao)\)/);
     expect(template).not.toContain("?titulo=");
     expect(template).toContain("aba === 'legisbot' ? hrefBase");

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QuestionRichEditor } from "@/components/admin/question-rich-editor";
+import { shouldNavigateToStandardizedOrder, standardizationContextOrder, type StandardizationField } from "@/lib/question-standardization-flow";
 
 export type StandardizableQuestion = { id: string; slug: string; ordem: string; assunto: string | null; legislacao: string | null };
 type Changes = { assunto: string; ordem: string; legislacao: string };
@@ -14,37 +15,53 @@ async function post(body: Record<string, unknown>) {
   return payload;
 }
 
-export function QuestionStandardizationPanel({ lawSlug, slug, ordem, questions, selectedIds, onClose, onSuccess }: { lawSlug: string; slug: string; ordem: string; questions: StandardizableQuestion[]; selectedIds: string[]; onClose: () => void; onSuccess: () => void }) {
+export function QuestionStandardizationPanel({ lawSlug, slug, ordem, questions, selectedIds, onClose, onSuccess, hrefForOrder, contextMode = false, linkedCounts = { legisbot: 0, community: 0, highlights: 0 } }: { lawSlug: string; slug: string; ordem: string; questions: StandardizableQuestion[]; selectedIds: string[]; onClose: () => void; onSuccess: () => void; hrefForOrder: (order: string) => string; contextMode?: boolean; linkedCounts?: { legisbot: number; community: number; highlights: number } }) {
   const router = useRouter();
-  const [changes, setChanges] = useState<Changes>({ assunto: "", ordem: "", legislacao: "" });
+  const initialContextChanges: Changes = contextMode ? { assunto: questions.find((question) => selectedIds.includes(question.id))?.assunto ?? "", ordem, legislacao: questions.find((question) => selectedIds.includes(question.id))?.legislacao ?? "" } : { assunto: "", ordem: "", legislacao: "" };
+  const [changes, setChanges] = useState<Changes>(initialContextChanges);
   const [review, setReview] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [appliedFields, setAppliedFields] = useState<Array<keyof Changes>>([]);
-  const selected = useMemo(() => questions.filter((question) => selectedIds.includes(question.id)), [questions, selectedIds]);
-  const fields = (["assunto", "ordem", "legislacao"] as const).filter((field) => changes[field].trim() !== "");
+  const selected = useMemo(() => contextMode ? questions : questions.filter((question) => selectedIds.includes(question.id)), [contextMode, questions, selectedIds]);
+  const fields = (["assunto", "ordem", "legislacao"] as const).filter((field) => contextMode ? changes[field] !== initialContextChanges[field] : changes[field].trim() !== "");
   const variations = (field: keyof Changes) => new Set(selected.map((item) => item[field] ?? "")).size;
   async function apply() {
     if (!fields.length) { setError("Informe ao menos um campo para padronizar."); return; }
     setBusy(true); setError(""); setAppliedFields([]);
-    const applied: Array<keyof Changes> = [];
+    if (contextMode) {
+      try {
+        await post({ action: "previsualizar_padronizacao_contexto", law_slug: lawSlug, context_slug: slug, context_ordem: ordem, changes });
+        const result = await post({ action: "aplicar_padronizacao_contexto", law_slug: lawSlug, context_slug: slug, context_ordem: ordem, changes, expected_question_ids: questions.map((question) => question.id).sort() });
+        setAppliedFields(fields);
+        if (result.moved) router.replace(hrefForOrder(String(result.next_order)));
+        else onSuccess();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Falha ao padronizar o contexto do artigo.");
+        router.refresh();
+      } finally { setBusy(false); }
+      return;
+    }
+    const applied: StandardizationField[] = [];
     try {
       for (const field of fields) {
-        const currentOrder = applied.includes("ordem") ? changes.ordem : ordem;
+        const currentOrder = standardizationContextOrder(ordem, changes.ordem, applied);
         const preview = await post({ action: "previsualizar_edicao_lote", law_slug: lawSlug, scope: "selected", field, value: changes[field], question_ids: selectedIds, context_slug: slug, context_ordem: currentOrder });
         await post({ action: "aplicar_edicao_lote", law_slug: lawSlug, scope: "selected", field, value: changes[field], question_ids: selectedIds, context_slug: slug, context_ordem: currentOrder, expected: preview.expected });
         applied.push(field); setAppliedFields([...applied]);
       }
-      onSuccess();
+      if (shouldNavigateToStandardizedOrder(ordem, changes.ordem, applied)) router.replace(hrefForOrder(standardizationContextOrder(ordem, changes.ordem, applied)));
+      else onSuccess();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Falha ao padronizar as questões.";
       setAppliedFields([...applied]);
       setError(message);
-      router.refresh();
+      if (shouldNavigateToStandardizedOrder(ordem, changes.ordem, applied)) router.replace(hrefForOrder(standardizationContextOrder(ordem, changes.ordem, applied)));
+      else router.refresh();
     }
     finally { setBusy(false); }
   }
   return <div className="admin-modal-backdrop" role="presentation"><section className="admin-modal question-standardization-modal" role="dialog" aria-modal="true" aria-labelledby="standardize-questions-title">
-    <header className="question-standardization-header"><span aria-hidden="true">≡</span><div><p>MANUTENÇÃO EM LOTE</p><h2 id="standardize-questions-title">Padronizar questões</h2><small>{selected.length} questão(ões) selecionada(s) · {slug} · {ordem}</small></div></header>
-    <p className="question-standardization-context">Edite apenas os campos desejados. Lei e slug permanecem no contexto atual; esta etapa não move questões para outra lei.</p>
+    <header className="question-standardization-header"><span aria-hidden="true">≡</span><div><p>{contextMode ? "PADRONIZAÇÃO DO CONTEXTO" : "MANUTENÇÃO EM LOTE"}</p><h2 id="standardize-questions-title">{contextMode ? "Padronizar artigo" : "Padronizar questões"}</h2><small>{selected.length} questão(ões) {contextMode ? "do contexto" : "selecionada(s)"} · {slug} · {ordem}</small></div></header>
+    <p className="question-standardization-context">{contextMode ? "A alteração será aplicada a todas as questões deste slug + ordem e aos registros diretamente vinculados." : "Edite apenas os campos desejados. Lei e slug permanecem no contexto atual; esta etapa não move questões para outra lei."}</p>
     {error ? <p className="admin-alert error" role="alert">{error}{appliedFields.length ? <> Campos já aplicados: <strong>{appliedFields.map((field) => field === "assunto" ? "Assunto" : field === "ordem" ? "Ordem" : "Legislação").join(", ")}</strong>. Os dados foram recarregados; confira os valores atuais antes de tentar novamente.</> : " Nenhum campo foi aplicado nesta tentativa."}</p> : null}
-    {!review ? <><div className="question-standardization-fields"><label><span>Assunto</span><small>Ex.: Art. 10, § 1º, II</small><input value={changes.assunto} onChange={(event) => setChanges((value) => ({ ...value, assunto: event.target.value }))} placeholder="Manter sem alteração" /></label><label><span>Ordem</span><small>Ex.: 0010.0.01.02</small><input value={changes.ordem} onChange={(event) => setChanges((value) => ({ ...value, ordem: event.target.value }))} placeholder="Manter sem alteração" /></label><div className="question-standardization-legislation"><span>Legislação</span><small>Cole do Google Docs: quebras de linha, negrito e cores serão mantidos.</small><QuestionRichEditor label="Texto legal" value={changes.legislacao} onChange={(legislacao) => setChanges((value) => ({ ...value, legislacao }))} /></div></div><div className="admin-modal-actions"><button type="button" className="admin-button secondary" onClick={onClose}>Cancelar</button><button type="button" className="admin-button primary" disabled={!fields.length} onClick={() => setReview(true)}>Revisar alterações</button></div></> : <><section className="question-standardization-preview"><h3>Prévia antes → depois</h3><p>{selected.length} questões serão analisadas antes de cada alteração. Valores diferentes são preservados na prévia como variações, mas todos receberão o novo valor.</p><ul>{fields.map((field) => <li key={field}><strong>{field === "assunto" ? "Assunto" : field === "ordem" ? "Ordem" : "Legislação"}:</strong> {variations(field) > 1 ? "Valores atuais diferentes" : (selected[0]?.[field] || "(vazio)")} → {changes[field]}</li>)}</ul></section><p className="admin-alert">A confirmação valida novamente os registros e aplica somente Assunto, Ordem e/ou Legislação. Se uma etapa falhar, a mensagem informa o campo; as etapas já concluídas não são revertidas nesta versão.</p><div className="admin-modal-actions"><button type="button" className="admin-button secondary" disabled={busy} onClick={() => setReview(false)}>Voltar</button><button type="button" className="admin-button primary" disabled={busy} onClick={() => void apply()}>{busy ? "Padronizando…" : "Confirmar padronização"}</button></div></>}
+    {!review ? <><div className="question-standardization-fields"><label><span>Assunto</span><small>Ex.: Art. 10, § 1º, II</small><input value={changes.assunto} onChange={(event) => setChanges((value) => ({ ...value, assunto: event.target.value }))} placeholder="Manter sem alteração" /></label><label><span>Ordem</span><small>Ex.: 0010.0.01.02</small><input value={changes.ordem} onChange={(event) => setChanges((value) => ({ ...value, ordem: event.target.value }))} placeholder="Manter sem alteração" /></label><div className="question-standardization-legislation"><span>Legislação</span><small>Cole do Google Docs: quebras de linha, negrito e cores serão mantidos.</small><QuestionRichEditor label="Texto legal" value={changes.legislacao} onChange={(legislacao) => setChanges((value) => ({ ...value, legislacao }))} /></div></div><div className="admin-modal-actions"><button type="button" className="admin-button secondary" onClick={onClose}>Cancelar</button><button type="button" className="admin-button primary" disabled={!fields.length} onClick={() => setReview(true)}>Revisar alterações</button></div></> : <><section className="question-standardization-preview"><h3>Prévia antes → depois</h3><p>{selected.length} questão(ões) serão atualizadas.{contextMode ? ` Registros vinculados: LegisBot ${linkedCounts.legisbot}, comentários ${linkedCounts.community}, destaques ${linkedCounts.highlights}.` : " Valores diferentes são preservados na prévia como variações, mas todos receberão o novo valor."}</p><ul>{fields.map((field) => <li key={field}><strong>{field === "assunto" ? "Assunto" : field === "ordem" ? "Ordem" : "Legislação"}:</strong> {variations(field) > 1 ? "Valores atuais diferentes" : (selected[0]?.[field] || "(vazio)")} → {changes[field]}</li>)}</ul></section><p className="admin-alert">A confirmação valida novamente o contexto inteiro. Se a ordem mudar, o artigo será aberto na nova URL.</p><div className="admin-modal-actions"><button type="button" className="admin-button secondary" disabled={busy} onClick={() => setReview(false)}>Voltar</button><button type="button" className="admin-button primary" disabled={busy} onClick={() => void apply()}>{busy ? "Padronizando…" : "Confirmar padronização"}</button></div></>}
   </section></div>;
 }

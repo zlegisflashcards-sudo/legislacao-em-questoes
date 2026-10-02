@@ -162,11 +162,51 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   revalidatePath("/admin/legisbot");
   revalidatePath(`/admin/legisbot/${saved.id}`);
   revalidatePath(`/legisbot/${saved.slug.toLowerCase()}/${saved.ordem}`);
+  revalidatePath(`/estudar/lei/${saved.slug.toLowerCase()}/legiscast`);
   return {
     ok: true,
     message: `${id === null ? "Comentário criado" : "Alterações salvas"} com sucesso.${comentario !== comentarioOriginal.trim() ? " O HTML foi sanitizado antes da gravação." : ""}`,
     record: saved,
   };
+}
+
+/** Cria apenas o rascunho editorial a partir da fonte confiável em questions. */
+export async function prepararContextoLegisBot(formData: FormData) {
+  await exigirAdministrador();
+  const slug = String(formData.get("slug") ?? "").trim().toUpperCase();
+  const ordem = String(formData.get("ordem") ?? "").trim();
+  const articleUrl = `/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(ordem)}?aba=legisbot`;
+  if (!SLUG_VALIDO.test(slug) || !ORDEM_VALIDA.test(ordem)) redirect("/admin/artigos?erro=identificadores");
+
+  const supabase = getSupabaseServerClient();
+  let source: Awaited<ReturnType<typeof findLegisBotSource>>;
+  try {
+    source = await findLegisBotSource(supabase, { slug, ordem });
+  } catch (error) {
+    const reason = error instanceof LegisBotSourceError && error.kind === "conflict" ? "conflito" : "fonte";
+    redirect(`${articleUrl}&erro=${reason}`);
+  }
+
+  const existing = await supabase.from("legisbot_comentarios").select("id").eq("slug", slug).eq("ordem", ordem).maybeSingle();
+  if (existing.data) redirect(articleUrl);
+  if (existing.error) redirect(`${articleUrl}&erro=preparo`);
+
+  const prepared = await supabase.from("legisbot_comentarios").insert({
+    slug,
+    ordem,
+    titulo: source.titulo,
+    assunto: source.assunto,
+    legislacao: source.legislacao,
+    comentario: null,
+    status: "pendente",
+    modelo_ia: null,
+    source_signature: source.signature,
+    precisa_revisao: false,
+  });
+  if (prepared.error && prepared.error.code !== "23505") redirect(`${articleUrl}&erro=preparo`);
+  revalidatePath("/admin/artigos");
+  revalidatePath(articleUrl);
+  redirect(articleUrl);
 }
 
 export async function alterarStatusComentario(formData: FormData) {

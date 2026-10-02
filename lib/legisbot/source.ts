@@ -78,7 +78,8 @@ export function resolveLegisBotSourceRows(
 ) {
   const sources = rows.map((row) => buildSource(row, identifiers, fallbackTitle));
   const legislationVersions = new Set(sources.map((source) => normalizedLegisBotLegislation(source.legislacao)));
-  if (legislationVersions.size > 1) {
+  const subjectVersions = new Set(sources.map((source) => normalizedLegisBotSourceText(source.assunto)));
+  if (legislationVersions.size > 1 || subjectVersions.size > 1) {
     throw new LegisBotSourceError(
       "conflict",
       "Este conteúdo está temporariamente indisponível enquanto passa por revisão.",

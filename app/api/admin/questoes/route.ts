@@ -32,6 +32,7 @@ import {
   saveLawQuestionScope,
   previewStructureTxtImport,
 } from "@/lib/admin-questoes-server";
+import { ArticleContextStandardizationError, applyArticleContextStandardization, previewArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +43,7 @@ function failure(error: unknown) {
   if (error instanceof AdminQuestoesError) {
     return NextResponse.json({ error: error.message }, { status: error.status, headers });
   }
+  if (error instanceof ArticleContextStandardizationError) return NextResponse.json({ error: error.message }, { status: error.status, headers });
   console.error("Falha interna na administração de questões.");
   return NextResponse.json({ error: "Não foi possível concluir a operação de questões." }, { status: 500, headers });
 }
@@ -91,6 +93,8 @@ export async function POST(request: Request) {
     else if (body.action === "excluir_questoes") data = await deleteBulkAdminQuestions(body);
     else if (body.action === "previsualizar_edicao_lote") data = await previewBulkQuestionEdit(body);
     else if (body.action === "aplicar_edicao_lote") data = await applyBulkQuestionEdit(body);
+    else if (body.action === "previsualizar_padronizacao_contexto") data = await previewArticleContextStandardization(body);
+    else if (body.action === "aplicar_padronizacao_contexto") data = await applyArticleContextStandardization(body);
     else if (body.action === "mover_questao") data = await moveAdminQuestion(body);
     else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);

@@ -18,8 +18,8 @@ describe("Central do Artigo administrativa", () => {
     expect(server).toContain("codigo.ilike");
     expect(server).toContain("ordem.ilike");
     expect(server).toContain("assunto.ilike");
-    expect(index).toContain("searchArticleContexts(query)");
-    expect(index).toContain('href="/admin/legisbot/novo"');
+    expect(index).toContain("searchArticleContexts(query, lawFilter)");
+    expect(index).toContain('name="lei"');
   });
 
   it("mantém resultados ambíguos como uma lista para escolha", () => {
@@ -27,10 +27,27 @@ describe("Central do Artigo administrativa", () => {
     expect(index).toContain("/admin/artigos/${encodeURIComponent(item.slug.toLowerCase())}/${encodeURIComponent(item.ordem)}");
   });
 
-  it("abre a aba de comentários e destaca a interação pela URL", () => {
-    expect(index).toContain("?aba=comentarios&comentario=");
+  it("mantém a aba de comentários no contexto derivado de questões", () => {
+    expect(index).toContain('tabHref("comentarios")');
     expect(detail).toContain('tab === "comentarios"');
     expect(community).toContain("highlightedId === item.id");
+  });
+
+  it("usa questões como fonte primária e agrega camadas auxiliares", () => {
+    expect(server).toContain('from("questions")');
+    expect(server).toContain('eq("ativo", true)');
+    expect(server).toContain('db.from("legisbot_comentarios").select("*")');
+    expect(server).toContain('db.from("legisbot_comentarios_comunidade")');
+    expect(server).toContain("listTrustedQuestionArticleContexts");
+    expect(server).toContain("normalizedLegisBotLegislation");
+    expect(server).toContain("normalizedLegisBotSourceText");
+  });
+
+  it("preserva contextos com apenas questões, LegisBot ou comentário como agregados", () => {
+    expect(server).toContain("questionsCount: group.length");
+    expect(server).toContain("legisbot: bot");
+    expect(server).toContain("commentsCount:");
+    expect(detail).toContain("O LegisBot é uma camada editorial do dispositivo derivado das questões.");
   });
 
   it("reutiliza a ação de moderação e as ações editoriais existentes", () => {
@@ -47,6 +64,19 @@ describe("Central do Artigo administrativa", () => {
     expect(editor).toContain("returnHref");
     expect(editor).toContain("Duplicar");
     expect(actions).toContain("articleUrl");
+  });
+
+  it("prepara apenas contextos confiáveis como rascunho e preserva a publicação humana", () => {
+    const actions = read("app/admin/actions.ts");
+    const source = read("lib/legisbot/source.ts");
+    const editor = read("components/admin/legisbot-editor.tsx");
+    expect(detail).toContain("prepararContextoLegisBot");
+    expect(detail).toContain("Preparar rascunho do LegisBot");
+    expect(actions).toContain('status: "pendente"');
+    expect(actions).toContain("findLegisBotSource");
+    expect(actions).toContain('intent === "publish" ? "concluido"');
+    expect(editor).toContain('name="intent" value="publish"');
+    expect(source).toContain("subjectVersions.size > 1");
   });
 
   it("filtra comentários pelo par slug + ordem", () => {

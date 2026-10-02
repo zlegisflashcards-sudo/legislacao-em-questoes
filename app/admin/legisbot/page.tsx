@@ -48,7 +48,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   return <main className="admin-shell">
-    <Link className="admin-central-link" href="/admin">← Central Administrativa</Link>
+    <Link className="admin-central-link" href="/admin/artigos">← Central do Artigo</Link>
     <header className="admin-header">
       <div>
         <div className="admin-eyebrow">Administração</div>

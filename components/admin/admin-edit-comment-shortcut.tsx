@@ -1,7 +1,6 @@
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import AdminEditCommentInlineShortcut from "@/components/admin/admin-edit-comment-inline-shortcut";
-import type { LegisBotComentario } from "@/lib/legisbot-comentario";
 
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
 const ORDEM_VALIDA = /^[A-Za-z0-9._-]{1,20}$/;
@@ -33,7 +32,7 @@ export default async function AdminEditCommentShortcut({
 
     if (error || !data?.id) return null;
 
-    return <AdminEditCommentInlineShortcut record={data as LegisBotComentario} />;
+    return <AdminEditCommentInlineShortcut slug={slugNormalizado} ordem={ordemNormalizada} />;
   } catch {
     return null;
   }

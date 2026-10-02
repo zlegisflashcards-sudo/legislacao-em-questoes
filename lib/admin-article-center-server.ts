@@ -3,10 +3,11 @@ import "server-only";
 import { exigirAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import type { LegisBotComentario } from "@/lib/legisbot-comentario";
+import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "@/lib/legisbot/source";
 
 const LIMIT = 40;
 
-export type ArticleContext = LegisBotComentario & { lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number };
+export type ArticleContext = { id: string; slug: string; ordem: string; titulo: string; assunto: string; legislacao: string; lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number; conflictsCount: number; pendingCount: number; trusted: boolean; updatedAt: string; legisbot: LegisBotComentario | null };
 export type ArticleInteraction = { id: string; kind: "comentario" | "legisbot"; slug: string; ordem: string; author: string | null; summary: string; status: string; createdAt: string };
 export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; legislacao: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
 
@@ -21,7 +22,7 @@ async function lawMetadata(slugs: string[]) {
   return new Map((result.data ?? []).map((law) => [String(law.slug).toUpperCase(), { title: String(law.titulo), code: law.codigo ? String(law.codigo) : null }]));
 }
 
-async function commentCounts(contexts: Array<Pick<LegisBotComentario, "slug" | "ordem">>) {
+async function commentCounts(contexts: Array<{ slug: string; ordem: string }>) {
   const db = getSupabaseServerClient();
   const counts = new Map<string, number>();
   await Promise.all(contexts.map(async (item) => {
@@ -32,7 +33,7 @@ async function commentCounts(contexts: Array<Pick<LegisBotComentario, "slug" | "
   return counts;
 }
 
-async function questionCounts(contexts: Array<Pick<LegisBotComentario, "slug" | "ordem">>) {
+async function questionCounts(contexts: Array<{ slug: string; ordem: string }>) {
   const db = getSupabaseServerClient();
   const counts = new Map<string, number>();
   await Promise.all(contexts.map(async (item) => {
@@ -43,34 +44,41 @@ async function questionCounts(contexts: Array<Pick<LegisBotComentario, "slug" | 
   return counts;
 }
 
-export async function searchArticleContexts(rawQuery: string): Promise<ArticleContext[]> {
+type SourceQuestion = { id: string; slug: string; ordem: string; titulo: string | null; assunto: string | null; legislacao: string | null; updated_at: string };
+
+async function sourceQuestions(rawQuery = "", lawSlug = ""): Promise<SourceQuestion[]> {
   await exigirAdministrador();
   const query = normalizeArticleSearch(rawQuery);
-  if (!query) return [];
   const db = getSupabaseServerClient();
-  const laws = await db.from("leis").select("slug").or(`slug.ilike.%${query}%,titulo.ilike.%${query}%,nome_curto.ilike.%${query}%,codigo.ilike.%${query}%`).limit(LIMIT);
-  if (laws.error) throw new Error("Não foi possível pesquisar as leis.");
-  const matchingSlugs = (laws.data ?? []).map((law) => String(law.slug).toUpperCase());
-  const terms = [`slug.ilike.%${query}%`, `ordem.ilike.%${query}%`, `titulo.ilike.%${query}%`, `assunto.ilike.%${query}%`];
-  if (matchingSlugs.length) terms.unshift(`slug.in.(${matchingSlugs.join(",")})`);
-  const request = db.from("legisbot_comentarios").select("*").or(terms.join(","));
-  const result = await request.order("updated_at", { ascending: false }).limit(LIMIT);
-  if (result.error) throw new Error("Não foi possível pesquisar os artigos do LegisBot.");
-  return enrichContexts((result.data ?? []) as LegisBotComentario[]);
+  let request = db.from("questions").select("id,slug,ordem,titulo,assunto,legislacao,updated_at").eq("ativo", true);
+  if (lawSlug) request = request.eq("slug", lawSlug.toLowerCase());
+  if (query) {
+    const laws = await db.from("leis").select("slug").or(`slug.ilike.%${query}%,titulo.ilike.%${query}%,nome_curto.ilike.%${query}%,codigo.ilike.%${query}%`).limit(LIMIT);
+    if (laws.error) throw new Error("Não foi possível pesquisar as leis.");
+    const matchingSlugs = (laws.data ?? []).map((law) => String(law.slug));
+    const terms = [`slug.ilike.%${query}%`, `ordem.ilike.%${query}%`, `titulo.ilike.%${query}%`, `assunto.ilike.%${query}%`, `artigo.ilike.%${query}%`];
+    if (matchingSlugs.length) terms.unshift(`slug.in.(${matchingSlugs.join(",")})`);
+    request = request.or(terms.join(","));
+  }
+  const result = await request.order("updated_at", { ascending: false }).limit(query ? 1000 : 500);
+  if (result.error) throw new Error("Não foi possível carregar os contextos das questões.");
+  return result.data as SourceQuestion[];
 }
 
-export async function getArticleContext(slug: string, ordem: string): Promise<ArticleContext | null> {
-  await exigirAdministrador();
-  const result = await getSupabaseServerClient().from("legisbot_comentarios").select("*").eq("slug", slug.toUpperCase()).eq("ordem", ordem).maybeSingle();
-  if (result.error) throw new Error("Não foi possível carregar o artigo.");
-  if (!result.data) return null;
-  return (await enrichContexts([result.data as LegisBotComentario]))[0] ?? null;
+async function consolidateQuestionContexts(rows: SourceQuestion[]): Promise<ArticleContext[]> {
+  const groups = new Map<string, SourceQuestion[]>(); for (const row of rows) { const key = `${row.slug.toUpperCase()}\u0000${row.ordem}`; groups.set(key, [...(groups.get(key) ?? []), row]); }
+  const bases = [...groups.values()].map((group) => group.sort((a, b) => a.id.localeCompare(b.id))[0]);
+  const db = getSupabaseServerClient(); const [laws, counts, bots] = await Promise.all([lawMetadata([...new Set(bases.map((item) => item.slug))]), commentCounts(bases), db.from("legisbot_comentarios").select("*").in("slug", [...new Set(bases.map((item) => item.slug.toUpperCase()))])]);
+  if (bots.error) throw new Error("Não foi possível carregar os dados agregados do LegisBot.");
+  const botMap = new Map((bots.data ?? []).map((item) => [`${String(item.slug).toUpperCase()}\u0000${String(item.ordem)}`, item as LegisBotComentario]));
+  return bases.map((base) => { const group = groups.get(`${base.slug.toUpperCase()}\u0000${base.ordem}`) ?? []; const legal = new Set(group.map((item) => normalizedLegisBotLegislation(item.legislacao ?? ""))); const subjects = new Set(group.map((item) => normalizedLegisBotSourceText(item.assunto ?? ""))); const conflict = legal.size > 1 || subjects.size > 1; const bot = botMap.get(`${base.slug.toUpperCase()}\u0000${base.ordem}`) ?? null; return { id: base.id, slug: base.slug.toUpperCase(), ordem: base.ordem, titulo: base.titulo ?? laws.get(base.slug.toUpperCase())?.title ?? base.slug, assunto: base.assunto ?? "", legislacao: base.legislacao ?? "", lawTitle: laws.get(base.slug.toUpperCase())?.title ?? null, lawCode: laws.get(base.slug.toUpperCase())?.code ?? null, commentsCount: counts.get(`${base.slug}:${base.ordem}`) ?? 0, questionsCount: group.length, conflictsCount: conflict ? 1 : 0, pendingCount: (conflict ? 1 : 0) + (bot?.precisa_revisao || bot?.status === "erro" ? 1 : 0), trusted: !conflict, updatedAt: group.reduce((latest, item) => latest > item.updated_at ? latest : item.updated_at, base.updated_at), legisbot: bot }; });
 }
 
-async function enrichContexts(records: LegisBotComentario[]): Promise<ArticleContext[]> {
-  const [laws, counts, questions] = await Promise.all([lawMetadata([...new Set(records.map((item) => item.slug))]), commentCounts(records), questionCounts(records)]);
-  return records.map((item) => ({ ...item, lawTitle: laws.get(item.slug)?.title ?? null, lawCode: laws.get(item.slug)?.code ?? null, commentsCount: counts.get(`${item.slug}:${item.ordem}`) ?? 0, questionsCount: questions.get(`${item.slug}:${item.ordem}`) ?? 0 }));
-}
+export async function searchArticleContexts(rawQuery: string, lawSlug = ""): Promise<ArticleContext[]> { return consolidateQuestionContexts(await sourceQuestions(rawQuery, lawSlug)); }
+export async function listArticleContexts(lawSlug = ""): Promise<ArticleContext[]> { return consolidateQuestionContexts(await sourceQuestions("", lawSlug)); }
+export async function listArticleContextLaws() { await exigirAdministrador(); const result = await getSupabaseServerClient().from("leis").select("slug,titulo,codigo").eq("ativo", true).order("titulo"); if (result.error) throw new Error("Não foi possível carregar as leis."); return (result.data ?? []).map((law) => ({ slug: String(law.slug), title: String(law.titulo), code: law.codigo ? String(law.codigo) : null })); }
+export async function listTrustedQuestionArticleContexts(): Promise<ArticleContext[]> { return (await listArticleContexts()).filter((item) => item.trusted); }
+export async function getArticleContext(slug: string, ordem: string): Promise<ArticleContext | null> { await exigirAdministrador(); const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,titulo,assunto,legislacao,updated_at").eq("ativo", true).eq("slug", slug.toLowerCase()).eq("ordem", ordem); if (result.error) throw new Error("Não foi possível carregar o contexto das questões."); return (await consolidateQuestionContexts(result.data as SourceQuestion[]))[0] ?? null; }
 
 export async function getLatestArticleInteractions(): Promise<ArticleInteraction[]> {
   await exigirAdministrador();
@@ -133,8 +141,5 @@ export async function getArticleQuestions(slug: string, ordem: string): Promise<
 }
 
 export async function getRecentArticleContexts() {
-  const interactions = await getLatestArticleInteractions();
-  const unique = [...new Map(interactions.map((item) => [`${item.slug}:${item.ordem}`, item])).values()].slice(0, 12);
-  const contexts = await Promise.all(unique.map((item) => getArticleContext(item.slug, item.ordem)));
-  return contexts.flatMap((context, index) => context ? [{ ...context, lastInteraction: unique[index] }] : []);
+  return (await listArticleContexts()).slice(0, 40);
 }

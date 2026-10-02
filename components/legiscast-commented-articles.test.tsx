@@ -4,16 +4,19 @@ import { describe, expect, it } from "vitest";
 const component = readFileSync("components/legiscast-commented-articles.tsx", "utf8");
 const overlay = readFileSync("components/legisbot-overlay.tsx", "utf8");
 const studyClient = readFileSync("components/legis-questoes-study-client.tsx", "utf8");
-const repository = readFileSync("lib/legisbot/comentarios-publicos.ts", "utf8");
+const repository = readFileSync("lib/legisbot/legislacao-comentada-publica.ts", "utf8");
 const page = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", "utf8");
 
 describe("artigos comentados no LegisCast", () => {
-  it("consulta somente comentários concluídos da lei e ordena exclusivamente por ordem", () => {
+  it("deriva a legislação de questions e associa somente comentários concluídos", () => {
+    expect(repository).toContain('from("questions")');
+    expect(repository).toContain('eq("ativo", true)');
     expect(repository).toContain('.eq("slug", slugNormalizado)');
     expect(repository).toContain('.eq("status", "concluido")');
     expect(repository).toContain('.not("comentario", "is", null)');
-    expect(repository).toContain('.order("ordem", { ascending: true })');
-    expect(page).toContain("buscarComentariosPublicosPorSlug(slug)");
+    expect(repository).toContain('comment.status === "concluido"');
+    expect(repository).toContain("legislations.size !== 1 || subjects.size !== 1");
+    expect(page).toContain("buscarLegislacaoComentadaPublicaPorSlug(slug)");
   });
 
   it("não renderiza a seção vazia, limita inicialmente e pesquisa a lista completa", () => {
@@ -21,7 +24,7 @@ describe("artigos comentados no LegisCast", () => {
     expect(component).toContain("INITIAL_VISIBLE_ARTICLES = 18");
     expect(component).toContain("comments.slice(0, INITIAL_VISIBLE_ARTICLES)");
     expect(component).toContain("comments.filter");
-    expect(component).toContain("Nenhum artigo comentado encontrado.");
+    expect(component).toContain("Nenhum artigo confiável encontrado.");
   });
 
   it("abre o modal oficial no artigo correto sem navegação full-page", () => {
@@ -30,7 +33,7 @@ describe("artigos comentados no LegisCast", () => {
     expect(component).toContain("setSelectedComment(comment)");
     expect(component).toContain("<LegisBotOverlay");
     expect(component).toContain("slug={selectedComment.slug}");
-    expect(component).toContain("ordem: selectedComment.ordem");
+    expect(component).toContain("question={selectedComment}");
     expect(component).toContain("onClose={() => setSelectedComment(null)}");
     expect(component).not.toContain("next/link");
     expect(component).not.toContain("window.location");
