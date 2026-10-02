@@ -16,14 +16,14 @@ describe("seleção explícita de contexto de estudo", () => {
     expect(mustChooseLawStudyContext([pmerj], null)).toBe(false);
   });
 
-  it("exige escolha para lei completa mais recorte", () => {
-    expect(selectLawStudyContext([full, pmerj], null)).toBeNull();
-    expect(mustChooseLawStudyContext([full, pmerj], null)).toBe(true);
+  it("prioriza lei completa na rota principal mesmo com recorte disponível", () => {
+    expect(selectLawStudyContext([full, pmerj], null)).toEqual(full);
+    expect(mustChooseLawStudyContext([full, pmerj], null)).toBe(false);
   });
 
   it("exige escolha para dois ou três recortes", () => {
     expect(mustChooseLawStudyContext([pmerj, another], null)).toBe(true);
-    expect(mustChooseLawStudyContext([full, pmerj, another], null)).toBe(true);
+    expect(mustChooseLawStudyContext([full, pmerj, another], null)).toBe(false);
   });
 
   it("preserva a escolha explícita de recorte e de lei completa", () => {
@@ -35,13 +35,20 @@ describe("seleção explícita de contexto de estudo", () => {
   it("não exige nova escolha quando a URL já declara um dos contextos", () => {
     expect(mustChooseLawStudyContext([full, pmerj], pmerj.recorteId)).toBe(false);
     expect(mustChooseLawStudyContext([full, pmerj], null, true)).toBe(false);
-    expect(mustChooseLawStudyContext([full, pmerj], null)).toBe(true);
+    expect(mustChooseLawStudyContext([full, pmerj], null)).toBe(false);
   });
 
   it("mostra o seletor somente quando a URL base ainda precisa de escolha", () => {
     expect(shouldShowLawStudyContextSelector([full, pmerj], pmerj.recorteId)).toBe(false);
     expect(shouldShowLawStudyContextSelector([full, pmerj], null, true)).toBe(false);
-    expect(shouldShowLawStudyContextSelector([full, pmerj], null)).toBe(true);
+    expect(shouldShowLawStudyContextSelector([full, pmerj], null)).toBe(false);
     expect(shouldShowLawStudyContextSelector([pmerj], null)).toBe(false);
+  });
+
+  it("mantém Estudo Livre selecionável com ou sem campanha", () => {
+    for (const campaignStatus of ["nao_iniciada", "em_andamento"] as const) {
+      expect(selectLawStudyContext([full, pmerj], null), `lei completa: ${campaignStatus}`).toEqual(full);
+      expect(selectLawStudyContext([full, pmerj], pmerj.recorteId), `recorte: ${campaignStatus}`).toEqual(pmerj);
+    }
   });
 });

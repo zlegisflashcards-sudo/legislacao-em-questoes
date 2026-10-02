@@ -98,7 +98,7 @@ describe("interface de estudo", () => {
 
   it("exige escolha explícita quando a lei possui mais de um contexto", () => {
     expect(client).toContain('selectLawStudyContext(contexts, requestedScopeId, requestedFullContext)');
-    expect(client).toContain('mustChooseLawStudyContext(contexts, requestedScopeId, requestedFullContext)');
+    expect(client).toContain('selectLawStudyContext(contexts, requestedScopeId, requestedFullContext)');
     expect(client).toContain('?contexto=completo');
     expect(client).not.toContain('contexts.find((item) => item.recorteId === requestedScopeId) ?? null');
   });
@@ -113,11 +113,11 @@ describe("interface de estudo", () => {
     for (const platform of ["Anki — Computador", "AnkiDroid — Android", "AnkiMobile — iPhone", "Online — Em breve"]) expect(contract).toContain(`label: "${platform}"`);
   });
 
-  it("mantém o seletor de contexto separado do Estudo Livre", () => {
+  it("mantém Estudo Livre visível mesmo com campanha ativa", () => {
     expect(client).toContain('const activeCampaign = !publicStudy && campaign.status === "em_andamento"');
     expect(client).toContain('showContextSelector && !activeCampaign');
-    expect(client).toContain('!mustChooseContext ? <section className="law-study-surface');
-    expect(client).not.toContain('!mustChooseContext && !activeCampaign');
+    expect(client).toContain('{selectedContext ? <section className="law-study-surface');
+    expect(client).not.toContain('!activeCampaign ? <section className="law-study-surface');
     expect(client).not.toContain('<Materials');
     expect(client).toContain('campaign.status === "concluida"');
   });
@@ -162,7 +162,7 @@ describe("interface de estudo", () => {
 
   it("representa uma lei sem subbaralhos pelo deck raiz, sem ação duplicada", () => {
     expect(client).toContain('function RootDeck');
-    expect(client).toContain('count={selectedContext?.questionCount ?? sourceLaw?.questions.length ?? 0}');
+    expect(client).toContain('count={selectedContext.questionCount}');
     expect(client).toContain('<Link href={href} className="group flex min-w-0 flex-1');
     expect(client).toContain('const href = `/questoes/${encodeURIComponent(slug)}/estudar?livre=1${recorteId ?');
   });
@@ -185,6 +185,13 @@ describe("interface de estudo", () => {
     const tree = client.slice(client.indexOf('function StructureTreeNode'), client.indexOf('function RootDeck'));
     expect(tree).toContain('<Link href={href} className="flex min-w-0 flex-1');
     expect(tree).toContain('<FreeStudyLabel name={node.nome} count={node.count} newCount={node.newCount} framed={false} />');
+    expect(tree).toContain('const selectable = allowedStructureIds === null || allowedStructureIds.includes(node.id);');
+    expect(tree).toContain('allowedStructureIds={allowedStructureIds}');
+  });
+
+  it("preserva os ancestrais visuais de um recorte sem liberar seus links", () => {
+    expect(client).toContain('function structureForStudyScope');
+    expect(client).toContain('for (let parentId = byId.get(id)?.parent_id ?? null; parentId !== null; parentId = byId.get(parentId)?.parent_id ?? null) visible.add(parentId);');
   });
 
   it("inicia todos os níveis expansíveis recolhidos", () => {
