@@ -42,7 +42,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
     const lawSlugById = new Map<string, string>();
     for (const link of links ?? []) {
       const law = Array.isArray(link.leis) ? link.leis[0] : link.leis;
-      if (law?.slug && law.status_publicacao === "ativa") lawSlugById.set(link.lei_id, law.slug);
+      if (law?.slug && law.status_publicacao === "ativa") lawSlugById.set(String(link.lei_id), law.slug);
     }
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
     const activeLawIds = [...lawSlugById.keys()];
