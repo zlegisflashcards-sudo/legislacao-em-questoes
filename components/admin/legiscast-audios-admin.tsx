@@ -26,6 +26,7 @@ type Structure = {
   nome: string;
   ordem: number;
   pdf_page: number | null;
+  audio_not_applicable: boolean;
 };
 type Audio = {
   id: string;
@@ -634,6 +635,27 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       setActionId(null);
     }
   }
+  async function setStructureAudioNotApplicable(structure: Structure, audioNotApplicable: boolean) {
+    const actionKey = `structure-audio:${structure.id}`;
+    setActionId(actionKey);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "update-structure-audio-not-applicable", structureId: structure.id, lawId: structure.lei_id, audioNotApplicable }),
+      });
+      const body = await readResponse(response);
+      if (!response.ok) throw new Error(apiError(body, "Não foi possível atualizar a marcação de áudio da estrutura."));
+      setMessage(audioNotApplicable ? "Estrutura marcada como áudio não se aplica." : "Estrutura voltou a exigir avaliação de áudio.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a marcação de áudio da estrutura.");
+    } finally {
+      setActionId(null);
+    }
+  }
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingAudio) return;
@@ -804,8 +826,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           {structure.tipo}: {structure.nome}
                         </h5>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-                          <span className={tracks.length ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : "rounded-full bg-slate-200 px-2 py-1 text-slate-600"}>
-                            {tracks.length ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"}` : "Sem áudio"}
+                          <span className={tracks.length ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : structure.audio_not_applicable ? "rounded-full bg-slate-200 px-2 py-1 text-slate-600" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
+                            {tracks.length ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"}` : structure.audio_not_applicable ? "Áudio não se aplica" : "Sem áudio"}
                           </span>
                           <span className={structure.pdf_page ? "rounded-full bg-blue-100 px-2 py-1 text-blue-800" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
                             {structure.pdf_page ? `PDF · página ${structure.pdf_page}` : "Página do PDF não informada"}
@@ -846,6 +868,15 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                             : "Salvar página"}
                         </button>
                       </form>
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={structure.audio_not_applicable}
+                          disabled={actionId === `structure-audio:${structure.id}`}
+                          onChange={(event) => void setStructureAudioNotApplicable(structure, event.target.checked)}
+                        />
+                        Áudio não se aplica
+                      </label>
                     </div>
                     {tracks.map((audio) => (
                       <article

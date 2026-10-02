@@ -20,6 +20,7 @@ const pdfViewer = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
 const jobsMigration = readFileSync("supabase/migrations/20260904140000_create_legiscast_audio_jobs.sql", "utf8");
 const mp3Migration = readFileSync("supabase/migrations/20260924110000_add_legiscast_mp3_admin_download.sql", "utf8");
 const mp3ReservationMigration = readFileSync("supabase/migrations/20260924123000_fix_legiscast_mp3_job_reservation.sql", "utf8");
+const audioNotApplicableMigration = readFileSync("supabase/migrations/20261001123000_add_law_structure_audio_not_applicable.sql", "utf8");
 const worker = readFileSync("workers/legiscast-audio/src/index.mjs", "utf8");
 
 describe("LegisCast em áudio", () => {
@@ -150,6 +151,16 @@ describe("LegisCast em áudio", () => {
     expect(normalizeLegiscastPdfPage(99, 30)).toBe(30);
     expect(normalizeLegiscastPdfPage(0, 30)).toBe(1);
     for (const expected of ["pdfjs-dist/legacy/build/pdf.mjs", "getOutline", "getPageIndex", "localStorage.setItem", "normalizeLegiscastPdfPage", "scrollIntoView", "Aumentar zoom"]) expect(pdfViewer).toContain(expected);
+  });
+
+  it("permite marcar manualmente que áudio não se aplica a um nó estrutural", () => {
+    expect(audioNotApplicableMigration).toContain("add column if not exists audio_not_applicable boolean not null default false");
+    expect(admin).toContain("updateAdminLegiscastStructureAudioNotApplicable");
+    expect(admin).toContain('eq("lei_id", lawId)');
+    expect(adminRoute).toContain('"update-structure-audio-not-applicable"');
+    expect(adminClient).toContain("Áudio não se aplica");
+    expect(adminClient).toContain("structure.audio_not_applicable");
+    expect(adminClient).toContain("Sem áudio");
   });
 
   it("renderiza text layer e mantém download e impressão no fluxo autorizado", () => {
