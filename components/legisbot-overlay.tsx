@@ -11,7 +11,7 @@ export type LegisBotOverlayArticle = {
   legislacao?: string | null;
 };
 
-export function LegisBotOverlay({ slug, question, initialTab, onClose }: { slug: string; question: LegisBotOverlayArticle; initialTab: LegisBotStudyTab; onClose: () => void }) {
+export function LegisBotOverlay({ slug, question, initialTab, publicComment, onClose }: { slug: string; question: LegisBotOverlayArticle; initialTab: LegisBotStudyTab; publicComment?: string | null; onClose: () => void }) {
   const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -47,5 +47,5 @@ export function LegisBotOverlay({ slug, question, initialTab, onClose }: { slug:
     }
   }
 
-  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={question.ordem ?? ""} dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded onClose={onClose} /></aside></div>;
+  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={question.ordem ?? ""} dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={publicComment} onClose={onClose} /></aside></div>;
 }

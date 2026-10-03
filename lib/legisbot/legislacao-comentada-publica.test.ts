@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { consolidarLegislacaoComentadaConfiavel } from "./legislacao-comentada-publica";
+import { getReferenciaDispositivo } from "./referencia-dispositivo";
 
 const question = (overrides: Partial<{ id: string; slug: string; ordem: string; titulo: string; assunto: string; legislacao: string; updated_at: string }> = {}) => ({
   id: "question-1",
@@ -32,5 +33,9 @@ describe("legislação comentada confiável do LegisCast", () => {
       question({ id: "question-3", ordem: "0002", legislacao: "<p>Outro dispositivo.</p>" }),
       question({ id: "question-4", ordem: "0002", legislacao: "<p>Texto divergente.</p>" }),
     ], [], "Código Penal")).toEqual([]);
+  });
+
+  it("usa uma referência enxuta do dispositivo no card público", () => {
+    expect(getReferenciaDispositivo({ assunto: "Art. 1º", slug: "cp" })).toBe("Art. 1º, CP");
   });
 });

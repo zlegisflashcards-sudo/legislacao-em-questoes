@@ -44,6 +44,8 @@ type LegisBotPageClientProps = {
   initialTab?: LegisBotStudyTab;
   adminShortcut?: ReactNode;
   embedded?: boolean;
+  /** Exibe o contexto público sem iniciar ou sugerir geração de comentário. */
+  publicComment?: string | null;
   onClose?: () => void;
 };
 
@@ -108,13 +110,16 @@ export default function LegisBotPageClient({
   initialTab = "legisbot",
   adminShortcut,
   embedded = false,
+  publicComment,
   onClose,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
   const [source, setSource] = useState<LegisBotApiResponse["source"]>();
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [answerState, setAnswerState] = useState<AnswerState>("loading");
+  const isPublicArticle = publicComment !== undefined;
+  const publishedComment = publicComment?.trim() || null;
+  const [answer, setAnswer] = useState<string | null>(publishedComment);
+  const [answerState, setAnswerState] = useState<AnswerState>(isPublicArticle ? (publishedComment ? "ready" : "not_found") : "loading");
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [readRevision, setReadRevision] = useState(0);
@@ -150,6 +155,7 @@ export default function LegisBotPageClient({
   }, [embedded]);
 
   useEffect(() => {
+    if (isPublicArticle) return;
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
       if (active) setAuthenticated(Boolean(data.session?.user));
@@ -256,7 +262,7 @@ export default function LegisBotPageClient({
       active = false;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [apiUrl, identifiersValid, readRevision]);
+  }, [apiUrl, identifiersValid, isPublicArticle, readRevision]);
 
   async function gerarComentario() {
     if (!identifiersValid || answerState === "generating") return;
@@ -355,7 +361,7 @@ export default function LegisBotPageClient({
   }, []);
 
   const legisBotContent = <>
-    <section className="question-block" aria-label="Pergunta feita ao LegisBot">
+    {!isPublicArticle ? <section className="question-block" aria-label="Pergunta feita ao LegisBot">
       <span className="question-label">👤 Você perguntou:</span>
       {answerState === "not_found" && authenticated === false ? (
         <a className="question-card legisbot-question-action" href={loginUrl}>{questionPrompt}</a>
@@ -369,12 +375,13 @@ export default function LegisBotPageClient({
           {questionPrompt}
         </button>
       ) : <div className="question-card">{questionPrompt}</div>}
-    </section>
+    </section> : null}
 
     <article className="bot-answer" aria-labelledby="legisbot-answer-title">
       <div className="answer-header"><div className="bot-avatar small" aria-hidden="true">🤖</div><div><h2 id="legisbot-answer-title">LegisBot</h2><p>Claro! Vamos lá:</p></div></div>
       <div className="answer-content answer-freeform" aria-live="polite">
         {answerState === "ready" && answer ? <LegisBotCommentContent html={answer} /> : null}
+        {isPublicArticle && !answer ? <p className="answer-status">O comentário do LegisBot ainda não foi publicado para este artigo.</p> : null}
         {answerState === "ready" && needsReview ? <p className="answer-status">⚠️ A legislação deste flashcard foi atualizada e este comentário precisa de revisão.</p> : null}
         {answerState === "loading" ? <p className="answer-status">Buscando a explicação…</p> : null}
         {answerState === "not_found" && authenticated === null ? <p className="answer-status">Verificando sua conta…</p> : null}
