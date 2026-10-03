@@ -18,6 +18,10 @@ import {
   listAdminQuestionLaws,
   listLawQuestionScopes,
   listAdminQuestions,
+  listAdminQuestionConference,
+  conferenceArticleContext,
+  previewConferenceQuestionBatch,
+  createConferenceQuestionBatch,
   searchAdminQuestions,
   getAdminQuestion,
   previewAnkiImport,
@@ -53,7 +57,11 @@ export async function GET(request: Request) {
     const searchParams = new URL(request.url).searchParams;
     const lawSlug = searchParams.get("law_slug");
     const scopes = searchParams.get("recortes") === "1";
-    const data = lawSlug && searchParams.get("mode") === "search"
+    const data = lawSlug && searchParams.get("mode") === "conference-context"
+      ? await conferenceArticleContext(lawSlug, searchParams.get("ordem"))
+      : lawSlug && searchParams.get("mode") === "conference"
+      ? await listAdminQuestionConference(lawSlug, searchParams.get("structure_id"))
+      : lawSlug && searchParams.get("mode") === "search"
       ? await searchAdminQuestions({ lawSlug, query: searchParams.get("q"), filter: searchParams.get("filter"), page: searchParams.get("page"), limit: searchParams.get("limit"), structureId: searchParams.get("structure_id"), article: searchParams.get("article") })
       : lawSlug && searchParams.get("question_id")
         ? await getAdminQuestion(lawSlug, searchParams.get("question_id"))
@@ -85,6 +93,8 @@ export async function POST(request: Request) {
     let data: unknown;
     if (body.action === "criar") data = await createAdminQuestion(body);
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
+    else if (body.action === "previsualizar_lote_conferencia") data = await previewConferenceQuestionBatch(body);
+    else if (body.action === "criar_lote_conferencia") data = await createConferenceQuestionBatch(body);
     else if (body.action === "atualizar_rapido") data = await updateQuickAdminQuestion(body);
     else if (body.action === "desativar") data = await deactivateAdminQuestion(body);
     else if (body.action === "resumo_exclusao_questao") data = await questionDeletionSummary(body);

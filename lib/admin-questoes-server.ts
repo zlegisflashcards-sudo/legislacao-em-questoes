@@ -11,6 +11,7 @@ import { summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution"
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, plainQuestionText } from "@/lib/admin-question-search";
 import { descendantStructureIds, sameImportIdentity } from "@/lib/admin-question-management";
 import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
+import { getArticleContext } from "@/lib/admin-article-center-server";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
@@ -51,6 +52,51 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
   const result = await request.range(offset, offset + limit - 1); if (result.error) fail("pesquisar_questoes", result.error); const total = result.count ?? 0;
   return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, structure_id: structureId };
 }
+export async function listAdminQuestionConference(lawSlug: string, structureId: unknown) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const rootId = id(structureId);
+  const nodes = await structure(current.id);
+  const ids = descendantStructureIds(nodes, rootId);
+  if (!ids.length) throw new AdminQuestoesError(404, "Bloco estrutural não encontrado para esta lei.");
+  const root = nodes.find((node) => node.id === rootId);
+  if (!root) throw new AdminQuestoesError(404, "Bloco estrutural não encontrado para esta lei.");
+  const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).in("structure_id", ids).order("ordem").order("id");
+  if (result.error) fail("listar_questoes_conferencia", result.error);
+  return { law: current, block: { id: root.id, nome: root.nome }, questions: result.data ?? [] };
+}
+export async function conferenceArticleContext(lawSlug: string, orderValue: unknown) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const ordem = typeof orderValue === "string" ? orderValue.trim() : "";
+  if (!ordem) throw new AdminQuestoesError(400, "Informe a ordem para consultar o contexto.");
+  const context = await getArticleContext(current.slug, ordem);
+  if (!context) return { status: "absent" as const, assunto: null, legislacao: null };
+  if (!context.trusted) return { status: "conflict" as const, assunto: null, legislacao: null };
+  return { status: "found" as const, assunto: context.assunto, legislacao: context.legislacao };
+}
+type ConferenceBatchInput = { pergunta?: unknown; resposta?: unknown; justificativa?: unknown; assunto?: unknown; ordem?: unknown; legislacao?: unknown };
+function conferenceBatchDrafts(current: Law, structureId: unknown, rows: unknown) {
+  const target = id(structureId);
+  const values = Array.isArray(rows) ? rows : [];
+  if (!values.length || values.length > 200) throw new AdminQuestoesError(400, "Informe entre 1 e 200 questões para adicionar.");
+  return { target, drafts: values.map((row, index) => {
+    try { return draft({ ...(row as ConferenceBatchInput), structure_id: target, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }); }
+    catch (error) { throw new AdminQuestoesError(422, `Linha ${index + 1}: ${error instanceof Error ? error.message : "dados inválidos."}`); }
+  }) };
+}
+async function validateConferenceBatch(current: Law, structureId: unknown, rows: unknown) {
+  const { target, drafts } = conferenceBatchDrafts(current, structureId, rows);
+  await validateStructure(current.id, target);
+  const local = new Set<string>();
+  for (const item of drafts) { const key = `${item.ordem}\u0000${item.pergunta.trim()}`; if (local.has(key)) throw new AdminQuestoesError(409, "A tabela possui linhas duplicadas com a mesma ordem e enunciado."); local.add(key); }
+  const existing = await db().from("questions").select("ordem,pergunta").eq("lei_id", current.id).eq("ativo", true);
+  if (existing.error) fail("validar_lote_conferencia", existing.error);
+  for (const item of drafts) if ((existing.data ?? []).some((stored) => sameImportIdentity(stored, item))) throw new AdminQuestoesError(409, `Já existe uma questão com a ordem ${item.ordem} e o mesmo enunciado nesta lei.`);
+  return { target, drafts };
+}
+export async function previewConferenceQuestionBatch(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const { drafts } = await validateConferenceBatch(current, body.structure_id, body.rows); return { count: drafts.length, rows: drafts.map((item, index) => ({ line: index + 1, ordem: item.ordem, resposta: item.resposta })) }; }
+export async function createConferenceQuestionBatch(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const { drafts } = await validateConferenceBatch(current, body.structure_id, body.rows); const result = await db().from("questions").insert(drafts.map((item) => ({ ...values(current, item), ativo: true }))).select(questionFields); if (result.error) fail("criar_lote_conferencia", result.error); return { created: result.data ?? [] }; }
 export async function getAdminQuestion(lawSlug: string, questionId: unknown) { await requireAdmin(); const current = await law(lawSlug); const result = await db().from("questions").select(questionFields).eq("id", qid(questionId)).eq("lei_id", current.id).maybeSingle(); if (result.error) fail("carregar_questao", result.error); if (!result.data) throw new AdminQuestoesError(404, "Questão não encontrada para a lei selecionada."); return { law: current, question: result.data }; }
 export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); return r.data; }
 export async function updateAdminQuestion(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const questionId = qid(body.id); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d, questionId); const before = await db().from("questions").select(questionFields).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (before.error) fail("ler_questao_antes_edicao", before.error); if (!before.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const r = await db().from("questions").update(values(current, d)).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).select(questionFields).maybeSingle(); if (r.error) fail("editar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const audit = await db().rpc("admin_comercial_auditar", { p_ator_user_id: user.id, p_acao: "atualizar", p_entidade: "questao", p_entidade_id: questionId, p_anterior: before.data, p_posterior: r.data, p_detalhes: { origem: "editor_questoes", slug: before.data.slug, ordem_anterior: before.data.ordem, ordem_posterior: d.ordem } }); if (audit.error) console.error("Falha ao auditar edição individual de questão", { questionId, code: audit.error.code }); const sourceChanged = normalizedImportSource({ titulo: String(before.data.titulo ?? ""), assunto: String(before.data.assunto ?? ""), legislacao: String(before.data.legislacao ?? "") }) !== normalizedImportSource({ titulo: d.titulo ?? "", assunto: d.assunto ?? "", legislacao: d.legislacao ?? "" }); const identifiersChanged = String(before.data.ordem) !== d.ordem; if (sourceChanged || identifiersChanged) { const oldReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", String(before.data.slug).toUpperCase()).eq("ordem", String(before.data.ordem)); if (oldReview.error) fail("sinalizar_revisao_apos_edicao", oldReview.error); if (identifiersChanged) { const newReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem); if (newReview.error) fail("sinalizar_revisao_nova_ordem", newReview.error); } } return r.data; }
