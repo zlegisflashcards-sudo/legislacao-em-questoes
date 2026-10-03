@@ -4,12 +4,14 @@ import { exigirAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import type { LegisBotComentario } from "@/lib/legisbot-comentario";
 import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "@/lib/legisbot/source";
+import { articleOrderStructure } from "@/lib/article-order-structure";
 
 const LIMIT = 40;
 
 export type ArticleContext = { id: string; slug: string; ordem: string; titulo: string; assunto: string; legislacao: string; lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number; conflictsCount: number; pendingCount: number; trusted: boolean; updatedAt: string; legisbot: LegisBotComentario | null };
 export type ArticleInteraction = { id: string; kind: "comentario" | "legisbot"; slug: string; ordem: string; author: string | null; summary: string; status: string; createdAt: string };
 export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; legislacao: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
+export type ArticleSiblingContext = { ordem: string; reference: string; questionsCount: number; current: boolean };
 
 export function normalizeArticleSearch(value: string) {
   return value.trim().slice(0, 120).replace(/[,%()]/g, " ").replace(/\s+/g, " ");
@@ -138,6 +140,24 @@ export async function getArticleQuestions(slug: string, ordem: string): Promise<
   const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,pergunta,resposta,assunto,legislacao,titulo,structure_id,ativo,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true).order("updated_at", { ascending: false }).limit(100);
   if (result.error) throw new Error("Não foi possível carregar as questões do artigo.");
   return (result.data ?? []) as ArticleQuestion[];
+}
+
+export async function getArticleSiblingContexts(slug: string, ordem: string, assunto: string | null): Promise<ArticleSiblingContext[]> {
+  await exigirAdministrador();
+  const current = articleOrderStructure(ordem, assunto);
+  const result = await getSupabaseServerClient().from("questions").select("id,ordem,assunto").eq("slug", slug.toLowerCase()).eq("ativo", true).order("ordem").limit(10000);
+  if (result.error) throw new Error("Não foi possível carregar os dispositivos deste artigo.");
+  const groups = new Map<string, Array<{ id: string; ordem: string; assunto: string | null }>>();
+  for (const row of result.data ?? []) {
+    const item = { id: String(row.id), ordem: String(row.ordem), assunto: row.assunto ? String(row.assunto) : null };
+    const structure = articleOrderStructure(item.ordem, item.assunto);
+    if (structure.articleKey !== current.articleKey) continue;
+    groups.set(item.ordem, [...(groups.get(item.ordem) ?? []), item]);
+  }
+  return [...groups.entries()].map(([siblingOrder, rows]) => {
+    const representative = [...rows].sort((left, right) => left.id.localeCompare(right.id)).find((row) => row.assunto?.trim()) ?? rows[0];
+    return { ordem: siblingOrder, reference: articleOrderStructure(siblingOrder, representative.assunto).reference, questionsCount: rows.length, current: siblingOrder === ordem };
+  }).sort((left, right) => left.ordem.localeCompare(right.ordem));
 }
 
 export async function getRecentArticleContexts() {

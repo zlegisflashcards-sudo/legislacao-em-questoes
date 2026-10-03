@@ -85,6 +85,15 @@ describe("Central do Artigo administrativa", () => {
     expect(detail).toContain('name="usuario"');
     expect(detail).toContain('name="status"');
   });
+
+  it("navega entre dispositivos irmãos derivados somente das questões", () => {
+    expect(server).toContain("getArticleSiblingContexts");
+    expect(server).toContain('.from("questions").select("id,ordem,assunto")');
+    expect(server).toContain("articleOrderStructure(item.ordem, item.assunto)");
+    expect(detail).toContain("Outros dispositivos deste artigo");
+    expect(detail).toContain("siblingHref(sibling.ordem)");
+    expect(detail).toContain('key !== "aba"');
+  });
 });
 
 describe("filtro do painel legado do LegisBot", () => {
