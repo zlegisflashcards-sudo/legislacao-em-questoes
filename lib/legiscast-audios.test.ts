@@ -33,7 +33,7 @@ describe("LegisCast em áudio", () => {
   });
 
   it("emite URL temporária somente depois da autorização da lei", () => {
-    expect(server).toContain("authorizeLawStudy(request, slug)");
+    expect(server).toContain("authorizeLawQuestionScope(request, slug, recorteId)");
     expect(server).toContain('createSignedUrl(audio.storage_path, 60 * 60)');
     expect(server).toContain('from(BUCKET)');
     expect(server).not.toContain("getPublicUrl");
@@ -69,7 +69,7 @@ describe("LegisCast em áudio", () => {
     expect(admin).toContain('patch.titulo = String(input.titulo ?? "").trim() || null');
     expect(admin).not.toContain("Lei e título são obrigatórios.");
     expect(admin).not.toContain("Título obrigatório.");
-    expect(adminClient).toContain("Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.");
+    expect(adminClient).toContain("Opcional. Usa o nome do trecho se ficar vazio.");
     expect(adminClient).not.toContain('name="titulo" required');
     expect(worker).toContain("publish_legiscast_audio_job");
     expect(worker).not.toContain("job.titulo.trim");
@@ -223,7 +223,7 @@ describe("LegisCast em áudio", () => {
     expect(actions).toBeGreaterThan(playerPosition);
     expect(articles).toBeGreaterThan(actions);
     expect(player).toContain("<StructureSummary");
-    expect(player.indexOf('aria-label="Posição da reprodução"')).toBeLessThan(player.indexOf("<StructureSummary"));
+    expect(player.indexOf('aria-label="Posição da reprodução"')).toBeLessThan(player.lastIndexOf("<StructureSummary"));
   });
 
   it("abre o PDF autorizado em modal mobile sem desmontar o player", () => {

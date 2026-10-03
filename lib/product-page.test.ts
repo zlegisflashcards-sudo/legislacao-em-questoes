@@ -31,13 +31,39 @@ describe("página comercial de produto", () => {
     expect(source).not.toContain("videoUrl={videoUrl}");
     expect(source).toContain("inline-flex w-full items-center justify-center");
     expect(source).toContain("Vídeo do produto:");
-    expect(source).toContain("const isLeiAvulsa = produto.leis.length === 1");
+    expect(source).toContain('const isLeiAvulsa = produto.tipoProduto === "lei_avulsa"');
     expect(source).not.toContain("Comprar agora");
+  });
+
+  it("mostra a projeção estrutural somente para vínculo avulso consistente", () => {
+    expect(source).toContain('select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto)")');
+    expect(source).toContain('tipo_produto');
+    expect(source).toContain("loadPublicLawContentTree");
+    expect(source).toContain("loadPublicLawCommercialSummary");
+    expect(source).toContain("produto.leis.length === 1");
+    expect(source).toContain("Conteúdo disponível nesta lei");
+    expect(source).toContain("🎧 = Possui LegisCast");
+    expect(source.indexOf("Conteúdo incluído")).toBeLessThan(source.indexOf("Conteúdo disponível nesta lei"));
+  });
+
+  it("acrescenta estado e módulos apenas para a lei avulsa validada", () => {
+    expect(source).toContain("<LegislationState summary={commercialSummary} />");
+    expect(source).toContain("<LawModules summary={commercialSummary} />");
+    expect(source).toContain("Estado da legislação");
+    expect(source).toContain("Disponibilidade do conteúdo");
+    expect(source).toContain('min-h-full bg-[#171a21]');
+  });
+
+  it("abre cada lei de combo ou edital na rota reutilizável da própria lei", () => {
+    expect(source).toContain("isCompositeLawProduct(produto.tipoProduto)");
+    expect(source).toContain("/leisflashcards/${encodeURIComponent(lei.slug)}");
+    expect(source).toContain("recorte_id=${encodeURIComponent(lei.recorteId)}");
+    expect(source).toContain("isProdutoComposto && lawHref");
   });
 
   it("mantém a rota comercial disponível enquanto a coluna de vídeo não foi aplicada", () => {
     expect(source).toContain("const produto = produtoComVideo.error");
-    expect(source).toContain('select("id,nome,descricao,hotmart_url")');
+    expect(source).toContain('select("id,nome,descricao,hotmart_url,tipo_produto")');
   });
 
   it("resolve produtos do banco antes do fallback de legislação", () => {

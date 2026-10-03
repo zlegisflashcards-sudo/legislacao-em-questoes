@@ -12,6 +12,9 @@ import { siteConfig } from "@/lib/site-config";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
+import { PublicLawContentTree } from "@/components/public-law-content-tree";
+import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLawCommercialSummary } from "@/lib/public-law-content-tree-server";
+import { isCompositeLawProduct } from "@/lib/product-types";
 
 // As quantidades comerciais dos materiais podem ser atualizadas pelo painel.
 // A página deve consultar o estado atual, em vez do snapshot do build.
@@ -28,11 +31,12 @@ const siteUrl = new URL(
 );
 
 type ProdutoCatalogo = {
+  tipoProduto: string;
   nome: string;
   descricao: string | null;
   hotmartUrl: string | null;
   videoDemoUrl: string | null;
-  leis: Array<{ id: number; titulo: string; flashcards: number | null }>;
+  leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null }>;
   totalFlashcards: number | null;
 };
 
@@ -41,14 +45,14 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const supabase = getSupabaseServerClient();
     const produtoComVideo = await supabase
       .from("produtos")
-      .select("id,nome,descricao,hotmart_url,video_demo_url")
+      .select("id,nome,descricao,hotmart_url,video_demo_url,tipo_produto")
       .eq("slug", slug)
       .eq("ativo", true)
       .maybeSingle();
     const produto = produtoComVideo.error
       ? await supabase
           .from("produtos")
-          .select("id,nome,descricao,hotmart_url")
+          .select("id,nome,descricao,hotmart_url,tipo_produto")
           .eq("slug", slug)
           .eq("ativo", true)
           .maybeSingle()
@@ -57,7 +61,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
 
     const vinculos = await supabase
       .from("produto_leis")
-      .select("lei_id,ordem,leis(id,slug,titulo,nome_curto)")
+      .select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto)")
       .eq("produto_id", produto.data.id)
       .order("ordem");
     if (vinculos.error) return null;
@@ -72,8 +76,10 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       const leiId = Number(vinculo.lei_id);
       return {
         id: leiId,
+        slug: typeof lei?.slug === "string" ? lei.slug : null,
         titulo: lei?.nome_curto || lei?.titulo || "Lei não identificada",
         flashcards: countsBySlug.get(lawSlugById.get(leiId) ?? "") ?? 0,
+        recorteId: vinculo.recorte_id == null ? null : String(vinculo.recorte_id),
       };
     });
     const totalFlashcards = leis.length
@@ -83,7 +89,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       "video_demo_url" in produto.data && typeof produto.data.video_demo_url === "string"
         ? produto.data.video_demo_url
         : null;
-    return { nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, videoDemoUrl, leis, totalFlashcards };
+    return { tipoProduto: produto.data.tipo_produto, nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, videoDemoUrl, leis, totalFlashcards };
   } catch {
     return null;
   }
@@ -410,27 +416,63 @@ export default async function LegislacaoPage({ params }: LegislacaoPageProps) {
   );
 }
 
-function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
+async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
   const video = produto.videoDemoUrl ? getYoutubeEmbedUrl(produto.videoDemoUrl) : null;
-  const isLeiAvulsa = produto.leis.length === 1;
+  const isLeiAvulsa = produto.tipoProduto === "lei_avulsa";
+  const isProdutoComposto = isCompositeLawProduct(produto.tipoProduto);
+  const avulsa = isLeiAvulsa && produto.leis.length === 1 && produto.leis[0].slug ? produto.leis[0] : null;
+  const [contentTree, commercialSummary] = avulsa ? await Promise.all([
+    loadPublicLawContentTree({ lawId: avulsa.id, recorteId: avulsa.recorteId }),
+    loadPublicLawCommercialSummary({ lawId: avulsa.id }),
+  ]) : [null, null];
   const resumoLeis = produto.leis.length > 1
     ? `${produto.leis.length} leis${produto.totalFlashcards !== null ? ` · ${produto.totalFlashcards.toLocaleString("pt-BR")} flashcards` : ""}`
     : null;
-  return <div className="bg-[#171a21] text-white">
+  return <div className="min-h-full bg-[#171a21] text-white">
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-6 sm:py-14">
       <a href="/" className="text-sm font-semibold text-slate-300 hover:text-blue-300">← Voltar para a Home</a>
       <section className="space-y-5">
         <div className="space-y-5">
           <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Legis Flashcards</p>
           <h1 className="text-4xl font-bold leading-tight sm:text-5xl">{produto.nome}</h1>
+          {avulsa && commercialSummary ? <LegislationState summary={commercialSummary} /> : null}
           {produto.descricao ? <p className="max-w-2xl text-lg leading-8 text-slate-200">{produto.descricao}</p> : null}
           {video ? <div className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]"><iframe className="aspect-video w-full" src={video} title={`Vídeo do produto: ${produto.nome}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div> : null}
           {produto.hotmartUrl ? <a href={produto.hotmartUrl} className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-center text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] sm:text-lg">Adquirir (garantia Hotmart)</a> : <p className="text-sm font-semibold text-slate-300">Link de aquisição indisponível no momento.</p>}
           <div className="grid gap-4 sm:grid-cols-3">{["Acesso vitalício", "Acesso ilimitado", "Material atualizado"].map((beneficio) => <div key={beneficio} className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 font-bold shadow-[0_16px_40px_rgba(0,0,0,0.22)]">{beneficio}</div>)}</div>
         </div>
       </section>
+      {avulsa && commercialSummary ? <LawModules summary={commercialSummary} /> : null}
       <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{!isLeiAvulsa && resumoLeis ? <p className="font-black text-slate-200">{resumoLeis}</p> : null}</div>
-        {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950"><h3 className="font-black">{lei.titulo}</h3>{lei.flashcards !== null ? <p className="shrink-0 text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</p> : null}</article>)}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
+        {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => {
+          const lawHref = lei.slug ? `/leisflashcards/${encodeURIComponent(lei.slug)}${lei.recorteId ? `?recorte_id=${encodeURIComponent(lei.recorteId)}` : ""}` : null;
+          const content = <><h3 className="font-black">{lei.titulo}</h3><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
+          return isProdutoComposto && lawHref ? <a key={lei.id} href={lawHref} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950 transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300">{content}</a> : <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950">{content}</article>;
+        })}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
+      {avulsa && contentTree ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo disponível nesta lei</p><p className="mt-2 text-sm text-slate-300">🎧 = Possui LegisCast</p></div><PublicLawContentTree tree={contentTree} /></section> : null}
     </div>
   </div>;
+}
+
+function LegislationState({ summary }: { summary: PublicLawCommercialSummary }) {
+  const updated = summary.legislation.status === "updated";
+  return <section className={`rounded-2xl border p-5 shadow-[0_14px_34px_rgba(0,0,0,0.18)] ${updated ? "border-emerald-300/40 bg-emerald-500/10" : "border-amber-300/40 bg-amber-500/10"}`} aria-labelledby="law-update-title">
+    <p className="text-sm font-semibold uppercase tracking-wide text-blue-200">Estado da legislação</p>
+    <h2 id="law-update-title" className={`mt-2 text-xl font-black ${updated ? "text-emerald-200" : "text-amber-200"}`}>{updated ? "✓ Legislação atualizada" : "⚠ Atualização pendente"}</h2>
+    {summary.legislation.reference ? <p className="mt-2 text-sm text-slate-100">Última alteração: {summary.legislation.reference}</p> : null}
+  </section>;
+}
+
+function LawModules({ summary }: { summary: PublicLawCommercialSummary }) {
+  const modules = [
+    ["materiais", "PDF"],
+    ["anki", "Anki"],
+    ["legiscast", "LegisCast"],
+    ["questoes", "Legis Questões"],
+  ] as const;
+  return <section className="rounded-2xl border border-blue-300/30 bg-slate-950/35 p-5 shadow-[0_14px_34px_rgba(0,0,0,0.18)]" aria-labelledby="law-modules-title">
+      <p className="text-sm font-semibold uppercase tracking-wide text-blue-200">Módulos</p>
+      <h2 id="law-modules-title" className="mt-2 text-xl font-black text-white">Disponibilidade do conteúdo</h2>
+      <ul className="mt-4 grid gap-2 text-sm font-bold">{modules.map(([module, label]) => <li key={module} className="flex items-center gap-2"><span className={summary.modules[module] ? "text-emerald-300" : "text-blue-300"} aria-hidden="true">{summary.modules[module] ? "✓" : "◷"}</span><span>{label}{summary.modules[module] ? null : <span className="text-slate-300"> · Em produção</span>}</span></li>)}</ul>
+  </section>;
 }
