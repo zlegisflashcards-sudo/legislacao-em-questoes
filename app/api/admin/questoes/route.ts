@@ -19,7 +19,10 @@ import {
   listLawQuestionScopes,
   listAdminQuestions,
   listAdminQuestionConference,
+  getAdminQuestionStructureReviews,
+  setAdminQuestionStructureReview,
   conferenceArticleContext,
+  conferenceArticleLink,
   previewConferenceQuestionBatch,
   createConferenceQuestionBatch,
   searchAdminQuestions,
@@ -59,6 +62,10 @@ export async function GET(request: Request) {
     const scopes = searchParams.get("recortes") === "1";
     const data = lawSlug && searchParams.get("mode") === "conference-context"
       ? await conferenceArticleContext(lawSlug, searchParams.get("ordem"))
+      : lawSlug && searchParams.get("mode") === "conference-article-link"
+      ? await conferenceArticleLink(lawSlug, searchParams.get("ordem"))
+      : lawSlug && searchParams.get("mode") === "structure-reviews"
+      ? await getAdminQuestionStructureReviews(lawSlug)
       : lawSlug && searchParams.get("mode") === "conference"
       ? await listAdminQuestionConference(lawSlug, searchParams.get("structure_id"))
       : lawSlug && searchParams.get("mode") === "search"
@@ -95,6 +102,7 @@ export async function POST(request: Request) {
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
     else if (body.action === "previsualizar_lote_conferencia") data = await previewConferenceQuestionBatch(body);
     else if (body.action === "criar_lote_conferencia") data = await createConferenceQuestionBatch(body);
+    else if (body.action === "marcar_revisao_estrutura") data = await setAdminQuestionStructureReview(body);
     else if (body.action === "atualizar_rapido") data = await updateQuickAdminQuestion(body);
     else if (body.action === "desativar") data = await deactivateAdminQuestion(body);
     else if (body.action === "resumo_exclusao_questao") data = await questionDeletionSummary(body);

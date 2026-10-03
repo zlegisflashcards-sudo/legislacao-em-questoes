@@ -5,6 +5,7 @@ import { conferenceCopyText, conferenceQuestions, parseConferenceTable } from ".
 const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
 const route = readFileSync("app/api/admin/questoes/route.ts", "utf8");
 const client = readFileSync("components/admin/admin-question-conference.tsx", "utf8");
+const questionsPage = readFileSync("components/admin/admin-law-questions.tsx", "utf8");
 
 describe("modo conferência administrativo", () => {
   const questions = [
@@ -39,5 +40,28 @@ describe("modo conferência administrativo", () => {
 
   it("reutiliza salvar, prévia e confirmação de exclusão sem atalhos em campos editáveis", () => {
     for (const expected of ["action: \"atualizar\"", "action: \"resumo_exclusao_questao\"", "action: \"excluir_questao\"", "Ctrl + Enter", "isEditingTarget", "Há alterações não salvas", "Conferir erradas deste bloco", "keepOutsideFilter", "Duplicar", "Nova questão", "Adicionar por tabela", "conference-context", "pasteTable", "+ Adicionar linha"]) expect(client).toContain(expected);
+  });
+
+  it("mantém revisão manual isolada por lei e bloco", () => {
+    expect(server).toContain("getAdminQuestionStructureReviews");
+    expect(server).toContain("setAdminQuestionStructureReview");
+    expect(server).toContain('await validateStructure(current.id, structureId)');
+    expect(route).toContain('mode") === "structure-reviews"');
+    expect(route).toContain('marcar_revisao_estrutura');
+    const reviewMigration = readFileSync("supabase/migrations/20261003100000_add_admin_question_structure_reviews.sql", "utf8");
+    expect(reviewMigration).toContain("primary key (lei_id, structure_id)");
+    expect(reviewMigration).toContain("foreign key (structure_id, lei_id)");
+    expect(questionsPage).toContain("Marcar revisão");
+    expect(questionsPage).toContain("stopPropagation");
+  });
+
+  it("abre a Central do Artigo somente para contexto confiável, em nova guia", () => {
+    expect(server).toContain("conferenceArticleLink");
+    expect(server).toContain('if (!context.trusted) return { status: "conflict" as const, href: null }');
+    expect(server).toContain('`/admin/artigos/${encodeURIComponent(current.slug.toLowerCase())}/${encodeURIComponent(context.ordem)}?aba=artigo');
+    expect(route).toContain('mode") === "conference-article-link"');
+    expect(client).toContain('target="_blank"');
+    expect(client).toContain('rel="noopener noreferrer"');
+    expect(client).toContain("contexto precisa ser conferido manualmente");
   });
 });

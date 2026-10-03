@@ -65,6 +65,26 @@ export async function listAdminQuestionConference(lawSlug: string, structureId: 
   if (result.error) fail("listar_questoes_conferencia", result.error);
   return { law: current, block: { id: root.id, nome: root.nome }, questions: result.data ?? [] };
 }
+export async function getAdminQuestionStructureReviews(lawSlug: string) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const result = await db().from("admin_question_structure_reviews").select("structure_id").eq("lei_id", current.id);
+  if (result.error) fail("carregar_revisoes_estruturais", result.error);
+  return { reviewed: (result.data ?? []).map((row) => Number(row.structure_id)).filter((value) => Number.isSafeInteger(value)) };
+}
+export async function setAdminQuestionStructureReview(body: Record<string, unknown>) {
+  const admin = await obterAdministrador();
+  if (!admin) throw new AdminQuestoesError(401, "Autenticação administrativa obrigatória.");
+  const current = await law(String(body.law_slug));
+  const structureId = id(body.structure_id);
+  await validateStructure(current.id, structureId);
+  if (typeof body.reviewed !== "boolean") throw new AdminQuestoesError(400, "Marcação de revisão inválida.");
+  const result = body.reviewed
+    ? await db().from("admin_question_structure_reviews").upsert({ lei_id: current.id, structure_id: structureId, reviewed_at: new Date().toISOString(), reviewed_by: admin.id }, { onConflict: "lei_id,structure_id" })
+    : await db().from("admin_question_structure_reviews").delete().eq("lei_id", current.id).eq("structure_id", structureId);
+  if (result.error) fail("salvar_revisao_estrutural", result.error);
+  return { structure_id: structureId, reviewed: body.reviewed };
+}
 export async function conferenceArticleContext(lawSlug: string, orderValue: unknown) {
   await requireAdmin();
   const current = await law(lawSlug);
@@ -74,6 +94,16 @@ export async function conferenceArticleContext(lawSlug: string, orderValue: unkn
   if (!context) return { status: "absent" as const, assunto: null, legislacao: null };
   if (!context.trusted) return { status: "conflict" as const, assunto: null, legislacao: null };
   return { status: "found" as const, assunto: context.assunto, legislacao: context.legislacao };
+}
+export async function conferenceArticleLink(lawSlug: string, orderValue: unknown) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const ordem = typeof orderValue === "string" ? orderValue.trim() : "";
+  if (!ordem) throw new AdminQuestoesError(400, "Informe a ordem para consultar o artigo.");
+  const context = await getArticleContext(current.slug, ordem);
+  if (!context) return { status: "absent" as const, href: null };
+  if (!context.trusted) return { status: "conflict" as const, href: null };
+  return { status: "found" as const, href: `/admin/artigos/${encodeURIComponent(current.slug.toLowerCase())}/${encodeURIComponent(context.ordem)}?aba=artigo&lei=${encodeURIComponent(current.slug.toLowerCase())}` };
 }
 type ConferenceBatchInput = { pergunta?: unknown; resposta?: unknown; justificativa?: unknown; assunto?: unknown; ordem?: unknown; legislacao?: unknown };
 function conferenceBatchDrafts(current: Law, structureId: unknown, rows: unknown) {
