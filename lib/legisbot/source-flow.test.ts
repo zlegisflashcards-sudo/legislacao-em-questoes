@@ -28,7 +28,7 @@ describe("fonte canônica do LegisBot", () => {
   });
 
   it("valida os cinco campos e denuncia conflito de slug + ordem na importação", () => {
-    const base = { slug: "cp", ordem: "0013.0.00.00", titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto A</p>" };
+    const base = { slug: "cp", ordem: "0013.0.00.0.00.0", titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto A</p>" };
     expect(validateImportSource(base)).toBeNull();
     expect(validateImportSource({ ...base, legislacao: "<script>x()</script>" })).toContain("legislacao");
     expect(conflictingImportSourceGroups([base, { ...base, legislacao: "<p>Texto B</p>" }]).size).toBe(1);
@@ -37,15 +37,15 @@ describe("fonte canônica do LegisBot", () => {
   });
 
   it("agrupa divergências como aviso único e não confunde metadados com legislação", () => {
-    const base = { slug: "cp", ordem: "0013.0.00.00", titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto A</p>" };
+    const base = { slug: "cp", ordem: "0013.0.00.0.00.0", titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto A</p>" };
     const conflicts = groupImportSourceWarnings([base, { ...base, legislacao: "<p>Texto B</p>" }, { ...base, legislacao: "<div><strong>Texto B</strong></div>" }]);
     expect(conflicts).toEqual([expect.objectContaining({ kind: "legislacao", slug: "CP", ordem: base.ordem, flashcards: 3, versions: 2 })]);
-    const metadata = groupImportSourceWarnings([base, { ...base, titulo: "CP", assunto: "Artigo 13" }]);
+    const metadata = groupImportSourceWarnings([base, { ...base, titulo: "CP" }]);
     expect(metadata).toEqual([expect.objectContaining({ kind: "metadados", versions: 2 })]);
   });
 
   it("bloqueia o LegisBot diante de conflito real de assunto ou legislação", () => {
-    const identifiers = { slug: "CP", ordem: "0013.0.00.00" };
+    const identifiers = { slug: "CP", ordem: "0013.0.00.0.00.0" };
     const row = { id: "a", slug: "cp", ordem: identifiers.ordem, titulo: "Código Penal", assunto: "Art. 13", legislacao: "<p>Texto legal</p>", updated_at: "2026-09-30T00:00:00Z" };
     expect(resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: " art. 13 ", legislacao: "<div><strong>Texto legal</strong></div>" }], identifiers, null).questionId).toBe("a");
     expect(() => resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: "Artigo 13" }], identifiers, null)).toThrow(LegisBotSourceError);
@@ -55,6 +55,13 @@ describe("fonte canônica do LegisBot", () => {
     } catch (error) {
       expect(error).toMatchObject({ kind: "conflict", publicMessage: "Este conteúdo está temporariamente indisponível enquanto passa por revisão." });
     }
+  });
+
+  it("sinaliza conflito estrutural na importação, sem tratá-lo como erro", () => {
+    const structuralRow = { slug: "cp", ordem: "0027.b.01.0.02.0", titulo: "Código Penal", assunto: "Art. 27-B, § 1º-C, II", legislacao: "<p>Texto</p>" };
+    expect(validateImportSource(structuralRow)).toBeNull();
+    const warnings = groupImportSourceWarnings([structuralRow]);
+    expect(warnings).toEqual([expect.objectContaining({ kind: "estrutural", structuralStatus: "conflict", expectedOrder: "0027.b.01.c.02.0" })]);
   });
 
   it("usa somente slug + ordem no cliente, ignora query legada e gera URL canônica no Anki", () => {

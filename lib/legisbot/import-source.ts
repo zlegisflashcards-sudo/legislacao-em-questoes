@@ -1,5 +1,6 @@
 import { legalHtmlToStructuredText } from "./sanitize-legal-html-core";
 import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "./source";
+import { validateQuestionStructure, type StructuralStatus } from "@/lib/question-structure-consistency";
 
 export type ImportSourceFields = {
   slug: string;
@@ -13,10 +14,12 @@ export type ImportSourceWarning = {
   key: string;
   slug: string;
   ordem: string;
-  kind: "legislacao" | "metadados";
+  kind: "legislacao" | "metadados" | "estrutural";
   flashcards: number;
   versions: number;
   message: string;
+  structuralStatus?: Exclude<StructuralStatus, "valid">;
+  expectedOrder?: string;
 };
 
 export function importSourceKey(value: Pick<ImportSourceFields, "slug" | "ordem">) {
@@ -63,13 +66,15 @@ export function groupImportSourceWarnings(rows: ImportSourceFields[]): ImportSou
   }
   const warnings: ImportSourceWarning[] = [];
   for (const [key, items] of groups) {
+    const common = { key, slug: items[0].slug.trim().toUpperCase(), ordem: items[0].ordem.trim(), flashcards: items.length };
+    const structural = items.map((item) => validateQuestionStructure(item)).find((item) => item.status !== "valid");
+    if (structural && structural.status !== "valid") warnings.push({ ...common, kind: "estrutural", versions: 1, structuralStatus: structural.status, expectedOrder: structural.expectedOrder, message: structural.message ?? "Assunto e Ordem divergentes; revise na Central do Artigo." });
     if (items.length < 2) continue;
     const legislationVersions = new Set(items.map(normalizedImportLegislation));
     const metadataVersions = new Set(items.map((item) => JSON.stringify([
       normalizedLegisBotSourceText(item.titulo),
       normalizedLegisBotSourceText(item.assunto),
     ])));
-    const common = { key, slug: items[0].slug.trim().toUpperCase(), ordem: items[0].ordem.trim(), flashcards: items.length };
     if (legislationVersions.size > 1) {
       warnings.push({ ...common, kind: "legislacao", versions: legislationVersions.size, message: "Versões diferentes da legislação serão revisadas na Central do Artigo." });
     } else if (metadataVersions.size > 1) {

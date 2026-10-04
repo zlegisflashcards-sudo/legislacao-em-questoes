@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   AdminArticleConflictError,
   applyArticleSourceStandardization,
+  applyArticleStructuralBatch,
   deactivateArticleConflictQuestion,
+  previewArticleStructuralBatch,
   previewArticleSourceStandardization,
 } from "@/lib/admin-article-conflicts-server";
 import { obterAdministrador } from "@/lib/admin-auth";
@@ -37,6 +39,12 @@ export async function POST(request: Request) {
     }
     if (body.action === "inativar_flashcard") {
       return NextResponse.json(await deactivateArticleConflictQuestion(slug, ordem, String(body.question_id ?? ""), String(body.confirmation ?? "")), { headers });
+    }
+    if (body.action === "previsualizar_lote_estrutural") {
+      return NextResponse.json(await previewArticleStructuralBatch(body.contexts), { headers });
+    }
+    if (body.action === "aplicar_lote_estrutural") {
+      return NextResponse.json(await applyArticleStructuralBatch({ contexts: body.contexts, confirmation: String(body.confirmation ?? "") }), { headers });
     }
     throw new AdminArticleConflictError(400, "Ação de conflito inválida.");
   } catch (error) {

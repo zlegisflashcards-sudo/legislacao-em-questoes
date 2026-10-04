@@ -86,7 +86,7 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("Destinos estruturais");
     expect(panel).toContain("await onImported?.()");
     expect(panel).toContain("Duplicadas:");
-    expect(panel).toContain("Conflitos de legislação para revisão");
+    expect(panel).toContain("Pendências editoriais para revisão");
     expect(panel).toContain("Ver conflitos na Central do Artigo");
     expect(panel).toContain("Importação concluída com pendências.");
   });
@@ -193,7 +193,7 @@ describe("administração de Legis Questões", () => {
 
   it("mantém conflitos editoriais fora dos erros impeditivos e atualiza apenas o flashcard identificado", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    expect(server).toContain("warnings.filter((warning) => warning.kind === \"legislacao\").length");
+    expect(server).toContain('warning.kind === "legislacao" || warning.kind === "estrutural"');
     expect(server).toContain("conflitos: previewData.summary.conflitos");
     expect(server).toContain("previewData.errors.length");
     expect(server).toContain('.eq("id", existingId)');

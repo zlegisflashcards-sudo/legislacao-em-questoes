@@ -56,10 +56,16 @@ describe("Central do Artigo — administração de conflitos", () => {
   const detail = readFileSync("components/admin/article-source-conflict-detail.tsx", "utf8");
   const questionPage = readFileSync("app/admin/leis/[slug]/questoes/page.tsx", "utf8");
 
-  it("aplica filtros no servidor e pagina sem enviar todos os registros ao navegador", () => {
+  it("filtra por tipo de conflito no servidor e pagina sem enviar todos os registros ao navegador", () => {
     expect(server).toContain("PAGE_SIZE = 20");
     expect(server).toContain("filtered.slice(start, start + PAGE_SIZE)");
-    for (const field of ["filters.law", "filters.ordem", "filters.titulo", "filters.assunto", "filters.status", "filters.q"]) expect(server).toContain(field);
+    for (const field of ["filters.law", "filters.type"]) expect(server).toContain(field);
+    expect(server).toContain('type === "estrutural"');
+    expect(server).toContain('type === "possivel_estrutural"');
+    expect(server).toContain('type === "legislacao"');
+    expect(server).toContain('type === "comentario_sem_analise"');
+    expect(list).toContain('name="tipo"');
+    expect(list).toContain("Comentário sem análise");
     expect(list).toContain("pagina");
   });
 
@@ -88,7 +94,8 @@ describe("Central do Artigo — administração de conflitos", () => {
   });
 
   it("calcula pendências diretamente dos flashcards ativos e ignora HTML visual equivalente", () => {
-    expect(server).toContain("groupLegisBotSourceConflicts(await loadQuestions(true))");
+    expect(server).toContain("const activeRows = await loadQuestions(true)");
+    expect(server).toContain("groupLegisBotSourceConflicts(activeRows)");
     expect(server).toContain("getArticleSourceConflict(preview.slug, preview.ordem)) === null");
   });
 
@@ -99,5 +106,17 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(api).toContain("AdminArticleConflictError");
     expect(api.indexOf("obterAdministrador()")).toBeLessThan(api.indexOf("request.json()"));
     expect(detail).toContain("Ele não será excluído");
+  });
+
+  it("oferece lote somente para ordens estruturais inequívocas e exige autorização", () => {
+    expect(server).toContain("previewArticleStructuralBatch");
+    expect(server).toContain('input.confirmation !== "APLICAR ORDENS"');
+    expect(server).toContain("validations.every");
+    expect(server).toContain("expectedOrders.size !== 1");
+    expect(server).toContain("structuralSuggestions");
+    expect(api).toContain('body.action === "aplicar_lote_estrutural"');
+    expect(list).toContain("Marcar para lote");
+    expect(list).toContain("Sugerir lote");
+    expect(list).toContain("Autorizar solução em lote");
   });
 });

@@ -2,6 +2,7 @@ import { isOfflineBuild } from "../build-mode";
 import { getSupabaseServerClient } from "../supabase-server";
 import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "./source";
+import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 
 export type LegislacaoComentadaPublica = {
   slug: string;
@@ -60,7 +61,7 @@ export function consolidarLegislacaoComentadaConfiavel(
 
       const legislations = new Set(group.map((item) => normalizedLegisBotLegislation(item.legislacao ?? "")));
       const subjects = new Set(group.map((item) => normalizedLegisBotSourceText(item.assunto ?? "")));
-      if (legislations.size !== 1 || subjects.size !== 1) return [];
+      if (legislations.size !== 1 || subjects.size !== 1 || group.some((item) => validateQuestionStructure(item).status !== "valid")) return [];
 
       return [{
         slug: source.slug.toUpperCase(),

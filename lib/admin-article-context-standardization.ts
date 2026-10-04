@@ -3,6 +3,7 @@ import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { parseQuestionFieldChange } from "@/lib/admin-questoes";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 
 export class ArticleContextStandardizationError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -53,7 +54,9 @@ async function load(body: Record<string, unknown>) {
 
 export async function previewArticleContextStandardization(body: Record<string, unknown>) {
   const data = await load(body);
-  return { questions: data.rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, changes: data.input.changes, next_order: data.nextOrder };
+  const representative = data.rows[0];
+  const structuralValidation = validateQuestionStructure({ assunto: data.input.changes.assunto ?? representative.assunto, ordem: data.nextOrder });
+  return { questions: data.rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, changes: data.input.changes, next_order: data.nextOrder, structural_validation: structuralValidation };
 }
 
 export async function applyArticleContextStandardization(body: Record<string, unknown>) {
@@ -79,5 +82,6 @@ export async function applyArticleContextStandardization(body: Record<string, un
     ]);
     if (community.error || highlights.error) throw new ArticleContextStandardizationError(502, "As questões foram atualizadas, mas uma referência vinculada não pôde ser movida. Recarregue os dados antes de tentar novamente.");
   }
-  return { questions: rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, next_order: nextOrder, moved: nextOrder !== input.ordem };
+  const structuralValidation = validateQuestionStructure({ assunto: input.changes.assunto ?? rows[0].assunto, ordem: nextOrder });
+  return { questions: rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, next_order: nextOrder, moved: nextOrder !== input.ordem, structural_validation: structuralValidation };
 }

@@ -85,9 +85,7 @@
 
   <aside class="lf-trust-footer" aria-label="Melhoria contínua do material">
     <div class="lf-trust-actions">
-      <a id="lf_report_error" class="lf-report-link" href="#" data-ordem="{{ordem}}">Reportar erro</a>
-      <span id="lf_report_titulo" hidden>{{titulo}}</span>
-      <span id="lf_report_assunto" hidden>{{assunto}}</span>
+      <a id="lf_report_error" class="lf-report-link" href="#" data-question-id="{{IDQuestao}}" data-law="{{titulo}}" data-ordem="{{ordem}}" data-assunto="{{assunto}}">Reportar erro na questão</a>
     </div>
   </aside>
 </main>
@@ -168,15 +166,17 @@ function alternarComentarioProfessor() {
 (function () {
   var link = document.getElementById('lf_report_error');
   if (!link) return;
-  var ordem = link.getAttribute('data-ordem') || '';
-  var tituloEl = document.getElementById('lf_report_titulo');
-  var assuntoEl = document.getElementById('lf_report_assunto');
-  var titulo = tituloEl ? tituloEl.textContent.trim() : '';
-  var assuntoCard = assuntoEl ? assuntoEl.textContent.trim() : '';
-  var assuntoEmail = 'ERRO NO FLASHCARD - ' + (assuntoCard || 'Assunto');
-  var corpo = '\uD83D\uDCDD Descrição do erro:\n(Descreva aqui)\n\n\uD83D\uDCF7 Se possível, envie um print em anexo.';
-  link.href = 'mailto:zlegisflashcards@gmail.com?subject=' + encodeURIComponent(assuntoEmail)
-    + '&body=' + encodeURIComponent(corpo);
+  var questionId = (link.getAttribute('data-question-id') || '').trim();
+  var validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!validUuid.test(questionId)) {
+    link.hidden = true;
+    return;
+  }
+  var law = (link.getAttribute('data-law') || '').trim() || 'Não informada';
+  var ordem = (link.getAttribute('data-ordem') || '').trim() || 'Não informada';
+  var assunto = (link.getAttribute('data-assunto') || '').trim() || 'Não informado';
+  var body = 'Lei: ' + law + '\nOrdem: ' + ordem + '\nAssunto: ' + assunto + '\nID da questão: ' + questionId + '\n\nDescrição do erro:\n';
+  link.href = 'mailto:zlegisflashcards@gmail.com?subject=' + encodeURIComponent('Reportar erro na questão') + '&body=' + encodeURIComponent(body);
 })();
 </script>
 

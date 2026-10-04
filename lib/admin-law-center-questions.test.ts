@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, plainQuestionText } from "./admin-question-search";
+import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, plainQuestionText } from "./admin-question-search";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const server = read("lib/admin-questoes-server.ts");
@@ -28,6 +28,17 @@ describe("Questões na Central da Lei", () => {
     expect(adminQuestionSearchTerms("  afastamento, do lar  ")).toEqual(["afastamento", "do", "lar"]);
     expect(adminQuestionSearchTerms("um dois três quatro cinco seis sete")).toHaveLength(6);
     expect(adminQuestionSearchTerms("... / -")).toEqual([]);
+  });
+
+  it("localiza exatamente a questão quando a busca recebe seu UUID", () => {
+    const search = server.slice(server.indexOf("export async function searchAdminQuestions"), server.indexOf("export async function getAdminQuestion"));
+    const questionId = "18452a01-1234-4abc-8def-1234567890ab";
+    expect(adminQuestionSearchId(questionId)).toBe(questionId);
+    expect(adminQuestionSearchId("texto comum")).toBeNull();
+    expect(search).toContain("const questionId = adminQuestionSearchId(input.query)");
+    expect(search).toContain('request = request.eq("id", questionId)');
+    expect(search).toContain("if (!questionId) for (const term of terms)");
+    expect(central).toContain("justificativa ou UUID");
   });
 
   it("isola pesquisa e leitura completa pela lei atual", () => {

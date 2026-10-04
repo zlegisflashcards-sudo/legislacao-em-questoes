@@ -5,13 +5,16 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import type { LegisBotComentario } from "@/lib/legisbot-comentario";
 import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "@/lib/legisbot/source";
 import { articleOrderStructure } from "@/lib/article-order-structure";
+import { validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
+import { questionStructurePath, type QuestionStructurePathNode } from "@/lib/question-structure-path";
 
 const LIMIT = 40;
 
-export type ArticleContext = { id: string; slug: string; ordem: string; titulo: string; assunto: string; legislacao: string; lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number; conflictsCount: number; pendingCount: number; trusted: boolean; updatedAt: string; legisbot: LegisBotComentario | null };
+export type ArticleContext = { id: string; slug: string; ordem: string; titulo: string; assunto: string; legislacao: string; lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number; conflictsCount: number; pendingCount: number; trusted: boolean; updatedAt: string; legisbot: LegisBotComentario | null; structuralValidation: StructuralValidation | null };
 export type ArticleInteraction = { id: string; kind: "comentario" | "legisbot"; slug: string; ordem: string; author: string | null; summary: string; status: string; createdAt: string };
 export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; legislacao: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
 export type ArticleSiblingContext = { ordem: string; reference: string; questionsCount: number; current: boolean };
+export type ArticleStructureTrail = { status: "linked"; items: string[] } | { status: "unlinked"; items: [] } | { status: "inconsistent"; items: []; structureIds: number[] };
 
 export function normalizeArticleSearch(value: string) {
   return value.trim().slice(0, 120).replace(/[,%()]/g, " ").replace(/\s+/g, " ");
@@ -73,7 +76,7 @@ async function consolidateQuestionContexts(rows: SourceQuestion[]): Promise<Arti
   const db = getSupabaseServerClient(); const [laws, counts, bots] = await Promise.all([lawMetadata([...new Set(bases.map((item) => item.slug))]), commentCounts(bases), db.from("legisbot_comentarios").select("*").in("slug", [...new Set(bases.map((item) => item.slug.toUpperCase()))])]);
   if (bots.error) throw new Error("Não foi possível carregar os dados agregados do LegisBot.");
   const botMap = new Map((bots.data ?? []).map((item) => [`${String(item.slug).toUpperCase()}\u0000${String(item.ordem)}`, item as LegisBotComentario]));
-  return bases.map((base) => { const group = groups.get(`${base.slug.toUpperCase()}\u0000${base.ordem}`) ?? []; const legal = new Set(group.map((item) => normalizedLegisBotLegislation(item.legislacao ?? ""))); const subjects = new Set(group.map((item) => normalizedLegisBotSourceText(item.assunto ?? ""))); const conflict = legal.size > 1 || subjects.size > 1; const bot = botMap.get(`${base.slug.toUpperCase()}\u0000${base.ordem}`) ?? null; return { id: base.id, slug: base.slug.toUpperCase(), ordem: base.ordem, titulo: base.titulo ?? laws.get(base.slug.toUpperCase())?.title ?? base.slug, assunto: base.assunto ?? "", legislacao: base.legislacao ?? "", lawTitle: laws.get(base.slug.toUpperCase())?.title ?? null, lawCode: laws.get(base.slug.toUpperCase())?.code ?? null, commentsCount: counts.get(`${base.slug}:${base.ordem}`) ?? 0, questionsCount: group.length, conflictsCount: conflict ? 1 : 0, pendingCount: (conflict ? 1 : 0) + (bot?.precisa_revisao || bot?.status === "erro" ? 1 : 0), trusted: !conflict, updatedAt: group.reduce((latest, item) => latest > item.updated_at ? latest : item.updated_at, base.updated_at), legisbot: bot }; });
+  return bases.map((base) => { const group = groups.get(`${base.slug.toUpperCase()}\u0000${base.ordem}`) ?? []; const legal = new Set(group.map((item) => normalizedLegisBotLegislation(item.legislacao ?? ""))); const subjects = new Set(group.map((item) => normalizedLegisBotSourceText(item.assunto ?? ""))); const structuralValidation = group.map((item) => validateQuestionStructure(item)).find((item) => item.status !== "valid") ?? null; const conflict = legal.size > 1 || subjects.size > 1 || Boolean(structuralValidation); const bot = botMap.get(`${base.slug.toUpperCase()}\u0000${base.ordem}`) ?? null; return { id: base.id, slug: base.slug.toUpperCase(), ordem: base.ordem, titulo: base.titulo ?? laws.get(base.slug.toUpperCase())?.title ?? base.slug, assunto: base.assunto ?? "", legislacao: base.legislacao ?? "", lawTitle: laws.get(base.slug.toUpperCase())?.title ?? null, lawCode: laws.get(base.slug.toUpperCase())?.code ?? null, commentsCount: counts.get(`${base.slug}:${base.ordem}`) ?? 0, questionsCount: group.length, conflictsCount: conflict ? 1 : 0, pendingCount: (conflict ? 1 : 0) + (bot?.precisa_revisao || bot?.status === "erro" ? 1 : 0), trusted: !conflict, updatedAt: group.reduce((latest, item) => latest > item.updated_at ? latest : item.updated_at, base.updated_at), legisbot: bot, structuralValidation }; });
 }
 
 export async function searchArticleContexts(rawQuery: string, lawSlug = ""): Promise<ArticleContext[]> { return consolidateQuestionContexts(await sourceQuestions(rawQuery, lawSlug)); }
@@ -140,6 +143,25 @@ export async function getArticleQuestions(slug: string, ordem: string): Promise<
   const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,pergunta,resposta,assunto,legislacao,titulo,structure_id,ativo,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true).order("updated_at", { ascending: false }).limit(100);
   if (result.error) throw new Error("Não foi possível carregar as questões do artigo.");
   return (result.data ?? []) as ArticleQuestion[];
+}
+
+/** Localização no sumário da lei, derivada exclusivamente do vínculo structure_id das questões. */
+export async function getArticleStructureTrail(slug: string, ordem: string): Promise<ArticleStructureTrail> {
+  await exigirAdministrador();
+  const db = getSupabaseServerClient();
+  const linked = await db.from("questions").select("structure_id").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true);
+  if (linked.error) throw new Error("Não foi possível carregar os vínculos estruturais do artigo.");
+  const structureIds = [...new Set((linked.data ?? []).map((item) => Number(item.structure_id)).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!structureIds.length) return { status: "unlinked", items: [] };
+  if (structureIds.length !== 1) return { status: "inconsistent", items: [], structureIds };
+  const selected = await db.from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem").eq("id", structureIds[0]).eq("ativo", true).maybeSingle();
+  if (selected.error) throw new Error("Não foi possível carregar a estrutura vinculada ao artigo.");
+  if (!selected.data) return { status: "unlinked", items: [] };
+  const nodes = await db.from("law_structure").select("id,parent_id,tipo,nome").eq("lei_id", selected.data.lei_id).eq("ativo", true).order("ordem").order("id");
+  if (nodes.error) throw new Error("Não foi possível carregar a trilha estrutural da lei.");
+  const structuralTypes = new Set(["parte", "livro", "titulo", "capitulo", "secao", "subsecao"]);
+  const path = questionStructurePath(nodes.data as QuestionStructurePathNode[], Number(selected.data.id)).filter((node) => node.tipo && structuralTypes.has(node.tipo) && node.nome.trim());
+  return path.length ? { status: "linked", items: path.map((node) => node.nome.trim()) } : { status: "unlinked", items: [] };
 }
 
 export async function getArticleSiblingContexts(slug: string, ordem: string, assunto: string | null): Promise<ArticleSiblingContext[]> {

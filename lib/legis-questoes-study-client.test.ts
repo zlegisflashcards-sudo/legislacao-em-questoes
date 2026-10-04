@@ -44,13 +44,17 @@ describe("player Legis Questões", () => {
     expect(styles).toContain('.lf-update-seal{display:block;width:fit-content;max-width:100%');
   });
 
-  it("monta o Reportar erro como mailto seguro com apenas campos disponíveis", () => {
-    expect(player).toContain('mailto:zlegisflashcards@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}');
-    expect(player).toContain('Erro no flashcard - ${order}');
-    expect(player).toContain('[["Lei", law], ["Ordem", order], ["Assunto", question.assunto?.trim()]]');
+  it("gera o e-mail de Reportar erro com o UUID da questão atual, sem pedir o identificador ao aluno", () => {
+    expect(player).toContain('mailto:zlegisflashcards@gmail.com?subject=${encodeURIComponent("Reportar erro na questão")}&body=${encodeURIComponent(body)}');
+    expect(player).toContain('ID da questão: ${question.id}');
+    expect(player).toContain('Lei: ${lawName}');
+    expect(player).toContain('Ordem: ${order}');
+    expect(player).toContain('Assunto: ${subject}');
+    expect(player).toContain('>Reportar erro na questão</a>');
+    expect(player).not.toContain('/api/aluno/estudar/lei/${encodeURIComponent(slug)}/reportar-erro');
     expect(player).toContain('<ReportError question={question} />');
     expect(player).toContain('<ReportError question={currentQuestion} />');
-    expect(styles).toContain('.lf-report-error{display:table;margin:14px auto 0');
+    expect(styles).toContain('.lf-report-wrap{display:table;margin:14px auto 0}');
   });
 
   it("renderiza HTML do Anki somente após sanitização", () => {

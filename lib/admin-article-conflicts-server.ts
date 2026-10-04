@@ -13,8 +13,11 @@ import {
   type LegisBotConflictGroup,
   type LegisBotConflictQuestion,
 } from "@/lib/legisbot/source-conflicts";
+import { validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
+import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 
 const PAGE_SIZE = 20;
+const STRUCTURAL_BATCH_SIZE = 100;
 const QUESTION_FIELDS = "id,lei_id,slug,ordem,titulo,assunto,legislacao,pergunta,resposta,justificativa,ativo,updated_at";
 
 export class AdminArticleConflictError extends Error {
@@ -23,13 +26,12 @@ export class AdminArticleConflictError extends Error {
 
 export type ArticleConflictFilters = {
   law?: string;
-  ordem?: string;
-  titulo?: string;
-  assunto?: string;
-  status?: string;
-  q?: string;
+  type?: string;
   page?: number;
 };
+
+type StructuralBatchTarget = { slug: string; ordem: string };
+type StructuralBatchCandidate = StructuralBatchTarget & { expectedOrder: string; questionIds: string[] };
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
 
@@ -84,62 +86,116 @@ async function commentsFor(groups: LegisBotConflictGroup[]) {
 
 export async function listArticleSourceConflicts(filters: ArticleConflictFilters = {}) {
   await requireAdmin();
-  const groups = groupLegisBotSourceConflicts(await loadQuestions(true));
+  const activeRows = await loadQuestions(true);
+  const groups = groupLegisBotSourceConflicts(activeRows);
+  const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; validation: StructuralValidation }>();
+  const byContext = new Map<string, LegisBotConflictQuestion[]>();
+  for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
+  for (const [key, questions] of byContext) { const validation = questions.map((question) => validateQuestionStructure(question)).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); }
+  const legalByKey = new Map(groups.map((group) => [group.key, group]));
+  const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys()])];
   const [laws, comments] = await Promise.all([lawMap(), commentsFor(groups)]);
   const law = safeFilter(filters.law);
-  const ordem = safeFilter(filters.ordem, 30);
-  const titulo = safeFilter(filters.titulo);
-  const assunto = safeFilter(filters.assunto);
-  const q = safeFilter(filters.q, 200);
-  const status = safeFilter(filters.status, 40);
-  const filtered = groups.filter((group) => {
-    const metadata = laws.get(group.slug);
-    const comment = comments.get(group.key);
-    const titles = group.questions.map((item) => item.titulo ?? "").join(" ").toLocaleLowerCase("pt-BR");
-    const subjects = group.questions.map((item) => item.assunto ?? "").join(" ").toLocaleLowerCase("pt-BR");
-    const haystack = [group.slug, group.ordem, metadata?.title ?? "", metadata?.code ?? "", titles, subjects,
-      ...group.questions.map((item) => legalHtmlToStructuredText(item.legislacao ?? ""))].join(" ").toLocaleLowerCase("pt-BR");
-    if (law && !`${group.slug} ${metadata?.title ?? ""} ${metadata?.code ?? ""}`.toLocaleLowerCase("pt-BR").includes(law)) return false;
-    if (ordem && !group.ordem.toLocaleLowerCase("pt-BR").includes(ordem)) return false;
-    if (titulo && !titles.includes(titulo)) return false;
-    if (assunto && !subjects.includes(assunto)) return false;
-    if (q && !haystack.includes(q)) return false;
-    if (status === "com_comentario" && !comment) return false;
-    if (status === "sem_comentario" && comment) return false;
-    if (status === "precisa_revisao" && !comment?.precisa_revisao) return false;
-    if (["pendente", "processando", "concluido", "erro"].includes(status) && comment?.status !== status) return false;
+  const type = safeFilter(filters.type, 40);
+  const filtered = contextKeys.filter((key) => {
+    const group = legalByKey.get(key); const structuralGroup = structural.get(key); const slug = group?.slug ?? structuralGroup!.slug;
+    const metadata = laws.get(slug);
+    const comment = comments.get(key);
+    if (law && !`${slug} ${metadata?.title ?? ""} ${metadata?.code ?? ""}`.toLocaleLowerCase("pt-BR").includes(law)) return false;
+    if (type === "estrutural" && structuralGroup?.validation.status !== "conflict") return false;
+    if (type === "possivel_estrutural" && structuralGroup?.validation.status !== "possible_conflict") return false;
+    if (type === "legislacao" && !group) return false;
+    if (type === "comentario_sem_analise" && (!comment || !["pendente", "processando"].includes(comment.status))) return false;
     return true;
   });
   const requestedPage = Number(filters.page);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
   const start = (page - 1) * PAGE_SIZE;
-  const items = filtered.slice(start, start + PAGE_SIZE).map((group) => {
-    const metadata = laws.get(group.slug);
-    const comment = comments.get(group.key);
+  const items = filtered.slice(start, start + PAGE_SIZE).map((key) => {
+    const group = legalByKey.get(key); const structuralGroup = structural.get(key); const questions = group?.questions ?? structuralGroup!.questions; const slug = group?.slug ?? structuralGroup!.slug; const currentOrder = group?.ordem ?? structuralGroup!.ordem;
+    const metadata = laws.get(slug);
+    const comment = comments.get(key);
     return {
-      slug: group.slug,
-      ordem: group.ordem,
-      lawTitle: metadata?.title ?? group.questions[0]?.titulo ?? group.slug,
+      slug,
+      ordem: currentOrder,
+      lawTitle: metadata?.title ?? questions[0]?.titulo ?? slug,
       lawCode: metadata?.code ?? null,
-      titulo: group.questions.find((item) => item.titulo?.trim())?.titulo ?? null,
-      assunto: group.questions.find((item) => item.assunto?.trim())?.assunto ?? null,
-      flashcards: group.questions.length,
-      versions: group.versions.size,
+      titulo: questions.find((item) => item.titulo?.trim())?.titulo ?? null,
+      assunto: questions.find((item) => item.assunto?.trim())?.assunto ?? null,
+      flashcards: questions.length,
+      versions: group?.versions.size ?? 1,
       comment,
+      structuralValidation: structuralGroup?.validation ?? null,
     };
   });
+  const structuralSuggestions = filtered.flatMap((key) => {
+    const item = structural.get(key);
+    return item?.validation.status === "conflict" && item.validation.expectedOrder ? [{ slug: item.slug, ordem: item.ordem }] : [];
+  }).slice(0, STRUCTURAL_BATCH_SIZE);
   return {
     items,
+    structuralSuggestions,
     page,
     pages,
     total: filtered.length,
     indicators: {
-      pending: groups.length,
-      laws: new Set(groups.map((group) => group.slug)).size,
-      flashcards: groups.reduce((sum, group) => sum + group.questions.length, 0),
+      pending: contextKeys.length,
+      laws: new Set(contextKeys.map((key) => legalByKey.get(key)?.slug ?? structural.get(key)!.slug)).size,
+      flashcards: contextKeys.reduce((sum, key) => sum + (legalByKey.get(key)?.questions ?? structural.get(key)!.questions).length, 0),
     },
   };
+}
+
+function structuralBatchTargets(input: unknown): StructuralBatchTarget[] {
+  if (!Array.isArray(input) || !input.length || input.length > STRUCTURAL_BATCH_SIZE) throw new AdminArticleConflictError(400, "Selecione de 1 a 100 contextos para a correção em lote.");
+  const unique = new Map<string, StructuralBatchTarget>();
+  for (const value of input) {
+    if (!value || typeof value !== "object") throw new AdminArticleConflictError(400, "Contexto selecionado inválido.");
+    const identifiers = normalizeLegisBotIdentifiers(String((value as Record<string, unknown>).slug ?? ""), String((value as Record<string, unknown>).ordem ?? ""));
+    unique.set(`${identifiers.slug}\u0000${identifiers.ordem}`, identifiers);
+  }
+  return [...unique.values()];
+}
+
+async function structuralBatchCandidates(targets: StructuralBatchTarget[]) {
+  const candidates: StructuralBatchCandidate[] = [];
+  const excluded: Array<StructuralBatchTarget & { reason: string }> = [];
+  for (const target of targets) {
+    const rows = await loadQuestions(true, target);
+    if (!rows.length) { excluded.push({ ...target, reason: "Não há questões ativas neste contexto." }); continue; }
+    const validations = rows.map((row) => validateQuestionStructure(row));
+    const expectedOrders = new Set(validations.filter((item) => item.status === "conflict" && item.expectedOrder).map((item) => item.expectedOrder!));
+    if (!validations.every((item) => item.status === "conflict" && item.expectedOrder) || expectedOrders.size !== 1) {
+      excluded.push({ ...target, reason: "O contexto não possui uma única ordem sugerida com segurança." }); continue;
+    }
+    const expectedOrder = [...expectedOrders][0];
+    if (expectedOrder === target.ordem) { excluded.push({ ...target, reason: "A ordem sugerida já é a ordem atual." }); continue; }
+    candidates.push({ ...target, expectedOrder, questionIds: rows.map((row) => row.id).sort() });
+  }
+  return { candidates, excluded };
+}
+
+export async function previewArticleStructuralBatch(input: unknown) {
+  await requireAdmin();
+  return structuralBatchCandidates(structuralBatchTargets(input));
+}
+
+export async function applyArticleStructuralBatch(input: { contexts: unknown; confirmation: string }) {
+  await requireAdmin();
+  if (input.confirmation !== "APLICAR ORDENS") throw new AdminArticleConflictError(422, "Digite APLICAR ORDENS para confirmar.");
+  const preview = await structuralBatchCandidates(structuralBatchTargets(input.contexts));
+  const applied: Array<StructuralBatchCandidate & { questions: number }> = [];
+  const failed: Array<StructuralBatchTarget & { reason: string }> = [...preview.excluded];
+  for (const candidate of preview.candidates) {
+    try {
+      const result = await applyArticleContextStandardization({ law_slug: candidate.slug.toLowerCase(), context_slug: candidate.slug.toLowerCase(), context_ordem: candidate.ordem, changes: { ordem: candidate.expectedOrder }, expected_question_ids: candidate.questionIds });
+      applied.push({ ...candidate, questions: result.questions });
+    } catch (error) {
+      failed.push({ slug: candidate.slug, ordem: candidate.ordem, reason: error instanceof Error ? error.message : "Não foi possível corrigir este contexto." });
+    }
+  }
+  return { applied, failed };
 }
 
 export async function getArticleSourceConflict(rawSlug: string, rawOrdem: string) {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LegisBotIdentifiers } from "./request-validation";
 import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
+import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 
 type QuestionSourceRow = {
   id: string;
@@ -76,6 +77,7 @@ export function resolveLegisBotSourceRows(
   identifiers: LegisBotIdentifiers,
   fallbackTitle: string | null,
 ) {
+  if (rows.some((row) => validateQuestionStructure(row).status !== "valid")) throw new LegisBotSourceError("conflict", "Este conteúdo está temporariamente indisponível enquanto o conflito estrutural entre Assunto e Ordem é revisado.");
   const sources = rows.map((row) => buildSource(row, identifiers, fallbackTitle));
   const legislationVersions = new Set(sources.map((source) => normalizedLegisBotLegislation(source.legislacao)));
   const subjectVersions = new Set(sources.map((source) => normalizedLegisBotSourceText(source.assunto)));

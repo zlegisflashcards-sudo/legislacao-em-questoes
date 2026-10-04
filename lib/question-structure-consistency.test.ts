@@ -1,21 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { parseQuestionSubject, questionStructureIssues, legislationGroups } from "./question-structure-consistency";
+import { expectedQuestionOrder, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
 
-describe("consistência estrutural de flashcards", () => {
-  it("interpreta artigo, letra, parágrafo, inciso e alínea", () => {
-    expect(parseQuestionSubject("Art. 10")).toMatchObject({ article: "10" });
-    expect(parseQuestionSubject('Art. 11-A, parágrafo único')).toMatchObject({ article: "11", suffix: "A", unique: true });
-    expect(parseQuestionSubject("Art. 10, § 1º")).toMatchObject({ paragraph: "1" });
-    expect(parseQuestionSubject("Art. 10, § 1º, II")).toMatchObject({ item: "II" });
-    expect(parseQuestionSubject('Art. 10, § 1º, II, "a"')).toMatchObject({ article: "10", paragraph: "1", item: "II", letter: "a" });
+describe("validador estrutural Assunto × Ordem", () => {
+  const validate = (assunto: string, ordem: string) => validateQuestionStructure({ assunto, ordem });
+  it("valida artigo simples", () => expect(validate("Art. 1º", "0001.0.00.0.00.0").status).toBe("valid"));
+  it("valida artigo com letra", () => expect(validate("Art. 1º-A", "0001.a.00.0.00.0").status).toBe("valid"));
+  it("detecta letra de artigo ausente", () => expect(validate("Art. 1º-A", "0001.0.00.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0001.a.00.0.00.0" }));
+  it("valida parágrafo simples", () => expect(validate("Art. 27-B, § 1º", "0027.b.01.0.00.0").status).toBe("valid"));
+  it("trata parágrafo único como parágrafo 01 na ordem", () => {
+    expect(validate("Art. 3º, parágrafo único", "0003.0.01.0.00.0")).toMatchObject({ status: "valid", expectedOrder: "0003.0.01.0.00.0" });
+    expect(validate("Art. 3º, parágrafo único", "0003.0.00.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0003.0.01.0.00.0" });
   });
-  it("aponta somente divergências detectáveis", () => {
-    expect(questionStructureIssues({ assunto: "Art. 10, § 1º", ordem: "0010.0.00.00", legislacao: "x" }).map((item) => item.code)).toContain("paragrafo_caput");
-    expect(questionStructureIssues({ assunto: "Art. 10", ordem: "0010.0.00.00", legislacao: "x" })).toEqual([]);
-    expect(questionStructureIssues({ assunto: "Art. 11", ordem: "0010.0.00.00", legislacao: "x" }).map((item) => item.code)).toContain("artigo_divergente");
-    expect(questionStructureIssues({ assunto: "Art. 10, § 1º, II", ordem: "0010.0.01.00", legislacao: "x" }).map((item) => item.code)).toContain("inciso_incompleto");
-    expect(questionStructureIssues({ assunto: 'Art. 10, § 1º, II, "a"', ordem: "0010.0.01.02", legislacao: "x" }).map((item) => item.code)).toContain("alinea_incompleta");
-    expect(questionStructureIssues({ assunto: null, ordem: null, legislacao: null }).map((item) => item.code)).toEqual(["assunto_ausente", "ordem_ausente", "legislacao_ausente"]);
+  it("valida parágrafo com letra", () => expect(validate("Art. 27-B, § 1º-C", "0027.b.01.c.00.0").status).toBe("valid"));
+  it("detecta letra de parágrafo ausente", () => expect(validate("Art. 27-B, § 1º-C", "0027.b.01.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0027.b.01.c.00.0" }));
+  it("valida inciso", () => expect(validate("Art. 27-B, § 1º-C, II", "0027.b.01.c.02.0").status).toBe("valid"));
+  it("valida inciso com letra", () => expect(validate("Art. 27-B, § 1º-C, II-A", "0027.b.01.c.02.a").status).toBe("valid"));
+  it("não confunde Art. 91 com Art. 91-A", () => expect(validate("Art. 91-A", "0091.0.00.0.00.0").status).toBe("conflict"));
+  it("preserva zero como ausência de letra sem colidir com letra", () => {
+    expect(parseQuestionOrder("0001.0.00.0.00.0")).toMatchObject({ artigo: "1", letraArtigo: undefined });
+    expect(parseQuestionOrder("0001.a.00.0.00.0")).toMatchObject({ artigo: "1", letraArtigo: "A" });
   });
-  it("agrupa versões de legislação sem escolher uma", () => expect(legislationGroups([{ legislacao: "A" }, { legislacao: "B" }, { legislacao: "A" }])).toEqual([{ value: "A", count: 2 }, { value: "B", count: 1 }]));
+  it("sinaliza assunto ambíguo sem sugerir correção", () => expect(validateQuestionStructure({ assunto: "Disposição geral", ordem: "0001.0.00.0.00.0" }).status).toBe("possible_conflict"));
+  it("mantém helpers reutilizáveis para assunto e ordem", () => {
+    expect(parseQuestionSubject("Art. 27-B, § 1º-C, inciso II-A")).toMatchObject({ article: "27", suffix: "B", paragraph: "1", paragraphSuffix: "C", item: "II", itemSuffix: "A" });
+    expect(expectedQuestionOrder({ artigo: "27", letraArtigo: "B", paragrafo: "1", letraParagrafo: "C", inciso: "2", letraInciso: "A" })).toBe("0027.b.01.c.02.a");
+  });
 });
