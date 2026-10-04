@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedQuestionOrder, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
+import { expectedQuestionOrder, hasIncisoGranularityPending, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
 
 describe("validador estrutural Assunto × Ordem", () => {
   const validate = (assunto: string, ordem: string) => validateQuestionStructure({ assunto, ordem });
@@ -24,5 +24,9 @@ describe("validador estrutural Assunto × Ordem", () => {
   it("mantém helpers reutilizáveis para assunto e ordem", () => {
     expect(parseQuestionSubject("Art. 27-B, § 1º-C, inciso II-A")).toMatchObject({ article: "27", suffix: "B", paragraph: "1", paragraphSuffix: "C", item: "II", itemSuffix: "A" });
     expect(expectedQuestionOrder({ artigo: "27", letraArtigo: "B", paragrafo: "1", letraParagrafo: "C", inciso: "2", letraInciso: "A" })).toBe("0027.b.01.c.02.a");
+  });
+  it("sinaliza recorte por inciso como pendência editorial, sem conflito estrutural", () => {
+    expect(hasIncisoGranularityPending({ assunto: "Art. 121, § 2º-B, inciso II, CP" })).toBe(true);
+    expect(hasIncisoGranularityPending({ assunto: "Art. 121, § 2º-B, CP" })).toBe(false);
   });
 });

@@ -51,6 +51,11 @@ export function validateQuestionStructure(input: { assunto?: string | null; orde
   return { status: "conflict", currentOrder, expectedOrder, subjectReference, orderReference: order, differences, message: "Conflito estrutural: Assunto e Ordem representam dispositivos diferentes." };
 }
 
+/** Incisos podem exigir o texto do parágrafo inteiro; a escolha do recorte é editorial e nunca automática. */
+export function hasIncisoGranularityPending(input: { assunto?: string | null }) {
+  return Boolean(parseQuestionSubject(input.assunto)?.item);
+}
+
 export function questionStructureIssues(question: { assunto?: string | null; ordem?: string | null; legislacao?: string | null; slug?: string | null }, context?: { slug: string; ordem: string }): StructuralIssue[] {
   const issues: StructuralIssue[] = [];
   if (!question.assunto?.trim()) issues.push({ code: "assunto_ausente", label: "Assunto ausente", certainty: "objective" });

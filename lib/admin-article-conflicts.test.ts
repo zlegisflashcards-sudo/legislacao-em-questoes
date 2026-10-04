@@ -60,6 +60,7 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("PAGE_SIZE = 20");
     expect(server).toContain("filtered.slice(start, start + PAGE_SIZE)");
     for (const field of ["filters.law", "filters.type"]) expect(server).toContain(field);
+    expect(server).toContain('slug.toLocaleLowerCase("pt-BR") !== law');
     expect(server).toContain('type === "estrutural"');
     expect(server).toContain('type === "possivel_estrutural"');
     expect(server).toContain('type === "legislacao"');

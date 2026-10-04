@@ -30,6 +30,7 @@ describe("Central do Artigo administrativa", () => {
 
   it("preserva o slug selecionado entre as abas, inclusive Conflitos", () => {
     expect(index).toContain('lei=${encodeURIComponent(lawFilter)}');
+    expect(index).toContain("one(params.lei) || one(params.law)");
     expect(index).toContain("&ordem_sort=${orderDirection}");
     expect(index).toContain('className="article-context-filter"');
     expect(index).toContain('name="lei"');
@@ -37,6 +38,7 @@ describe("Central do Artigo administrativa", () => {
     const conflicts = read("components/admin/article-source-conflicts.tsx");
     expect(conflicts).toContain('type="hidden" name="lei"');
     expect(conflicts).toContain('type="hidden" name="ordem_sort"');
+    expect(conflicts).toContain('key === "law" ? "lei" : key === "type" ? "tipo" : key');
     expect(conflicts).toContain("Sugerir lote{filters.law");
   });
 

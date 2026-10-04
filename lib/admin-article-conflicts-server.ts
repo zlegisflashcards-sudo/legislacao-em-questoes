@@ -13,7 +13,7 @@ import {
   type LegisBotConflictGroup,
   type LegisBotConflictQuestion,
 } from "@/lib/legisbot/source-conflicts";
-import { validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
+import { hasIncisoGranularityPending, validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
 import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 
 const PAGE_SIZE = 20;
@@ -89,22 +89,24 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const activeRows = await loadQuestions(true);
   const groups = groupLegisBotSourceConflicts(activeRows);
   const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; validation: StructuralValidation }>();
+  const granularities = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[] }>();
   const byContext = new Map<string, LegisBotConflictQuestion[]>();
   for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
-  for (const [key, questions] of byContext) { const validation = questions.map((question) => validateQuestionStructure(question)).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); }
+  for (const [key, questions] of byContext) { const validation = questions.map((question) => validateQuestionStructure(question)).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); if (questions.some((question) => hasIncisoGranularityPending(question))) granularities.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions }); }
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
-  const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys()])];
+  const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys(), ...granularities.keys()])];
   const [laws, comments] = await Promise.all([lawMap(), commentsFor(groups)]);
   const law = safeFilter(filters.law);
   const type = safeFilter(filters.type, 40);
   const filtered = contextKeys.filter((key) => {
-    const group = legalByKey.get(key); const structuralGroup = structural.get(key); const slug = group?.slug ?? structuralGroup!.slug;
+    const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug;
     const metadata = laws.get(slug);
     const comment = comments.get(key);
-    if (law && !`${slug} ${metadata?.title ?? ""} ${metadata?.code ?? ""}`.toLocaleLowerCase("pt-BR").includes(law)) return false;
+    if (law && slug.toLocaleLowerCase("pt-BR") !== law) return false;
     if (type === "estrutural" && structuralGroup?.validation.status !== "conflict") return false;
     if (type === "possivel_estrutural" && structuralGroup?.validation.status !== "possible_conflict") return false;
     if (type === "legislacao" && !group) return false;
+    if (type === "granularidade" && !granularity) return false;
     if (type === "comentario_sem_analise" && (!comment || !["pendente", "processando"].includes(comment.status))) return false;
     return true;
   });
@@ -113,7 +115,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
   const start = (page - 1) * PAGE_SIZE;
   const items = filtered.slice(start, start + PAGE_SIZE).map((key) => {
-    const group = legalByKey.get(key); const structuralGroup = structural.get(key); const questions = group?.questions ?? structuralGroup!.questions; const slug = group?.slug ?? structuralGroup!.slug; const currentOrder = group?.ordem ?? structuralGroup!.ordem;
+    const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const questions = group?.questions ?? structuralGroup?.questions ?? granularity!.questions; const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug; const currentOrder = group?.ordem ?? structuralGroup?.ordem ?? granularity!.ordem;
     const metadata = laws.get(slug);
     const comment = comments.get(key);
     return {
@@ -127,6 +129,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       versions: group?.versions.size ?? 1,
       comment,
       structuralValidation: structuralGroup?.validation ?? null,
+      editorialGranularityPending: Boolean(granularity),
     };
   });
   const structuralSuggestions = filtered.flatMap((key) => {
@@ -141,8 +144,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     total: filtered.length,
     indicators: {
       pending: contextKeys.length,
-      laws: new Set(contextKeys.map((key) => legalByKey.get(key)?.slug ?? structural.get(key)!.slug)).size,
-      flashcards: contextKeys.reduce((sum, key) => sum + (legalByKey.get(key)?.questions ?? structural.get(key)!.questions).length, 0),
+      laws: new Set(contextKeys.map((key) => legalByKey.get(key)?.slug ?? structural.get(key)?.slug ?? granularities.get(key)!.slug)).size,
+      flashcards: contextKeys.reduce((sum, key) => sum + (legalByKey.get(key)?.questions ?? structural.get(key)?.questions ?? granularities.get(key)!.questions).length, 0),
     },
   };
 }
