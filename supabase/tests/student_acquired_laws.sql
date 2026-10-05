@@ -15,9 +15,9 @@ insert into auth.users (id, email, raw_user_meta_data) values
 set local role service_role;
 
 insert into public.leis (slug, titulo, nome_curto, descricao, codigo, categoria, ativo, ordem, thumbnail_url,norma_originaria_referencia,norma_originaria_data,houve_alteracao_legislativa,ultima_alteracao_referencia,ultima_alteracao_data,situacao_atualizacao) values
-  ('minhas-leis-b', 'Lei Beta', 'Beta', 'Descricao B', 'B-2', 'Categoria B', true, 2, 'https://example.invalid/b.png','Lei nº 2/2020','2020-02-02',true,'Lei nº 22/2026','2026-08-02','em_revisao'),
+  ('minhas-leis-b', 'Lei Beta', 'Beta', 'Descricao B', 'B-2', 'Categoria B', true, 2, 'https://example.invalid/b.png','Lei nº 2/2020','2020-02-02',true,'Lei nº 22/2026','2026-08-02','desatualizado'),
   ('minhas-leis-a', 'Lei Alfa', 'Alfa', 'Descricao A', 'A-1', 'Categoria A', true, 1, null,'Lei nº 1/2015','2015-01-01',false,null,null,'atualizado'),
-  ('minhas-leis-sem-ativa', 'Lei sem fonte ativa', null, null, 'S-3', 'Categoria S', true, 3, null,null,null,false,null,null,'revisao_pendente'),
+  ('minhas-leis-sem-ativa', 'Lei sem fonte ativa', null, null, 'S-3', 'Categoria S', true, 3, null,null,null,false,null,null,'desatualizado'),
   ('minhas-leis-inativa', 'Lei inativa', null, null, 'I-0', 'Categoria I', false, 0, null,null,null,false,null,null,'desatualizado');
 
 insert into public.materiais_leis (lei_id,tipo,titulo,provedor,url_externa,acao,ordem,ativo,quantidade_itens,versao_material,revisado_em,publicado_em,observacao_interna) values
@@ -91,7 +91,7 @@ begin
   if v_rows->0->>'situacao_atualizacao'<>'atualizado' or (v_rows->0->>'houve_alteracao_legislativa')::boolean then raise exception '12c: situacao Alfa invalida'; end if;
   if v_rows->0->>'referencia_normativa_atual'<>'Lei nº 1/2015' or v_rows->0->>'tipo_referencia_normativa'<>'originaria' then raise exception '12d: norma originaria Alfa invalida'; end if;
   if (v_rows->1->>'total_flashcards')::integer<>320 or v_rows->1->>'versao_material'<>'4.1' or v_rows->1->>'publicado_em'<>'2026-08-04' then raise exception '12e: resumo Beta invalido: %',v_rows->1; end if;
-  if v_rows->1->>'situacao_atualizacao'<>'em_revisao' or not (v_rows->1->>'houve_alteracao_legislativa')::boolean then raise exception '12f: situacao Beta invalida'; end if;
+  if v_rows->1->>'situacao_atualizacao'<>'desatualizado' or not (v_rows->1->>'houve_alteracao_legislativa')::boolean then raise exception '12f: situacao Beta invalida'; end if;
   if v_rows->1->>'referencia_normativa_atual'<>'Lei nº 22/2026' or v_rows->1->>'tipo_referencia_normativa'<>'alteracao' then raise exception '12g: ultima alteracao Beta invalida'; end if;
   if v_rows::text like '%minhas-leis-sem-ativa%' then raise exception '13: status inativo concedeu acesso'; end if;
   if v_rows::text like '%minhas-leis-inativa%' then raise exception '14: lei inativa foi retornada'; end if;

@@ -34,6 +34,7 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
       <input type="hidden" name="ultima_alteracao_referencia" value="" />
       <input type="hidden" name="ultima_alteracao_data" value="" />
     </>}
-    <label>Situação de atualização<select name="situacao_atualizacao" defaultValue={text(law?.situacao_atualizacao) || "revisao_pendente"}>{["atualizado", "revisao_pendente", "desatualizado", "em_revisao"].map((item) => <option key={item}>{item}</option>)}</select></label>
+    <label>Situação de atualização<select name="situacao_atualizacao" defaultValue={text(law?.situacao_atualizacao) === "desatualizado" ? "desatualizado" : "atualizado"}><option value="atualizado">Atualizado</option><option value="desatualizado">Desatualizado</option></select></label>
+    {law ? <label>Situação de conferência<select name="situacao_conferencia" defaultValue={text(law.situacao_conferencia)}><option value="">Sem marcação</option><option value="para_conferir">Para conferir</option><option value="conferido">Conferido</option></select></label> : null}
   </>;
 }

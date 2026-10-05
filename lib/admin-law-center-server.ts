@@ -1,23 +1,37 @@
 import "server-only";
 
 import { obterAdministrador } from "@/lib/admin-auth";
+import { adminLawConferenceFilter, adminLawConferenceStatus, type AdminLawConferenceFilter } from "@/lib/admin-law-listing";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
-export type AdminLaw = Record<string, unknown> & { id: number; slug: string; titulo: string; ativo: boolean; status_publicacao: "ativa" | "em_breve" | "inativa" };
+export type AdminLaw = Record<string, unknown> & { id: number; slug: string; titulo: string; codigo?: unknown; ativo: boolean; status_publicacao: "ativa" | "em_breve" | "inativa"; situacao_conferencia: "para_conferir" | "conferido" | null };
+export { ADMIN_LAW_CONFERENCE_FILTERS, adminLawConferenceFilter, type AdminLawConferenceFilter } from "@/lib/admin-law-listing";
 
 async function requireAdmin() {
   if (!await obterAdministrador()) throw new Error("Autenticação administrativa obrigatória.");
 }
 
-export async function listAdminLawCenterLaws(query = "") {
+export async function listAdminLawCenterLaws({ query = "", conference = "todas", page = 1, limit = 25 }: { query?: string; conference?: string; page?: number; limit?: number } = {}) {
   await requireAdmin();
   const db = getSupabaseServerClient();
-  let request = db.from("leis").select("id,slug,titulo,nome_curto,codigo,categoria,ativo,status_publicacao,ordem");
+  const selectedConference = adminLawConferenceFilter(conference);
+  let request = db.from("leis").select("id,slug,titulo,nome_curto,codigo,categoria,ativo,status_publicacao,situacao_conferencia,ordem", { count: "exact" });
   const normalized = query.trim().slice(0, 120).replace(/[%_,()]/g, " ").replace(/\s+/g, " ");
   if (normalized) request = request.or(`slug.ilike.%${normalized}%,titulo.ilike.%${normalized}%,nome_curto.ilike.%${normalized}%,codigo.ilike.%${normalized}%`);
-  const result = await request.order("ordem").order("titulo").limit(100);
+  const persistedConference = adminLawConferenceStatus(selectedConference);
+  if (persistedConference) request = request.eq("situacao_conferencia", persistedConference);
+  const safeLimit = Math.min(Math.max(Math.trunc(limit) || 25, 1), 100);
+  let safePage = Math.max(Math.trunc(page) || 1, 1);
+  let result = await request.order("ordem").order("titulo").range((safePage - 1) * safeLimit, safePage * safeLimit - 1);
   if (result.error) throw new Error("Não foi possível carregar as leis.");
-  return (result.data ?? []) as AdminLaw[];
+  const total = result.count ?? 0;
+  const pages = Math.max(1, Math.ceil(total / safeLimit));
+  if (safePage > pages) {
+    safePage = pages;
+    result = await request.order("ordem").order("titulo").range((safePage - 1) * safeLimit, safePage * safeLimit - 1);
+    if (result.error) throw new Error("Não foi possível carregar as leis.");
+  }
+  return { laws: (result.data ?? []) as AdminLaw[], total, page: safePage, pages, conference: selectedConference };
 }
 
 export async function getAdminLawBySlug(slug: string) {

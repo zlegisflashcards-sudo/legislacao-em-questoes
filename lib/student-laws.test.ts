@@ -11,7 +11,7 @@ const page = readFileSync("app/minhas-leis/page.tsx", "utf8");
 
 const laws: StudentLaw[] = [
   { id: 1, slug: "cf", titulo: "Constituição Federal", nomeCurto: "CF", descricao: null, codigo: "CF/88", categoria: "Constitucional", thumbnailUrl: null, ordem: 0, totalFlashcards: 845, versaoMaterial: "4.1", revisadoEm: "2026-08-06", publicadoEm: "2026-08-06", situacaoAtualizacao: "atualizado", houveAlteracaoLegislativa: true, referenciaNormativaAtual: "EC 138/2025", tipoReferenciaNormativa: "alteracao" },
-  { id: 2, slug: "cpp", titulo: "Código de Processo Penal", nomeCurto: "CPP", descricao: null, codigo: "DL 3.689", categoria: "Processo Penal", thumbnailUrl: null, ordem: 1, totalFlashcards: 0, versaoMaterial: null, revisadoEm: null, publicadoEm: null, situacaoAtualizacao: "revisao_pendente", houveAlteracaoLegislativa: false, referenciaNormativaAtual: "Decreto-Lei nº 3.689/1941", tipoReferenciaNormativa: "originaria" },
+  { id: 2, slug: "cpp", titulo: "Código de Processo Penal", nomeCurto: "CPP", descricao: null, codigo: "DL 3.689", categoria: "Processo Penal", thumbnailUrl: null, ordem: 1, totalFlashcards: 0, versaoMaterial: null, revisadoEm: null, publicadoEm: null, situacaoAtualizacao: "desatualizado", houveAlteracaoLegislativa: false, referenciaNormativaAtual: "Decreto-Lei nº 3.689/1941", tipoReferenciaNormativa: "originaria" },
 ];
 
 const rpcLaw = {
@@ -36,9 +36,7 @@ describe("dados das leis adquiridas", () => {
 
   it("centraliza os rótulos editoriais sem distorcer os valores", () => {
     expect(studentLawStatusLabel("atualizado")).toBe("Material atualizado");
-    expect(studentLawStatusLabel("revisao_pendente")).toBe("Revisão pendente");
     expect(studentLawStatusLabel("desatualizado")).toBe("Material desatualizado");
-    expect(studentLawStatusLabel("em_revisao")).toBe("Material em revisão");
     expect(studentLawReferenceLabel("originaria")).toBe("Norma originária");
     expect(studentLawReferenceLabel("alteracao")).toBe("Última alteração incorporada");
   });

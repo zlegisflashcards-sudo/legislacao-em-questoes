@@ -26,7 +26,8 @@ export const MATERIAL_TYPES = ["flashcards", "video", "pdf", "tutorial", "audio"
 export const MATERIAL_PROVIDERS = ["google_drive", "youtube", "externo", "supabase_storage"] as const;
 export const MATERIAL_ACTIONS = ["abrir", "baixar", "assistir"] as const;
 export const PRODUCT_TYPES = ["lei_avulsa", "combo", "edital", "assinatura", "outro"] as const;
-export const LAW_UPDATE_STATUSES = ["atualizado", "revisao_pendente", "desatualizado", "em_revisao"] as const;
+export const LAW_UPDATE_STATUSES = ["atualizado", "desatualizado"] as const;
+export const LAW_CONFERENCE_STATUSES = ["para_conferir", "conferido"] as const;
 export const EDITORIAL_UPDATE_TYPES = [
   "alteracao_legislativa", "nova_versao_flashcards", "novas_questoes", "correcao_questoes",
   "correcao_flashcards", "melhoria_material", "outro",

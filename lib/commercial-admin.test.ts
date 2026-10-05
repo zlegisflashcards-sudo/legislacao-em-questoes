@@ -4,6 +4,7 @@ import {
   CommercialValidationError,
   EDITORIAL_IMPORTANCE,
   EDITORIAL_UPDATE_TYPES,
+  LAW_CONFERENCE_STATUSES,
   LAW_UPDATE_STATUSES,
   idList,
   limitFrom,
@@ -27,6 +28,7 @@ const page = readFileSync("app/admin/comercial/page.tsx", "utf8");
 const productVideoMigration = readFileSync("supabase/migrations/20260807210000_add_product_demo_video.sql", "utf8");
 const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
 const postSaleFinalOutcomeMigration = readFileSync("supabase/migrations/20260815100000_add_purchase_post_sale_final_outcome.sql", "utf8");
+const lawConferenceNullableMigration = readFileSync("supabase/migrations/20261005124000_allow_unmarked_law_conference_status.sql", "utf8");
 
 describe("validação da administração comercial", () => {
   it("aceita slug normalizado e rejeita valores perigosos", () => {
@@ -50,9 +52,18 @@ describe("validação da administração comercial", () => {
     expect(() => optionalIsoDate("2026-02-30", "Data")).toThrow(CommercialValidationError);
     expect(optionalNonNegativeInteger(0, "Quantidade")).toBe(0);
     expect(() => optionalNonNegativeInteger(-1, "Quantidade")).toThrow(CommercialValidationError);
-    expect(LAW_UPDATE_STATUSES).toContain("revisao_pendente");
+    expect(LAW_UPDATE_STATUSES).toEqual(["atualizado", "desatualizado"]);
+    expect(LAW_CONFERENCE_STATUSES).toEqual(["para_conferir", "conferido"]);
     expect(EDITORIAL_UPDATE_TYPES).toContain("alteracao_legislativa");
     expect(EDITORIAL_IMPORTANCE).toEqual(["informativa", "recomendada", "essencial"]);
+  });
+
+  it("permite que a situação de conferência permaneça sem marcação", () => {
+    const validation = server.slice(server.indexOf("function validateLawData"), server.indexOf("function validateMaterialData"));
+    expect(validation).toContain('value == null || value === "" ? null');
+    expect(lawConferenceNullableMigration).toContain("drop not null");
+    expect(lawConferenceNullableMigration).toContain("drop default");
+    expect(lawConferenceNullableMigration).toContain("situacao_conferencia is null or");
   });
 
   it("aceita URLs normais do YouTube e as normaliza para o player", () => {

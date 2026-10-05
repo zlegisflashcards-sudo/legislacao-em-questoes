@@ -8,8 +8,9 @@ describe("Central administrativa por lei", () => {
     for (const path of ["app/admin/leis/page.tsx", "app/admin/leis/[slug]/layout.tsx", "app/admin/leis/[slug]/page.tsx", "app/admin/leis/[slug]/dados/page.tsx", "app/admin/leis/[slug]/estrutura/page.tsx"]) expect(existsSync(path)).toBe(true);
     const list = read("app/admin/leis/page.tsx");
     const shell = read("app/admin/leis/[slug]/layout.tsx");
-    expect(list).toContain("listAdminLawCenterLaws(query)");
-    expect(list).toContain("Abrir central");
+    expect(list).toContain("listAdminLawCenterLaws({ query");
+    expect(list).toContain("Abrir questões");
+    expect(list).toContain("/questoes");
     expect(list).toContain("publicationStatusLabel(law.status_publicacao)");
     expect(list).not.toContain("{law.slug} ·");
     expect(read("lib/admin-law-center-server.ts")).toContain("status_publicacao");
@@ -44,6 +45,23 @@ describe("Central administrativa por lei", () => {
     expect(overview).toContain("LawOverviewCards");
     expect(read("components/admin/law-overview-cards.tsx")).toContain("law-center-operation-card");
     expect(overview).not.toContain("Math.random");
+  });
+
+  it("filtra a conferência pelo status administrativo persistido antes de paginar", () => {
+    const list = read("app/admin/leis/page.tsx");
+    const server = read("lib/admin-law-center-server.ts");
+    const listing = server.slice(server.indexOf("export async function listAdminLawCenterLaws"), server.indexOf("export async function getAdminLawBySlug"));
+    const filters = read("components/admin/admin-law-list-filters.tsx");
+    expect(filters).toContain('name="conferencia"');
+    expect(list).toContain("Todas");
+    expect(list).toContain("Para conferir");
+    expect(list).toContain("Conferida");
+    expect(list).toContain("page: pageNumber(params.page)");
+    expect(listing).toContain('select("id,slug,titulo,nome_curto,codigo,categoria,ativo,status_publicacao,situacao_conferencia,ordem", { count: "exact" })');
+    expect(listing).toContain('request.eq("situacao_conferencia", persistedConference)');
+    expect(listing).not.toContain('from("admin_law_overview_checks")');
+    expect(listing).toContain("adminLawConferenceStatus");
+    expect(filters).toContain("requestSubmit");
   });
 
   it("mantém a navegação desktop e mobile na ordem operacional dos cards", () => {

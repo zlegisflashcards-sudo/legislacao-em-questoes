@@ -9,7 +9,7 @@ export default async function AdminLawOverviewPage({ params }: { params: Promise
   const [overview, completed] = await Promise.all([getAdminLawOverview(law.id), getAdminLawOverviewChecks(law.id)]);
   const base = `/admin/leis/${encodeURIComponent(law.slug)}`;
   const situation = String(law.situacao_atualizacao ?? "");
-  const editorialWarning = situation === "desatualizado" ? "Esta lei está marcada como desatualizada. Revise o conteúdo antes de novas publicações." : situation === "revisao_pendente" || situation === "em_revisao" ? "Esta lei está marcada para revisão. Verifique o conteúdo antes de novas publicações." : null;
+  const editorialWarning = situation === "desatualizado" ? "Esta lei está marcada como desatualizada. Revise o conteúdo antes de novas publicações." : law.situacao_conferencia === "para_conferir" ? "Esta lei está marcada para conferir. Verifique o conteúdo antes de novas publicações." : null;
   const cards = [
     { id: "estrutura" as const, label: "Estrutura", value: overview.structure, description: "nós estruturais", action: "Organizar estrutura", href: `${base}/estrutura` },
     { id: "materiais" as const, label: "Legislação", value: overview.materials, description: "conteúdos legislativos e PDFs ativos", action: "Gerenciar legislação", href: `${base}/materiais` },

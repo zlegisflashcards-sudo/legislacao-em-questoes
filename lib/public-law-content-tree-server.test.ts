@@ -45,7 +45,7 @@ describe("loader público da árvore de conteúdo", () => {
   it("usa a norma originária e informa pendência para os demais estados editoriais", async () => {
     const summary = await loadPublicLawCommercialSummary({ lawId: 1, db: database({
       ...rows,
-      leis: [{ id: 1, situacao_atualizacao: "em_revisao", houve_alteracao_legislativa: false, norma_originaria_referencia: "Lei nº 2/2001" }],
+      leis: [{ id: 1, situacao_atualizacao: "desatualizado", houve_alteracao_legislativa: false, norma_originaria_referencia: "Lei nº 2/2001" }],
     }) });
     expect(summary?.legislation).toEqual({ status: "pending", reference: "Lei nº 2/2001" });
   });
