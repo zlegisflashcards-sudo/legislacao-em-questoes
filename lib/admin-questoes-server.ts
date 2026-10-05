@@ -55,8 +55,14 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
 export async function listAdminQuestionConference(lawSlug: string, structureId: unknown) {
   await requireAdmin();
   const current = await law(lawSlug);
-  const rootId = id(structureId);
   const nodes = await structure(current.id);
+  const rootId = optionalId(structureId);
+  if (rootId === null) {
+    if (nodes.length) throw new AdminQuestoesError(422, "Selecione um bloco estrutural para esta lei.");
+    const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).order("ordem").order("id");
+    if (result.error) fail("listar_questoes_conferencia_lei", result.error);
+    return { law: current, block: { id: null, nome: "Lei completa", complete_law: true }, questions: result.data ?? [] };
+  }
   const ids = descendantStructureIds(nodes, rootId);
   if (!ids.length) throw new AdminQuestoesError(404, "Bloco estrutural não encontrado para esta lei.");
   const root = nodes.find((node) => node.id === rootId);
@@ -68,17 +74,30 @@ export async function listAdminQuestionConference(lawSlug: string, structureId: 
 export async function getAdminQuestionStructureReviews(lawSlug: string) {
   await requireAdmin();
   const current = await law(lawSlug);
-  const result = await db().from("admin_question_structure_reviews").select("structure_id").eq("lei_id", current.id);
+  const [result, lawReview] = await Promise.all([
+    db().from("admin_question_structure_reviews").select("structure_id").eq("lei_id", current.id),
+    db().from("admin_question_law_reviews").select("lei_id").eq("lei_id", current.id).maybeSingle(),
+  ]);
   if (result.error) fail("carregar_revisoes_estruturais", result.error);
-  return { reviewed: (result.data ?? []).map((row) => Number(row.structure_id)).filter((value) => Number.isSafeInteger(value)) };
+  if (lawReview.error) fail("carregar_revisao_lei", lawReview.error);
+  return { reviewed: (result.data ?? []).map((row) => Number(row.structure_id)).filter((value) => Number.isSafeInteger(value)), law_reviewed: Boolean(lawReview.data) };
 }
 export async function setAdminQuestionStructureReview(body: Record<string, unknown>) {
   const admin = await obterAdministrador();
   if (!admin) throw new AdminQuestoesError(401, "Autenticação administrativa obrigatória.");
   const current = await law(String(body.law_slug));
-  const structureId = id(body.structure_id);
-  await validateStructure(current.id, structureId);
+  const structureId = optionalId(body.structure_id);
   if (typeof body.reviewed !== "boolean") throw new AdminQuestoesError(400, "Marcação de revisão inválida.");
+  if (structureId === null) {
+    const nodes = await structure(current.id);
+    if (nodes.length) throw new AdminQuestoesError(422, "A marcação da lei completa só está disponível quando não há estrutura cadastrada.");
+    const result = body.reviewed
+      ? await db().from("admin_question_law_reviews").upsert({ lei_id: current.id, reviewed_at: new Date().toISOString(), reviewed_by: admin.id }, { onConflict: "lei_id" })
+      : await db().from("admin_question_law_reviews").delete().eq("lei_id", current.id);
+    if (result.error) fail("salvar_revisao_lei", result.error);
+    return { structure_id: null, reviewed: body.reviewed };
+  }
+  await validateStructure(current.id, structureId);
   const result = body.reviewed
     ? await db().from("admin_question_structure_reviews").upsert({ lei_id: current.id, structure_id: structureId, reviewed_at: new Date().toISOString(), reviewed_by: admin.id }, { onConflict: "lei_id,structure_id" })
     : await db().from("admin_question_structure_reviews").delete().eq("lei_id", current.id).eq("structure_id", structureId);
@@ -107,7 +126,7 @@ export async function conferenceArticleLink(lawSlug: string, orderValue: unknown
 }
 type ConferenceBatchInput = { pergunta?: unknown; resposta?: unknown; justificativa?: unknown; assunto?: unknown; ordem?: unknown; legislacao?: unknown };
 function conferenceBatchDrafts(current: Law, structureId: unknown, rows: unknown) {
-  const target = id(structureId);
+  const target = optionalId(structureId);
   const values = Array.isArray(rows) ? rows : [];
   if (!values.length || values.length > 200) throw new AdminQuestoesError(400, "Informe entre 1 e 200 questões para adicionar.");
   return { target, drafts: values.map((row, index) => {
@@ -117,6 +136,8 @@ function conferenceBatchDrafts(current: Law, structureId: unknown, rows: unknown
 }
 async function validateConferenceBatch(current: Law, structureId: unknown, rows: unknown) {
   const { target, drafts } = conferenceBatchDrafts(current, structureId, rows);
+  const nodes = await structure(current.id);
+  if (target === null && nodes.length) throw new AdminQuestoesError(422, "Selecione um bloco estrutural para esta lei.");
   await validateStructure(current.id, target);
   const local = new Set<string>();
   for (const item of drafts) { const key = `${item.ordem}\u0000${item.pergunta.trim()}`; if (local.has(key)) throw new AdminQuestoesError(409, "A tabela possui linhas duplicadas com a mesma ordem e enunciado."); local.add(key); }

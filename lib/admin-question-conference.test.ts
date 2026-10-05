@@ -34,15 +34,23 @@ describe("modo conferência administrativo", () => {
     expect(route).toContain('searchParams.get("mode") === "conference"');
   });
 
+  it("permite a fila da lei completa somente quando não há estrutura", () => {
+    expect(server).toContain('if (rootId === null)');
+    expect(server).toContain('if (nodes.length) throw new AdminQuestoesError(422, "Selecione um bloco estrutural para esta lei.")');
+    expect(server).toContain('block: { id: null, nome: "Lei completa", complete_law: true }');
+    expect(client).toContain('if (structureId !== null) params.set("structure_id", String(structureId))');
+    expect(client).toContain('structure_id: structureId');
+  });
+
   it("cria em lote somente no bloco atual, com validação de duplicidade e UUIDs novos", () => {
     for (const expected of ["conferenceArticleContext", "previewConferenceQuestionBatch", "createConferenceQuestionBatch", "validateConferenceBatch", "sameImportIdentity", "insert(drafts.map", 'action: "criar_lote_conferencia"']) expect(`${server}\n${route}\n${client}`).toContain(expected);
   });
 
   it("reutiliza salvar, prévia e confirmação de exclusão sem atalhos em campos editáveis", () => {
-    for (const expected of ["action: \"atualizar\"", "action: \"resumo_exclusao_questao\"", "action: \"excluir_questao\"", "Ctrl + Enter", "isEditingTarget", "Há alterações não salvas", "Conferir erradas deste bloco", "keepOutsideFilter", "Duplicar", "Nova questão", "Adicionar por tabela", "conference-context", "pasteTable", "+ Adicionar linha"]) expect(client).toContain(expected);
+    for (const expected of ["action: \"atualizar\"", "action: \"resumo_exclusao_questao\"", "action: \"excluir_questao\"", "Ctrl + Enter", "isEditingTarget", "Há alterações não salvas", "Conferir erradas", "keepOutsideFilter", "Duplicar", "Nova questão", "Adicionar por tabela", "conference-context", "pasteTable", "+ Adicionar linha"]) expect(client).toContain(expected);
   });
 
-  it("mantém revisão manual isolada por lei e bloco", () => {
+  it("mantém conferência manual isolada por lei e bloco", () => {
     expect(server).toContain("getAdminQuestionStructureReviews");
     expect(server).toContain("setAdminQuestionStructureReview");
     expect(server).toContain('await validateStructure(current.id, structureId)');
@@ -51,8 +59,20 @@ describe("modo conferência administrativo", () => {
     const reviewMigration = readFileSync("supabase/migrations/20261003100000_add_admin_question_structure_reviews.sql", "utf8");
     expect(reviewMigration).toContain("primary key (lei_id, structure_id)");
     expect(reviewMigration).toContain("foreign key (structure_id, lei_id)");
-    expect(questionsPage).toContain("Marcar revisão");
+    expect(questionsPage).toContain("Marcar como conferido");
+    expect(questionsPage).toContain("✓ Conferido");
     expect(questionsPage).toContain("stopPropagation");
+  });
+
+  it("persiste a marcação da lei sem estrutura separadamente", () => {
+    expect(server).toContain('db().from("admin_question_law_reviews")');
+    expect(server).toContain('A marcação da lei completa só está disponível quando não há estrutura cadastrada.');
+    expect(questionsPage).toContain("law_reviewed");
+    expect(questionsPage).toContain("Lei completa");
+    const lawReviewMigration = readFileSync("supabase/migrations/20261005110000_add_admin_question_law_reviews.sql", "utf8");
+    expect(lawReviewMigration).toContain("lei_id bigint primary key");
+    expect(lawReviewMigration).toContain("enable row level security");
+    expect(lawReviewMigration).toContain("service_role");
   });
 
   it("abre a Central do Artigo somente para contexto confiável, em nova guia", () => {
