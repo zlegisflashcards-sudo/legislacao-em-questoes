@@ -32,7 +32,7 @@ export function AdminQuestionEditor({ lawName, nodes, value, original, editing, 
       <section><h3>Estrutura da questão</h3><div className="question-structure-grid">
         <label>Estrutura<select value={value.structure_id ?? ""} onChange={(event) => update("structure_id", event.target.value ? Number(event.target.value) : null)}><option value="">Sem estrutura</option>{options.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
         <label>Ordem<input required inputMode="decimal" value={value.ordem} onChange={(event) => update("ordem", event.target.value)} /></label>
-        <label>Resposta<select value={value.resposta} onChange={(event) => update("resposta", event.target.value as QuestionAnswer)}>{QUESTION_ANSWERS.map((answer) => <option key={answer}>{answer}</option>)}</select></label>
+        <label>Resposta<select required value={value.resposta} onChange={(event) => update("resposta", event.target.value as QuestionAnswer)}><option value="" disabled>Selecione</option>{QUESTION_ANSWERS.map((answer) => <option key={answer}>{answer}</option>)}</select></label>
       </div></section>
       <section><h3>Conteúdo</h3>
         <QuestionRichEditor label="Pergunta" required value={value.pergunta} onChange={(next) => update("pergunta", next)} />
