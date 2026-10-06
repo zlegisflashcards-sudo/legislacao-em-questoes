@@ -58,9 +58,16 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
 
 export async function exportLawApkg(slug: string) {
   const { listAdminQuestions } = await import("./admin-questoes-server");
-  const { law, questions, structure } = await listAdminQuestions(slug);
+  const { law, questions, structure, questionCount } = await listAdminQuestions(slug);
   if (!questions.length) throw new Error("Esta lei ainda não possui questões disponíveis para exportação.");
-  return buildLawApkg(law, questions, structure);
+  const exported = await buildLawApkg(law, questions, structure);
+  return { ...exported, found: questionCount, exported: exported.notes };
+}
+
+export async function summarizeLawApkgExport(slug: string) {
+  const { listAdminQuestions } = await import("./admin-questoes-server");
+  const { questions, questionCount } = await listAdminQuestions(slug);
+  return { found: questionCount, exported: questions.length, complete: questionCount > 0 && questionCount === questions.length };
 }
 
 export async function exportLawContentApkg(slug: string) {

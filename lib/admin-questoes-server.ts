@@ -15,12 +15,14 @@ import { getArticleContext } from "@/lib/admin-article-center-server";
 import { createHash } from "node:crypto";
 import { extractLawShadowUnits, googleDocumentId, pastedLawTextToDocument, readGoogleDocument, readPublicGoogleDocument, type LawShadowUnitDraft } from "@/lib/law-shadow-doc";
 import { parseQuestionOrder, validateQuestionStructure } from "@/lib/question-structure-consistency";
+import { collectPages } from "@/lib/law-question-pagination";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
 type Law = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null };
 const types: StructureType[] = creatableQuestionStructureTypes;
 const questionFields = "id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo,created_at,updated_at";
+const questionExportPageSize = 500;
 const db = () => getSupabaseServerClient();
 async function requireAdmin() { const user = await obterAdministrador(); if (!user) throw new AdminQuestoesError(401, "Autenticação administrativa obrigatória."); return user; }
 function fail(context: string, error: { code?: string; message?: string; details?: unknown; hint?: string } | null): never { console.error("Falha na administração de questões", { context, code: error?.code ?? null, message: error?.message ?? null, details: error?.details ?? null, hint: error?.hint ?? null }); if (context.includes("sombra") && (error?.code === "42P01" || error?.code === "PGRST205")) throw new AdminQuestoesError(503, "Artigo Sombra indisponível: aplique a migration 20261005140000_create_law_question_shadows.sql antes de usar a análise."); if (context.includes("sombra") && error?.code === "42703") throw new AdminQuestoesError(503, "Artigo Sombra precisa da atualização para texto colado: aplique a migration 20261005150000_add_pasted_text_to_law_question_shadows.sql."); throw new AdminQuestoesError(502, "Não foi possível concluir a operação no banco de questões."); }
@@ -41,7 +43,22 @@ async function rejectDuplicateQuestion(leiId: number, d: QuestionDraft, exceptId
 export async function listAdminQuestionLaws() { await requireAdmin(); const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo").eq("ativo", true).order("ordem").order("titulo"); if (r.error) fail("listar_leis", r.error); return r.data ?? []; }
 export async function listLawQuestionScopes(lawSlug: string) { await requireAdmin(); const current = await law(lawSlug); const [scopes, nodes, questions, links] = await Promise.all([db().from("recortes_leis").select("id,nome,descricao,ativo,status_publicacao,acesso_gratuito,created_at,updated_at").eq("lei_id", current.id).order("nome"), structure(current.id), db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true), db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id)]); if (scopes.error) fail("listar_recortes", scopes.error); if (questions.error) fail("contar_recortes", questions.error); if (links.error) fail("listar_estruturas_recortes", links.error); const scopeRows = scopes.data ?? []; const questionRows = questions.data ?? []; return { law: current, structure: nodes, questions: questionRows, unstructured_questions: questionRows.filter((question) => question.structure_id === null).length, recortes: summarizeLawQuestionScopes(scopeRows, links.data ?? [], nodes, questionRows) }; }
 export async function saveLawQuestionScope(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const name = text(body.nome, "Nome do recorte"); const description = typeof body.descricao === "string" ? body.descricao.trim() : ""; const ids = Array.isArray(body.structure_ids) ? body.structure_ids.map(Number).filter((item) => Number.isSafeInteger(item) && item > 0) : []; const suppliedId = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null; const status = body.status_publicacao === "em_breve" || body.status_publicacao === "inativa" ? body.status_publicacao : "ativa"; const free = body.acesso_gratuito === true; const result = await db().rpc("admin_salvar_recorte_lei", { p_recorte_id: suppliedId, p_lei_id: current.id, p_nome: name, p_descricao: description, p_ativo: status !== "inativa", p_status_publicacao: status, p_acesso_gratuito: free, p_structure_ids: ids }); if (result.error || !result.data) fail("salvar_recorte", result.error); return { id: result.data, lei_id: current.id, nome: name, descricao: description, status_publicacao: status, acesso_gratuito: free, structure_ids: ids }; }
-export async function listQuestionContent(lawSlug: string) { const current = await law(lawSlug); const r = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).order("ordem").order("created_at").order("id"); if (r.error) fail("listar_questoes", r.error); return { law: current, questions: r.data ?? [], structure: await structure(current.id) }; }
+export async function listQuestionContent(lawSlug: string) {
+  const current = await law(lawSlug);
+  const [questions, count, nodes] = await Promise.all([
+    collectPages(async (from, to) => {
+      const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).order("ordem").order("created_at").order("id").range(from, to);
+      if (result.error) fail("listar_questoes", result.error);
+      return result.data ?? [];
+    }, questionExportPageSize),
+    db().from("questions").select("id", { count: "exact", head: true }).eq("lei_id", current.id).eq("ativo", true),
+    structure(current.id),
+  ]);
+  if (count.error) fail("contar_questoes", count.error);
+  const questionCount = count.count ?? 0;
+  if (questions.length !== questionCount) throw new AdminQuestoesError(502, "Não foi possível carregar todas as questões para a exportação.");
+  return { law: current, questions, structure: nodes, questionCount };
+}
 export async function listAdminQuestions(lawSlug: string) { await requireAdmin(); return listQuestionContent(lawSlug); }
 export async function searchAdminQuestions(input: { lawSlug: string; query?: unknown; filter?: unknown; page?: unknown; limit?: unknown; structureId?: unknown; article?: unknown }) {
   await requireAdmin(); const current = await law(input.lawSlug); const questionId = adminQuestionSearchId(input.query); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit; const nodes = await structure(current.id); const structureId = input.structureId ? id(input.structureId) : null; const structureIds = structureId ? descendantStructureIds(nodes, structureId) : [];

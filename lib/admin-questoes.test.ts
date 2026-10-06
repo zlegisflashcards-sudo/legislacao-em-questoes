@@ -107,7 +107,15 @@ describe("administração de Legis Questões", () => {
     const route = readFileSync("app/api/admin/questoes/exportar-apkg/route.ts", "utf8");
     expect(panel).toContain("Exportar APKG");
     expect(panel).toContain("/api/admin/questoes/exportar-apkg?slug=");
+    expect(panel).toContain("Questões encontradas:");
+    expect(panel).toContain("resumo=1");
+    expect(panel).toContain("disabled={!summary?.complete}");
     expect(route).toContain("exportLawApkg");
+    expect(route).toContain("summarizeLawApkgExport");
+    expect(route).toContain("X-APKG-Questions-Exported");
+    expect(route).toContain("status: 409");
+    expect(readFileSync("lib/admin-questoes-server.ts", "utf8")).toContain("collectPages(async (from, to)");
+    expect(readFileSync("lib/admin-questoes-server.ts", "utf8")).toContain("questionExportPageSize");
     expect(route).toContain('export const runtime = "nodejs"');
   });
 

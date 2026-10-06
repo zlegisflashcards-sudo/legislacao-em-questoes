@@ -4,14 +4,14 @@ import { collectPages } from "./law-question-pagination";
 
 describe("contextos comerciais de estudo por lei", () => {
   it("percorre todas as páginas de questões, mesmo quando a fonte limita a resposta", async () => {
-    const questions = Array.from({ length: 590 }, (_, index) => index + 1);
+    const questions = Array.from({ length: 1350 }, (_, index) => index + 1);
     const pages: Array<[number, number]> = [];
     const result = await collectPages(async (from, to) => {
       pages.push([from, to]);
       return questions.slice(from, to + 1);
-    }, 200);
-    expect(result).toHaveLength(590);
-    expect(pages).toEqual([[0, 199], [200, 399], [400, 599]]);
+    }, 500);
+    expect(result).toHaveLength(1350);
+    expect(pages).toEqual([[0, 499], [500, 999], [1000, 1499]]);
   });
 
   it("reconhece uma única lei completa", () => {

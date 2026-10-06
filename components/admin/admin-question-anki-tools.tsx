@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sanitizeLegisQuestoesHtml } from "@/lib/legis-questoes-html";
 import type { CreatableQuestionStructureType } from "@/lib/questoes-structure";
 
@@ -12,6 +12,7 @@ type AnkiPreview = { total: number; errors: ImportDiagnostic[]; warnings: Import
 type AnkiResult = { lidas: number; importadas: number; atualizadas: number; duplicadas: number; conflitos: number; avisos: ImportWarning[]; erros: number };
 type ApkgPreview = AnkiPreview & { apkg: { rootDecks: string[]; subdecks: string[]; notes: number; cards: number; recognizedModels: string[]; unrecognizedModels: Array<{ name: string; fields: string[]; notes: number }>; media: Array<{ name: string; referenced: boolean }>; samples: Array<{ pergunta: string; resposta: string; justificativa: string; legislacao: string; ordem: string; deck: string[] }> } };
 type StructureMappings = Record<string, number | "new">;
+type ApkgExportSummary = { found: number; exported: number; complete: boolean };
 
 async function api<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
@@ -23,10 +24,22 @@ async function api<T>(url: string, init?: RequestInit) {
 export function AdminQuestionAnkiTools({ lawSlug, lawName, onImported }: { lawSlug: string; lawName: string; onImported?: () => Promise<void> }) {
   return <section className="grid gap-5">
     <header className="law-center-page-heading"><div><p className="law-center-kicker">Anki</p><h2>Importação e exportação</h2><p>Use os mesmos parsers, validações e formatos do Admin de Questões.</p></div></header>
-    <article className="commercial-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2>Exportar Anki</h2><p className="text-sm text-slate-600">Gera o APKG da lei com o exportador administrativo atual.</p></div><a className="admin-button secondary" href={`/api/admin/questoes/exportar-apkg?slug=${encodeURIComponent(lawSlug)}`}>Exportar APKG</a></div></article>
+    <ApkgExport lawSlug={lawSlug} />
     <AnkiImport key={lawSlug} lawSlug={lawSlug} lawName={lawName} onImported={onImported} />
     <ApkgImport lawSlug={lawSlug} lawName={lawName} />
   </section>;
+}
+
+function ApkgExport({ lawSlug }: { lawSlug: string }) {
+  const [summary, setSummary] = useState<ApkgExportSummary | null>(null); const [error, setError] = useState("");
+  const downloadUrl = `/api/admin/questoes/exportar-apkg?slug=${encodeURIComponent(lawSlug)}`;
+  useEffect(() => {
+    let active = true;
+    setSummary(null); setError("");
+    void api<ApkgExportSummary>(`${downloadUrl}&resumo=1`).then((result) => { if (active) setSummary(result); }).catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : "Não foi possível conferir as questões da exportação."); });
+    return () => { active = false; };
+  }, [downloadUrl]);
+  return <article className="commercial-card"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2>Exportar Anki</h2><p className="text-sm text-slate-600">Gera o APKG da lei com o exportador administrativo atual.</p>{summary ? <p className={summary.complete ? "text-sm text-emerald-700" : "admin-alert error"}><strong>Questões encontradas: {summary.found} / Questões exportadas: {summary.exported}</strong>{summary.complete ? "" : " A exportação está bloqueada porque a contagem não confere."}</p> : <p className="text-sm text-slate-600">Conferindo questões para exportação…</p>}{error ? <p className="admin-alert error" role="alert">{error}</p> : null}</div><button type="button" className="admin-button secondary" disabled={!summary?.complete} onClick={() => { window.location.assign(downloadUrl); }}>Exportar APKG</button></div></article>;
 }
 
 function StructureDestinations({ preview, lawName, mappings, onMapping }: { preview: AnkiPreview; lawName: string; mappings: StructureMappings; onMapping: (key: string, value: number | "new") => void }) {
