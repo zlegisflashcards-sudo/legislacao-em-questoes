@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
-import { adminCookieNames, exigirAdministrador, usuarioEhAdministrador } from "@/lib/admin-auth";
+import { ADMIN_REFRESH_COOKIE_MAX_AGE, adminCookieNames, adminCookieOptions, exigirAdministrador, usuarioEhAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { sanitizarComentarioHtml } from "@/lib/legisbot/sanitize-comment-html";
 import { possuiTextoLegislacao, sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
@@ -41,9 +41,9 @@ export async function entrarAdministrador(_: AdminActionState, formData: FormDat
     return { ok: false, message: "Este usuário não possui acesso administrativo." };
   }
   const store = await cookies();
-  const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+  const options = adminCookieOptions();
   store.set(adminCookieNames.access, data.session.access_token, { ...options, maxAge: data.session.expires_in });
-  store.set(adminCookieNames.refresh, data.session.refresh_token, { ...options, maxAge: 60 * 60 * 24 * 30 });
+  store.set(adminCookieNames.refresh, data.session.refresh_token, { ...options, maxAge: ADMIN_REFRESH_COOKIE_MAX_AGE });
   redirect("/admin");
 }
 
