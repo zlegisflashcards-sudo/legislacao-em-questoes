@@ -10,6 +10,7 @@ export class ArticleContextStandardizationError extends Error {
 }
 
 type Changes = Partial<Record<"assunto" | "ordem" | "legislacao", string>>;
+type GranularityDecision = "paragrafo_inteiro" | "recorte_inciso";
 type ContextRow = { id: string; titulo: string | null; assunto: string | null; ordem: string; legislacao: string | null };
 const validSlug = (value: unknown) => typeof value === "string" && /^[a-z0-9-]{1,160}$/i.test(value.trim());
 const validOrder = (value: unknown) => typeof value === "string" && /^[A-Za-z0-9._-]{1,20}$/.test(value.trim());
@@ -26,8 +27,10 @@ function parse(body: Record<string, unknown>) {
     const value = (raw as Record<string, unknown>)[field];
     if (typeof value === "string" && value.trim()) changes[field] = parseQuestionFieldChange(field, value) as string;
   }
-  if (!Object.keys(changes).length) throw new ArticleContextStandardizationError(400, "Informe ao menos um campo para padronizar.");
-  return { lawSlug, slug, ordem, changes };
+  const rawDecision = body.granularity_decision;
+  const granularityDecision: GranularityDecision | null = rawDecision === "paragrafo_inteiro" || rawDecision === "recorte_inciso" ? rawDecision : null;
+  if (!Object.keys(changes).length && !granularityDecision) throw new ArticleContextStandardizationError(400, "Informe ao menos um campo para padronizar ou decida a granularidade da legislação.");
+  return { lawSlug, slug, ordem, changes, granularityDecision };
 }
 
 async function load(body: Record<string, unknown>) {
@@ -56,7 +59,7 @@ export async function previewArticleContextStandardization(body: Record<string, 
   const data = await load(body);
   const representative = data.rows[0];
   const structuralValidation = validateQuestionStructure({ assunto: data.input.changes.assunto ?? representative.assunto, ordem: data.nextOrder });
-  return { questions: data.rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, changes: data.input.changes, next_order: data.nextOrder, structural_validation: structuralValidation };
+  return { questions: data.rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, changes: data.input.changes, granularity_decision: data.input.granularityDecision, next_order: data.nextOrder, structural_validation: structuralValidation };
 }
 
 export async function applyArticleContextStandardization(body: Record<string, unknown>) {
@@ -64,16 +67,22 @@ export async function applyArticleContextStandardization(body: Record<string, un
   const expectedIds = Array.isArray(body.expected_question_ids) ? body.expected_question_ids.map(String).sort() : [];
   if (JSON.stringify(expectedIds) !== JSON.stringify(rows.map((row) => row.id).sort())) throw new ArticleContextStandardizationError(409, "As questões mudaram desde a prévia. Gere uma nova prévia.");
   const questionPatch = { ...input.changes };
-  const questions = await db.from("questions").update(questionPatch).eq("lei_id", data.law.id).eq("slug", input.slug).eq("ordem", input.ordem).eq("ativo", true).select("id");
-  if (questions.error || (questions.data?.length ?? 0) !== rows.length) throw new ArticleContextStandardizationError(409, "Não foi possível atualizar todas as questões do contexto. Nenhuma referência externa foi movida.");
+  if (Object.keys(questionPatch).length) {
+    const questions = await db.from("questions").update(questionPatch).eq("lei_id", data.law.id).eq("slug", input.slug).eq("ordem", input.ordem).eq("ativo", true).select("id");
+    if (questions.error || (questions.data?.length ?? 0) !== rows.length) throw new ArticleContextStandardizationError(409, "Não foi possível atualizar todas as questões do contexto. Nenhuma referência externa foi movida.");
+  }
   const slug = input.slug.toUpperCase();
-  if (data.botId) {
+  if (data.botId && Object.keys(questionPatch).length) {
     const botPatch: Record<string, unknown> = { precisa_revisao: true };
     if (input.changes.ordem) botPatch.ordem = nextOrder;
     if (input.changes.assunto) botPatch.assunto = input.changes.assunto;
     if (input.changes.legislacao) botPatch.legislacao = input.changes.legislacao;
     const bot = await db.from("legisbot_comentarios").update(botPatch).eq("id", data.botId);
     if (bot.error) throw new ArticleContextStandardizationError(502, "As questões foram atualizadas, mas o registro do LegisBot não pôde ser sincronizado. Recarregue os dados antes de tentar novamente.");
+  }
+  if (input.granularityDecision) {
+    const decision = await db.from("article_context_mappings").upsert({ slug: input.slug, ordem: nextOrder, granularidade_legislacao: input.granularityDecision, granularidade_decidida_em: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: "slug,ordem" });
+    if (decision.error) throw new ArticleContextStandardizationError(502, "As questões foram atualizadas, mas não foi possível registrar a decisão de granularidade.");
   }
   if (input.changes.ordem) {
     const [community, highlights] = await Promise.all([
@@ -83,5 +92,5 @@ export async function applyArticleContextStandardization(body: Record<string, un
     if (community.error || highlights.error) throw new ArticleContextStandardizationError(502, "As questões foram atualizadas, mas uma referência vinculada não pôde ser movida. Recarregue os dados antes de tentar novamente.");
   }
   const structuralValidation = validateQuestionStructure({ assunto: input.changes.assunto ?? rows[0].assunto, ordem: nextOrder });
-  return { questions: rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, next_order: nextOrder, moved: nextOrder !== input.ordem, structural_validation: structuralValidation };
+  return { questions: rows.length, legisbot: data.botId ? 1 : 0, community: data.communityCount, highlights: data.highlightsCount, granularity_decision: input.granularityDecision, next_order: nextOrder, moved: nextOrder !== input.ordem, structural_validation: structuralValidation };
 }

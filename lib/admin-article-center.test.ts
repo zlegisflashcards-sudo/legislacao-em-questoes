@@ -123,6 +123,23 @@ describe("Central do Artigo administrativa", () => {
     expect(detail).toContain("Ordem esperada");
   });
 
+  it("permite decidir a granularidade de contextos por inciso sem alterar questões automaticamente", () => {
+    const standardization = read("lib/admin-article-context-standardization.ts");
+    const panel = read("components/admin/question-standardization-panel.tsx");
+    const migration = read("supabase/migrations/20261007130000_add_article_context_granularity_decision.sql");
+    expect(detail).toContain("granularityPending={article.editorialGranularityPending}");
+    expect(detail).toContain("Possível erro editorial");
+    expect(detail).toContain("Analisar possível erro");
+    expect(panel).toContain("Manter como está");
+    expect(panel).toContain("Alterar o recorte da legislação");
+    expect(panel).toContain("possível inconsistência é de granularidade");
+    expect(panel).toContain("granularity_decision");
+    expect(standardization).toContain("Object.keys(questionPatch).length");
+    expect(standardization).toContain("granularidade_legislacao");
+    expect(server).toContain("granularidade_legislacao");
+    expect(migration).toContain("granularidade_legislacao");
+  });
+
   it("filtra comentários pelo par slug + ordem", () => {
     expect(server).toContain('.eq("slug", slug.toUpperCase()).eq("ordem", ordem)');
     expect(server).toContain("filters.reported");

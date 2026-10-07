@@ -94,6 +94,10 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
   for (const [key, questions] of byContext) { const validation = questions.map((question) => validateQuestionStructure(question)).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); if (questions.some((question) => hasIncisoGranularityPending(question))) granularities.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions }); }
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
+  const decisions = await getSupabaseServerClient().from("article_context_mappings").select("slug,ordem,granularidade_legislacao");
+  if (decisions.error) throw new AdminArticleConflictError(503, "Não foi possível consultar as decisões editoriais de granularidade.");
+  const decidedGranularities = new Set((decisions.data ?? []).flatMap((item) => item.granularidade_legislacao === "paragrafo_inteiro" || item.granularidade_legislacao === "recorte_inciso" ? [`${String(item.slug).toUpperCase()}\u0000${String(item.ordem)}`] : []));
+  for (const key of decidedGranularities) granularities.delete(key);
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys(), ...granularities.keys()])];
   const [laws, comments] = await Promise.all([lawMap(), commentsFor(groups)]);
   const law = safeFilter(filters.law);
@@ -110,6 +114,23 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     if (type === "comentario_sem_analise" && (!comment || !["pendente", "processando"].includes(comment.status))) return false;
     return true;
   });
+  // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
+  // atualmente escolhido no filtro. Assim o quadro funciona como um placar
+  // de avisos pendentes para a lei.
+  const contextsForLaw = contextKeys.filter((key) => {
+    const slug = legalByKey.get(key)?.slug ?? structural.get(key)?.slug ?? granularities.get(key)?.slug ?? "";
+    return !law || slug.toLocaleLowerCase("pt-BR") === law;
+  });
+  const typeCounts = {
+    structural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "conflict").length,
+    possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "possible_conflict").length,
+    legislation: contextsForLaw.filter((key) => legalByKey.has(key)).length,
+    granularity: contextsForLaw.filter((key) => granularities.has(key)).length,
+    commentWithoutAnalysis: contextsForLaw.filter((key) => {
+      const comment = comments.get(key);
+      return Boolean(comment && ["pendente", "processando"].includes(comment.status));
+    }).length,
+  };
   const requestedPage = Number(filters.page);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
@@ -156,6 +177,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       laws: new Set(filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? item.granularity!.slug)).size,
       flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? item.granularity!.questions).length, 0),
     },
+    typeCounts,
   };
 }
 

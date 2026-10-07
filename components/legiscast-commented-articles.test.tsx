@@ -49,4 +49,10 @@ describe("artigos comentados no LegisCast", () => {
     expect(overlay).toContain('event.key === "Escape"');
     expect(component).toContain("data-recorte-id={recorteId ?? undefined}");
   });
+
+  it("leva a incidência mapeada ao cabeçalho do artigo aberto", () => {
+    expect(overlay).toContain("mappingIncidence={question.incidencia}");
+    expect(overlay).toContain("incidencia?:");
+    expect(component).toContain("#fef08a_35%");
+  });
 });

@@ -14,6 +14,7 @@ const ALLOWED_FILTERS = [
   "capitulo",
   "secao",
   "subsecao",
+  "ordem",
 ] as const;
 
 async function descendantStructureIds(lawId: number, rootId: number) {

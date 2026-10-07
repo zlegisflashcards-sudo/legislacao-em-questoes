@@ -46,7 +46,18 @@ type LegisBotPageClientProps = {
   embedded?: boolean;
   /** Exibe o contexto público sem iniciar ou sugerir geração de comentário. */
   publicComment?: string | null;
+  /** Incidência editorial, mostrada no cabeçalho quando o artigo é aberto pelo LegisCast. */
+  mappingIncidence?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
+  articleQuestionsHref?: string | null;
   onClose?: () => void;
+};
+
+const MAPPING_FLAG_LABEL: Record<NonNullable<LegisBotPageClientProps["mappingIncidence"]>, string> = {
+  muito_alta: "Incidência muito alta",
+  alta: "Incidência alta",
+  media: "Incidência média",
+  baixa: "Incidência baixa",
+  nao_mapeado: "Sem incidência mapeada",
 };
 
 type LegisBotApiResponse = {
@@ -111,6 +122,8 @@ export default function LegisBotPageClient({
   adminShortcut,
   embedded = false,
   publicComment,
+  mappingIncidence,
+  articleQuestionsHref,
   onClose,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -420,7 +433,7 @@ export default function LegisBotPageClient({
   return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div> : adminShortcut ? <div className="legisbot-topic-tools">{adminShortcut}</div> : null}
+        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><div className="legisbot-topic-actions">{mappingIncidence && mappingIncidence !== "nao_mapeado" ? <span className={`legisbot-mapping-flag legisbot-mapping-flag--${mappingIncidence}`} role="img" aria-label={MAPPING_FLAG_LABEL[mappingIncidence]} title={MAPPING_FLAG_LABEL[mappingIncidence]}>⚑</span> : null}<button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div></div> : adminShortcut ? <div className="legisbot-topic-tools">{adminShortcut}</div> : null}
         <h1>{assunto}</h1>
       </header>
 
@@ -430,6 +443,7 @@ export default function LegisBotPageClient({
         ordem={ordemNormalizada}
         communityCount={communityCount}
         initialTab={initialTab}
+        articleQuestionsHref={articleQuestionsHref}
         onActiveTabChange={changeStudyTab}
         legisBotContent={conversationContent}
         communityContent={

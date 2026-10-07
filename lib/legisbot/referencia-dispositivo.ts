@@ -3,9 +3,8 @@ type DispositivoComReferencia = {
   slug: string;
 };
 
-/** Referência curta usada na lista pública, sem expor o estado do comentário. */
+/** Referência curta usada na lista pública, sem repetir o código interno da lei. */
 export function getReferenciaDispositivo({ assunto, slug }: DispositivoComReferencia) {
-  const dispositivo = assunto.trim();
-  const lei = slug.trim().toUpperCase();
-  return dispositivo && lei ? `${dispositivo}, ${lei}` : dispositivo || lei || "Dispositivo legal";
+  const dispositivo = assunto.replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
+  return dispositivo || slug.trim().toUpperCase() || "Dispositivo legal";
 }

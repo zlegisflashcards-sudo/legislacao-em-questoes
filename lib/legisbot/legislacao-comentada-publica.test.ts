@@ -27,7 +27,7 @@ describe("legislação comentada confiável do LegisCast", () => {
   });
 
   it("usa a incidência da Central de artigos sem depender do comentário publicado", () => {
-    const [context] = consolidarLegislacaoComentadaConfiavel([question()], [], "Código Penal", [{ slug: "CP", ordem: "0001", incidencia: "muito_alta", artigo_recente: false }]);
+    const [context] = consolidarLegislacaoComentadaConfiavel([question()], [], "Código Penal", [{ slug: "CP", ordem: "0001.0.00.0.00.0", incidencia: "muito_alta", artigo_recente: false }]);
     expect(context).toMatchObject({ comentario: null, incidencia: "muito_alta" });
   });
 
@@ -47,6 +47,7 @@ describe("legislação comentada confiável do LegisCast", () => {
   });
 
   it("usa uma referência enxuta do dispositivo no card público", () => {
-    expect(getReferenciaDispositivo({ assunto: "Art. 1º", slug: "cp" })).toBe("Art. 1º, CP");
+    expect(getReferenciaDispositivo({ assunto: "Art. 1º", slug: "cp" })).toBe("Art. 1º");
+    expect(getReferenciaDispositivo({ assunto: "Art. 2º, § 2º,&nbsp; Lei X", slug: "cp" })).toBe("Art. 2º, § 2º, Lei X");
   });
 });

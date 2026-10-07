@@ -12,6 +12,7 @@ type LegisBotStudyTabsProps = {
   highlightsContent: ReactNode;
   communityCount: number;
   initialTab?: LegisBotStudyTab;
+  articleQuestionsHref?: string | null;
   onActiveTabChange?: (tab: LegisBotStudyTab) => void;
 };
 
@@ -23,6 +24,7 @@ export default function LegisBotStudyTabs({
   highlightsContent,
   communityCount,
   initialTab = "legisbot",
+  articleQuestionsHref,
   onActiveTabChange,
 }: LegisBotStudyTabsProps) {
   const [activeTab, setActiveTab] = useState<LegisBotStudyTab>(initialTab);
@@ -64,6 +66,7 @@ export default function LegisBotStudyTabs({
             ) : null}
           </button>
         ))}
+        {articleQuestionsHref ? <a className="legisbot-article-questions-link" href={articleQuestionsHref}>📝 Questões do artigo</a> : null}
       </div>
 
       {tabs.map((tab) => openedTabs.has(tab.key) ? (
