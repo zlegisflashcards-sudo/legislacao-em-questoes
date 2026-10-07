@@ -182,6 +182,9 @@ describe("administração de Legis Questões", () => {
     expect(editor).toContain("&lt;&gt;");
     expect(editor).toContain("visualRef.current.innerHTML = value");
     expect(editor).not.toContain("sanitizeLegisQuestoesHtml");
+    expect(editor).toContain("function editorHtmlValue");
+    expect(editor).toContain("restoreSourceStyles");
+    expect(editor).toContain('includes("--tw-")');
   });
 
   it("bloqueia TXT de outra legislação antes de planejar ou persistir questões", () => {
