@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  FormEvent,
-  KeyboardEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   LEGISCAST_ORIGINAL_MAX_BYTES,
   formatLegiscastAudioSize,
@@ -15,6 +8,7 @@ import {
 } from "@/lib/legiscast-audio-processing";
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 import { filterLegiscastAdminLaws, normalizeLegiscastPdfPage } from "@/lib/legiscast-audios-admin-form";
+import { LawSearchSelect } from "@/components/law-search-select";
 
 export type LegiscastAdminLaw = { id: number; slug: string; titulo: string };
 type Law = LegiscastAdminLaw;
@@ -175,142 +169,6 @@ function structureName(structures: Structure[], structureId: number | null) {
     ? "Outros / Sem estrutura"
     : (structures.find((structure) => structure.id === structureId)?.nome ??
         "Estrutura não encontrada");
-}
-
-function LawSearchSelect({
-  laws,
-  value,
-  onChange,
-}: {
-  laws: Law[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const selected = laws.find((law) => String(law.id) === value) ?? null;
-  const [query, setQuery] = useState(selected?.titulo ?? "");
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const results = useMemo(
-    () => filterLegiscastAdminLaws(laws, query).slice(0, 12),
-    [laws, query],
-  );
-  useEffect(() => {
-    if (selected) setQuery(selected.titulo);
-  }, [selected]);
-  useEffect(() => {
-    const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-  const choose = (law: Law) => {
-    onChange(String(law.id));
-    setQuery(law.titulo);
-    setOpen(false);
-    setActiveIndex(0);
-  };
-  const clear = () => {
-    onChange("");
-    setQuery("");
-    setOpen(false);
-    setActiveIndex(0);
-  };
-  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      setOpen(false);
-      return;
-    }
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIndex((index) =>
-        results.length
-          ? (index + (event.key === "ArrowDown" ? 1 : -1) + results.length) %
-            results.length
-          : 0,
-      );
-      return;
-    }
-    if (event.key === "Enter" && open && results[activeIndex]) {
-      event.preventDefault();
-      choose(results[activeIndex]);
-    }
-  };
-  return (
-    <div ref={rootRef} className="relative min-w-0">
-      <label className="grid gap-1 font-bold">
-        Lei
-        <div className="relative">
-          <input
-            role="combobox"
-            aria-expanded={open}
-            aria-controls="legiscast-law-results"
-            aria-autocomplete="list"
-            placeholder="Pesquisar lei..."
-            value={query}
-            onFocus={() => setOpen(true)}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              onChange("");
-              setOpen(true);
-              setActiveIndex(0);
-            }}
-            onKeyDown={keyDown}
-            className="w-full pr-20"
-          />
-          {query ? (
-            <button
-              type="button"
-              aria-label="Limpar lei selecionada"
-              onClick={clear}
-              className="absolute right-10 top-1/2 -translate-y-1/2 px-2 text-slate-500"
-            >
-              ×
-            </button>
-          ) : null}
-          <button
-            type="button"
-            aria-label={open ? "Fechar lista de leis" : "Abrir lista de leis"}
-            onClick={() => setOpen((current) => !current)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-2 text-slate-600"
-          >
-            ⌄
-          </button>
-        </div>
-      </label>
-      <input type="hidden" name="lei_id" value={value} />
-      {open ? (
-        <div
-          id="legiscast-law-results"
-          role="listbox"
-          className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-xl"
-        >
-          {results.length ? (
-            results.map((law, index) => (
-              <button
-                key={law.id}
-                type="button"
-                role="option"
-                aria-selected={String(law.id) === value}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => choose(law)}
-                className={`block w-full rounded-md px-3 py-2 text-left text-sm ${index === activeIndex ? "bg-blue-50 text-blue-800" : "hover:bg-slate-50"}`}
-              >
-                <span className="block font-bold">{law.titulo}</span>
-                <span className="text-xs text-slate-500">{law.slug}</span>
-              </button>
-            ))
-          ) : (
-            <p className="px-3 py-2 text-sm text-slate-500">
-              Nenhuma lei encontrada.
-            </p>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function DeleteAudioConfirmation({
@@ -700,7 +558,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       >
         <fieldset className="grid gap-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4 lg:grid-cols-2">
           <legend className="px-1 text-sm font-black text-[#062a5f]">1. Vincular ao trecho da lei</legend>
-          {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <LawSearchSelect laws={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} />}
+          {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <label className="grid min-w-0 gap-1 font-bold">Lei<LawSearchSelect name="lei_id" options={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} emptyLabel="Selecionar lei do áudio" placeholder="Pesquisar lei por título ou slug…" /></label>}
           <label className="grid min-w-0 gap-1 font-bold">
             Trecho da estrutura
             <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => { const structureId = event.target.value; setUploadStructureId(structureId); const selectedStructure = structures.find((structure) => String(structure.id) === structureId); setUploadPdfPage(selectedStructure?.pdf_page ? String(selectedStructure.pdf_page) : ""); }}>

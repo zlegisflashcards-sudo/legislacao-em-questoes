@@ -26,3 +26,8 @@ export function LawSearchSelect({ options, value, onChange, name, placeholder = 
     {open ? <div id={name ? `${name}-law-options` : undefined} role="listbox" className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">{matches.length ? matches.map((option) => <button key={String(option.id)} type="button" role="option" aria-selected={String(option.id) === value} onMouseDown={(event) => event.preventDefault()} onClick={() => { onChange(String(option.id)); setQuery(label(option)); setOpen(false); }} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-blue-50">{label(option)}{option.slug ? <small className="ml-2 text-slate-500">{option.slug}</small> : null}</button>) : <p className="px-3 py-2 text-sm text-slate-500">Nenhuma lei encontrada.</p>}</div> : null}
   </div>;
 }
+
+export function LawSearchFormSelect({ options, value, name = "lei", placeholder, emptyLabel = "Todas as leis", className = "" }: { options: LawSearchOption[]; value: string; name?: string; placeholder?: string; emptyLabel?: string; className?: string }) {
+  const [selected, setSelected] = useState(value);
+  return <LawSearchSelect options={options} value={selected} onChange={setSelected} name={name} emptyLabel={emptyLabel} placeholder={placeholder ?? "Pesquisar lei por título, código ou slug…"} className={className} />;
+}

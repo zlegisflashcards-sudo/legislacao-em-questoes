@@ -159,6 +159,9 @@ describe("fronteira administrativa comercial", () => {
     expect(client).toContain('emptyLabel="Adicionar lei ao produto"');
     expect(client).toContain('emptyLabel="Selecionar lei para liberar"');
     expect(client).toContain('disabled={busy || !lawId}');
+    expect(client).toContain('placeholder="Pesquisar lei para exportar…"');
+    expect(client).toContain('emptyLabel="Selecionar lei da atualização"');
+    expect(client).toContain('tab === "materiais" ? <label>Lei<LawSearchSelect');
   });
 
   it("identifica ao lado da lei o recorte selecionado na composição", () => {

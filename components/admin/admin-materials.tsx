@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CommercialDataTable as DataTable, CommercialEditForm as EditForm } from "@/components/admin/commercial-admin-ui";
+import { LawSearchSelect } from "@/components/law-search-select";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
@@ -24,7 +25,7 @@ export function LawMaterialsAdmin({ law }: { law: { id: number; slug: string; ti
 export function MaterialPanel({ rows, laws, fixedLaw, editing, setEditing, busy, mutate }: { rows: Row[]; laws: Row[]; fixedLaw?: Row; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: MaterialMutation }) {
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("materiais", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ...(editing ? {} : { lei_id: fixedLaw ? Number(fixedLaw.id) : Number(data.lei_id) }), ordem: Number(data.ordem), ativo: data.ativo === "true", quantidade_itens: data.quantidade_itens === "" ? null : Number(data.quantidade_itens) } }, "Material salvo com sucesso."); }
   return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar material" : "Cadastrar material"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
-    {!editing && !fixedLaw ? <select name="lei_id" required defaultValue=""><option value="" disabled>Selecione a lei</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select> : null}
+    {!editing && !fixedLaw ? <MaterialLawSelect laws={laws} /> : null}
     <input name="tipo" type="hidden" value="pdf" />
     <input name="titulo" defaultValue={text(editing?.titulo)} placeholder="Título" required /><textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" />
     <select name="provedor" defaultValue={text(editing?.provedor) || "google_drive"}>{["google_drive","youtube","externo","supabase_storage"].map((item) => <option key={item}>{item}</option>)}</select>
@@ -34,4 +35,9 @@ export function MaterialPanel({ rows, laws, fixedLaw, editing, setEditing, busy,
     <textarea name="observacao_interna" defaultValue={text(editing?.observacao_interna)} placeholder="Observação interna — nunca exibida ao aluno ou catálogo" />
     <input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required /><select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
   </EditForm><DataTable headers={["Material", "Lei", "Versão / quantidade", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small><a href={text(row.url_externa)} target="_blank" rel="noreferrer">Abrir URL administrativa</a></small></td><td>{text(relation(row,"leis").titulo)}</td><td>{text(row.versao_material) || "—"}<small>{row.quantidade_itens == null ? "Quantidade não informada" : `${text(row.quantidade_itens)} ${row.tipo === "flashcards" ? "flashcards" : "itens"}`}</small></td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("materiais", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do material atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
+}
+
+function MaterialLawSelect({ laws }: { laws: Row[] }) {
+  const [lawId, setLawId] = useState("");
+  return <label>Lei<LawSearchSelect name="lei_id" value={lawId} onChange={setLawId} options={laws.map((law) => ({ id: text(law.id), titulo: text(law.titulo), slug: text(law.slug), codigo: text(law.codigo) }))} emptyLabel="Selecionar lei do material" placeholder="Pesquisar lei por título, código ou slug…" /></label>;
 }

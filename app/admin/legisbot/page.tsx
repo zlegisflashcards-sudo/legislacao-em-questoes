@@ -4,6 +4,7 @@ import { alterarStatusComentario, sairAdministrador } from "@/app/admin/actions"
 import { exigirAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { LEGISBOT_COMENTARIO_STATUS, type LegisBotComentario } from "@/lib/legisbot-comentario";
+import { LawSearchFormSelect } from "@/components/law-search-select";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
@@ -75,12 +76,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
           {LEGISBOT_COMENTARIO_STATUS.map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}
         </select>
       </label>
-      <label>Lei
-        <select name="lei" defaultValue={law}>
-          <option value="">Todas as leis</option>
-          {(lawsResult.data ?? []).map((item) => <option key={String(item.slug)} value={String(item.slug)}>{item.codigo ? `${String(item.codigo)} — ` : ""}{String(item.titulo)}</option>)}
-        </select>
-      </label>
+      <label>Lei<LawSearchFormSelect name="lei" value={law} options={(lawsResult.data ?? []).map((item) => ({ id: String(item.slug), titulo: String(item.titulo), slug: String(item.slug), codigo: item.codigo ? String(item.codigo) : null }))} /></label>
       <div className="admin-filter-actions">
         <button className="admin-button primary">Buscar</button>
         <Link className="admin-button secondary" href="/admin/legisbot">Limpar</Link>

@@ -17,7 +17,9 @@ describe("LegisCast na Central da Lei", () => {
     const client = read("components/admin/legiscast-audios-admin.tsx");
     expect(client).toContain("lawContext ?");
     expect(client).toContain('type="hidden" name="lei_id" value={uploadLawId}');
-    expect(client).toContain(": <LawSearchSelect");
+    expect(client).toContain('<LawSearchSelect name="lei_id"');
+    expect(client).toContain('import { LawSearchSelect } from "@/components/law-search-select"');
+    expect(client).toContain("options={laws}");
     expect(client).toContain("lawContext ? String(lawContext.id)");
     expect(client).toContain("useState<number | null>(lawContext?.id ?? null)");
   });

@@ -136,6 +136,7 @@ export default function CommercialAdmin() {
   function submitSearch(event: FormEvent) { event.preventDefault(); setPage(1); void load(); }
   const selectedProduct = useMemo(() => products.find((item) => text(item.id) === filters.produto_id), [filters.produto_id, products]);
   const selectedProductLawCount = Array.isArray(selectedProduct?.leis) ? selectedProduct.leis.length : 0;
+  const lawOptions = useMemo(() => laws.map((law) => ({ id: text(law.id), titulo: text(law.titulo), slug: text(law.slug), codigo: text(law.codigo) })), [laws]);
 
   return <section className="commercial-admin">
     <nav className="commercial-tabs" aria-label="Seções comerciais">{TABS.map((item) => <button type="button" key={item.id} className={tab === item.id ? "active" : ""} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
@@ -144,8 +145,8 @@ export default function CommercialAdmin() {
 
     <form className="commercial-toolbar" onSubmit={submitSearch}>
       {tab !== "liberacoes" && tab !== "anki_tutoriais" ? <label>Busca<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar registros" /></label> : null}
-      {tab === "materiais" ? <label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : null}
-      {tab === "atualizacoes" ? <><label>Lei<select value={filters.lei_id ?? ""} onChange={(event) => setFilters({ ...filters, lei_id: event.target.value })}><option value="">Todas</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label><label>Tipo<select value={filters.tipo ?? ""} onChange={(event) => setFilters({ ...filters, tipo: event.target.value })}><option value="">Todos</option>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label><label>Importância<select value={filters.importancia ?? ""} onChange={(event) => setFilters({ ...filters, importancia: event.target.value })}><option value="">Todas</option>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
+      {tab === "materiais" ? <label>Lei<LawSearchSelect options={lawOptions} value={filters.lei_id ?? ""} onChange={(lei_id) => setFilters({ ...filters, lei_id })} emptyLabel="Todas as leis" placeholder="Pesquisar lei…" /></label> : null}
+      {tab === "atualizacoes" ? <><label>Lei<LawSearchSelect options={lawOptions} value={filters.lei_id ?? ""} onChange={(lei_id) => setFilters({ ...filters, lei_id })} emptyLabel="Todas as leis" placeholder="Pesquisar lei…" /></label><label>Tipo<select value={filters.tipo ?? ""} onChange={(event) => setFilters({ ...filters, tipo: event.target.value })}><option value="">Todos</option>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label><label>Importância<select value={filters.importancia ?? ""} onChange={(event) => setFilters({ ...filters, importancia: event.target.value })}><option value="">Todas</option>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "aquisicoes" ? <><label>Status<select value={filters.status ?? ""} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="ativo">Ativo</option><option value="reembolso_solicitado">Reembolso solicitado</option><option value="cancelado">Cancelado</option><option value="reembolsado">Reembolsado</option></select></label><label>Origem<select value={filters.origem ?? ""} onChange={(event) => setFilters({ ...filters, origem: event.target.value })}><option value="">Todas</option>{ORIGENS.map((item) => <option key={item}>{item}</option>)}</select></label></> : null}
       {tab === "auditoria" ? <><label>Ator (UUID)<input value={filters.ator_user_id ?? ""} onChange={(event) => setFilters({ ...filters, ator_user_id: event.target.value })} /></label><label>Ação<input value={filters.acao ?? ""} onChange={(event) => setFilters({ ...filters, acao: event.target.value })} /></label><label>Entidade<input value={filters.entidade ?? ""} onChange={(event) => setFilters({ ...filters, entidade: event.target.value })} /></label><label>De<input type="datetime-local" value={filters.de ?? ""} onChange={(event) => setFilters({ ...filters, de: event.target.value })} /></label><label>Até<input type="datetime-local" value={filters.ate ?? ""} onChange={(event) => setFilters({ ...filters, ate: event.target.value })} /></label></> : null}
       {tab !== "liberacoes" && tab !== "anki_tutoriais" ? <button className="admin-button secondary" disabled={busy}>Filtrar</button> : null}
@@ -155,7 +156,7 @@ export default function CommercialAdmin() {
     {tab === "produtos" ? <ProductPanel rows={result.items} laws={laws} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "aquisicoes" ? <AcquisitionPanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ ...filters, aluno_id: text(item.id) }); setPage(1); }} products={products} filters={filters} setFilters={setFilters} lawCount={selectedProductLawCount} busy={busy} mutate={mutate} /> : null}
     {tab === "liberacoes" ? <ReleasePanel rows={result.items} student={student} setStudent={(item) => { setStudent(item); setFilters({ aluno_id: text(item.id) }); setPage(1); }} laws={laws} busy={busy} mutate={mutate} reload={load} /> : null}
-    {tab === "atualizacoes" ? <EditorialUpdatesPanel rows={result.items} laws={laws} materials={materials} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
+    {tab === "atualizacoes" ? <EditorialUpdatesPanel rows={result.items} laws={laws} lawOptions={lawOptions} materials={materials} editing={editing} setEditing={setEditing} busy={busy} mutate={mutate} /> : null}
     {tab === "anki_tutoriais" ? <AnkiTutorialsPanel rows={result.items} busy={busy} mutate={mutate} /> : null}
     {tab === "auditoria" ? <AuditPanel rows={result.items} /> : null}
     {busy ? <p className="commercial-loading">Carregando…</p> : null}
@@ -226,6 +227,7 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
   const [editForm, setEditForm] = useState({ email: "" });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const lawOptions = useMemo(() => laws.map((law) => ({ id: text(law.id), titulo: text(law.titulo), slug: text(law.slug), codigo: text(law.codigo) })), [laws]);
 
   async function selectStudent(nextStudent: Row) {
     setStudent(nextStudent); setAcquisitions([]); setReleases([]); setBusy(true); setError(""); setMessage(""); setEditing(false);
@@ -357,7 +359,7 @@ function StudentsPanelCore({ laws, products, rows, filter, setFilter }: { laws: 
   </section><section className="commercial-card">
     <div className="commercial-form-grid">
       <h2>Exportar alunos com acesso ativo</h2>
-      <label>Lei<select value={exportFilters.lei_id} onChange={(event) => setExportFilters({ ...exportFilters, lei_id: event.target.value })}><option value="">Todas as leis</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label>
+      <label>Lei<LawSearchSelect options={lawOptions} value={exportFilters.lei_id} onChange={(lei_id) => setExportFilters({ ...exportFilters, lei_id })} emptyLabel="Todas as leis" placeholder="Pesquisar lei para exportar…" /></label>
       <label>Produto<select value={exportFilters.produto_id} onChange={(event) => setExportFilters({ ...exportFilters, produto_id: event.target.value })}><option value="">Todos os produtos</option>{products.map((product) => <option key={text(product.id)} value={text(product.id)}>{text(product.nome)}</option>)}</select></label>
       <button type="button" className="admin-button secondary" disabled={exportBusy} onClick={() => void exportStudents()}>{exportBusy ? "Exportando…" : "Exportar CSV"}</button>
     </div>
@@ -552,7 +554,7 @@ function ReleasePanel({ rows, student, setStudent, laws, busy, mutate, reload }:
 
 const optionalNumber = (value: FormDataEntryValue | undefined) => value == null || value === "" ? null : Number(value);
 
-function EditorialUpdatesPanel({ rows, laws, materials, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[]; materials: Row[] }) {
+function EditorialUpdatesPanel({ rows, laws, lawOptions, materials, editing, setEditing, busy, mutate }: PanelProps & { laws: Row[]; lawOptions: Array<{ id: string; titulo: string; slug: string; codigo: string }>; materials: Row[] }) {
   const [lawId, setLawId] = useState(text(editing?.lei_id));
   useEffect(() => setLawId(text(editing?.lei_id)), [editing]);
   const lawMaterials = materials.filter((item) => !lawId || text(item.lei_id) === lawId);
@@ -591,7 +593,7 @@ function EditorialUpdatesPanel({ rows, laws, materials, editing, setEditing, bus
   }
   return <>
     <EditForm key={text(editing?.id) || "new-update"} title={editing ? "Editar atualização editorial" : "Registrar atualização editorial"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
-      {!editing ? <label>Lei<select name="lei_id" required value={lawId} onChange={(event) => setLawId(event.target.value)}><option value="" disabled>Selecione a lei</option>{laws.map((law) => <option key={text(law.id)} value={text(law.id)}>{text(law.titulo)}</option>)}</select></label> : <p><strong>Lei:</strong> {text(relation(editing,"leis").titulo)}</p>}
+      {!editing ? <LawSearchSelect name="lei_id" options={lawOptions} value={lawId} onChange={setLawId} emptyLabel="Selecionar lei da atualização" placeholder="Pesquisar lei por título, código ou slug…" /> : <p><strong>Lei:</strong> {text(relation(editing,"leis").titulo)}</p>}
       <label>Material relacionado<select name="material_lei_id" defaultValue={text(editing?.material_lei_id)}><option value="">Nenhum</option>{lawMaterials.map((item) => <option key={text(item.id)} value={text(item.id)}>{text(item.titulo)} ({text(item.tipo)})</option>)}</select></label>
       <label>Tipo<select name="tipo" defaultValue={text(editing?.tipo) || "melhoria_material"}>{UPDATE_TYPES.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Importância<select name="importancia" defaultValue={text(editing?.importancia) || "informativa"}>{IMPORTANCE.map((item) => <option key={item}>{item}</option>)}</select></label>

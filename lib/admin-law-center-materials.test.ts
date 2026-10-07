@@ -51,6 +51,9 @@ describe("Materiais na Central da Lei", () => {
     expect(legacy).toContain('from "@/components/admin/admin-materials"');
     expect(client).toContain("<MaterialPanel rows={result.items} laws={[law]} fixedLaw={law}");
     expect(client.match(/function MaterialPanel/g)).toHaveLength(1);
+    expect(client).toContain('import { LawSearchSelect } from "@/components/law-search-select"');
+    expect(client).toContain("<MaterialLawSelect laws={laws}");
+    expect(client).toContain('emptyLabel="Selecionar lei do material"');
   });
 
   it("mantém autenticação, validações e RPCs comerciais existentes", () => {

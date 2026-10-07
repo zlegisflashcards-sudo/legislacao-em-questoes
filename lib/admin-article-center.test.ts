@@ -149,6 +149,8 @@ describe("filtro do painel legado do LegisBot", () => {
     const listing = read("app/admin/legisbot/page.tsx");
     const detail = read("app/admin/legisbot/[id]/page.tsx");
     expect(listing).toContain('name="lei"');
+    expect(listing).toContain("LawSearchFormSelect");
+    expect(read("components/law-search-select.tsx")).toContain("export function LawSearchFormSelect");
     expect(listing).toContain('request = request.eq("slug", law.toUpperCase())');
     expect(listing).toContain("retorno=");
     expect(detail).toContain("returnHref");
