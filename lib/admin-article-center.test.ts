@@ -23,7 +23,8 @@ describe("Central do Artigo administrativa", () => {
   });
 
   it("abre a listagem na aba Artigos e só seleciona LegisBot por parâmetro explícito", () => {
-    expect(index).toContain('requestedTab === "legisbot" ? "legisbot" : "artigos"');
+    expect(index).toContain('requestedTab === "legisbot" ? "legisbot"');
+    expect(index).toContain(': "artigos"');
     expect(index).toContain('tab === "artigos" ? "active" : ""');
     expect(index).toContain('href={tabHref("artigos")}>Artigos');
   });
@@ -40,6 +41,12 @@ describe("Central do Artigo administrativa", () => {
     expect(conflicts).toContain('type="hidden" name="ordem_sort"');
     expect(conflicts).toContain('key === "law" ? "lei" : key === "type" ? "tipo" : key');
     expect(conflicts).toContain("Sugerir lote{filters.law");
+  });
+
+  it("mantém a contagem de pendências vinculada à lei selecionada em todas as abas", () => {
+    expect(index).toContain("const pendingSummary");
+    expect(index).toContain("listArticleSourceConflicts({ law: lawFilter })");
+    expect(index).toContain("pendingSummary.indicators.pending");
   });
 
   it("centraliza as operações administrativas de LegisBot e comunidade nas abas", () => {

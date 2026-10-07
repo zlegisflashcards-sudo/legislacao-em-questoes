@@ -97,6 +97,9 @@ describe("Central do Artigo — administração de conflitos", () => {
   it("calcula pendências diretamente dos flashcards ativos e ignora HTML visual equivalente", () => {
     expect(server).toContain("const activeRows = await loadQuestions(true)");
     expect(server).toContain("groupLegisBotSourceConflicts(activeRows)");
+    expect(server).toContain("const filteredContexts = filtered.map");
+    expect(server).toContain("pending: filteredContexts.length");
+    expect(server).not.toContain("pending: contextKeys.length");
     expect(server).toContain("getArticleSourceConflict(preview.slug, preview.ordem)) === null");
   });
 

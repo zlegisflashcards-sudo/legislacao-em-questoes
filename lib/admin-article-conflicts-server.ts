@@ -132,6 +132,15 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       editorialGranularityPending: Boolean(granularity),
     };
   });
+  // Os indicadores precisam refletir exatamente o mesmo universo da lista.
+  // Antes deste ponto eles usavam `contextKeys`, o conjunto global, e por isso
+  // continuavam exibindo pendências de outras leis depois de aplicar o filtro.
+  const filteredContexts = filtered.map((key) => ({
+    key,
+    group: legalByKey.get(key),
+    structural: structural.get(key),
+    granularity: granularities.get(key),
+  }));
   const structuralSuggestions = filtered.flatMap((key) => {
     const item = structural.get(key);
     return item?.validation.status === "conflict" && item.validation.expectedOrder ? [{ slug: item.slug, ordem: item.ordem }] : [];
@@ -143,9 +152,9 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     pages,
     total: filtered.length,
     indicators: {
-      pending: contextKeys.length,
-      laws: new Set(contextKeys.map((key) => legalByKey.get(key)?.slug ?? structural.get(key)?.slug ?? granularities.get(key)!.slug)).size,
-      flashcards: contextKeys.reduce((sum, key) => sum + (legalByKey.get(key)?.questions ?? structural.get(key)?.questions ?? granularities.get(key)!.questions).length, 0),
+      pending: filteredContexts.length,
+      laws: new Set(filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? item.granularity!.slug)).size,
+      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? item.granularity!.questions).length, 0),
     },
   };
 }
