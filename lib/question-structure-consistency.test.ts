@@ -14,6 +14,10 @@ describe("validador estrutural Assunto × Ordem", () => {
   it("valida parágrafo com letra", () => expect(validate("Art. 27-B, § 1º-C", "0027.b.01.c.00.0").status).toBe("valid"));
   it("detecta letra de parágrafo ausente", () => expect(validate("Art. 27-B, § 1º-C", "0027.b.01.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0027.b.01.c.00.0" }));
   it("valida inciso", () => expect(validate("Art. 27-B, § 1º-C, II", "0027.b.01.c.02.0").status).toBe("valid"));
+  it("valida inciso citado diretamente após o artigo", () => {
+    expect(validate("Art. 40, VI, Lei Estadual 6.513/95 - MA", "0040.0.00.0.06.0")).toMatchObject({ status: "valid", expectedOrder: "0040.0.00.0.06.0" });
+    expect(validate("Art. 40, VI, Lei Estadual 6.513/95 - MA", "0040.0.00.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0040.0.00.0.06.0" });
+  });
   it("valida inciso com letra", () => expect(validate("Art. 27-B, § 1º-C, II-A", "0027.b.01.c.02.a").status).toBe("valid"));
   it("não confunde Art. 91 com Art. 91-A", () => expect(validate("Art. 91-A", "0091.0.00.0.00.0").status).toBe("conflict"));
   it("preserva zero como ausência de letra sem colidir com letra", () => {

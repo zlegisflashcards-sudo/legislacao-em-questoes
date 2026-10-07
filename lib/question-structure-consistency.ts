@@ -23,7 +23,7 @@ export function parseQuestionSubject(value: string | null | undefined): SubjectS
   const rawParagraph = sectionParagraph?.[1] ?? namedParagraph?.[1];
   const paragraphNumber = rawParagraph === "unico" ? "1" : rawParagraph;
   const paragraphSuffix = sectionParagraph?.[2] ?? namedParagraph?.[2];
-  const item = text.match(/(?:inciso\s+|§[^,]*,\s*|paragrafo[^,]*,\s*)([ivxlcdm]+)(?:\s*-\s*([a-z]))?\b/i);
+  const item = text.match(/(?:inciso\s+|art\.?\s*\d+\s*(?:º|o)?(?:\s*-\s*[a-z])?\s*,\s*|§[^,]*,\s*|paragrafo[^,]*,\s*)([ivxlcdm]+)(?:\s*-\s*([a-z]))?\b/i);
   const letter = text.match(/[,:\s]["“]?([a-z])["”]?\s*$/i);
   return { article: article[1], suffix: article[2]?.toUpperCase(), paragraph: paragraphNumber, paragraphSuffix: paragraphSuffix?.toUpperCase(), unique: rawParagraph === "unico", item: item?.[1]?.toUpperCase(), itemSuffix: item?.[2]?.toUpperCase(), letter: letter && !item?.[2] ? letter[1].toLowerCase() : undefined };
 }
