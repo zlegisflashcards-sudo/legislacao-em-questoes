@@ -8,6 +8,16 @@ import { normalizarTextoPesquisa } from "@/components/legisbot-comments-list";
 
 export const INITIAL_VISIBLE_ARTICLES = 18;
 
+const HEAT = {
+  muito_alta: "border-red-300 bg-red-50 hover:border-red-400 hover:bg-red-100",
+  alta: "border-orange-300 bg-orange-50 hover:border-orange-400 hover:bg-orange-100",
+  media: "border-amber-300 bg-amber-50 hover:border-amber-400 hover:bg-amber-100",
+  baixa: "border-blue-100 bg-white hover:border-blue-300 hover:bg-blue-50",
+  nao_mapeado: "border-blue-100 bg-white hover:border-blue-300 hover:bg-blue-50",
+} as const;
+
+const RECENT_HEAT = "border-sky-300 bg-sky-50 hover:border-sky-400 hover:bg-sky-100";
+
 export function LegiscastCommentedArticles({ comments, recorteId }: { comments: LegislacaoComentadaPublica[]; recorteId: string | null }) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -20,7 +30,8 @@ export function LegiscastCommentedArticles({ comments, recorteId }: { comments: 
     <section className="mt-6 min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7" aria-labelledby="commented-articles-title" data-recorte-id={recorteId ?? undefined}>
       <h2 id="commented-articles-title" className="text-2xl font-black text-[#062a5f]">Legislação comentada</h2>
       <div className="relative mt-4 max-w-xl"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar artigo..." aria-label="Pesquisar artigo comentado" className="min-h-12 w-full rounded-xl border border-slate-300 px-4 text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" /></div>
-      {visible.length ? <ul className="mt-5 columns-1 gap-3 min-[420px]:columns-2 lg:columns-3" aria-live="polite">{visible.map((comment) => <li key={`${comment.slug}:${comment.ordem}`} className="mb-3 break-inside-avoid"><button type="button" onClick={() => setSelectedComment(comment)} className="flex min-h-11 w-full items-center rounded-xl border border-blue-100 bg-slate-50 px-4 py-2 text-left font-bold text-[#062a5f] hover:border-blue-300 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">{getReferenciaDispositivo(comment)}</button></li>)}</ul> : <p className="mt-5 rounded-xl bg-slate-50 p-4 font-bold text-slate-700">Nenhum artigo confiável encontrado.</p>}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-600" aria-label="Legenda da calorimetria"><span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-[3px] border border-sky-300 bg-sky-50" aria-hidden="true" />Recente</span><span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-[3px] border border-amber-300 bg-amber-50" aria-hidden="true" />Média</span><span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-[3px] border border-orange-300 bg-orange-50" aria-hidden="true" />Alta</span><span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-[3px] border border-red-300 bg-red-50" aria-hidden="true" />Muito alta</span><span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-[3px] border border-blue-100 bg-white" aria-hidden="true" />Sem informações</span></div>
+      {visible.length ? <ul className="mt-5 columns-1 gap-3 min-[420px]:columns-2 lg:columns-3" aria-live="polite">{visible.map((comment) => <li key={`${comment.slug}:${comment.ordem}`} className="mb-3 break-inside-avoid"><button type="button" onClick={() => setSelectedComment(comment)} className={`flex min-h-11 w-full items-center rounded-xl border px-4 py-2 text-left font-bold text-[#062a5f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${comment.artigo_recente ? RECENT_HEAT : HEAT[comment.incidencia]}`} title={comment.artigo_recente ? "Artigo recente" : `Incidência: ${comment.incidencia.replaceAll("_", " ")}`}>{getReferenciaDispositivo(comment)}</button></li>)}</ul> : <p className="mt-5 rounded-xl bg-slate-50 p-4 font-bold text-slate-700">Nenhum artigo confiável encontrado.</p>}
       {!normalizedQuery && comments.length > INITIAL_VISIBLE_ARTICLES ? <button type="button" className="mt-3 min-h-11 rounded-xl border border-blue-200 px-5 py-2 font-black text-blue-700 hover:bg-blue-50" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>{expanded ? "Ver menos" : "Ver mais"}</button> : null}
     </section>
     {selectedComment ? <LegisBotOverlay slug={selectedComment.slug} question={selectedComment} initialTab="legisbot" publicComment={selectedComment.comentario} onClose={() => setSelectedComment(null)} /> : null}

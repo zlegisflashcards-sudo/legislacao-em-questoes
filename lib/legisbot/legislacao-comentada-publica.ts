@@ -11,6 +11,8 @@ export type LegislacaoComentadaPublica = {
   titulo: string;
   legislacao: string;
   comentario: string | null;
+  incidencia: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
+  artigo_recente: boolean;
 };
 
 type QuestionContextRow = {
@@ -30,6 +32,21 @@ type PublishedCommentRow = {
   status: string;
 };
 
+type ArticleMappingRow = {
+  slug: string;
+  ordem: string;
+  incidencia: string | null;
+  artigo_recente: boolean | null;
+};
+
+const INCIDENCIAS_PUBLICAS = new Set<LegislacaoComentadaPublica["incidencia"]>(["muito_alta", "alta", "media", "baixa", "nao_mapeado"]);
+
+function incidenciaPublica(value: string | null | undefined): LegislacaoComentadaPublica["incidencia"] {
+  return value && INCIDENCIAS_PUBLICAS.has(value as LegislacaoComentadaPublica["incidencia"])
+    ? value as LegislacaoComentadaPublica["incidencia"]
+    : "nao_mapeado";
+}
+
 /**
  * Consolida somente dispositivos que possuem uma fonte consistente em questions.
  * `status === concluido` é a regra já usada pelo botão humano Publicar do LegisBot.
@@ -38,6 +55,7 @@ export function consolidarLegislacaoComentadaConfiavel(
   questions: QuestionContextRow[],
   comments: PublishedCommentRow[],
   fallbackTitle = "",
+  mappings: ArticleMappingRow[] = [],
 ): LegislacaoComentadaPublica[] {
   const grouped = new Map<string, QuestionContextRow[]>();
   for (const question of questions) {
@@ -48,6 +66,9 @@ export function consolidarLegislacaoComentadaConfiavel(
     comments
       .filter((comment) => comment.status === "concluido" && Boolean(comment.comentario?.trim()))
       .map((comment) => [`${comment.slug.toUpperCase()}\u0000${comment.ordem}`, comment.comentario?.trim() ?? ""]),
+  );
+  const mappingByContext = new Map(
+    mappings.map((mapping) => [`${mapping.slug.toUpperCase()}\u0000${mapping.ordem}`, { incidencia: incidenciaPublica(mapping.incidencia), artigo_recente: mapping.artigo_recente === true }]),
   );
 
   return [...grouped.values()]
@@ -63,6 +84,7 @@ export function consolidarLegislacaoComentadaConfiavel(
       const subjects = new Set(group.map((item) => normalizedLegisBotSourceText(item.assunto ?? "")));
       if (legislations.size !== 1 || subjects.size !== 1 || group.some((item) => validateQuestionStructure(item).status !== "valid")) return [];
 
+      const mapping = mappingByContext.get(`${source.slug.toUpperCase()}\u0000${source.ordem}`);
       return [{
         slug: source.slug.toUpperCase(),
         ordem: source.ordem,
@@ -70,6 +92,8 @@ export function consolidarLegislacaoComentadaConfiavel(
         assunto,
         legislacao,
         comentario: commentByContext.get(`${source.slug.toUpperCase()}\u0000${source.ordem}`) ?? null,
+        incidencia: mapping?.incidencia ?? "nao_mapeado",
+        artigo_recente: mapping?.artigo_recente ?? false,
       }];
     })
     .sort((a, b) => a.ordem.localeCompare(b.ordem));
@@ -81,10 +105,11 @@ export async function buscarLegislacaoComentadaPublicaPorSlug(slug: string) {
   if (!slugNormalizado || isOfflineBuild()) return [];
 
   const db = getSupabaseServerClient();
-  const [questionsResult, lawResult, commentsResult] = await Promise.all([
+  const [questionsResult, lawResult, commentsResult, mappingsResult] = await Promise.all([
     db.from("questions").select("id,slug,ordem,titulo,assunto,legislacao,updated_at").eq("slug", slugNormalizado.toLowerCase()).eq("ativo", true),
     db.from("leis").select("titulo").eq("slug", slugNormalizado.toLowerCase()).maybeSingle(),
-    db.from("legisbot_comentarios").select("slug,ordem,comentario,status").eq("slug", slugNormalizado).eq("status", "concluido").not("comentario", "is", null).neq("comentario", ""),
+    db.from("legisbot_comentarios").select("slug,ordem,comentario,status").eq("slug", slugNormalizado).eq("status", "concluido").eq("context_kind", "comment").not("comentario", "is", null).neq("comentario", ""),
+    db.from("article_context_mappings").select("slug,ordem,incidencia,artigo_recente").eq("slug", slugNormalizado.toLowerCase()),
   ]);
   if (questionsResult.error || lawResult.error || commentsResult.error) {
     console.error("Erro ao carregar a legislação comentada confiável do LegisCast:", {
@@ -99,5 +124,6 @@ export async function buscarLegislacaoComentadaPublicaPorSlug(slug: string) {
     (questionsResult.data ?? []) as QuestionContextRow[],
     (commentsResult.data ?? []) as PublishedCommentRow[],
     lawResult.data?.titulo ? String(lawResult.data.titulo) : "",
+    mappingsResult.error ? [] : (mappingsResult.data ?? []) as ArticleMappingRow[],
   );
 }

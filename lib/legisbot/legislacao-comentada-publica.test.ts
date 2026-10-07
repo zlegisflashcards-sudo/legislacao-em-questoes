@@ -26,6 +26,17 @@ describe("legislação comentada confiável do LegisCast", () => {
     expect(contexts[0]?.comentario).toBe("Comentário aprovado");
   });
 
+  it("usa a incidência da Central de artigos sem depender do comentário publicado", () => {
+    const [context] = consolidarLegislacaoComentadaConfiavel([question()], [], "Código Penal", [{ slug: "CP", ordem: "0001", incidencia: "muito_alta", artigo_recente: false }]);
+    expect(context).toMatchObject({ comentario: null, incidencia: "muito_alta" });
+  });
+
+  it("não cria legislação comentada apenas por haver um registro do LegisBot", () => {
+    expect(consolidarLegislacaoComentadaConfiavel([], [
+      { slug: "CP", ordem: "0001.0.00.0.00.0", status: "concluido", comentario: "Conteúdo em revisão" },
+    ], "Código Penal")).toEqual([]);
+  });
+
   it("exclui um contexto com conflito real de assunto ou legislação", () => {
     expect(consolidarLegislacaoComentadaConfiavel([
       question(),
