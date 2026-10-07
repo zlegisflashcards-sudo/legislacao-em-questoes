@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AdminLawQuestions } from "@/components/admin/admin-law-questions";
 import type { AdminQuestionStructureNode } from "@/components/admin/admin-question-editor";
 import { getAdminLawBySlug, getAdminLawStructure } from "@/lib/admin-law-center-server";
-import { getAdminQuestion } from "@/lib/admin-questoes-server";
+import { getAdminQuestion, getLegisBotQuestionDraft } from "@/lib/admin-questoes-server";
 
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
 
@@ -15,7 +15,9 @@ export default async function AdminLawQuestionsPage({ params, searchParams }: { 
   const structure = await getAdminLawStructure(law.id);
   const questionId = one(query.question_id);
   const initialQuestion = questionId ? (await getAdminQuestion(law.slug, questionId)).question : null;
+  const legisBotId = one(query.legisbot_id);
+  const initialDraft = !initialQuestion && legisBotId ? (await getLegisBotQuestionDraft(law.slug, legisBotId)).data : null;
   const requestedReturn = one(query.retorno);
   const returnHref = requestedReturn.startsWith("/admin/artigos/conflitos/") && !requestedReturn.startsWith("//") ? requestedReturn : "";
-  return <div data-law-area="questoes"><AdminLawQuestions law={{ id: law.id, slug: law.slug, titulo: law.titulo }} initialStructure={structure as AdminQuestionStructureNode[]} initialQuestion={initialQuestion} returnHref={returnHref} /></div>;
+  return <div data-law-area="questoes"><AdminLawQuestions law={{ id: law.id, slug: law.slug, titulo: law.titulo }} initialStructure={structure as AdminQuestionStructureNode[]} initialQuestion={initialQuestion} initialDraft={initialDraft} sourceLegisBotId={legisBotId ? Number(legisBotId) : null} returnHref={returnHref} /></div>;
 }

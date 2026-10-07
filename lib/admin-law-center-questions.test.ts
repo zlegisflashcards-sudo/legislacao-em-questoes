@@ -95,6 +95,19 @@ describe("Questões na Central da Lei", () => {
     expect(central).toContain("law_slug: law.slug");
   });
 
+  it("trata o LegisBot como contexto editorial até a criação explícita da questão", () => {
+    const page = read("app/admin/leis/[slug]/questoes/page.tsx");
+    const botEditor = read("components/admin/legisbot-editor.tsx");
+    expect(server).toContain("export async function getLegisBotQuestionDraft");
+    expect(server).toContain('.eq("id", id(commentId))');
+    expect(server).toContain('.eq("slug", current.slug.toUpperCase())');
+    expect(server).toContain("precisa de Assunto e Ordem confiáveis antes de criar uma questão");
+    expect(page).toContain("getLegisBotQuestionDraft");
+    expect(page).toContain("legisbot_id");
+    expect(botEditor).toContain("Criar questão");
+    expect(botEditor).toContain("?legisbot_id=");
+  });
+
   it("reutiliza o editor completo na Central", () => {
     expect(central).toContain("<AdminQuestionEditor");
     for (const field of ["pergunta", "resposta", "justificativa", "assunto", "legislacao", "artigo", "ordem", "structure_id", "titulo", "total_artigos", "capitulo", "secao", "subsecao"]) expect(editor).toContain(field);

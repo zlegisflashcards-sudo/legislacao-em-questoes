@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { excluirComentario, salvarComentario, type AdminActionState } from "@/app/admin/actions";
 import { LegisBotRichEditor } from "@/components/admin/legisbot-rich-editor";
+import { ArticleMapping } from "@/components/admin/article-mapping";
 import {
   LEGISBOT_COMENTARIO_STATUS,
   type LegisBotComentario,
@@ -15,7 +16,7 @@ import { prepararComentarioParaEditor } from "@/lib/legisbot/prepare-comment-htm
 
 type Fields = Pick<
   LegisBotComentario,
-  "slug" | "ordem" | "titulo" | "assunto" | "legislacao" | "comentario" | "status" | "modelo_ia"
+  "slug" | "ordem" | "titulo" | "assunto" | "legislacao" | "comentario" | "status" | "modelo_ia" | "context_kind"
 >;
 
 const initialAction: AdminActionState = { ok: false, message: "" };
@@ -28,6 +29,7 @@ const emptyFields: Fields = {
   comentario: "",
   status: "pendente",
   modelo_ia: null,
+  context_kind: "comment",
 };
 const statusLabels: Record<LegisBotComentarioStatus, string> = {
   pendente: "Rascunho / pendente",
@@ -45,6 +47,7 @@ const fromRecord = (record?: LegisBotComentario): Fields => record ? {
   comentario: record.comentario ?? "",
   status: record.status,
   modelo_ia: record.modelo_ia,
+  context_kind: record.context_kind ?? "comment",
 } : emptyFields;
 const forEditor = (fields: Fields): Fields => ({
   ...fields,
@@ -62,12 +65,14 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
   const [state, action, pending] = useActionState(salvarComentario, initialAction);
   const identifiersConfirmedRef = useRef<HTMLInputElement>(null);
   const publicUrl = `/legisbot/${encodeURIComponent(savedFields.slug.toLowerCase())}/${encodeURIComponent(savedFields.ordem)}`;
+  const createQuestionHref = savedRecord?.context_kind === "shadow_question" ? `/admin/leis/${encodeURIComponent(savedFields.slug.toLowerCase())}/questoes?legisbot_id=${encodeURIComponent(String(savedRecord.id))}` : null;
   const dirty = snapshot(fields) !== snapshot(savedFields);
   const identifiersChanged = Boolean(savedRecord && (
     savedRecord.slug !== fields.slug.trim().toUpperCase()
     || savedRecord.ordem !== fields.ordem.trim()
   ));
   const canOpenPublic = Boolean(savedRecord && savedRecord.status === "concluido");
+  const isShadow = fields.context_kind === "shadow_question";
 
   function duplicate() {
     setSavedRecord(undefined);
@@ -130,6 +135,7 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
   return <>
     <form action={action} className="admin-editor-form" onSubmit={confirmIdentifiers}>
       <input type="hidden" name="id" value={savedRecord?.id ?? ""} />
+      <input type="hidden" name="context_kind" value={fields.context_kind} />
       <input ref={identifiersConfirmedRef} type="hidden" name="identifiers_confirmed" defaultValue="" />
       <header className="admin-detail-header">
         <div>
@@ -142,6 +148,7 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
         </div>
         <div className="admin-save-actions">
           {canOpenPublic ? <Link className="admin-button secondary" href={publicUrl} target="_blank">Abrir página pública</Link> : null}
+          {createQuestionHref ? <Link className="admin-button secondary" href={createQuestionHref}>Criar questão</Link> : null}
           {savedRecord ? <button type="button" className="admin-button secondary" disabled={pending} onClick={duplicate}>Duplicar</button> : null}
           <button name="intent" value="draft" type="submit" className="admin-button secondary" disabled={pending}>
             {pending ? "Carregando…" : "Salvar como rascunho"}
@@ -149,9 +156,9 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
           {savedRecord ? <button name="intent" value="save" type="submit" className="admin-button primary" disabled={pending || !dirty}>
             {pending ? "Carregando…" : "Salvar alterações"}
           </button> : null}
-          <button name="intent" value="publish" type="submit" className="admin-button primary" disabled={pending}>
+          {!isShadow ? <button name="intent" value="publish" type="submit" className="admin-button primary" disabled={pending}>
             {pending ? "Publicando…" : "Publicar"}
-          </button>
+          </button> : null}
         </div>
       </header>
 
@@ -191,6 +198,12 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
             </select>
             {error("status")}
           </label>
+          <label>Tipo de contexto
+            <select value={fields.context_kind} disabled={Boolean(savedRecord)} onChange={(e) => update("context_kind", e.target.value as Fields["context_kind"])}>
+              <option value="comment">Comentário editorial</option>
+              <option value="shadow_question">Artigo Sombra pré-editorial</option>
+            </select>
+          </label>
           <label>Modelo de IA
             <input name="modelo_ia" value={fields.modelo_ia ?? ""} maxLength={50} onChange={(e) => update("modelo_ia", e.target.value || null)} />
           </label>
@@ -213,11 +226,11 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
         {error("legislacao")}
       </section>
 
-      <LegisBotRichEditor
+      {isShadow ? <section className="admin-card"><h2>Artigo Sombra</h2><p>Este contexto está em preparação editorial. Ele não será público, não entra em Anki nem no LegisCast. Use “Criar questão” depois de salvar para criar a primeira assertiva.</p></section> : <LegisBotRichEditor
         value={fields.comentario ?? ""}
         error={state.fieldErrors?.comentario}
         onChange={(html) => update("comentario", html)}
-      />
+      />}
 
       <div className="admin-bottom-actions">
         <div>
@@ -230,6 +243,8 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
         </div>
       </div>
     </form>
+
+    {savedRecord ? <ArticleMapping slug={savedFields.slug} ordem={savedFields.ordem} initial={null} /> : null}
 
     {confirmDelete && savedRecord ? <div className="admin-modal-backdrop" role="presentation">
       <div className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title">

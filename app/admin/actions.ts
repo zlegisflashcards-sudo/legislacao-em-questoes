@@ -81,6 +81,7 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   const modeloIa = String(formData.get("modelo_ia") ?? "").trim();
   const intent = String(formData.get("intent") ?? "save");
   const selectedStatus = String(formData.get("status") ?? "") as LegisBotComentarioStatus;
+  const contextKind = formData.get("context_kind") === "shadow_question" ? "shadow_question" : "comment";
   const status = (intent === "draft" ? "pendente" : intent === "publish" ? "concluido" : selectedStatus) as LegisBotComentarioStatus;
   const fieldErrors: NonNullable<AdminActionState["fieldErrors"]> = {};
 
@@ -90,7 +91,8 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   if (!titulo) fieldErrors.titulo = "Informe o título.";
   if (!assunto) fieldErrors.assunto = "Informe o assunto.";
   if (!possuiTextoLegislacao(legislacao)) fieldErrors.legislacao = "Informe o texto literal da legislação.";
-  if (!comentario) fieldErrors.comentario = "Informe o HTML do comentário.";
+  if (contextKind === "comment" && !comentario) fieldErrors.comentario = "Informe o HTML do comentário.";
+  if (contextKind === "shadow_question" && (status !== "pendente" || comentario)) return { ok: false, message: "Artigo Sombra não pode ser publicado nem conter comentário editorial." };
   if (!LEGISBOT_COMENTARIO_STATUS.includes(status)) fieldErrors.status = "Status inválido.";
   if (titulo.length > 255) fieldErrors.titulo = "Use no máximo 255 caracteres.";
   if (assunto.length > 255) fieldErrors.assunto = "Use no máximo 255 caracteres.";
@@ -147,6 +149,7 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
     legislacao: trustedSource?.legislacao ?? legislacao,
     comentario,
     status,
+    context_kind: contextKind,
     modelo_ia: modeloIa || null,
     ...(trustedSource ? { source_signature: trustedSource.signature, precisa_revisao: false } : {}),
   };

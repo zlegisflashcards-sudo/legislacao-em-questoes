@@ -21,16 +21,11 @@ import {
   listAdminQuestionConference,
   getAdminQuestionStructureReviews,
   setAdminQuestionStructureReview,
-  getLawQuestionShadowSources,
   getLawQuestionShadows,
   getLawQuestionShadowDraft,
-  analyzeLawQuestionShadows,
-  confirmLawQuestionShadowAnalysis,
   setLawQuestionShadowDecision,
   conferenceArticleContext,
   conferenceArticleLink,
-  previewConferenceQuestionBatch,
-  createConferenceQuestionBatch,
   searchAdminQuestions,
   getAdminQuestion,
   previewAnkiImport,
@@ -46,7 +41,6 @@ import {
   previewStructureTxtImport,
 } from "@/lib/admin-questoes-server";
 import { ArticleContextStandardizationError, applyArticleContextStandardization, previewArticleContextStandardization } from "@/lib/admin-article-context-standardization";
-import { LawShadowDocError } from "@/lib/law-shadow-doc";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -57,7 +51,6 @@ function failure(error: unknown) {
   if (error instanceof AdminQuestoesError) {
     return NextResponse.json({ error: error.message }, { status: error.status, headers });
   }
-  if (error instanceof LawShadowDocError) return NextResponse.json({ error: error.message }, { status: error.status, headers });
   if (error instanceof ArticleContextStandardizationError) return NextResponse.json({ error: error.message }, { status: error.status, headers });
   console.error("Falha interna na administração de questões.");
   return NextResponse.json({ error: "Não foi possível concluir a operação de questões." }, { status: 500, headers });
@@ -70,8 +63,6 @@ export async function GET(request: Request) {
     const scopes = searchParams.get("recortes") === "1";
     const data = lawSlug && searchParams.get("mode") === "conference-context"
       ? await conferenceArticleContext(lawSlug, searchParams.get("ordem"))
-      : lawSlug && searchParams.get("mode") === "shadow-sources"
-      ? await getLawQuestionShadowSources(lawSlug)
       : lawSlug && searchParams.get("mode") === "shadows"
       ? await getLawQuestionShadows(lawSlug)
       : lawSlug && searchParams.get("mode") === "shadow-draft"
@@ -114,11 +105,6 @@ export async function POST(request: Request) {
     let data: unknown;
     if (body.action === "criar") data = await createAdminQuestion(body);
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
-    else if (body.action === "previsualizar_lote_conferencia") data = await previewConferenceQuestionBatch(body);
-    else if (body.action === "criar_lote_conferencia") data = await createConferenceQuestionBatch(body);
-    else if (body.action === "analisar_sombras_docs") data = await analyzeLawQuestionShadows(body);
-    else if (body.action === "analisar_sombras_texto") data = await analyzeLawQuestionShadows(body);
-    else if (body.action === "confirmar_sombras_docs") data = await confirmLawQuestionShadowAnalysis(body);
     else if (body.action === "decidir_sombra") data = await setLawQuestionShadowDecision(body);
     else if (body.action === "marcar_revisao_estrutura") data = await setAdminQuestionStructureReview(body);
     else if (body.action === "atualizar_rapido") data = await updateQuickAdminQuestion(body);

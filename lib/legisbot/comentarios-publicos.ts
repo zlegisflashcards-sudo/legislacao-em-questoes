@@ -40,6 +40,7 @@ export async function buscarComentariosPublicosPorSlug(slug: string) {
     .select("slug,ordem,assunto,titulo")
     .eq("slug", slugNormalizado)
     .eq("status", "concluido")
+    .eq("context_kind", "comment")
     .not("comentario", "is", null)
     .neq("comentario", "")
     .order("ordem", { ascending: true });

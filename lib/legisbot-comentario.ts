@@ -7,6 +7,7 @@ export const LEGISBOT_COMENTARIO_STATUS = [
 
 export type LegisBotComentarioStatus =
   (typeof LEGISBOT_COMENTARIO_STATUS)[number];
+export type LegisBotContextKind = "comment" | "shadow_question";
 
 /** Representação da linha persistida em public.legisbot_comentarios. */
 export interface LegisBotComentario {
@@ -25,6 +26,8 @@ export interface LegisBotComentario {
   last_error_category: string | null;
   source_signature: string | null;
   precisa_revisao: boolean;
+  context_kind?: LegisBotContextKind;
+  structure_id?: number | null;
   created_at: string;
   updated_at: string;
 }

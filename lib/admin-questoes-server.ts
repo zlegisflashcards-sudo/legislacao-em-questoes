@@ -12,9 +12,7 @@ import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQues
 import { descendantStructureIds, sameImportIdentity } from "@/lib/admin-question-management";
 import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
 import { getArticleContext } from "@/lib/admin-article-center-server";
-import { createHash } from "node:crypto";
-import { extractLawShadowUnits, googleDocumentId, pastedLawTextToDocument, readGoogleDocument, readPublicGoogleDocument, type LawShadowUnitDraft } from "@/lib/law-shadow-doc";
-import { parseQuestionOrder, validateQuestionStructure } from "@/lib/question-structure-consistency";
+import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 import { collectPages } from "@/lib/law-question-pagination";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -25,7 +23,7 @@ const questionFields = "id,lei_id,structure_id,pergunta,resposta,justificativa,a
 const questionExportPageSize = 500;
 const db = () => getSupabaseServerClient();
 async function requireAdmin() { const user = await obterAdministrador(); if (!user) throw new AdminQuestoesError(401, "Autenticação administrativa obrigatória."); return user; }
-function fail(context: string, error: { code?: string; message?: string; details?: unknown; hint?: string } | null): never { console.error("Falha na administração de questões", { context, code: error?.code ?? null, message: error?.message ?? null, details: error?.details ?? null, hint: error?.hint ?? null }); if (context.includes("sombra") && (error?.code === "42P01" || error?.code === "PGRST205")) throw new AdminQuestoesError(503, "Artigo Sombra indisponível: aplique a migration 20261005140000_create_law_question_shadows.sql antes de usar a análise."); if (context.includes("sombra") && error?.code === "42703") throw new AdminQuestoesError(503, "Artigo Sombra precisa da atualização para texto colado: aplique a migration 20261005150000_add_pasted_text_to_law_question_shadows.sql."); throw new AdminQuestoesError(502, "Não foi possível concluir a operação no banco de questões."); }
+function fail(context: string, error: { code?: string; message?: string; details?: unknown; hint?: string } | null): never { console.error("Falha na administração de questões", { context, code: error?.code ?? null, message: error?.message ?? null, details: error?.details ?? null, hint: error?.hint ?? null }); if (context.includes("sombra") && (error?.code === "42P01" || error?.code === "PGRST205")) throw new AdminQuestoesError(503, "Questões Sombra indisponíveis: aplique a migration 20261005140000_create_law_question_shadows.sql antes de importar pelo Mapeamento."); throw new AdminQuestoesError(502, "Não foi possível concluir a operação no banco de questões."); }
 function slug(value: unknown) { if (typeof value !== "string" || !/^[a-z0-9-]{1,160}$/.test(value)) throw new AdminQuestoesError(400, "Lei inválida."); return value; }
 function id(value: unknown) { if (!Number.isSafeInteger(Number(value)) || Number(value) < 1) throw new AdminQuestoesError(400, "Estrutura inválida."); return Number(value); }
 function qid(value: unknown) { if (typeof value !== "string" || !/^[0-9a-f-]{36}$/i.test(value)) throw new AdminQuestoesError(400, "Questão inválida."); return value; }
@@ -145,79 +143,8 @@ export async function conferenceArticleLink(lawSlug: string, orderValue: unknown
   return { status: "found" as const, href: `/admin/artigos/${encodeURIComponent(current.slug.toLowerCase())}/${encodeURIComponent(context.ordem)}?aba=artigo&lei=${encodeURIComponent(current.slug.toLowerCase())}` };
 }
 
-type ShadowSource = { id: number | null; titulo: string; url_externa: string; google_document_id: string; direct: boolean };
-type ShadowAnalysisKind = "google_docs" | "texto_colado";
-type ShadowStoredUnit = { id: string; identity_key: string; ordem: string | null; assunto: string; tipo: "caput" | "paragrafo"; texto_html: string; texto_plano: string; caminho_estrutural: string[]; decision: "nao_cabe_questao" | "revogado" | null; last_seen_analysis_id: string | null; last_seen_at: string };
-const shadowHash = (value: string) => createHash("sha256").update(value).digest("hex");
-const shadowText = (value: unknown, field: string, max = 120000) => { if (typeof value !== "string" || !value.trim() || value.trim().length > max) throw new AdminQuestoesError(422, `${field} inválido na prévia do Artigo Sombra.`); return value.trim(); };
+type ShadowStoredUnit = { id: string; identity_key: string; ordem: string | null; assunto: string; tipo: "caput" | "paragrafo"; texto_html: string; texto_plano: string; caminho_estrutural: string[]; decision: "nao_cabe_questao" | "revogado" | null };
 const shadowPath = (value: unknown) => Array.isArray(value) ? value.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean).slice(0, 12) : [];
-function shadowIdentity(unit: Pick<LawShadowUnitDraft, "ordem" | "assunto">) { return unit.ordem ? `ordem:${unit.ordem}` : `referencia:${unit.assunto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim()}`; }
-function editedShadowUnits(value: unknown, snapshot: LawShadowUnitDraft[]) {
-  if (!Array.isArray(value) || value.length !== snapshot.length) throw new AdminQuestoesError(422, "A prévia do Artigo Sombra mudou; gere uma nova análise.");
-  const original = new Map(snapshot.map((unit) => [unit.key, unit]));
-  return value.map((raw) => {
-    const row = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
-    const base = original.get(String(row.key ?? ""));
-    if (!base) throw new AdminQuestoesError(422, "A prévia contém uma unidade que não pertence à análise.");
-    const ordemRaw = row.ordem === null || row.ordem === "" ? null : shadowText(row.ordem, "Ordem", 80);
-    if (ordemRaw && !parseQuestionOrder(ordemRaw)) throw new AdminQuestoesError(422, "A Ordem do Artigo Sombra deve seguir o padrão artigo.letra_artigo.parágrafo.letra_parágrafo.inciso.letra_inciso.");
-    const assunto = shadowText(row.assunto ?? base.assunto, "Referência", 500);
-    if (ordemRaw && validateQuestionStructure({ assunto, ordem: ordemRaw }).status !== "valid") throw new AdminQuestoesError(422, "A Referência e a Ordem do Artigo Sombra representam dispositivos diferentes; ajuste a prévia antes de confirmar.");
-    const textoHtml = shadowText(row.texto_html ?? base.texto_html, "Texto legal");
-    const path = shadowPath(row.caminho_estrutural ?? base.caminho_estrutural);
-    return { ...base, ordem: ordemRaw, assunto, texto_html: textoHtml, texto_plano: textoHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(), caminho_estrutural: path, key: ordemRaw ?? base.key, ambiguous: !ordemRaw, warnings: ordemRaw ? base.warnings.filter((warning) => !warning.includes("Ordem")) : [...new Set([...base.warnings, "Sem Ordem confiável; esta unidade não comprova cobertura."])] };
-  });
-}
-async function shadowSourceCandidates(current: Law) {
-  const result = await db().from("materiais_leis").select("id,titulo,url_externa").eq("lei_id", current.id).not("url_externa", "is", null).order("ordem").order("id");
-  if (result.error) fail("listar_docs_sombra", result.error);
-  return (result.data ?? []).flatMap((row) => { const documentId = googleDocumentId(String(row.url_externa ?? "")); return documentId ? [{ id: Number(row.id), titulo: String(row.titulo), url_externa: String(row.url_externa), google_document_id: documentId, direct: false }] : []; }) as ShadowSource[];
-}
-function directShadowSource(value: unknown): ShadowSource | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const url = value.trim();
-  const documentId = googleDocumentId(url);
-  if (!documentId) throw new AdminQuestoesError(422, "Cole uma URL HTTPS de Google Docs no formato docs.google.com/document/d/...; links de Drive, PDF e visualização de arquivo não servem como fonte.");
-  return { id: null, titulo: "Link informado", url_externa: url, google_document_id: documentId, direct: true };
-}
-async function shadowMaterial(current: Law, value: unknown, sourceUrl?: unknown) {
-  const direct = directShadowSource(sourceUrl);
-  if (direct) return direct;
-  const candidates = await shadowSourceCandidates(current);
-  if (!candidates.length) throw new AdminQuestoesError(422, "Nenhum Google Docs foi vinculado à lei. Cole um link público abaixo ou cadastre na área Legislação um material com URL docs.google.com/document/d/... antes de analisar.");
-  const requested = value === null || value === undefined || value === "" ? null : Number(value);
-  const source = requested ? candidates.find((item) => item.id === requested) : candidates.length === 1 ? candidates[0] : null;
-  if (!source) throw new AdminQuestoesError(422, "Há mais de um Google Docs vinculado à lei; selecione explicitamente o documento-fonte.");
-  return source;
-}
-export async function getLawQuestionShadowSources(lawSlug: string) {
-  await requireAdmin(); const current = await law(lawSlug);
-  const [candidates, selected] = await Promise.all([shadowSourceCandidates(current), db().from("admin_law_question_doc_sources").select("material_id,source_url,google_document_id,configured_at").eq("lei_id", current.id).maybeSingle()]);
-  if (selected.error) fail("carregar_fonte_sombra", selected.error);
-  return { sources: candidates, selected_material_id: selected.data?.material_id ?? null, selected_source_url: selected.data?.source_url ?? null, configured_at: selected.data?.configured_at ?? null };
-}
-export async function analyzeLawQuestionShadows(body: Record<string, unknown>) {
-  const admin = await requireAdmin(); const current = await law(String(body.law_slug));
-  const pastedText = typeof body.texto_legal === "string" && body.texto_legal.trim() ? body.texto_legal : null;
-  const source = pastedText ? null : await shadowMaterial(current, body.material_id, body.source_url);
-  const kind: ShadowAnalysisKind = pastedText ? "texto_colado" : "google_docs";
-  const document = pastedText ? pastedLawTextToDocument(pastedText) : source!.direct ? await readPublicGoogleDocument(source!.google_document_id) : await readGoogleDocument(source!.google_document_id);
-  const extracted = extractLawShadowUnits(document);
-  const before = await db().from("admin_law_question_shadow_units").select("identity_key,source_fingerprint").eq("lei_id", current.id);
-  if (before.error) fail("comparar_analise_sombra", before.error);
-  const previous = new Map((before.data ?? []).map((row) => [String(row.identity_key), String(row.source_fingerprint)]));
-  const next = new Map(extracted.units.map((unit) => [shadowIdentity(unit), shadowHash(`${unit.assunto}\u0000${unit.texto_html}`)]));
-  const changes = {
-    novas: [...next.keys()].filter((key) => !previous.has(key)),
-    alteradas: [...next.entries()].filter(([key, fingerprint]) => previous.has(key) && previous.get(key) !== fingerprint).map(([key]) => key),
-    // A pasted chapter is deliberately partial: units outside it are unknown,
-    // not absent, and must never be treated as removed from the inventory.
-    ausentes: pastedText ? [] : [...previous.keys()].filter((key) => !next.has(key)),
-  };
-  const record = await db().from("admin_law_question_shadow_analyses").insert({ lei_id: current.id, material_id: source?.id ?? null, source_url: source?.url_externa ?? null, google_document_id: source?.google_document_id ?? null, source_kind: kind, partial: Boolean(pastedText), google_revision_id: document.revisionId ?? null, units: extracted.units, warnings: extracted.warnings, complete: extracted.units.length > 0, created_by: admin.id }).select("id,created_at").single();
-  if (record.error) fail("registrar_analise_sombra", record.error);
-  return { analysis_id: record.data.id, analyzed_at: record.data.created_at, source: source ?? { titulo: "Texto colado", direct: true }, partial: Boolean(pastedText), units: extracted.units, warnings: extracted.warnings, complete: extracted.units.length > 0, changes };
-}
 function shadowCoverage(units: ShadowStoredUnit[], questions: Array<{ id: string; ordem: string; assunto: string | null }>) {
   return units.map((unit) => {
     const related = unit.ordem ? questions.filter((question) => question.ordem === unit.ordem) : [];
@@ -229,31 +156,13 @@ function shadowCoverage(units: ShadowStoredUnit[], questions: Array<{ id: string
 }
 export async function getLawQuestionShadows(lawSlug: string) {
   await requireAdmin(); const current = await law(lawSlug);
-  const [units, questions, analysis] = await Promise.all([
-    db().from("admin_law_question_shadow_units").select("id,identity_key,ordem,assunto,tipo,texto_html,texto_plano,caminho_estrutural,decision,last_seen_analysis_id,last_seen_at").eq("lei_id", current.id).order("ordem").order("first_seen_at"),
+  const [units, questions] = await Promise.all([
+    db().from("admin_law_question_shadow_units").select("id,identity_key,ordem,assunto,tipo,texto_html,texto_plano,caminho_estrutural,decision").eq("lei_id", current.id).order("ordem").order("first_seen_at"),
     db().from("questions").select("id,ordem,assunto").eq("lei_id", current.id).eq("ativo", true).order("ordem").order("id"),
-    db().from("admin_law_question_shadow_analyses").select("id,created_at,complete,partial,warnings").eq("lei_id", current.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
-  if (units.error) fail("listar_sombras", units.error); if (questions.error) fail("comparar_sombras", questions.error); if (analysis.error) fail("ultima_analise_sombra", analysis.error);
+  if (units.error) fail("listar_sombras", units.error); if (questions.error) fail("comparar_sombras", questions.error);
   const covered = shadowCoverage((units.data ?? []) as ShadowStoredUnit[], (questions.data ?? []) as Array<{ id: string; ordem: string; assunto: string | null }>);
-  return { units: covered.map((unit) => ({ ...unit, absent_from_latest: Boolean(!analysis.data?.partial && analysis.data?.id && unit.last_seen_analysis_id !== analysis.data.id) })), last_analysis: analysis.data ?? null };
-}
-export async function confirmLawQuestionShadowAnalysis(body: Record<string, unknown>) {
-  const admin = await requireAdmin(); const current = await law(String(body.law_slug)); const analysisId = qid(body.analysis_id);
-  const analysis = await db().from("admin_law_question_shadow_analyses").select("id,material_id,source_url,google_document_id,source_kind,units").eq("id", analysisId).eq("lei_id", current.id).maybeSingle();
-  if (analysis.error) fail("carregar_analise_sombra", analysis.error); if (!analysis.data) throw new AdminQuestoesError(404, "A prévia do Artigo Sombra não pertence à lei atual.");
-  const units = editedShadowUnits(body.units, Array.isArray(analysis.data.units) ? analysis.data.units as LawShadowUnitDraft[] : []);
-  if (analysis.data.source_kind !== "texto_colado") {
-    const source = await shadowMaterial(current, analysis.data.material_id, analysis.data.source_url);
-    if (source.google_document_id !== analysis.data.google_document_id) throw new AdminQuestoesError(409, "O documento-fonte mudou desde a prévia; analise novamente.");
-    const sourceSaved = await db().from("admin_law_question_doc_sources").upsert({ lei_id: current.id, material_id: source.id, source_url: source.url_externa, google_document_id: source.google_document_id, configured_at: new Date().toISOString(), configured_by: admin.id }, { onConflict: "lei_id" });
-    if (sourceSaved.error) fail("salvar_fonte_sombra", sourceSaved.error);
-  }
-  for (const unit of units) {
-    const identity = shadowIdentity(unit); const result = await db().from("admin_law_question_shadow_units").upsert({ lei_id: current.id, identity_key: identity, ordem: unit.ordem, assunto: unit.assunto, tipo: unit.tipo, texto_html: unit.texto_html, texto_plano: unit.texto_plano, caminho_estrutural: unit.caminho_estrutural, source_fingerprint: shadowHash(`${unit.assunto}\u0000${unit.texto_html}`), last_seen_at: new Date().toISOString(), last_seen_analysis_id: analysis.data.id }, { onConflict: "lei_id,identity_key" });
-    if (result.error) fail("salvar_unidade_sombra", result.error);
-  }
-  return await getLawQuestionShadows(current.slug);
+  return { units: covered };
 }
 export async function setLawQuestionShadowDecision(body: Record<string, unknown>) {
   const admin = await requireAdmin(); const current = await law(String(body.law_slug)); const unitId = qid(body.unit_id); const decision = body.decision === "nao_cabe_questao" || body.decision === "revogado" ? body.decision : body.decision === null ? null : undefined;
@@ -266,35 +175,32 @@ export async function getLawQuestionShadowDraft(lawSlug: string, unitId: unknown
   await requireAdmin(); const current = await law(lawSlug); const result = await db().from("admin_law_question_shadow_units").select("id,ordem,assunto,texto_html,caminho_estrutural,decision").eq("id", qid(unitId)).eq("lei_id", current.id).maybeSingle();
   if (result.error) fail("carregar_sombra_para_questao", result.error); if (!result.data || result.data.decision || !result.data.ordem) throw new AdminQuestoesError(422, "Esta unidade não possui vínculo confiável para criar uma questão.");
   const nodes = await structure(current.id); const targetPath = shadowPath(result.data.caminho_estrutural); const candidates = nodes.filter((node) => { const path: string[] = []; for (let currentNode: QuestionStructureNode | undefined = node; currentNode; currentNode = currentNode.parent_id ? nodes.find((item) => item.id === currentNode!.parent_id) : undefined) path.unshift(currentNode.nome.trim()); return path.length === targetPath.length && path.every((name, index) => name === targetPath[index]); });
-  return { unit_id: result.data.id, data: { ...blankShadowQuestion(result.data.ordem, result.data.assunto, result.data.texto_html), structure_id: candidates.length === 1 ? candidates[0].id : null }, structure_warning: targetPath.length && candidates.length !== 1 ? "A estrutura do Docs não corresponde de forma única à Central da Lei; escolha o bloco manualmente." : null };
+  return { unit_id: result.data.id, data: { ...blankShadowQuestion(result.data.ordem, result.data.assunto, result.data.texto_html), structure_id: candidates.length === 1 ? candidates[0].id : null }, structure_warning: targetPath.length && candidates.length !== 1 ? "A estrutura informada não corresponde de forma única à Central da Lei; escolha o bloco manualmente." : null };
 }
-function blankShadowQuestion(ordem: string, assunto: string, legislacao: string) { return { pergunta: "", resposta: "", justificativa: "", assunto, legislacao, ordem, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }; }
-type ConferenceBatchInput = { pergunta?: unknown; resposta?: unknown; justificativa?: unknown; assunto?: unknown; ordem?: unknown; legislacao?: unknown };
-function conferenceBatchDrafts(current: Law, structureId: unknown, rows: unknown) {
-  const target = optionalId(structureId);
-  const values = Array.isArray(rows) ? rows : [];
-  if (!values.length || values.length > 200) throw new AdminQuestoesError(400, "Informe entre 1 e 200 questões para adicionar.");
-  return { target, drafts: values.map((row, index) => {
-    try { return draft({ ...(row as ConferenceBatchInput), structure_id: target, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }); }
-    catch (error) { throw new AdminQuestoesError(422, `Linha ${index + 1}: ${error instanceof Error ? error.message : "dados inválidos."}`); }
-  }) };
+function blankShadowQuestion(ordem: string, assunto: string, legislacao: string): QuestionDraft { return { structure_id: null, pergunta: "", resposta: "Certo", justificativa: "", assunto, legislacao, ordem, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }; }
+export async function getLegisBotQuestionDraft(lawSlug: string, commentId: unknown) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const result = await db()
+    .from("legisbot_comentarios")
+    .select("id,slug,ordem,assunto,legislacao")
+    .eq("id", id(commentId))
+    .eq("slug", current.slug.toUpperCase())
+    .eq("context_kind", "shadow_question")
+    .maybeSingle();
+  if (result.error) fail("carregar_legisbot_para_questao", result.error);
+  if (!result.data) throw new AdminQuestoesError(404, "Contexto do LegisBot não encontrado para esta lei.");
+  if (validateQuestionStructure({ assunto: result.data.assunto, ordem: result.data.ordem }).status !== "valid") {
+    throw new AdminQuestoesError(422, "O contexto do LegisBot precisa de Assunto e Ordem confiáveis antes de criar uma questão.");
+  }
+  return {
+    comment_id: Number(result.data.id),
+    data: { ...blankShadowQuestion(result.data.ordem, result.data.assunto, result.data.legislacao), structure_id: null },
+    structure_warning: null,
+  };
 }
-async function validateConferenceBatch(current: Law, structureId: unknown, rows: unknown) {
-  const { target, drafts } = conferenceBatchDrafts(current, structureId, rows);
-  const nodes = await structure(current.id);
-  if (target === null && nodes.length) throw new AdminQuestoesError(422, "Selecione um bloco estrutural para esta lei.");
-  await validateStructure(current.id, target);
-  const local = new Set<string>();
-  for (const item of drafts) { const key = `${item.ordem}\u0000${item.pergunta.trim()}`; if (local.has(key)) throw new AdminQuestoesError(409, "A tabela possui linhas duplicadas com a mesma ordem e enunciado."); local.add(key); }
-  const existing = await db().from("questions").select("ordem,pergunta").eq("lei_id", current.id).eq("ativo", true);
-  if (existing.error) fail("validar_lote_conferencia", existing.error);
-  for (const item of drafts) if ((existing.data ?? []).some((stored) => sameImportIdentity(stored, item))) throw new AdminQuestoesError(409, `Já existe uma questão com a ordem ${item.ordem} e o mesmo enunciado nesta lei.`);
-  return { target, drafts };
-}
-export async function previewConferenceQuestionBatch(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const { drafts } = await validateConferenceBatch(current, body.structure_id, body.rows); return { count: drafts.length, rows: drafts.map((item, index) => ({ line: index + 1, ordem: item.ordem, resposta: item.resposta })) }; }
-export async function createConferenceQuestionBatch(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const { drafts } = await validateConferenceBatch(current, body.structure_id, body.rows); const result = await db().from("questions").insert(drafts.map((item) => ({ ...values(current, item), ativo: true }))).select(questionFields); if (result.error) fail("criar_lote_conferencia", result.error); return { created: result.data ?? [] }; }
 export async function getAdminQuestion(lawSlug: string, questionId: unknown) { await requireAdmin(); const current = await law(lawSlug); const result = await db().from("questions").select(questionFields).eq("id", qid(questionId)).eq("lei_id", current.id).maybeSingle(); if (result.error) fail("carregar_questao", result.error); if (!result.data) throw new AdminQuestoesError(404, "Questão não encontrada para a lei selecionada."); return { law: current, question: result.data }; }
-export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); return r.data; }
+export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); const legisBotId = body.legisbot_id === null || body.legisbot_id === undefined || body.legisbot_id === "" ? null : Number(body.legisbot_id); if (legisBotId !== null && Number.isSafeInteger(legisBotId)) { const converted = await db().from("legisbot_comentarios").update({ context_kind: "comment", status: "pendente", comentario: null, precisa_revisao: false }).eq("id", legisBotId).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem).eq("context_kind", "shadow_question"); if (converted.error) fail("converter_sombra_legisbot", converted.error); } return r.data; }
 export async function updateAdminQuestion(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const questionId = qid(body.id); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d, questionId); const before = await db().from("questions").select(questionFields).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (before.error) fail("ler_questao_antes_edicao", before.error); if (!before.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const r = await db().from("questions").update(values(current, d)).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).select(questionFields).maybeSingle(); if (r.error) fail("editar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const audit = await db().rpc("admin_comercial_auditar", { p_ator_user_id: user.id, p_acao: "atualizar", p_entidade: "questao", p_entidade_id: questionId, p_anterior: before.data, p_posterior: r.data, p_detalhes: { origem: "editor_questoes", slug: before.data.slug, ordem_anterior: before.data.ordem, ordem_posterior: d.ordem } }); if (audit.error) console.error("Falha ao auditar edição individual de questão", { questionId, code: audit.error.code }); const sourceChanged = normalizedImportSource({ titulo: String(before.data.titulo ?? ""), assunto: String(before.data.assunto ?? ""), legislacao: String(before.data.legislacao ?? "") }) !== normalizedImportSource({ titulo: d.titulo ?? "", assunto: d.assunto ?? "", legislacao: d.legislacao ?? "" }); const identifiersChanged = String(before.data.ordem) !== d.ordem; if (sourceChanged || identifiersChanged) { const oldReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", String(before.data.slug).toUpperCase()).eq("ordem", String(before.data.ordem)); if (oldReview.error) fail("sinalizar_revisao_apos_edicao", oldReview.error); if (identifiersChanged) { const newReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem); if (newReview.error) fail("sinalizar_revisao_nova_ordem", newReview.error); } } return r.data; }
 export async function updateQuickAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const question = await db().from("questions").select(questionFields).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (question.error) fail("ler_questao", question.error); if (!question.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const input = body.data as Record<string, unknown>; if (!input || Object.keys(input).some((key) => !["pergunta","resposta","justificativa","assunto","legislacao","ordem"].includes(key))) throw new AdminQuestoesError(400, "A edição rápida não permite alterar a estrutura da questão."); return updateAdminQuestion({ law_slug: current.slug, id: question.data.id, data: { ...question.data, ...input } }); }
 async function deleteContentRpc(current: Law, userId: string, questionIds: string[] | null, structureId: number | null, execute: boolean, confirmation?: unknown, jobAction?: unknown) { const result = await db().rpc("admin_delete_law_content_v3", { p_lei_id: current.id, p_question_ids: questionIds, p_structure_id: structureId, p_actor_user_id: userId, p_confirmation: typeof confirmation === "string" ? confirmation : null, p_execute: execute, p_job_action: jobAction === "detach_completed" || jobAction === "cancel_active" ? jobAction : null }); if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : 422, result.error.message); if (!result.data) throw new AdminQuestoesError(404, "Conteúdo não encontrado para exclusão."); return result.data as Record<string, unknown>; }
