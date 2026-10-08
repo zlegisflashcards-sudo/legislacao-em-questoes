@@ -133,10 +133,14 @@ export default function LegisBotPageClient({
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [dadosLegislacao, setDadosLegislacao] = useState(dadosIniciais);
   const [source, setSource] = useState<LegisBotApiResponse["source"]>();
-  const isPublicArticle = publicComment !== undefined;
   const publishedComment = publicComment?.trim() || null;
+  // `null` means that this dispositivo ainda não tem comentário publicado.
+  // Ele continua sendo um contexto estudável: o aluno autenticado deve poder
+  // solicitar a geração pelo endpoint autenticado. Somente um comentário já
+  // publicado torna o contexto estritamente público/readonly.
+  const isPublicArticle = Boolean(publishedComment);
   const [answer, setAnswer] = useState<string | null>(publishedComment);
-  const [answerState, setAnswerState] = useState<AnswerState>(isPublicArticle ? (publishedComment ? "ready" : "not_found") : "loading");
+  const [answerState, setAnswerState] = useState<AnswerState>(isPublicArticle ? "ready" : "loading");
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [readRevision, setReadRevision] = useState(0);

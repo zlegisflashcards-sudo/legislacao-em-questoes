@@ -88,4 +88,11 @@ describe("contrato de leitura pública do LegisBot", () => {
     expect(actionBlock).toContain("method: \"POST\"");
     expect(actionBlock).toContain("onClick={() => void gerarComentario()}");
   });
+
+  it("permite gerar quando o overlay recebe um comentário ainda não publicado", () => {
+    const client = readFileSync(join(process.cwd(), "app/legisbot/legisbot-page-client.tsx"), "utf8");
+    expect(client).toContain("const isPublicArticle = Boolean(publishedComment);");
+    expect(client).toContain('const [answerState, setAnswerState] = useState<AnswerState>(isPublicArticle ? "ready" : "loading");');
+    expect(client).not.toContain("const isPublicArticle = publicComment !== undefined;");
+  });
 });
