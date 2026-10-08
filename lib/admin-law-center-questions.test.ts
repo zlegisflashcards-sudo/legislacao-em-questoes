@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, plainQuestionText } from "./admin-question-search";
+import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, parseAdminQuestionSearchSort, plainQuestionText } from "./admin-question-search";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const server = read("lib/admin-questoes-server.ts");
@@ -52,6 +52,9 @@ describe("Questões na Central da Lei", () => {
     expect(parseAdminQuestionSearchFilter("certo")).toBe("certo");
     expect(parseAdminQuestionSearchFilter("errado")).toBe("errado");
     expect(parseAdminQuestionSearchFilter("unstructured")).toBe("unstructured");
+    expect(parseAdminQuestionSearchSort("ordem_asc")).toBe("ordem_asc");
+    expect(parseAdminQuestionSearchSort("ordem_desc")).toBe("ordem_desc");
+    expect(parseAdminQuestionSearchSort("inválido")).toBe("recent");
     expect(server).toContain('request.eq("resposta", "Certo")');
     expect(server).toContain('request.eq("resposta", "Errado")');
     expect(server).toContain('request.is("structure_id", null)');
@@ -90,6 +93,8 @@ describe("Questões na Central da Lei", () => {
   it("cria questão diretamente na lei atual e valida sua estrutura", () => {
     const create = server.slice(server.indexOf("export async function createAdminQuestion"), server.indexOf("export async function updateAdminQuestion"));
     expect(create).toContain("const current = await law(String(body.law_slug))");
+    expect(create).toContain("Informe a estrutura para esta lei.");
+    expect(create).toContain("Informe o Total de artigos para exportação Anki.");
     expect(create).toContain("await validateStructure(current.id, d.structure_id)");
     expect(create).toContain("values(current, d)");
     expect(central).toContain("law_slug: law.slug");
@@ -112,6 +117,10 @@ describe("Questões na Central da Lei", () => {
     expect(central).toContain("<AdminQuestionEditor");
     for (const field of ["pergunta", "resposta", "justificativa", "assunto", "legislacao", "artigo", "ordem", "structure_id", "titulo", "total_artigos", "capitulo", "secao", "subsecao"]) expect(editor).toContain(field);
     expect(editor).toContain("<QuestionRichEditor");
+    expect(editor).toContain("const hasQuestionText = Boolean(plainQuestionText(value.pergunta))");
+    expect(editor).toContain("Informe a assertiva antes de cadastrar a questão.");
+    expect(editor).toContain("Informe a estrutura antes de cadastrar a questão.");
+    expect(editor).toContain("Informe o Total de artigos para a exportação Anki.");
   });
 
   it("mantém os fluxos Anki e Recortes pelos componentes da Central", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { lawDisplayName, nextQuestionOrder, parseQuestionDraft } from "./admin-questoes";
+import { QUESTION_LONG_CONTENT_MAX_LENGTH, lawDisplayName, nextQuestionOrder, parseQuestionDraft } from "./admin-questoes";
 
 const base = { pergunta: "A Constituição é a lei fundamental?", resposta: "Certo", ordem: 1 };
 
@@ -19,6 +19,13 @@ describe("administração de Legis Questões", () => {
 
   it("preserva ordem textual de questões importadas", () => {
     expect(parseQuestionDraft({ ...base, ordem: "0010.0.00.14" }).ordem).toBe("0010.0.00.14");
+  });
+
+  it("aceita legislação e justificativa extensas sem ampliar o limite da pergunta", () => {
+    const longContent = "L".repeat(QUESTION_LONG_CONTENT_MAX_LENGTH);
+    expect(parseQuestionDraft({ ...base, legislacao: longContent, justificativa: longContent })).toMatchObject({ legislacao: longContent, justificativa: longContent });
+    expect(() => parseQuestionDraft({ ...base, legislacao: `${longContent}x` })).toThrow("Legislação excede");
+    expect(() => parseQuestionDraft({ ...base, pergunta: "P".repeat(12_001) })).toThrow("Pergunta excede");
   });
 
   it("prepara a próxima ordem e a identificação da lei principal", () => {

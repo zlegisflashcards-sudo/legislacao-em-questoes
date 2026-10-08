@@ -2,6 +2,7 @@ export const ADMIN_QUESTION_SEARCH_LIMIT = 30;
 export const ADMIN_QUESTION_SEARCH_MAX_LIMIT = 50;
 
 export type AdminQuestionSearchFilter = "all" | "certo" | "errado" | "unstructured";
+export type AdminQuestionSearchSort = "recent" | "ordem_asc" | "ordem_desc";
 
 export function normalizeAdminQuestionSearchQuery(value: unknown) {
   return String(value ?? "")
@@ -23,6 +24,10 @@ export function adminQuestionSearchId(value: unknown) {
 
 export function parseAdminQuestionSearchFilter(value: unknown): AdminQuestionSearchFilter {
   return (["certo", "errado", "unstructured"] as const).includes(value as never) ? value as AdminQuestionSearchFilter : "all";
+}
+
+export function parseAdminQuestionSearchSort(value: unknown): AdminQuestionSearchSort {
+  return value === "ordem_asc" || value === "ordem_desc" ? value : "recent";
 }
 
 export function plainQuestionText(value: unknown, limit = 320) {

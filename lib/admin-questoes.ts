@@ -1,4 +1,5 @@
 export const QUESTION_ANSWERS = ["Certo", "Errado"] as const;
+export const QUESTION_LONG_CONTENT_MAX_LENGTH = 60_000;
 
 export type QuestionAnswer = (typeof QUESTION_ANSWERS)[number];
 
@@ -61,9 +62,9 @@ export function parseQuestionFieldChange(field: QuestionEditableField, value: un
       return resposta as QuestionAnswer;
     }
     case "ordem": return order(value);
-    case "justificativa": return text(value, "Justificativa");
+    case "justificativa": return text(value, "Justificativa", false, QUESTION_LONG_CONTENT_MAX_LENGTH);
     case "assunto": return text(value, "Assunto", false, 500);
-    case "legislacao": return text(value, "Legislação");
+    case "legislacao": return text(value, "Legislação", false, QUESTION_LONG_CONTENT_MAX_LENGTH);
     case "titulo": return text(value, "Título", false, 500);
     case "total_artigos": return optionalInteger(value, "Total de artigos");
     case "capitulo": return text(value, "Capítulo", false, 500);

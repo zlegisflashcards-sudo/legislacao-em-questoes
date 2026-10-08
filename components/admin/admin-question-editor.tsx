@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { QuestionRichEditor } from "@/components/admin/question-rich-editor";
-import { QUESTION_ANSWERS, type QuestionAnswer, type QuestionDraft } from "@/lib/admin-questoes";
+import { QUESTION_ANSWERS, QUESTION_LONG_CONTENT_MAX_LENGTH, type QuestionAnswer, type QuestionDraft } from "@/lib/admin-questoes";
 import { compareQuestionStructureNames, type QuestionStructureType } from "@/lib/questoes-structure";
 import { plainQuestionText } from "@/lib/admin-question-search";
 
@@ -23,6 +23,12 @@ export function AdminQuestionEditor({ lawName, nodes, value, original, editing, 
   }, [nodes]);
   const update = <K extends keyof AdminQuestionForm>(key: K, next: AdminQuestionForm[K]) => onChange({ ...value, [key]: next });
   const dirty = JSON.stringify(value) !== JSON.stringify(original ?? blankAdminQuestionForm());
+  const hasQuestionText = Boolean(plainQuestionText(value.pergunta));
+  const requiresStructure = !editing && nodes.length > 0;
+  const hasStructure = !requiresStructure || value.structure_id !== null;
+  const hasTotalArticles = editing || (typeof value.total_artigos === "number" && value.total_artigos > 0);
+  const legislationWithinLimit = (value.legislacao ?? "").trim().length <= QUESTION_LONG_CONTENT_MAX_LENGTH;
+  const canSubmit = hasQuestionText && hasStructure && hasTotalArticles && legislationWithinLimit;
 
   return <article className="commercial-card question-editor-card">
     <header><div><p className="question-editor-eyebrow">{lawName}</p><h2 id="admin-question-editor-title">{editing ? "Editar questão" : "Cadastrar questão"}</h2><p>{dirty ? "Alterações não salvas" : editing ? "Alterações salvas" : "Preencha os dados da nova questão"}</p></div></header>
@@ -30,26 +36,28 @@ export function AdminQuestionEditor({ lawName, nodes, value, original, editing, 
 	    {editing && (onPrevious || onNext || onDuplicate || onMove || onDelete) ? <nav className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 sm:px-6" aria-label="Ações da questão"><button type="button" className="admin-button secondary" disabled={saving || !onPrevious} onClick={onPrevious}>← Questão anterior</button><button type="button" className="admin-button secondary" disabled={saving || !onNext} onClick={onNext}>Próxima questão →</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onDuplicate}>Duplicar</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onMove}>Mover para outra estrutura</button><button type="button" className="admin-button danger ml-auto" disabled={saving} onClick={onDelete}>Excluir questão</button></nav> : null}
 	    <form onSubmit={onSubmit} className="question-editor-form">
       <section><h3>Estrutura da questão</h3><div className="question-structure-grid">
-        <label>Estrutura<select value={value.structure_id ?? ""} onChange={(event) => update("structure_id", event.target.value ? Number(event.target.value) : null)}><option value="">Sem estrutura</option>{options.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select></label>
+        <label>Estrutura<select value={value.structure_id ?? ""} onChange={(event) => update("structure_id", event.target.value ? Number(event.target.value) : null)}><option value="">Sem estrutura</option>{options.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select>{!hasStructure ? <small className="text-amber-700">Informe a estrutura antes de cadastrar a questão.</small> : null}</label>
         <label>Ordem<input required inputMode="decimal" value={value.ordem} onChange={(event) => update("ordem", event.target.value)} /></label>
         <label>Resposta<select required value={value.resposta} onChange={(event) => update("resposta", event.target.value as QuestionAnswer)}><option value="" disabled>Selecione</option>{QUESTION_ANSWERS.map((answer) => <option key={answer}>{answer}</option>)}</select></label>
       </div></section>
       <section><h3>Conteúdo</h3>
         <QuestionRichEditor label="Pergunta" required value={value.pergunta} onChange={(next) => update("pergunta", next)} />
+        {!hasQuestionText ? <p className="mt-2 text-sm text-amber-700">Informe a assertiva antes de cadastrar a questão.</p> : null}
         <QuestionRichEditor label="Justificativa" value={value.justificativa ?? ""} onChange={(next) => update("justificativa", next)} />
         <label className="question-subject">Assunto<textarea value={value.assunto ?? ""} onChange={(event) => update("assunto", event.target.value)} /></label>
         <QuestionRichEditor label="Legislação" value={value.legislacao ?? ""} onChange={(next) => update("legislacao", next)} />
+        {!legislationWithinLimit ? <p className="mt-2 text-sm text-amber-700">A legislação excede o limite de {QUESTION_LONG_CONTENT_MAX_LENGTH.toLocaleString("pt-BR")} caracteres.</p> : null}
       </section>
       <section><h3>Campos complementares e legados</h3><div className="question-structure-grid">
         <label>Artigo<input value={value.artigo ?? ""} onChange={(event) => update("artigo", event.target.value)} /></label>
         <label>Título legado<input value={value.titulo ?? ""} onChange={(event) => update("titulo", event.target.value)} /></label>
-        <label>Total de artigos<input type="number" min="0" value={value.total_artigos ?? ""} onChange={(event) => update("total_artigos", event.target.value === "" ? null : Number(event.target.value))} /></label>
+        <label>Total de artigos<input type="number" min="1" value={value.total_artigos ?? ""} onChange={(event) => update("total_artigos", event.target.value === "" ? null : Number(event.target.value))} />{!hasTotalArticles ? <small className="text-amber-700">Informe o Total de artigos para a exportação Anki.</small> : null}</label>
         <label>Capítulo legado<input value={value.capitulo ?? ""} onChange={(event) => update("capitulo", event.target.value)} /></label>
         <label>Seção legada<input value={value.secao ?? ""} onChange={(event) => update("secao", event.target.value)} /></label>
         <label>Subseção legada<input value={value.subsecao ?? ""} onChange={(event) => update("subsecao", event.target.value)} /></label>
       </div></section>
 	      {showPreview ? <section aria-labelledby="question-preview-title"><h3 id="question-preview-title">Prévia para o aluno</h3><div className="rounded-xl border border-blue-100 bg-white p-4"><p className="text-sm text-slate-800">{plainQuestionText(value.pergunta) || "O enunciado aparecerá aqui."}</p><p className={`mt-3 inline-flex rounded-full px-2 py-1 text-xs font-black ${value.resposta === "Certo" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{value.resposta}</p>{value.justificativa ? <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">{plainQuestionText(value.justificativa)}</p> : null}</div></section> : null}
-	      <footer><span className={dirty ? "is-dirty" : ""}>{dirty ? "● Alterações não salvas" : ""}</span><div className="flex flex-wrap gap-2">{onCancel ? <button type="button" className="admin-button secondary" disabled={saving} onClick={onCancel}>Cancelar</button> : null}{editing && onNext ? <button name="save-intent" value="next" className="admin-button secondary" disabled={saving || !dirty}>{saving ? "Salvando…" : "Salvar e ir para a próxima"}</button> : null}<button name="save-intent" value="stay" className="admin-button primary" disabled={saving || !dirty}>{saving ? "Salvando…" : editing ? "Salvar" : "Cadastrar questão"}</button></div></footer>
+      <footer><span className={dirty ? "is-dirty" : ""}>{dirty ? "● Alterações não salvas" : ""}</span><div className="flex flex-wrap gap-2">{onCancel ? <button type="button" className="admin-button secondary" disabled={saving} onClick={onCancel}>Cancelar</button> : null}{editing && onNext ? <button name="save-intent" value="next" className="admin-button secondary" disabled={saving || !dirty || !canSubmit}>{saving ? "Salvando…" : "Salvar e ir para a próxima"}</button> : null}<button name="save-intent" value="stay" className="admin-button primary" disabled={saving || !dirty || !canSubmit}>{saving ? "Salvando…" : editing ? "Salvar" : "Cadastrar questão"}</button></div></footer>
     </form>
   </article>;
 }
