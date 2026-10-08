@@ -80,21 +80,24 @@ describe("player Legis Questões", () => {
     expect(styles).toContain('.lf-feedback-details .lf-professor-toggle{border-top:0;padding:0}');
   });
 
-  it("vincula LegisBot, Comunidade e Destaques ao bloco de legislação", () => {
+  it("abre a central de aprofundamento por uma única ação no bloco de legislação", () => {
     const feedback = player.slice(player.indexOf("function LawStudyTools"), player.indexOf("function isPlayerFormTarget"));
     expect(feedback).toContain('className="lf-law-tools"');
+    expect(feedback).toContain('Aprofundar neste trecho da lei');
     expect(feedback).toContain('onOpen("legisbot")');
-    expect(feedback).toContain('onOpen("community")');
-    expect(feedback).toContain('onOpen("highlights")');
+    expect(feedback).not.toContain('onOpen("community")');
+    expect(feedback).not.toContain('onOpen("highlights")');
     expect(feedback.indexOf('lf-law-block')).toBeLessThan(feedback.indexOf('LawStudyTools onOpen={onOpenLegisBot}'));
-    expect(styles).toContain('.lf-law-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))');
-    expect(styles).toContain('@media(max-width:520px){.lf-law-tools{grid-template-columns:repeat(3,minmax(0,1fr))');
+    expect(styles).toContain('.lf-law-tools{display:block}');
+    expect(styles).toContain('.lf-law-tool{display:flex;width:100%;min-height:48px');
   });
 
   it("abre o LegisBot sobre o jogador sem navegação e mantém as abas no mesmo painel", () => {
     expect(player).toContain('import { LegisBotOverlay } from "@/components/legisbot-overlay"');
     expect(legisBotOverlay).toContain('<LegisBotPageClient slug={slug} ordem={question.ordem ?? ""}');
-    expect(legisBotOverlay).toContain('initialTab={initialTab} embedded onClose={onClose}');
+    expect(legisBotOverlay).toContain('initialTab={initialTab} embedded');
+    expect(legisBotOverlay).toContain('showArticleQuestions={Boolean(question.ordem)}');
+    expect(legisBotOverlay).toContain('questionsRecorteId={recorteId}');
     expect(legisBotOverlay).toContain('document.body.style.overflow = "hidden"');
     expect(legisBotOverlay).toContain('event.key === "Escape"');
     expect(legisBotOverlay).toContain('role="dialog" aria-modal="true"');
@@ -269,6 +272,14 @@ describe("player Legis Questões", () => {
     expect(player).toContain('questionStructurePath(structure, currentQuestion.structure_id)');
     expect(styles).toContain('.lf-structure-path{display:grid;gap:2px');
     expect(styles).toContain('overflow-wrap:anywhere');
+  });
+
+  it("abre cada item estrutural em uma nova aba no ponto correspondente do sumário do LegisCast", () => {
+    expect(player).toContain('new URLSearchParams({ structure_id: String(structureId) })');
+    expect(player).toContain('`/estudar/lei/${encodeURIComponent(slug ?? "")}/legiscast?${query}`');
+    expect(player).toContain('target="_blank"');
+    expect(player).toContain('rel="noopener noreferrer"');
+    expect(player).toContain('no sumário do LegisCast');
   });
 
   it("renderiza somente a questão atual no estudo livre", () => {

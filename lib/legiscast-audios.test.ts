@@ -87,6 +87,15 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain("aria-current");
   });
 
+  it("posiciona o sumário na estrutura recebida pela URL sem iniciar áudio automaticamente", () => {
+    expect(player).toContain('useSearchParams');
+    expect(player).toContain('searchParams.get("structure_id")');
+    expect(player).toContain('id={`legiscast-structure-${node.id}`}');
+    expect(player).toContain('data-target-structure={target ? "true" : undefined}');
+    expect(player).toContain('scrollIntoView({ block: "center" })');
+    expect(player).not.toContain('targetStructureId) void toggle');
+  });
+
   it("coordena lei, PDF e áudio antes de revelar o LegisCast", () => {
     const client = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
     const pdf = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");

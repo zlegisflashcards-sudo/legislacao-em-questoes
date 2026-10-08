@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { buildLegiscastStructureTree, type LegiscastStructureTreeItem } from "@/lib/legiscast-structure-tree";
 import { supabase } from "@/lib/supabase";
 
@@ -10,16 +11,30 @@ const speeds = [0.75, 1, 1.25, 1.5, 2];
 const formatTime = (seconds: number) => { const value = Math.max(0, Math.floor(seconds)); return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`; };
 
 function StructureSummary({ structure, tracks, index, onSelect, onNavigateToPdfPage }: { structure: Structure[]; tracks: AudioTrack[]; index: number; onSelect: (track: AudioTrack) => void; onNavigateToPdfPage?: (page: number) => void }) {
+  const searchParams = useSearchParams();
+  const rawTargetStructureId = searchParams.get("structure_id");
+  const parsedTargetStructureId = rawTargetStructureId && /^\d+$/.test(rawTargetStructureId) ? Number(rawTargetStructureId) : null;
+  const targetStructureId = parsedTargetStructureId && Number.isSafeInteger(parsedTargetStructureId) && parsedTargetStructureId > 0 ? parsedTargetStructureId : null;
   const tree = useMemo(() => buildLegiscastStructureTree(structure), [structure]);
   const tracksByStructure = useMemo(() => { const result = new Map<number, AudioTrack[]>(); for (const track of tracks) if (track.structureId !== null) result.set(track.structureId, [...(result.get(track.structureId) ?? []), track]); return result; }, [tracks]);
   const trackIndex = useMemo(() => new Map(tracks.map((track, position) => [track.id, position])), [tracks]);
   const unstructured = tracks.filter((track) => track.structureId === null);
+  useEffect(() => {
+    if (!targetStructureId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`legiscast-structure-${targetStructureId}`)?.scrollIntoView({ block: "center" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [targetStructureId, tree]);
   const render = (node: LegiscastStructureTreeItem, depth = 0): React.ReactNode => {
     const nodeTracks = tracksByStructure.get(node.id) ?? []; const first = nodeTracks[0]; const active = first ? trackIndex.get(first.id) === index : false;
+    const target = node.id === targetStructureId;
     const navigablePage = Number.isSafeInteger(node.pdf_page) && Number(node.pdf_page) >= 1 ? Number(node.pdf_page) : null;
     const activate = (selectedTrack?: AudioTrack) => { if (selectedTrack) onSelect(selectedTrack); if (navigablePage !== null) onNavigateToPdfPage?.(navigablePage); };
     const label = <span className={node.tipo === "titulo" ? "font-black uppercase tracking-wide text-blue-950" : node.tipo === "capitulo" ? "font-bold text-slate-800" : "text-slate-600"}>{first ? "▶ " : navigablePage !== null ? "↗ " : ""}{node.nome}</span>;
-    return <li key={node.id} style={{ paddingLeft: `${Math.min(depth, 3) * 12}px` }} className={node.tipo === "titulo" ? "mt-3 border-b border-blue-200 pb-2 pt-1 text-sm" : "pt-1 text-sm"}>{first || navigablePage !== null ? <button type="button" onClick={() => activate(first)} aria-current={active ? "true" : undefined} className={active ? "w-full rounded-lg bg-blue-50 px-2 py-2 text-left ring-1 ring-blue-200" : "w-full rounded-lg px-2 py-2 text-left hover:bg-slate-50"}>{label}</button> : <div className="px-2 py-2">{label}</div>}{nodeTracks.slice(1).map((track) => <button key={track.id} type="button" onClick={() => activate(track)} aria-current={trackIndex.get(track.id) === index ? "true" : undefined} className={trackIndex.get(track.id) === index ? "ml-2 mt-1 w-[calc(100%-0.5rem)] rounded bg-blue-50 px-2 py-1 text-left text-xs font-bold text-blue-800" : "ml-2 mt-1 w-[calc(100%-0.5rem)] rounded px-2 py-1 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50"}>▶ {track.title}</button>)}{node.children.length ? <ul>{node.children.map((child) => render(child, depth + 1))}</ul> : null}</li>;
+    const itemClassName = `${node.tipo === "titulo" ? "mt-3 border-b border-blue-200 pb-2 pt-1 text-sm" : "pt-1 text-sm"}${target ? " rounded-xl bg-blue-50 ring-2 ring-blue-400 ring-offset-1" : ""}`;
+    const mainClassName = target ? "w-full rounded-lg bg-blue-100 px-2 py-2 text-left" : active ? "w-full rounded-lg bg-blue-50 px-2 py-2 text-left ring-1 ring-blue-200" : "w-full rounded-lg px-2 py-2 text-left hover:bg-slate-50";
+    return <li key={node.id} id={`legiscast-structure-${node.id}`} data-target-structure={target ? "true" : undefined} style={{ paddingLeft: `${Math.min(depth, 3) * 12}px` }} className={itemClassName}>{first || navigablePage !== null ? <button type="button" onClick={() => activate(first)} aria-current={active ? "true" : undefined} className={mainClassName}>{label}</button> : <div className={target ? "rounded-lg bg-blue-100 px-2 py-2" : "px-2 py-2"}>{label}</div>}{nodeTracks.slice(1).map((track) => <button key={track.id} type="button" onClick={() => activate(track)} aria-current={trackIndex.get(track.id) === index ? "true" : undefined} className={trackIndex.get(track.id) === index ? "ml-2 mt-1 w-[calc(100%-0.5rem)] rounded bg-blue-50 px-2 py-1 text-left text-xs font-bold text-blue-800" : "ml-2 mt-1 w-[calc(100%-0.5rem)] rounded px-2 py-1 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50"}>▶ {track.title}</button>)}{node.children.length ? <ul>{node.children.map((child) => render(child, depth + 1))}</ul> : null}</li>;
   };
   return <nav className="mt-5 max-h-96 overflow-y-auto border-t border-slate-200 pt-2 lg:min-h-0 lg:flex-1 lg:max-h-none" aria-label="Playlist do LegisCast"><p className="px-2 pb-1 text-xs font-black uppercase tracking-wide text-slate-500">Sumário da lei</p><ul>{tree.map((node) => render(node))}</ul>{unstructured.length ? <section className="mt-3 border-t border-slate-200 pt-2"><p className="px-2 text-xs font-bold text-slate-500">Outros áudios</p>{unstructured.map((track) => <button key={track.id} type="button" onClick={() => onSelect(track)} aria-current={trackIndex.get(track.id) === index ? "true" : undefined} className={trackIndex.get(track.id) === index ? "mt-1 w-full rounded bg-blue-50 px-2 py-2 text-left text-sm font-bold text-blue-800" : "mt-1 w-full rounded px-2 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-50"}>▶ {track.title}</button>)}</section> : null}</nav>;
 }

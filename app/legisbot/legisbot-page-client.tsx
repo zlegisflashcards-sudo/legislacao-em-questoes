@@ -8,6 +8,7 @@ import { legalHtmlToPlainText } from "@/lib/legisbot-community";
 import { supabase } from "@/lib/supabase";
 import LegisBotStudyTabs, { type LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 import LegisBotPersonalHighlights from "@/components/legisbot-personal-highlights";
+import { LegisBotArticleQuestions } from "@/components/legisbot-article-questions";
 import {
   isHighlightCompatible,
   type LegisBotHighlight,
@@ -48,7 +49,8 @@ type LegisBotPageClientProps = {
   publicComment?: string | null;
   /** Incidência editorial, mostrada no cabeçalho quando o artigo é aberto pelo LegisCast. */
   mappingIncidence?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
-  articleQuestionsHref?: string | null;
+  showArticleQuestions?: boolean;
+  questionsRecorteId?: string | null;
   onClose?: () => void;
 };
 
@@ -123,7 +125,8 @@ export default function LegisBotPageClient({
   embedded = false,
   publicComment,
   mappingIncidence,
-  articleQuestionsHref,
+  showArticleQuestions = false,
+  questionsRecorteId = null,
   onClose,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -430,10 +433,14 @@ export default function LegisBotPageClient({
     <div className="legisbot-conversation-revealed">{legisBotContent}</div>
   );
 
+  const incidenceFlag = mappingIncidence && mappingIncidence !== "nao_mapeado" ? (
+    <span className={`legisbot-mapping-flag legisbot-mapping-flag--${mappingIncidence}`} role="img" aria-label={MAPPING_FLAG_LABEL[mappingIncidence]} title={MAPPING_FLAG_LABEL[mappingIncidence]}>⚑</span>
+  ) : null;
+
   return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><div className="legisbot-topic-actions">{mappingIncidence && mappingIncidence !== "nao_mapeado" ? <span className={`legisbot-mapping-flag legisbot-mapping-flag--${mappingIncidence}`} role="img" aria-label={MAPPING_FLAG_LABEL[mappingIncidence]} title={MAPPING_FLAG_LABEL[mappingIncidence]}>⚑</span> : null}<button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div></div> : adminShortcut ? <div className="legisbot-topic-tools">{adminShortcut}</div> : null}
+        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><div className="legisbot-topic-actions">{incidenceFlag}<button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div></div> : adminShortcut || incidenceFlag ? <div className="legisbot-topic-tools">{adminShortcut}<div className="legisbot-topic-actions">{incidenceFlag}</div></div> : null}
         <h1>{assunto}</h1>
       </header>
 
@@ -443,7 +450,7 @@ export default function LegisBotPageClient({
         ordem={ordemNormalizada}
         communityCount={communityCount}
         initialTab={initialTab}
-        articleQuestionsHref={articleQuestionsHref}
+        questionsContent={showArticleQuestions ? <LegisBotArticleQuestions slug={slugNormalizado} ordem={ordemNormalizada} recorteId={questionsRecorteId} /> : undefined}
         onActiveTabChange={changeStudyTab}
         legisBotContent={conversationContent}
         communityContent={

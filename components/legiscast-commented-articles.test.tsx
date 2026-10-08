@@ -46,6 +46,8 @@ describe("artigos comentados no LegisCast", () => {
     expect(overlay).toContain('role="dialog"');
     expect(overlay).toContain("embedded");
     expect(overlay).toContain("onClose={onClose}");
+    expect(overlay).toContain("showArticleQuestions={Boolean(question.ordem)}");
+    expect(component).toContain("recorteId={recorteId}");
     expect(overlay).toContain('event.key === "Escape"');
     expect(component).toContain("data-recorte-id={recorteId ?? undefined}");
   });

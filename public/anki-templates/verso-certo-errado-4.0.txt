@@ -73,9 +73,7 @@
             <div class="lf-law-text">{{legislação}}</div>
           </div>
           <div class="lf-legisbot-row lf-card-actions">
-            <a id="lf_legisbot" class="lf-legisbot-link lf-card-action" href="#" data-aba="legisbot" target="_blank" rel="noopener noreferrer">&#129302; LegisBot</a>
-            <a class="lf-legisbot-link lf-card-action" href="#" data-aba="comunidade" target="_blank" rel="noopener noreferrer">&#128172; Comunidade</a>
-            <a class="lf-legisbot-link lf-card-action" href="#" data-aba="destaques" target="_blank" rel="noopener noreferrer">&#128397;&#65039; Destaques</a>
+            <a id="lf_legisbot" class="lf-legisbot-link lf-card-action" href="#" target="_blank" rel="noopener noreferrer">Aprofundar neste trecho da lei</a>
           </div>
         </div>
       </div>
@@ -252,8 +250,8 @@ function alternarComentarioProfessor() {
 </script>
 <script>
 (function () {
-  var botoesLegisbot = document.querySelectorAll('.lf-card-actions .lf-legisbot-link');
-  if (!botoesLegisbot.length) return;
+  var botaoLegisbot = document.getElementById('lf_legisbot');
+  if (!botaoLegisbot) return;
 
   var slug = '{{slug}}'.trim();
   var ordem = '{{ordem}}'.trim();
@@ -263,9 +261,6 @@ function alternarComentarioProfessor() {
     + '/'
     + encodeURIComponent(ordem);
 
-  for (var i = 0; i < botoesLegisbot.length; i++) {
-    var aba = botoesLegisbot[i].getAttribute('data-aba') || 'legisbot';
-    botoesLegisbot[i].href = aba === 'legisbot' ? hrefBase : hrefBase + '?tab=' + encodeURIComponent(aba);
-  }
+  botaoLegisbot.href = hrefBase;
 })();
 </script>

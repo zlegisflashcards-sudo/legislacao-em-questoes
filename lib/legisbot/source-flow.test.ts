@@ -71,11 +71,17 @@ describe("fonte canônica do LegisBot", () => {
     const template = readFileSync("public/anki-templates/verso-certo-errado-4.0.txt", "utf8");
     expect(page).not.toMatch(/query\.(titulo|assunto|legislacao)/);
     expect(page).toContain("query.aba");
+    expect(page).toContain('.from("article_context_mappings")');
+    expect(page).toContain('mappingIncidence={incidence}');
     expect(client).toContain("body: JSON.stringify({})");
+    expect(client).toContain("const incidenceFlag = mappingIncidence");
+    expect(client.match(/\{incidenceFlag\}/g)).toHaveLength(2);
     expect(overlay).toContain('dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }}');
     expect(template).not.toMatch(/encodeURIComponent\((titulo|assunto|legislacao)\)/);
     expect(template).not.toContain("?titulo=");
-    expect(template).toContain("aba === 'legisbot' ? hrefBase");
+    expect(template).toContain("Aprofundar neste trecho da lei");
+    expect(template).toContain("botaoLegisbot.href = hrefBase");
+    expect(template).not.toContain("data-aba=");
   });
 
   it("mantém a revelação pedagógica do Legis Questões e respeita redução de movimento", () => {

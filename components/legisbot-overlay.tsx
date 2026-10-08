@@ -13,7 +13,7 @@ export type LegisBotOverlayArticle = {
   incidencia?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 };
 
-export function LegisBotOverlay({ slug, question, initialTab, publicComment, onClose }: { slug: string; question: LegisBotOverlayArticle; initialTab: LegisBotStudyTab; publicComment?: string | null; onClose: () => void }) {
+export function LegisBotOverlay({ slug, question, initialTab, publicComment, recorteId, onClose }: { slug: string; question: LegisBotOverlayArticle; initialTab: LegisBotStudyTab; publicComment?: string | null; recorteId?: string | null; onClose: () => void }) {
   const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -49,6 +49,5 @@ export function LegisBotOverlay({ slug, question, initialTab, publicComment, onC
     }
   }
 
-  const articleQuestionsHref = question.ordem ? `/questoes/${encodeURIComponent(slug.toLowerCase())}/estudar?livre=1&ordem=${encodeURIComponent(question.ordem)}` : null;
-  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={question.ordem ?? ""} dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={publicComment} mappingIncidence={question.incidencia} articleQuestionsHref={articleQuestionsHref} onClose={onClose} /></aside></div>;
+  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={question.ordem ?? ""} dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={publicComment} mappingIncidence={question.incidencia} showArticleQuestions={Boolean(question.ordem)} questionsRecorteId={recorteId} onClose={onClose} /></aside></div>;
 }

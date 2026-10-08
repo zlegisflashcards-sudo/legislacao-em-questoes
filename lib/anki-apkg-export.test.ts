@@ -10,6 +10,14 @@ describe("exportação APKG", () => {
     expect(exporter).not.toContain("C:/Users/User/Documents/certo errado 4.0");
   });
 
+  it("usa um único botão canônico para aprofundar o trecho no Anki", () => {
+    const back = readFileSync("public/anki-templates/verso-certo-errado-4.0.txt", "utf8");
+    expect(back).toContain("Aprofundar neste trecho da lei");
+    expect(back.match(/class=\"lf-legisbot-link lf-card-action\"/g)).toHaveLength(1);
+    expect(back).toContain("botaoLegisbot.href = hrefBase");
+    expect(back).not.toContain("data-aba=");
+  });
+
   it("preserva campos, GUID e subdeck no round-trip", async () => {
     const exported = await buildLawApkg({ slug: "l14751", titulo: "Lei nº 14.751" }, [{ id: "questao-1", structure_id: 7, pergunta: "<strong>Enunciado</strong><br>continuação", resposta: "Certo", justificativa: "<mark>Justificativa</mark>", assunto: "Assunto", legislacao: "<div>Art. 1º</div>", ordem: "0002.0.00.00" }], [{ id: 7, parent_id: null, nome: "Capítulo 01 – DISPOSIÇÕES GERAIS" }]);
     const parsed = await parseLegisApkg(Buffer.from(exported.bytes));

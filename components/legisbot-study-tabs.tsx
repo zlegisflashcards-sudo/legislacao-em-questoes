@@ -2,7 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-export type LegisBotStudyTab = "legisbot" | "community" | "highlights";
+export type LegisBotStudyTab = "legisbot" | "community" | "highlights" | "questions";
 
 type LegisBotStudyTabsProps = {
   slug: string;
@@ -10,9 +10,9 @@ type LegisBotStudyTabsProps = {
   legisBotContent: ReactNode;
   communityContent: ReactNode;
   highlightsContent: ReactNode;
+  questionsContent?: ReactNode;
   communityCount: number;
   initialTab?: LegisBotStudyTab;
-  articleQuestionsHref?: string | null;
   onActiveTabChange?: (tab: LegisBotStudyTab) => void;
 };
 
@@ -22,9 +22,9 @@ export default function LegisBotStudyTabs({
   legisBotContent,
   communityContent,
   highlightsContent,
+  questionsContent,
   communityCount,
   initialTab = "legisbot",
-  articleQuestionsHref,
   onActiveTabChange,
 }: LegisBotStudyTabsProps) {
   const [activeTab, setActiveTab] = useState<LegisBotStudyTab>(initialTab);
@@ -35,6 +35,7 @@ export default function LegisBotStudyTabs({
     { key: "legisbot", icon: "🤖", label: "LegisBot", content: legisBotContent },
     { key: "community", icon: "💬", label: "Comunidade", content: communityContent },
     { key: "highlights", icon: "🖍️", label: "Destaques", content: highlightsContent },
+    ...(questionsContent ? [{ key: "questions" as const, icon: "📝", label: "Questões", content: questionsContent }] : []),
   ];
 
   function selectTab(tab: LegisBotStudyTab) {
@@ -52,13 +53,15 @@ export default function LegisBotStudyTabs({
             id={`${id}-${tab.key}-tab`}
             type="button"
             role="tab"
+            aria-label={tab.label}
+            title={tab.label}
             aria-selected={activeTab === tab.key}
             aria-controls={`${id}-${tab.key}-panel`}
             className={activeTab === tab.key ? "active" : ""}
             onClick={() => selectTab(tab.key)}
           >
             <span aria-hidden="true">{tab.icon}</span>
-            <span>{tab.label}</span>
+            <span className="legisbot-tab-label">{tab.label}</span>
             {tab.key === "community" ? (
               <span className="legisbot-tab-count" aria-label={`${communityCount} contribuições públicas`}>
                 {communityCount}
@@ -66,7 +69,6 @@ export default function LegisBotStudyTabs({
             ) : null}
           </button>
         ))}
-        {articleQuestionsHref ? <a className="legisbot-article-questions-link" href={articleQuestionsHref}>📝 Questões do artigo</a> : null}
       </div>
 
       {tabs.map((tab) => openedTabs.has(tab.key) ? (

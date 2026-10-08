@@ -14,6 +14,15 @@ type LegisBotPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+type MappingIncidence = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
+const MAPPING_INCIDENCES = new Set<MappingIncidence>(["muito_alta", "alta", "media", "baixa", "nao_mapeado"]);
+
+function mappingIncidence(value: unknown): MappingIncidence | undefined {
+  return typeof value === "string" && MAPPING_INCIDENCES.has(value as MappingIncidence)
+    ? value as MappingIncidence
+    : undefined;
+}
+
 function primeiroValor(valor: string | string[] | undefined): string {
   return Array.isArray(valor) ? valor[0] ?? "" : valor ?? "";
 }
@@ -34,14 +43,26 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
       return null;
     }
   })();
-  const communityCount = await getPublicCommunityContributionCount(slug, ordem).catch((error) => {
+  const [communityCount, incidence] = await Promise.all([getPublicCommunityContributionCount(slug, ordem).catch((error) => {
     console.error("[LegisBot] Não foi possível carregar a contagem pública da comunidade.", {
       slug,
       ordem,
       tipo: error instanceof Error ? error.name : "unknown",
     });
     return 0;
-  });
+  }), (async () => {
+    const { data, error } = await getSupabaseServerClient()
+      .from("article_context_mappings")
+      .select("incidencia")
+      .eq("slug", slug.trim().toLowerCase())
+      .eq("ordem", ordem.trim())
+      .maybeSingle();
+    if (error) {
+      console.error("[LegisBot] Não foi possível carregar a incidência editorial.", { slug, ordem, code: error.code });
+      return undefined;
+    }
+    return mappingIncidence(data?.incidencia);
+  })().catch(() => undefined)]);
 
   return (
     <LegisBotPageClient
@@ -50,6 +71,7 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
       dadosIniciais={{ titulo: source?.titulo ?? "", assunto: source?.assunto ?? "", legislacao: source?.legislacao ?? "" }}
       initialCommunityCount={communityCount}
       initialTab={initialTab}
+      mappingIncidence={incidence}
       adminShortcut={<AdminEditCommentShortcut slug={slug} ordem={ordem} />}
     />
   );
