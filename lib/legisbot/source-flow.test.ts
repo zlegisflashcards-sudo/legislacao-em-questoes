@@ -74,7 +74,10 @@ describe("fonte canônica do LegisBot", () => {
     expect(page).toContain('.from("article_context_mappings")');
     expect(page).toContain('mappingIncidence={incidence}');
     expect(client).toContain("body: JSON.stringify({})");
-    expect(client).toContain("const incidenceFlag = mappingIncidence");
+    expect(client).toContain("const [resolvedMappingIncidence, setResolvedMappingIncidence] = useState(mappingIncidence)");
+    expect(client).toContain("setResolvedMappingIncidence(result.incidencia)");
+    expect(client).toContain('data-tooltip={MAPPING_FLAG_LABEL[resolvedMappingIncidence]}');
+    expect(client).toContain("const incidenceFlag = resolvedMappingIncidence");
     expect(client.match(/\{incidenceFlag\}/g)).toHaveLength(2);
     expect(overlay).toContain('dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }}');
     expect(template).not.toMatch(/encodeURIComponent\((titulo|assunto|legislacao)\)/);

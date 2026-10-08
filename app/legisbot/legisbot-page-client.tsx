@@ -55,11 +55,11 @@ type LegisBotPageClientProps = {
 };
 
 const MAPPING_FLAG_LABEL: Record<NonNullable<LegisBotPageClientProps["mappingIncidence"]>, string> = {
-  muito_alta: "Incidência muito alta",
-  alta: "Incidência alta",
-  media: "Incidência média",
-  baixa: "Incidência baixa",
-  nao_mapeado: "Sem incidência mapeada",
+  muito_alta: "Prioridade muito alta",
+  alta: "Prioridade alta",
+  media: "Prioridade média",
+  baixa: "Prioridade baixa",
+  nao_mapeado: "Sem prioridade definida",
 };
 
 type LegisBotApiResponse = {
@@ -72,6 +72,7 @@ type LegisBotApiResponse = {
   error?: string;
   reason?: "legisbot_resting" | "rate_limited" | "cooldown" | "attempts_exhausted" | "source_not_found" | "source_incomplete" | "source_conflict" | "source_unavailable";
   precisa_revisao?: boolean;
+  incidencia?: NonNullable<LegisBotPageClientProps["mappingIncidence"]>;
 };
 
 type HighlightedLegalTextProps = {
@@ -148,6 +149,7 @@ export default function LegisBotPageClient({
   const [typedQuestion, setTypedQuestion] = useState("");
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [needsReview, setNeedsReview] = useState(false);
+  const [resolvedMappingIncidence, setResolvedMappingIncidence] = useState(mappingIncidence);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
@@ -242,6 +244,7 @@ export default function LegisBotPageClient({
         }
         setSource(result.source);
         setNeedsReview(result.precisa_revisao === true);
+        if (result.incidencia) setResolvedMappingIncidence(result.incidencia);
         if (response.status === 202 || result.source === "processing") {
           retryAttempts += 1;
           if (retryAttempts >= maxRetryAttempts) {
@@ -433,8 +436,8 @@ export default function LegisBotPageClient({
     <div className="legisbot-conversation-revealed">{legisBotContent}</div>
   );
 
-  const incidenceFlag = mappingIncidence && mappingIncidence !== "nao_mapeado" ? (
-    <span className={`legisbot-mapping-flag legisbot-mapping-flag--${mappingIncidence}`} role="img" aria-label={MAPPING_FLAG_LABEL[mappingIncidence]} title={MAPPING_FLAG_LABEL[mappingIncidence]}>⚑</span>
+  const incidenceFlag = resolvedMappingIncidence && resolvedMappingIncidence !== "nao_mapeado" ? (
+    <span className={`legisbot-mapping-flag legisbot-mapping-flag--${resolvedMappingIncidence}`} role="img" tabIndex={0} aria-label={MAPPING_FLAG_LABEL[resolvedMappingIncidence]} data-tooltip={MAPPING_FLAG_LABEL[resolvedMappingIncidence]}>⚑</span>
   ) : null;
 
   return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
