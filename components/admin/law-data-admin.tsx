@@ -38,8 +38,8 @@ export function LawDataAdmin({ law }: { law: (AdminLawData & { id: number }) | n
     finally { setBusy(false); }
   }
   const deletionStoragePaths = Array.isArray(deletionSummary?.storage_paths) ? deletionSummary.storage_paths.filter((path): path is string => typeof path === "string") : [];
-  return <form className="commercial-card commercial-form-grid" onSubmit={submit}>
-    <h2>{law ? "Dados da lei" : "Cadastrar nova lei"}</h2><p className="admin-questoes-wide mt-0 text-sm text-slate-600">Identificação, exibição e estado editorial usados pelos fluxos existentes.</p>
+  return <form className="commercial-card law-data-form" onSubmit={submit}>
+    <header className="law-data-form-header"><div><h2>{law ? "Dados da lei" : "Cadastrar nova lei"}</h2><p>Identificação, publicação e atualização legislativa em grupos independentes.</p></div></header>
     <LawDataFields law={law} showFreeAccess={Boolean(law)} />
     {message ? <p className="admin-alert success" role="status">{message}</p> : null}
     {error ? <p className="admin-alert error" role="alert">{error}</p> : null}

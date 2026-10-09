@@ -66,7 +66,7 @@ describe("Central administrativa por lei", () => {
 
   it("mantém a navegação desktop e mobile na ordem operacional dos cards", () => {
     const shell = read("app/admin/leis/[slug]/layout.tsx");
-    for (const [before, after] of [["estrutura", "materiais"], ["materiais", "legiscast"], ["legiscast", "anki"], ["anki", "questoes"], ["questoes", "recortes"]]) expect(shell.indexOf(`data-law-nav=\"${before}\"`)).toBeLessThan(shell.indexOf(`data-law-nav=\"${after}\"`));
+    for (const [before, after] of [["estrutura", "materiais"], ["materiais", "legiscast"], ["legiscast", "questoes"], ["questoes", "anki"], ["anki", "recortes"]]) expect(shell.indexOf(`data-law-nav=\"${before}\"`)).toBeLessThan(shell.indexOf(`data-law-nav=\"${after}\"`));
     expect(shell).toContain("law-center-nav-mobile");
   });
 
@@ -85,9 +85,9 @@ describe("Central administrativa por lei", () => {
     const checks = read("supabase/migrations/20260924122000_add_admin_law_overview_checks.sql");
     expect(overview.indexOf('id: "estrutura"')).toBeLessThan(overview.indexOf('id: "materiais"'));
     expect(overview.indexOf('id: "materiais"')).toBeLessThan(overview.indexOf('id: "legiscast"'));
-    expect(overview.indexOf('id: "legiscast"')).toBeLessThan(overview.indexOf('id: "anki"'));
-    expect(overview.indexOf('id: "anki"')).toBeLessThan(overview.indexOf('id: "questoes"'));
-    expect(overview.indexOf('id: "questoes"')).toBeLessThan(overview.indexOf('id: "recortes"'));
+    expect(overview.indexOf('id: "legiscast"')).toBeLessThan(overview.indexOf('id: "questoes"'));
+    expect(overview.indexOf('id: "questoes"')).toBeLessThan(overview.indexOf('id: "anki"'));
+    expect(overview.indexOf('id: "anki"')).toBeLessThan(overview.indexOf('id: "recortes"'));
     expect(overview).toContain("law-center-editorial-warning");
     expect(cards).toContain("aria-pressed");
     expect(checks).toContain("admin_law_overview_checks");

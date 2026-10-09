@@ -64,10 +64,10 @@ async function loadQuestions(activeOnly: boolean, pair?: { slug: string; ordem: 
 }
 
 async function lawMap() {
-  const result = await getSupabaseServerClient().from("leis").select("id,slug,titulo,codigo");
+  const result = await getSupabaseServerClient().from("leis").select("id,slug,titulo,codigo,nome_curto");
   if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar as leis.");
   return new Map((result.data ?? []).map((law) => [String(law.slug).toUpperCase(), {
-    id: Number(law.id), title: String(law.titulo), code: law.codigo ? String(law.codigo) : null,
+    id: Number(law.id), title: String(law.titulo), code: law.codigo ? String(law.codigo) : null, shortName: law.nome_curto ? String(law.nome_curto) : null,
   }]));
 }
 
@@ -94,14 +94,15 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const granularities = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[] }>();
   const byContext = new Map<string, LegisBotConflictQuestion[]>();
   for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
-  for (const [key, questions] of byContext) { const validation = questions.map((question) => validateQuestionStructure(question)).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); if (questions.some((question) => hasIncisoGranularityPending(question))) granularities.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions }); }
+  const lawsForValidation = await lawMap();
+  for (const [key, questions] of byContext) { const lawShortName = lawsForValidation.get(questions[0].slug.toUpperCase())?.shortName; const validation = questions.map((question) => validateQuestionStructure({ ...question, lawShortName })).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); if (questions.some((question) => hasIncisoGranularityPending(question))) granularities.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions }); }
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
   const decisions = await getSupabaseServerClient().from("article_context_mappings").select("slug,ordem,granularidade_legislacao");
   if (decisions.error) throw new AdminArticleConflictError(503, "Não foi possível consultar as decisões editoriais de granularidade.");
   const decidedGranularities = new Set((decisions.data ?? []).flatMap((item) => item.granularidade_legislacao === "paragrafo_inteiro" || item.granularidade_legislacao === "recorte_inciso" ? [`${String(item.slug).toUpperCase()}\u0000${String(item.ordem)}`] : []));
   for (const key of decidedGranularities) granularities.delete(key);
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys(), ...granularities.keys()])];
-  const [laws, comments] = await Promise.all([lawMap(), commentsFor(groups)]);
+  const [laws, comments] = await Promise.all([Promise.resolve(lawsForValidation), commentsFor(groups)]);
   const law = safeFilter(filters.law);
   const type = safeFilter(filters.type, 40);
   const filtered = contextKeys.filter((key) => {

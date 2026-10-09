@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import LegisBotPageClient from "@/app/legisbot/legisbot-page-client";
 import type { LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 
@@ -9,12 +9,32 @@ export type LegisBotOverlayArticle = {
   titulo?: string | null;
   assunto?: string | null;
   legislacao?: string | null;
+  comentario?: string | null;
   /** Metadado editorial exibido somente no contexto do LegisCast. */
   incidencia?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 };
 
-export function LegisBotOverlay({ slug, question, initialTab, publicComment, recorteId, onClose }: { slug: string; question: LegisBotOverlayArticle; initialTab: LegisBotStudyTab; publicComment?: string | null; recorteId?: string | null; onClose: () => void }) {
+export function LegisBotOverlay({ slug, question, articles, initialTab, publicComment, recorteId, onClose }: { slug: string; question: LegisBotOverlayArticle; /** Artigos disponíveis no contexto atual, em ordem de estudo. */ articles?: LegisBotOverlayArticle[]; initialTab: LegisBotStudyTab; publicComment?: string | null; recorteId?: string | null; onClose: () => void }) {
   const panelRef = useRef<HTMLElement | null>(null);
+  const [activeArticle, setActiveArticle] = useState(question);
+  const availableArticles = useMemo(() => {
+    const seen = new Set<string>();
+    const result: LegisBotOverlayArticle[] = [];
+    for (const article of [...(articles ?? []), question]) {
+      const key = article.ordem?.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      result.push(article);
+    }
+    return result;
+  }, [articles, question]);
+  const activeIndex = availableArticles.findIndex((article) => article.ordem?.trim() === activeArticle.ordem?.trim());
+  const previousArticle = activeIndex > 0 ? availableArticles[activeIndex - 1] : null;
+  const nextArticle = activeIndex >= 0 && activeIndex < availableArticles.length - 1 ? availableArticles[activeIndex + 1] : null;
+
+  useEffect(() => {
+    setActiveArticle(question);
+  }, [question]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -49,5 +69,5 @@ export function LegisBotOverlay({ slug, question, initialTab, publicComment, rec
     }
   }
 
-  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={question.ordem ?? ""} dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={publicComment} mappingIncidence={question.incidencia} showArticleQuestions={Boolean(question.ordem)} questionsRecorteId={recorteId} onClose={onClose} /></aside></div>;
+  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} showArticleQuestions={Boolean(activeArticle.ordem)} questionsRecorteId={recorteId} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} /></aside></div>;
 }

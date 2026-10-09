@@ -67,9 +67,9 @@ describe("modo conferência administrativo", () => {
     expect(lawReviewMigration).toContain("service_role");
   });
 
-  it("abre a Central do Artigo somente para contexto confiável, em nova guia", () => {
+  it("abre a Central do Artigo pela ordem exata, mantendo o aviso quando o contexto requer conferência", () => {
     expect(server).toContain("conferenceArticleLink");
-    expect(server).toContain('if (!context.trusted) return { status: "conflict" as const, href: null }');
+    expect(server).toContain('status: context.trusted ? "found" as const : "conflict" as const, href');
     expect(server).toContain('`/admin/artigos/${encodeURIComponent(current.slug.toLowerCase())}/${encodeURIComponent(context.ordem)}?aba=artigo');
     expect(route).toContain('mode") === "conference-article-link"');
     expect(client).toContain('target="_blank"');

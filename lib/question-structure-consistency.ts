@@ -5,6 +5,15 @@ export type StructuralValidation = { status: StructuralStatus; currentOrder: str
 
 type SubjectStructure = { article?: string; suffix?: string; paragraph?: string; paragraphSuffix?: string; unique?: boolean; item?: string; itemSuffix?: string; letter?: string };
 const clean = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const normalizedLawReference = (value: string) => clean(value).replace(/[^a-z0-9]+/g, " ").replace(/\bn\b/g, " ").replace(/\s+/g, " ").trim();
+function lawReferenceDifference(subject: string | null | undefined, lawShortName: string | null | undefined) {
+  const expectedLawReference = lawShortName?.trim();
+  if (!expectedLawReference) return null;
+  const expected = normalizedLawReference(expectedLawReference);
+  const actual = normalizedLawReference(subject ?? "");
+  if (!expected || ` ${actual} `.includes(` ${expected} `)) return null;
+  return /\blei\b/i.test(subject ?? "") ? `lei divergente: esperado ${expectedLawReference}` : `referência divergente: esperado ${expectedLawReference}`;
+}
 const romanValues: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
 
 function romanToNumber(value: string) { let result = 0; const letters = value.toUpperCase().split(""); for (let index = 0; index < letters.length; index += 1) { const current = romanValues[letters[index]]; const next = romanValues[letters[index + 1]] ?? 0; if (!current) return null; result += current < next ? -current : current; } return result || null; }
@@ -38,17 +47,20 @@ export function parseQuestionOrder(value: string | null | undefined): DeviceRefe
 export function expectedQuestionOrder(reference: DeviceReference) { if (!reference.artigo || !/^\d+$/.test(reference.artigo)) return undefined; return [reference.artigo.padStart(4, "0"), reference.letraArtigo?.toLowerCase() ?? "0", (reference.paragrafo ?? "0").padStart(2, "0"), reference.letraParagrafo?.toLowerCase() ?? "0", (reference.inciso ?? "0").padStart(2, "0"), reference.letraInciso?.toLowerCase() ?? "0"].join("."); }
 
 const labels: Record<keyof DeviceReference, string> = { artigo: "artigo", letraArtigo: "letra do artigo", paragrafo: "parágrafo", letraParagrafo: "letra do parágrafo", inciso: "inciso", letraInciso: "letra do inciso" };
-export function validateQuestionStructure(input: { assunto?: string | null; ordem?: string | null }): StructuralValidation {
+export function validateQuestionStructure(input: { assunto?: string | null; ordem?: string | null; lawShortName?: string | null }): StructuralValidation {
   const currentOrder = input.ordem?.trim() ?? "";
   const subject = parseQuestionSubject(input.assunto);
   const order = parseQuestionOrder(currentOrder);
-  if (!subject || !subject.article) return { status: "possible_conflict", currentOrder, orderReference: order ?? undefined, message: "Possível conflito: o Assunto não contém uma referência jurídica que possa ser interpretada com segurança." };
+  const lawDifference = lawReferenceDifference(input.assunto, input.lawShortName);
+  if (!subject || !subject.article) return lawDifference ? { status: "conflict", currentOrder, orderReference: order ?? undefined, differences: [lawDifference], message: "Conflito estrutural: o Assunto não corresponde à referência curta cadastrada para a lei." } : { status: "possible_conflict", currentOrder, orderReference: order ?? undefined, message: "Possível conflito: o Assunto não contém uma referência jurídica que possa ser interpretada com segurança." };
   const subjectReference = referenceFromSubject(subject);
   const expectedOrder = expectedQuestionOrder(subjectReference);
   if (!order) return { status: "conflict", currentOrder, expectedOrder, subjectReference, differences: ["formato da ordem fora do padrão estrutural"], message: "Conflito estrutural: a Ordem não segue o padrão artigo.letra_artigo.parágrafo.letra_parágrafo.inciso.letra_inciso." };
   const differences = (Object.keys(labels) as Array<keyof DeviceReference>).filter((key) => subjectReference[key] !== order[key]).map((key) => `${labels[key]} ${order[key] ? `na ordem é ${order[key]}` : "ausente na ordem"}`);
+  if (lawDifference) differences.push(lawDifference);
   if (!differences.length) return { status: "valid", currentOrder, expectedOrder, subjectReference, orderReference: order };
-  return { status: "conflict", currentOrder, expectedOrder, subjectReference, orderReference: order, differences, message: "Conflito estrutural: Assunto e Ordem representam dispositivos diferentes." };
+  const hasLawDifference = differences.some((item) => item.startsWith("lei divergente") || item.startsWith("referência divergente"));
+  return { status: "conflict", currentOrder, expectedOrder, subjectReference, orderReference: order, differences, message: hasLawDifference ? "Conflito estrutural: o Assunto não corresponde à referência curta cadastrada para a lei." : "Conflito estrutural: Assunto e Ordem representam dispositivos diferentes." };
 }
 
 /** Incisos podem exigir o texto do parágrafo inteiro; a escolha do recorte é editorial e nunca automática. */

@@ -46,15 +46,27 @@ describe("artigos comentados no LegisCast", () => {
     expect(overlay).toContain('role="dialog"');
     expect(overlay).toContain("embedded");
     expect(overlay).toContain("onClose={onClose}");
-    expect(overlay).toContain("showArticleQuestions={Boolean(question.ordem)}");
+    expect(overlay).toContain("showArticleQuestions={Boolean(activeArticle.ordem)}");
     expect(component).toContain("recorteId={recorteId}");
     expect(overlay).toContain('event.key === "Escape"');
     expect(component).toContain("data-recorte-id={recorteId ?? undefined}");
   });
 
   it("leva a incidência mapeada ao cabeçalho do artigo aberto", () => {
-    expect(overlay).toContain("mappingIncidence={question.incidencia}");
+    expect(overlay).toContain("mappingIncidence={activeArticle.incidencia}");
     expect(overlay).toContain("incidencia?:");
     expect(component).toContain("#fef08a_35%");
+  });
+
+  it("oferece a mesma navegação entre artigos no painel compartilhado", () => {
+    expect(component).toContain("articles={comments}");
+    expect(studyClient).toContain("function useLegisBotArticleNavigation");
+    expect(studyClient).toContain("articles={navigationArticles.length ? navigationArticles");
+    expect(overlay).toContain("const previousArticle");
+    expect(overlay).toContain("const nextArticle");
+    const pageClient = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
+    expect(pageClient).toContain('>←</span><span>Artigo anterior</span>');
+    expect(pageClient).toContain("<span>Próximo artigo</span><span aria-hidden=\"true\">→</span>");
+    expect(pageClient).toContain("Fechar aprofundamento e voltar à tela principal");
   });
 });

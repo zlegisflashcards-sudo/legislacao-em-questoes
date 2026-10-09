@@ -74,7 +74,7 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("question_id=${encodeURIComponent(question.id)}");
     expect(server).toContain("retorno=${encodeURIComponent");
     expect(questionPage).toContain("initialQuestion");
-    expect(questionPage).toContain('requestedReturn.startsWith("/admin/artigos/conflitos/")');
+    expect(questionPage).toContain('requestedReturn.startsWith("/admin/artigos/")');
     expect(detail).toContain("Corrigir a ordem");
   });
 

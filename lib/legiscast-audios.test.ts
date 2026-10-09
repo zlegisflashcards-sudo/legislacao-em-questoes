@@ -211,12 +211,13 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain("node.pdf_page");
     expect(player).toContain("onNavigateToPdfPage?.(navigablePage)");
     expect(player).toContain("first || navigablePage !== null");
-    expect(lawLegiscastClient).toContain("onNavigateToPdfPage={setTargetPdfPage}");
+    expect(lawLegiscastClient).toContain("onNavigateToPdfPage={navigateToPdfPage}");
+    expect(lawLegiscastClient).toContain("requestId: (current?.requestId ?? 0) + 1");
     expect(lawLegiscastClient.match(/targetPage=\{targetPdfPage\}/g)).toHaveLength(2);
-    expect(pdfViewer).toContain('canvas[data-page="${targetPage}"]');
+    expect(pdfViewer).toContain('canvas[data-page="${requestedPage}"]');
     expect(pdfViewer).toContain("legiscast_pdf_page_navigation_ignored");
-    expect(pdfViewer).toContain("targetPage > total");
-    const viewerEffect = pdfViewer.slice(pdfViewer.indexOf('if (status !== "ready" || targetPage'), pdfViewer.indexOf("[targetPage, status, total"));
+    expect(pdfViewer).toContain("requestedPage > total");
+    const viewerEffect = pdfViewer.slice(pdfViewer.indexOf('if (status !== "ready" || requestedPage'), pdfViewer.indexOf("[targetPage?.requestId, status, total"));
     expect(viewerEffect).not.toContain("setZoom");
     expect(viewerEffect).not.toContain("fetchAuthorizedLegiscastPdf");
     expect(player.match(/<audio /g)).toHaveLength(1);

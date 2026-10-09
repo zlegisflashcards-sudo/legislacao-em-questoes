@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { expectedQuestionOrder, hasIncisoGranularityPending, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
 
 describe("validador estrutural Assunto × Ordem", () => {
-  const validate = (assunto: string, ordem: string) => validateQuestionStructure({ assunto, ordem });
+  const validate = (assunto: string, ordem: string, lawShortName?: string) => validateQuestionStructure({ assunto, ordem, lawShortName });
   it("valida artigo simples", () => expect(validate("Art. 1º", "0001.0.00.0.00.0").status).toBe("valid"));
   it("valida artigo com letra", () => expect(validate("Art. 1º-A", "0001.a.00.0.00.0").status).toBe("valid"));
   it("detecta letra de artigo ausente", () => expect(validate("Art. 1º-A", "0001.0.00.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0001.a.00.0.00.0" }));
@@ -47,6 +47,18 @@ describe("validador estrutural Assunto × Ordem", () => {
     expect(parseQuestionOrder("0001.a.00.0.00.0")).toMatchObject({ artigo: "1", letraArtigo: "A" });
   });
   it("sinaliza assunto ambíguo sem sugerir correção", () => expect(validateQuestionStructure({ assunto: "Disposição geral", ordem: "0001.0.00.0.00.0" }).status).toBe("possible_conflict"));
+  it("confere o nome curto cadastrado da lei no Assunto", () => {
+    expect(validate("Art. 11, Lei 8.112/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "valid" });
+    expect(validate("Art. 11, Lei nº 8.112/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "valid" });
+  });
+  it("sinaliza lei ou referência divergente sem alterar a ordem", () => {
+    expect(validate("Art. 11, Lei 8.113/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["lei divergente: esperado Lei 8.112/90"]) });
+    expect(validate("Art. 11, CF", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["referência divergente: esperado Lei 8.112/90"]) });
+    expect(validate("Lei 8.113/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["lei divergente: esperado Lei 8.112/90"]) });
+  });
+  it("mantém a divergência de artigo independente da referência correta da lei", () => {
+    expect(validate("Art. 12, Lei 8.112/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["artigo na ordem é 11"]) });
+  });
   it("mantém helpers reutilizáveis para assunto e ordem", () => {
     expect(parseQuestionSubject("Art. 27-B, § 1º-C, inciso II-A")).toMatchObject({ article: "27", suffix: "B", paragraph: "1", paragraphSuffix: "C", item: "II", itemSuffix: "A" });
     expect(expectedQuestionOrder({ artigo: "27", letraArtigo: "B", paragrafo: "1", letraParagrafo: "C", inciso: "2", letraInciso: "A" })).toBe("0027.b.01.c.02.a");

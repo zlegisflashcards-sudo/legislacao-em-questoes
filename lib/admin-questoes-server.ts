@@ -83,7 +83,19 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
   if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); request = request.or(predicates.join(",")); }
   request = sort === "ordem_asc" ? request.order("ordem").order("id") : sort === "ordem_desc" ? request.order("ordem", { ascending: false }).order("id", { ascending: false }) : terms.length || questionId ? request.order("ordem").order("id") : request.order("updated_at", { ascending: false }).order("id");
   const result = await request.range(offset, offset + limit - 1); if (result.error) fail("pesquisar_questoes", result.error); const total = result.count ?? 0;
-  return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId };
+  const matchingOrders = () => {
+    let scoped = db().from("questions").select("ordem").eq("lei_id", current.id).eq("ativo", true);
+    if (questionId) scoped = scoped.eq("id", questionId);
+    if (filter === "certo") scoped = scoped.eq("resposta", "Certo"); else if (filter === "errado") scoped = scoped.eq("resposta", "Errado"); else if (filter === "unstructured") scoped = scoped.is("structure_id", null);
+    if (structureIds.length) scoped = scoped.in("structure_id", structureIds);
+    if (typeof input.article === "string" && input.article.trim()) scoped = scoped.ilike("artigo", `%${input.article.trim().slice(0, 80)}%`);
+    if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); scoped = scoped.or(predicates.join(",")); }
+    return scoped;
+  };
+  const [firstOrder, lastOrder] = await Promise.all([matchingOrders().order("ordem").order("id").limit(1), matchingOrders().order("ordem", { ascending: false }).order("id", { ascending: false }).limit(1)]);
+  if (firstOrder.error || lastOrder.error) fail("abrangencia_pesquisa_questoes", firstOrder.error ?? lastOrder.error);
+  const range = { first_order: firstOrder.data?.[0]?.ordem ?? null, last_order: lastOrder.data?.[0]?.ordem ?? null };
+  return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, range, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId };
 }
 export async function listAdminQuestionConference(lawSlug: string, structureId: unknown) {
   await requireAdmin();
@@ -154,8 +166,8 @@ export async function conferenceArticleLink(lawSlug: string, orderValue: unknown
   if (!ordem) throw new AdminQuestoesError(400, "Informe a ordem para consultar o artigo.");
   const context = await getArticleContext(current.slug, ordem);
   if (!context) return { status: "absent" as const, href: null };
-  if (!context.trusted) return { status: "conflict" as const, href: null };
-  return { status: "found" as const, href: `/admin/artigos/${encodeURIComponent(current.slug.toLowerCase())}/${encodeURIComponent(context.ordem)}?aba=artigo&lei=${encodeURIComponent(current.slug.toLowerCase())}` };
+  const href = `/admin/artigos/${encodeURIComponent(current.slug.toLowerCase())}/${encodeURIComponent(context.ordem)}?aba=artigo&lei=${encodeURIComponent(current.slug.toLowerCase())}`;
+  return { status: context.trusted ? "found" as const : "conflict" as const, href };
 }
 
 type ShadowStoredUnit = { id: string; identity_key: string; ordem: string | null; assunto: string; tipo: "caput" | "paragrafo"; texto_html: string; texto_plano: string; caminho_estrutural: string[]; decision: "nao_cabe_questao" | "revogado" | null };

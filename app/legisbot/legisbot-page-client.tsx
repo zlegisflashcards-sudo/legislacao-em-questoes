@@ -51,6 +51,8 @@ type LegisBotPageClientProps = {
   mappingIncidence?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
   showArticleQuestions?: boolean;
   questionsRecorteId?: string | null;
+  onPreviousArticle?: () => void;
+  onNextArticle?: () => void;
   onClose?: () => void;
 };
 
@@ -128,6 +130,8 @@ export default function LegisBotPageClient({
   mappingIncidence,
   showArticleQuestions = false,
   questionsRecorteId = null,
+  onPreviousArticle,
+  onNextArticle,
   onClose,
 }: LegisBotPageClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -177,6 +181,21 @@ export default function LegisBotPageClient({
   }, [embedded]);
 
   useEffect(() => {
+    setDadosLegislacao(dadosIniciais);
+    setAnswer(publishedComment);
+    setAnswerState(publishedComment ? "ready" : "loading");
+    setStatusMessage("");
+    setSource(undefined);
+    setNeedsReview(false);
+    setResolvedMappingIncidence(mappingIncidence);
+    setHighlights([]);
+    setSelectedHighlight(null);
+    setConversationPhase("idle");
+    setTypedQuestion("");
+    setCommunityCount(initialCommunityCount);
+  }, [dadosIniciais, initialCommunityCount, mappingIncidence, publishedComment, slug, ordem]);
+
+  useEffect(() => {
     if (isPublicArticle) return;
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
@@ -189,7 +208,7 @@ export default function LegisBotPageClient({
       active = false;
       data.subscription.unsubscribe();
     };
-  }, []);
+  }, [isPublicArticle]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -447,7 +466,7 @@ export default function LegisBotPageClient({
   return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        {embedded ? <div className="legisbot-topic-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" onClick={onClose}>← Voltar ao estudo</button><div className="legisbot-topic-actions">{incidenceFlag}<button type="button" className="legisbot-overlay-close" aria-label="Fechar LegisBot e voltar ao estudo" onClick={onClose}>×</button></div></div> : adminShortcut || incidenceFlag ? <div className="legisbot-topic-tools">{adminShortcut}<div className="legisbot-topic-actions">{incidenceFlag}</div></div> : null}
+        {embedded ? <div className="legisbot-topic-tools legisbot-overlay-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" disabled={!onPreviousArticle} onClick={onPreviousArticle}><span aria-hidden="true">←</span><span>Artigo anterior</span></button><div className="legisbot-overlay-close-group">{incidenceFlag}<button type="button" className="legisbot-overlay-close" aria-label="Fechar aprofundamento e voltar à tela principal" onClick={onClose}>×</button></div><button type="button" className="legislation-back-link legisbot-overlay-next" disabled={!onNextArticle} onClick={onNextArticle}><span>Próximo artigo</span><span aria-hidden="true">→</span></button></div> : adminShortcut || incidenceFlag ? <div className="legisbot-topic-tools">{adminShortcut}<div className="legisbot-topic-actions">{incidenceFlag}</div></div> : null}
         <h1>{assunto}</h1>
       </header>
 
