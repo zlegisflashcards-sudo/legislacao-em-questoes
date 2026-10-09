@@ -1,6 +1,6 @@
 import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { parseQuestionDraft, type QuestionDraft } from "@/lib/admin-questoes";
+import { parseQuestionDraft, questionDeckDefaults, type QuestionDraft } from "@/lib/admin-questoes";
 import { parseBulkQuestionEdit, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
@@ -9,7 +9,7 @@ import { compareQuestionStructureNames, creatableQuestionStructureTypes, normali
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, parseAdminQuestionSearchSort, plainQuestionText } from "@/lib/admin-question-search";
-import { descendantStructureIds, sameImportIdentity } from "@/lib/admin-question-management";
+import { descendantStructureIds, sameStructureQuestionStatement } from "@/lib/admin-question-management";
 import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
 import { getArticleContext } from "@/lib/admin-article-center-server";
 import { validateQuestionStructure } from "@/lib/question-structure-consistency";
@@ -37,7 +37,20 @@ async function law(lawSlug: string): Promise<Law> { const r = await db().from("l
 async function structure(leiId: number) { const r = await db().from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page,ativo,created_at,updated_at").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("id"); if (r.error) fail("listar_estrutura", r.error); return [...(r.data ?? [])].sort(compareQuestionStructureNames) as QuestionStructureNode[]; }
 async function validateStructure(leiId: number, structureId: number | null) { if (!structureId) return; const r = await db().from("law_structure").select("id").eq("id", structureId).eq("lei_id", leiId).eq("ativo", true).maybeSingle(); if (r.error) fail("validar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(422, "A estrutura selecionada não pertence à lei ativa."); }
 function values(law: Law, d: QuestionDraft) { return { lei_id: law.id, structure_id: d.structure_id, pergunta: d.pergunta, resposta: d.resposta, justificativa: d.justificativa, assunto: d.assunto, legislacao: d.legislacao, ordem: d.ordem, titulo: d.titulo, total_artigos: d.total_artigos, slug: law.slug, capitulo: d.capitulo, secao: d.secao, subsecao: d.subsecao, artigo: d.artigo }; }
-async function rejectDuplicateQuestion(leiId: number, d: QuestionDraft, exceptId?: string) { let request = db().from("questions").select("id,ordem,pergunta").eq("lei_id", leiId).eq("ativo", true).eq("ordem", d.ordem).eq("pergunta", d.pergunta); if (exceptId) request = request.neq("id", exceptId); const result = await request.limit(1); if (result.error) fail("validar_duplicidade", result.error); if ((result.data ?? []).some((item) => sameImportIdentity(item, d))) throw new AdminQuestoesError(409, "Já existe uma questão ativa com a mesma ordem e enunciado nesta lei."); }
+async function rejectDuplicateQuestion(leiId: number, d: QuestionDraft, exceptId?: string) {
+  const loadPage = async (from: number, to: number) => {
+    let request = db().from("questions").select("id,pergunta").eq("lei_id", leiId).eq("ativo", true);
+    request = d.structure_id === null ? request.is("structure_id", null) : request.eq("structure_id", d.structure_id);
+    if (exceptId) request = request.neq("id", exceptId);
+    const result = await request.order("id").range(from, to);
+    if (result.error) fail("validar_duplicidade", result.error);
+    return result.data ?? [];
+  };
+  const questions = await collectPages(loadPage, questionExportPageSize);
+  if (questions.some((question) => sameStructureQuestionStatement(question, d))) {
+    throw new AdminQuestoesError(409, "Já existe uma questão ativa com o mesmo enunciado nesta estrutura.");
+  }
+}
 
 export async function listAdminQuestionLaws() { await requireAdmin(); const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo").eq("ativo", true).order("ordem").order("titulo"); if (r.error) fail("listar_leis", r.error); return r.data ?? []; }
 export async function listLawQuestionScopes(lawSlug: string) { await requireAdmin(); const current = await law(lawSlug); const [scopes, nodes, questions, links] = await Promise.all([db().from("recortes_leis").select("id,nome,descricao,ativo,status_publicacao,acesso_gratuito,created_at,updated_at").eq("lei_id", current.id).order("nome"), structure(current.id), db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true), db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id)]); if (scopes.error) fail("listar_recortes", scopes.error); if (questions.error) fail("contar_recortes", questions.error); if (links.error) fail("listar_estruturas_recortes", links.error); const scopeRows = scopes.data ?? []; const questionRows = questions.data ?? []; return { law: current, structure: nodes, questions: questionRows, unstructured_questions: questionRows.filter((question) => question.structure_id === null).length, recortes: summarizeLawQuestionScopes(scopeRows, links.data ?? [], nodes, questionRows) }; }
@@ -185,10 +198,22 @@ export async function setLawQuestionShadowDecision(body: Record<string, unknown>
 export async function getLawQuestionShadowDraft(lawSlug: string, unitId: unknown) {
   await requireAdmin(); const current = await law(lawSlug); const result = await db().from("admin_law_question_shadow_units").select("id,ordem,assunto,texto_html,caminho_estrutural,decision").eq("id", qid(unitId)).eq("lei_id", current.id).like("identity_key", "automatic-gap:%").maybeSingle();
   if (result.error) fail("carregar_sombra_para_questao", result.error); if (!result.data || result.data.decision || !result.data.ordem) throw new AdminQuestoesError(422, "Esta unidade não possui vínculo confiável para criar uma questão.");
-  const nodes = await structure(current.id); const targetPath = shadowPath(result.data.caminho_estrutural); const candidates = nodes.filter((node) => { const path: string[] = []; for (let currentNode: QuestionStructureNode | undefined = node; currentNode; currentNode = currentNode.parent_id ? nodes.find((item) => item.id === currentNode!.parent_id) : undefined) path.unshift(currentNode.nome.trim()); return path.length === targetPath.length && path.every((name, index) => name === targetPath[index]); });
-  return { unit_id: result.data.id, data: { ...blankShadowQuestion(result.data.ordem, result.data.assunto, result.data.texto_html), structure_id: candidates.length === 1 ? candidates[0].id : null }, structure_warning: targetPath.length ? candidates.length !== 1 ? "A estrutura informada não corresponde de forma única à Central da Lei; escolha o bloco manualmente." : null : "Esta Sombra foi detectada por uma lacuna de Ordem. Informe legislação e estrutura antes de salvar a questão." };
+  const [nodes, deckDefaults] = await Promise.all([
+    structure(current.id),
+    getLawQuestionDeckDefaults(current.id),
+  ]);
+  const targetPath = shadowPath(result.data.caminho_estrutural); const candidates = nodes.filter((node) => { const path: string[] = []; for (let currentNode: QuestionStructureNode | undefined = node; currentNode; currentNode = currentNode.parent_id ? nodes.find((item) => item.id === currentNode!.parent_id) : undefined) path.unshift(currentNode.nome.trim()); return path.length === targetPath.length && path.every((name, index) => name === targetPath[index]); });
+  return { unit_id: result.data.id, data: { ...blankShadowQuestion(result.data.ordem, result.data.assunto, result.data.texto_html), ...deckDefaults, structure_id: candidates.length === 1 ? candidates[0].id : null }, structure_warning: targetPath.length ? candidates.length !== 1 ? "A estrutura informada não corresponde de forma única à Central da Lei; escolha o bloco manualmente." : null : "Esta Sombra foi detectada por uma lacuna de Ordem. Informe legislação e estrutura antes de salvar a questão." };
 }
 function blankShadowQuestion(ordem: string, assunto: string, legislacao: string): QuestionDraft { return { structure_id: null, pergunta: "", resposta: "Certo", justificativa: "", assunto, legislacao, ordem, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }; }
+async function getLawQuestionDeckDefaults(leiId: number) {
+  const rows = await collectPages(async (from, to) => {
+    const result = await db().from("questions").select("titulo,total_artigos").eq("lei_id", leiId).eq("ativo", true).order("id").range(from, to);
+    if (result.error) fail("carregar_padrao_baralho", result.error);
+    return result.data ?? [];
+  }, questionExportPageSize);
+  return questionDeckDefaults(rows);
+}
 export async function getLegisBotQuestionDraft(lawSlug: string, commentId: unknown) {
   await requireAdmin();
   const current = await law(lawSlug);

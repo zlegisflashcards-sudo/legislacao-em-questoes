@@ -100,3 +100,23 @@ export function lawDisplayName(law: { codigo?: string | null; titulo: string; no
   const prefix = law.codigo?.trim() || law.nome_curto?.trim();
   return prefix ? `${prefix} — ${law.titulo}` : law.titulo;
 }
+
+type QuestionDeckDefaultsSource = Pick<QuestionDraft, "titulo" | "total_artigos">;
+
+function mostFrequentDeckValue<T extends string | number>(values: Array<T | null | undefined>) {
+  const counts = new Map<T, number>();
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort(([leftValue, leftCount], [rightValue, rightCount]) => rightCount - leftCount || String(leftValue).localeCompare(String(rightValue), "pt-BR"));
+  return ranked.length && (ranked.length === 1 || ranked[0][1] > ranked[1][1]) ? ranked[0][0] : null;
+}
+
+/** Valores recorrentes do baralho, seguros para sugerir em uma nova questão. */
+export function questionDeckDefaults(rows: QuestionDeckDefaultsSource[]): Pick<QuestionDraft, "titulo" | "total_artigos"> {
+  return {
+    titulo: mostFrequentDeckValue(rows.map((row) => typeof row.titulo === "string" ? row.titulo.trim() || null : null)),
+    total_artigos: mostFrequentDeckValue(rows.map((row) => typeof row.total_artigos === "number" && row.total_artigos > 0 ? row.total_artigos : null)),
+  };
+}

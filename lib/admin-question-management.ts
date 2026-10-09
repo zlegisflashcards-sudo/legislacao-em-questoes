@@ -25,3 +25,27 @@ export function questionResultNeighbor(ids: string[], currentId: string, directi
 export function sameImportIdentity(a: { ordem: string; pergunta: string }, b: { ordem: string; pergunta: string }) {
   return a.ordem.trim() === b.ordem.trim() && a.pergunta.trim() === b.pergunta.trim();
 }
+
+/**
+ * A questão é escrita no editor rico. Para a prevenção de duplicidade, a
+ * formatação visual não deve permitir cadastrar novamente o mesmo enunciado.
+ */
+export function normalizedQuestionStatement(value: unknown) {
+  return String(value ?? "")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+export function sameStructureQuestionStatement(a: { pergunta: string }, b: { pergunta: string }) {
+  return normalizedQuestionStatement(a.pergunta) === normalizedQuestionStatement(b.pergunta);
+}

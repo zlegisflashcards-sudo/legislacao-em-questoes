@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { QUESTION_LONG_CONTENT_MAX_LENGTH, lawDisplayName, nextQuestionOrder, parseQuestionDraft } from "./admin-questoes";
+import { QUESTION_LONG_CONTENT_MAX_LENGTH, lawDisplayName, nextQuestionOrder, parseQuestionDraft, questionDeckDefaults } from "./admin-questoes";
 
 const base = { pergunta: "A Constituição é a lei fundamental?", resposta: "Certo", ordem: 1 };
 
@@ -207,6 +207,15 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain("groupImportSourceWarnings(effectiveSources)");
     expect(server).toContain('status: reason ? "erro" : matching ? sourceChanged ? "atualizada" : "duplicada" : "nova"');
     expect(server).toContain("slug: row.slug");
+  });
+
+  it("sugere somente padrões recorrentes do baralho para uma Questão Sombra", () => {
+    expect(questionDeckDefaults([
+      { titulo: "Lei de exemplo", total_artigos: 91 },
+      { titulo: "Lei de exemplo", total_artigos: 91 },
+      { titulo: "Outro título", total_artigos: 90 },
+    ])).toEqual({ titulo: "Lei de exemplo", total_artigos: 91 });
+    expect(questionDeckDefaults([{ titulo: "A", total_artigos: 1 }, { titulo: "B", total_artigos: 2 }])).toEqual({ titulo: null, total_artigos: null });
   });
 
   it("mantém conflitos editoriais fora dos erros impeditivos e atualiza apenas o flashcard identificado", () => {
