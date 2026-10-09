@@ -127,6 +127,17 @@ describe("Central administrativa por lei", () => {
     for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "status_publicacao", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
   });
 
+  it("organiza dados, publicação e atualização legislativa em blocos independentes", () => {
+    const form = read("components/admin/law-data-admin.tsx");
+    const fields = read("components/admin/law-data-fields.tsx");
+    expect(form).toContain('className="commercial-card law-data-form"');
+    for (const block of ["law-data-identification", "law-data-publication", "law-data-update"]) expect(fields).toContain(block);
+    expect(fields.indexOf("law-data-identification")).toBeLessThan(fields.indexOf("law-data-publication"));
+    expect(fields.indexOf("law-data-publication")).toBeLessThan(fields.indexOf("law-data-update"));
+    expect(fields.indexOf('name="situacao_conferencia"')).toBeLessThan(fields.indexOf("law-data-update"));
+    expect(fields).toContain("law-data-reference-pair");
+  });
+
   it("permite configurar acesso gratuito somente na edição contextual da lei e pelo contrato administrativo", () => {
     const fields = read("components/admin/law-data-fields.tsx");
     const form = read("components/admin/law-data-admin.tsx");
