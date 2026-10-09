@@ -3,7 +3,9 @@ import {
   AdminArticleConflictError,
   applyArticleSourceStandardization,
   applyArticleStructuralBatch,
+  applyArticleReferenceCleanup,
   deactivateArticleConflictQuestion,
+  previewArticleReferenceCleanup,
   previewArticleStructuralBatch,
   previewArticleSourceStandardization,
 } from "@/lib/admin-article-conflicts-server";
@@ -45,6 +47,12 @@ export async function POST(request: Request) {
     }
     if (body.action === "aplicar_lote_estrutural") {
       return NextResponse.json(await applyArticleStructuralBatch({ contexts: body.contexts, confirmation: String(body.confirmation ?? "") }), { headers });
+    }
+    if (body.action === "previsualizar_limpeza_assuntos") {
+      return NextResponse.json(await previewArticleReferenceCleanup(body.law), { headers });
+    }
+    if (body.action === "aplicar_limpeza_assuntos") {
+      return NextResponse.json(await applyArticleReferenceCleanup({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? "") }), { headers });
     }
     throw new AdminArticleConflictError(400, "Ação de conflito inválida.");
   } catch (error) {

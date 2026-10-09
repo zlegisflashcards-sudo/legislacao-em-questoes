@@ -15,6 +15,7 @@ import {
 } from "@/lib/legisbot/source-conflicts";
 import { hasIncisoGranularityPending, validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
 import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
+import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
 
 const PAGE_SIZE = 20;
 const STRUCTURAL_BATCH_SIZE = 100;
@@ -32,6 +33,7 @@ export type ArticleConflictFilters = {
 
 type StructuralBatchTarget = { slug: string; ordem: string };
 type StructuralBatchCandidate = StructuralBatchTarget & { expectedOrder: string; questionIds: string[] };
+type ReferenceCleanupCandidate = { id: string; slug: string; ordem: string; before: string; after: string };
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
 
@@ -230,6 +232,68 @@ export async function applyArticleStructuralBatch(input: { contexts: unknown; co
     }
   }
   return { applied, failed };
+}
+
+function referenceCleanupLaw(value: unknown) {
+  const law = safeFilter(value, 160);
+  if (law && !/^[a-z0-9-]{1,160}$/.test(law)) throw new AdminArticleConflictError(400, "Lei inválida para a limpeza de assuntos.");
+  return law;
+}
+
+async function referenceCleanupCandidates(rawLaw: unknown) {
+  const law = referenceCleanupLaw(rawLaw);
+  const rows = await loadQuestions(true);
+  return rows.flatMap((row): ReferenceCleanupCandidate[] => {
+    if (law && row.slug.toLocaleLowerCase("pt-BR") !== law) return [];
+    const before = row.assunto ?? "";
+    const after = normalizeQuestionLegalReference(before);
+    return before !== after ? [{ id: row.id, slug: row.slug.toUpperCase(), ordem: row.ordem, before, after }] : [];
+  });
+}
+
+export async function previewArticleReferenceCleanup(rawLaw: unknown) {
+  await requireAdmin();
+  const candidates = await referenceCleanupCandidates(rawLaw);
+  return { law: referenceCleanupLaw(rawLaw) || null, candidates, sample: candidates.slice(0, 12) };
+}
+
+export async function applyArticleReferenceCleanup(input: { law: unknown; expected: unknown; confirmation: string }) {
+  const user = await requireAdmin();
+  if (input.confirmation !== "LIMPAR ASSUNTOS") throw new AdminArticleConflictError(422, "Digite LIMPAR ASSUNTOS para confirmar.");
+  const candidates = await referenceCleanupCandidates(input.law);
+  const expected = Array.isArray(input.expected) ? input.expected : [];
+  const current = candidates.map(({ id, before, after }) => ({ id, before, after }));
+  if (JSON.stringify(expected) !== JSON.stringify(current)) throw new AdminArticleConflictError(409, "Os assuntos mudaram desde a prévia. Gere uma nova prévia.");
+  const db = getSupabaseServerClient();
+  const failed: Array<{ id: string; reason: string }> = [];
+  let cleaned = 0;
+  for (const candidate of candidates) {
+    try {
+      const updated = await db.from("questions")
+        .update({ assunto: candidate.after })
+        .eq("id", candidate.id)
+        .eq("ativo", true)
+        .eq("assunto", candidate.before)
+        .select("id,slug,ordem,assunto")
+        .maybeSingle();
+      if (updated.error) throw new Error("Não foi possível salvar o assunto.");
+      if (!updated.data) throw new Error("O assunto mudou durante a limpeza.");
+      const audit = await db.rpc("admin_comercial_auditar", {
+        p_ator_user_id: user.id,
+        p_acao: "atualizar",
+        p_entidade: "questao",
+        p_entidade_id: candidate.id,
+        p_anterior: { assunto: candidate.before, slug: candidate.slug, ordem: candidate.ordem },
+        p_posterior: { assunto: candidate.after, slug: candidate.slug, ordem: candidate.ordem },
+        p_detalhes: { origem: "central_artigo_limpeza_assuntos" },
+      });
+      if (audit.error) console.error("Falha ao auditar limpeza de assunto", { questionId: candidate.id, code: audit.error.code });
+      cleaned += 1;
+    } catch (error) {
+      failed.push({ id: candidate.id, reason: error instanceof Error ? error.message : "Não foi possível limpar este assunto." });
+    }
+  }
+  return { cleaned, failed, law: referenceCleanupLaw(input.law) || null };
 }
 
 export async function getArticleSourceConflict(rawSlug: string, rawOrdem: string) {

@@ -1,3 +1,5 @@
+import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
+
 export const QUESTION_ANSWERS = ["Certo", "Errado"] as const;
 export const QUESTION_LONG_CONTENT_MAX_LENGTH = 60_000;
 
@@ -24,13 +26,13 @@ export type QuestionEditableField = (typeof QUESTION_EDITABLE_FIELDS)[number];
 
 type DraftInput = Record<string, unknown>;
 
-function text(value: unknown, field: string, required = false, max = 12000) {
+function text(value: unknown, field: string, required = false, max = 12000, normalizeReference = false) {
   if (value === null || value === undefined) {
     if (required) throw new Error(`${field} é obrigatório.`);
     return null;
   }
   if (typeof value !== "string") throw new Error(`${field} inválido.`);
-  const normalized = value.trim();
+  const normalized = normalizeReference ? normalizeQuestionLegalReference(value) : value.trim();
   if (!normalized) {
     if (required) throw new Error(`${field} é obrigatório.`);
     return null;
@@ -63,14 +65,14 @@ export function parseQuestionFieldChange(field: QuestionEditableField, value: un
     }
     case "ordem": return order(value);
     case "justificativa": return text(value, "Justificativa", false, QUESTION_LONG_CONTENT_MAX_LENGTH);
-    case "assunto": return text(value, "Assunto", false, 500);
+    case "assunto": return text(value, "Assunto", false, 500, true);
     case "legislacao": return text(value, "Legislação", false, QUESTION_LONG_CONTENT_MAX_LENGTH);
-    case "titulo": return text(value, "Título", false, 500);
+    case "titulo": return text(value, "Título", false, 500, true);
     case "total_artigos": return optionalInteger(value, "Total de artigos");
-    case "capitulo": return text(value, "Capítulo", false, 500);
-    case "secao": return text(value, "Seção", false, 500);
-    case "subsecao": return text(value, "Subseção", false, 500);
-    case "artigo": return text(value, "Artigo", false, 500);
+    case "capitulo": return text(value, "Capítulo", false, 500, true);
+    case "secao": return text(value, "Seção", false, 500, true);
+    case "subsecao": return text(value, "Subseção", false, 500, true);
+    case "artigo": return text(value, "Artigo", false, 500, true);
   }
 }
 

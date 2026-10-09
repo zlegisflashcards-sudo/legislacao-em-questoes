@@ -1,6 +1,7 @@
 import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { parseQuestionDraft, questionDeckDefaults, type QuestionDraft } from "@/lib/admin-questoes";
+import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
 import { parseBulkQuestionEdit, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
@@ -363,7 +364,14 @@ export async function importStructureTxt(body: Record<string, unknown>) {
   return { law: prepared.response.law, criados: insertedIds.length, existentes: prepared.response.summary.existentes, conflitos: 0 };
 }
 
-function withSlug(rows: ImportedQuestion[], lawSlug: string) { return rows.map((row) => ({ ...row, slug: effectiveAnkiSlug(row.slug, lawSlug) })); }
+function withSlug(rows: ImportedQuestion[], lawSlug: string) {
+  return rows.map((row) => ({
+    ...row,
+    slug: effectiveAnkiSlug(row.slug, lawSlug),
+    assunto: normalizeQuestionLegalReference(row.assunto),
+    titulo: normalizeQuestionLegalReference(row.titulo),
+  }));
+}
 function structureMappings(value: unknown): StructureImportMapping {
   if (value === undefined || value === null) return {};
   if (!value || Array.isArray(value) || typeof value !== "object") throw new AdminQuestoesError(400, "Mapeamento estrutural inválido.");

@@ -21,6 +21,19 @@ describe("administração de Legis Questões", () => {
     expect(parseQuestionDraft({ ...base, ordem: "0010.0.00.14" }).ordem).toBe("0010.0.00.14");
   });
 
+  it("limpa HTML, entidades e espaços da referência legal sem perder seus elementos", () => {
+    expect(parseQuestionDraft({
+      ...base,
+      assunto: "<div>Art. 19, § 3º,&nbsp; inciso &#160;II <b>,</b> alínea&nbsp;a, Lei&nbsp;Estadual&nbsp;6.513/95&nbsp;-&nbsp;MA</div>",
+      artigo: " <span>Art. 19</span>  , ",
+      titulo: "<b>Lei&nbsp;Estadual 6.513/95 &amp; Administração</b>",
+    })).toMatchObject({
+      assunto: "Art. 19, § 3º, inciso II, alínea a, Lei Estadual 6.513/95 - MA",
+      artigo: "Art. 19,",
+      titulo: "Lei Estadual 6.513/95 & Administração",
+    });
+  });
+
   it("aceita legislação e justificativa extensas sem ampliar o limite da pergunta", () => {
     const longContent = "L".repeat(QUESTION_LONG_CONTENT_MAX_LENGTH);
     expect(parseQuestionDraft({ ...base, legislacao: longContent, justificativa: longContent })).toMatchObject({ legislacao: longContent, justificativa: longContent });
@@ -207,6 +220,7 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain("groupImportSourceWarnings(effectiveSources)");
     expect(server).toContain('status: reason ? "erro" : matching ? sourceChanged ? "atualizada" : "duplicada" : "nova"');
     expect(server).toContain("slug: row.slug");
+    expect(server).toContain("assunto: normalizeQuestionLegalReference(row.assunto)");
   });
 
   it("sugere somente padrões recorrentes do baralho para uma Questão Sombra", () => {

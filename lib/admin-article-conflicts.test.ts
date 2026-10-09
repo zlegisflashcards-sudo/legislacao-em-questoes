@@ -123,4 +123,16 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Sugerir lote");
     expect(list).toContain("Autorizar solução em lote");
   });
+
+  it("oferece prévia e confirmação para limpar HTML dos assuntos sem alterar o restante da questão", () => {
+    expect(server).toContain("previewArticleReferenceCleanup");
+    expect(server).toContain("applyArticleReferenceCleanup");
+    expect(server).toContain("normalizeQuestionLegalReference(before)");
+    expect(server).toContain('input.confirmation !== "LIMPAR ASSUNTOS"');
+    expect(server).toContain('.update({ assunto: candidate.after })');
+    expect(api).toContain('body.action === "previsualizar_limpeza_assuntos"');
+    expect(api).toContain('body.action === "aplicar_limpeza_assuntos"');
+    expect(list).toContain("Limpar HTML dos assuntos");
+    expect(list).toContain("Pergunta, justificativa, legislação, respostas e ordem não serão alteradas.");
+  });
 });
