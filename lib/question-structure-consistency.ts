@@ -10,7 +10,7 @@ const romanValues: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, 
 function romanToNumber(value: string) { let result = 0; const letters = value.toUpperCase().split(""); for (let index = 0; index < letters.length; index += 1) { const current = romanValues[letters[index]]; const next = romanValues[letters[index + 1]] ?? 0; if (!current) return null; result += current < next ? -current : current; } return result || null; }
 function normalizedNumber(value: string | undefined) { return value && /^\d+$/.test(value) ? String(Number(value)) : undefined; }
 function normalizedLetter(value: string | undefined) { return value && /^[a-z]$/i.test(value) ? value.toUpperCase() : undefined; }
-function referenceFromSubject(value: SubjectStructure): DeviceReference { return { artigo: normalizedNumber(value.article), letraArtigo: normalizedLetter(value.suffix), paragrafo: normalizedNumber(value.paragraph), letraParagrafo: normalizedLetter(value.paragraphSuffix), inciso: value.item ? String(romanToNumber(value.item) ?? "") || undefined : undefined, letraInciso: normalizedLetter(value.itemSuffix) }; }
+function referenceFromSubject(value: SubjectStructure): DeviceReference { return { artigo: normalizedNumber(value.article), letraArtigo: normalizedLetter(value.suffix), paragrafo: normalizedNumber(value.paragraph), letraParagrafo: normalizedLetter(value.paragraphSuffix), inciso: value.item ? String(romanToNumber(value.item) ?? "") || undefined : undefined, letraInciso: normalizedLetter(value.itemSuffix ?? value.letter) }; }
 
 /** Parses the legal subject without treating an alínea as a new order level. */
 export function parseQuestionSubject(value: string | null | undefined): SubjectStructure | null {

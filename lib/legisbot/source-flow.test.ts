@@ -64,6 +64,12 @@ describe("fonte canônica do LegisBot", () => {
     expect(warnings).toEqual([expect.objectContaining({ kind: "estrutural", structuralStatus: "conflict", expectedOrder: "0027.b.01.c.02.0" })]);
   });
 
+  it("aceita letras estruturais na importação sem criar aviso de conflito", () => {
+    const row = { slug: "cp", ordem: "0027.b.01.c.02.b", titulo: "Código Penal", assunto: "Art. 27-B, § 1º-C, II-B", legislacao: "<p>Texto</p>" };
+    expect(validateImportSource(row)).toBeNull();
+    expect(groupImportSourceWarnings([row])).toEqual([]);
+  });
+
   it("usa somente slug + ordem no cliente, ignora query legada e gera URL canônica no Anki", () => {
     const page = readFileSync("app/legisbot/[slug]/[ordem]/page.tsx", "utf8");
     const client = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");

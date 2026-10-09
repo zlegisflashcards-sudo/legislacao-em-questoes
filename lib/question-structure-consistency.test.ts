@@ -19,6 +19,28 @@ describe("validador estrutural Assunto × Ordem", () => {
     expect(validate("Art. 40, VI, Lei Estadual 6.513/95 - MA", "0040.0.00.0.00.0")).toMatchObject({ status: "conflict", expectedOrder: "0040.0.00.0.06.0" });
   });
   it("valida inciso com letra", () => expect(validate("Art. 27-B, § 1º-C, II-A", "0027.b.01.c.02.a").status).toBe("valid"));
+  it.each([
+    ["artigo", "Art. 1º-A", "0001.a.00.0.00.0"],
+    ["parágrafo", "Art. 27-B, § 1º-C", "0027.b.01.c.00.0"],
+    ["inciso", "Art. 27-B, § 1º-C, II-B", "0027.b.01.c.02.b"],
+  ])("aceita letra estrutural válida no %s", (_level, assunto, ordem) => {
+    expect(validate(assunto, ordem)).toMatchObject({ status: "valid", expectedOrder: ordem });
+  });
+  it.each([
+    ["Art. 27-B", "0027.0.00.0.00.0", "0027.b.00.0.00.0"],
+    ["Art. 27", "0027.b.00.0.00.0", "0027.0.00.0.00.0"],
+    ["Art. 27-B, § 1º-C", "0027.b.01.0.00.0", "0027.b.01.c.00.0"],
+    ["Art. 27-B, § 1º", "0027.b.01.c.00.0", "0027.b.01.0.00.0"],
+    ["Art. 27-B, § 1º-C, II-B", "0027.b.01.c.02.0", "0027.b.01.c.02.b"],
+  ])("sinaliza conflito somente quando Assunto e Ordem divergem", (assunto, ordem, expectedOrder) => {
+    expect(validate(assunto, ordem)).toMatchObject({ status: "conflict", expectedOrder });
+  });
+  it("valida alínea no campo final de letra da Ordem", () => {
+    expect(validate("Art. 27-B, § 1º-C, II, alínea a", "0027.b.01.c.02.a")).toMatchObject({
+      status: "valid",
+      expectedOrder: "0027.b.01.c.02.a",
+    });
+  });
   it("não confunde Art. 91 com Art. 91-A", () => expect(validate("Art. 91-A", "0091.0.00.0.00.0").status).toBe("conflict"));
   it("preserva zero como ausência de letra sem colidir com letra", () => {
     expect(parseQuestionOrder("0001.0.00.0.00.0")).toMatchObject({ artigo: "1", letraArtigo: undefined });
