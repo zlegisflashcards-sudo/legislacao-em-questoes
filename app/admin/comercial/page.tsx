@@ -14,7 +14,7 @@ export default async function AdminCommercialPage() {
       <div>
         <div className="admin-eyebrow">Administração comercial</div>
         <h1>Gestão comercial</h1>
-        <p>Gerencie leis, materiais, produtos, aquisições, liberações e auditoria.</p>
+        <p>Gerencie produtos, aquisições, liberações, tutoriais e auditoria.</p>
       </div>
       <div className="admin-header-actions">
         <span>{administrator.email}</span>

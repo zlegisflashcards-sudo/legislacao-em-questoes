@@ -6,7 +6,7 @@ import { LawSearchSelect } from "@/components/law-search-select";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
-type MaterialMutation = (resource: "materiais", payload: Row, success: string) => Promise<void>;
+type MaterialMutation = (resource: "materiais", payload: Row, success: string) => Promise<boolean>;
 
 const text = (value: unknown) => value == null ? "" : String(value);
 const object = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};

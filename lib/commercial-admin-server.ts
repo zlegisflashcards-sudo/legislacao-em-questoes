@@ -458,6 +458,10 @@ export async function getCommercialResource(resource: CommercialResource, reques
   if (resource === "produtos") {
     let query = supabase.from("produtos").select("*", { count: "exact" });
     if (q) query = query.or(`nome.ilike.%${q}%,slug.ilike.%${q}%,hotmart_product_id.ilike.%${q}%`);
+    const tipoProduto = safeSearch(url.searchParams.get("tipo_produto"), 60);
+    const ativo = url.searchParams.get("ativo");
+    if (tipoProduto) query = query.eq("tipo_produto", enumValue(tipoProduto, PRODUCT_TYPES, "Tipo do produto"));
+    if (ativo === "true" || ativo === "false") query = query.eq("ativo", ativo === "true");
     const result = await query.order("ordem").order("nome").range(from, to);
     assertQuery(result);
     const uniqueProducts = new Map<string, (typeof result.data extends (infer Row)[] | null ? Row : never)>();
