@@ -39,7 +39,7 @@ describe("modo conferência administrativo", () => {
   });
 
   it("reutiliza salvar, prévia e confirmação de exclusão sem atalhos em campos editáveis", () => {
-    for (const expected of ["action: \"atualizar\"", "action: \"resumo_exclusao_questao\"", "action: \"excluir_questao\"", "Ctrl + Enter", "isEditingTarget", "Há alterações não salvas", "Conferir erradas", "keepOutsideFilter", "Duplicar", "Nova questão", "conference-context"]) expect(client).toContain(expected);
+    for (const expected of ["action: \"atualizar\"", "action: \"resumo_exclusao_questao\"", "action: \"excluir_questao\"", "Ctrl + Enter", "isEditingTarget", "Há alterações não salvas", "Conferir erradas", "keepOutsideFilter", "Duplicar (D)", "Cancelar edição (Esc)", "beginDuplicate", "openCorrection", "Nova questão", "conference-context"]) expect(client).toContain(expected);
   });
 
   it("mantém conferência manual isolada por lei e bloco", () => {
