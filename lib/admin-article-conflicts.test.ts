@@ -54,7 +54,9 @@ describe("Central do Artigo — administração de conflitos", () => {
   const api = readFileSync("app/api/admin/artigos/conflitos/route.ts", "utf8");
   const list = readFileSync("components/admin/article-source-conflicts.tsx", "utf8");
   const detail = readFileSync("components/admin/article-source-conflict-detail.tsx", "utf8");
+  const panel = readFileSync("components/admin/question-standardization-panel.tsx", "utf8");
   const questionPage = readFileSync("app/admin/leis/[slug]/questoes/page.tsx", "utf8");
+  const conflictPage = readFileSync("app/admin/artigos/conflitos/[slug]/[ordem]/page.tsx", "utf8");
 
   it("filtra por tipo de conflito no servidor e pagina sem enviar todos os registros ao navegador", () => {
     expect(server).toContain("PAGE_SIZE = 20");
@@ -78,6 +80,18 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(detail).toContain("Corrigir a ordem");
   });
 
+  it("volta à lista filtrada pela lei quando a URL do conflito contém uma ordem inválida", () => {
+    expect(conflictPage).toContain("normalizeLegisBotIdentifiers(slug, ordem)");
+    expect(conflictPage).toContain("redirect(fallbackHref)");
+    expect(conflictPage).toContain("aba=conflitos&lei=");
+  });
+
+  it("volta à lista filtrada pela lei quando o conflito da URL já foi resolvido", () => {
+    expect(conflictPage).toContain("if (!conflict) redirect(");
+    expect(conflictPage).toContain("identifiers.slug.toLowerCase()");
+    expect(conflictPage).not.toContain("if (!conflict) notFound()");
+  });
+
   it("padroniza somente legislação com prévia, proteção contra estado antigo e RPC transacional auditada", () => {
     expect(server).toContain('field: "legislacao"');
     expect(server).toContain("question_ids: preview.questionIds");
@@ -85,6 +99,20 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("applyBulkQuestionEdit");
     expect(detail).toContain("Somente o campo");
     expect(detail).toContain("IDs afetados");
+  });
+
+  it("permite informar uma legislação nova apenas para os flashcards marcados", () => {
+    expect(detail).toContain("Criar legislação correta");
+    expect(detail).toContain("legislationOnly");
+    expect(detail).toContain("selectedIds");
+    expect(panel).toContain("legislationOnly");
+    expect(panel).toContain("A legislação será aplicada apenas aos flashcards marcados.");
+  });
+
+  it("renderiza pergunta e justificativa com HTML sanitizado, sem expor marcação bruta", () => {
+    expect(detail).toContain("sanitizeLegisQuestoesHtml");
+    expect(detail).toContain('label="Pergunta" value={question.pergunta} richText');
+    expect(detail).toContain('label="Justificativa" value={question.justificativa} richText');
   });
 
   it("reavalia automaticamente, preserva o comentário e sinaliza revisão sem chamar IA", () => {
@@ -121,7 +149,29 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(api).toContain('body.action === "aplicar_lote_estrutural"');
     expect(list).toContain("Marcar para lote");
     expect(list).toContain("Sugerir lote");
-    expect(list).toContain("Autorizar solução em lote");
+    expect(list).toContain("Confirmar solução em lote");
+  });
+
+  it("permite decidir a granularidade por lote sem alterar os flashcards", () => {
+    expect(server).toContain("previewArticleGranularityBatch");
+    expect(server).toContain("applyArticleGranularityBatch");
+    expect(server).toContain("hasIncisoGranularityPending(row)");
+    expect(server).toContain("granularity_decision: decision");
+    expect(api).toContain('body.action === "previsualizar_lote_granularidade"');
+    expect(api).toContain('body.action === "aplicar_lote_granularidade"');
+    expect(list).toContain("Revisar granularidade");
+    expect(list).toContain("Decidir granularidade em lote");
+    expect(list).toContain("nenhuma pergunta, resposta, legislação ou ordem será alterada");
+    expect(list).not.toContain("Digite APLICAR GRANULARIDADE");
+  });
+
+  it("exibe explicitamente todos os tipos de revisão de cada contexto", () => {
+    expect(server).toContain("const reviewTypes = [");
+    expect(server).toContain('"Legislação divergente"');
+    expect(server).toContain('"Pendência de granularidade"');
+    expect(server).toContain('"Comentário sem análise"');
+    expect(list).toContain('aria-label="Tipos de revisão"');
+    expect(list).toContain("item.reviewTypes.map");
   });
 
   it("oferece prévia e confirmação para limpar HTML dos assuntos sem alterar o restante da questão", () => {

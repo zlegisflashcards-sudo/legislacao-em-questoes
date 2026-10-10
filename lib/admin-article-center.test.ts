@@ -63,6 +63,13 @@ describe("Central do Artigo administrativa", () => {
     expect(index).toContain("/admin/artigos/${encodeURIComponent(item.slug.toLowerCase())}/${encodeURIComponent(item.ordem)}");
   });
 
+  it("volta para a lista da lei quando o artigo da URL não existe mais", () => {
+    expect(detail).toContain('import { redirect } from "next/navigation"');
+    expect(detail).toContain("if (!article) redirect(");
+    expect(detail).toContain('lei=${encodeURIComponent(slug.trim().toLowerCase())}');
+    expect(detail).not.toContain("if (!article) notFound()");
+  });
+
   it("mantém a aba de comentários no contexto derivado de questões", () => {
     expect(index).toContain('tabHref("comentarios")');
     expect(detail).toContain('tab === "comentarios"');
@@ -116,7 +123,7 @@ describe("Central do Artigo administrativa", () => {
   });
 
   it("trata divergência entre Assunto e Ordem como conflito estrutural do contexto", () => {
-    expect(server).toContain("validateQuestionStructure(item)");
+    expect(server).toContain("validateQuestionStructure({ ...item");
     expect(server).toContain("structuralValidation");
     expect(server).toContain("Boolean(structuralValidation)");
     expect(detail).toContain("Conflito estrutural");

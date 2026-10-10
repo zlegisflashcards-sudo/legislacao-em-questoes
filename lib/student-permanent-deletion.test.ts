@@ -6,8 +6,9 @@ const server = readFileSync("lib/commercial-admin-server.ts", "utf8");
 const ui = readFileSync("components/admin/commercial-admin.tsx", "utf8");
 
 describe("exclusão administrativa definitiva de aluno", () => {
-  it("exige confirmação forte e mantém a operação no endpoint administrativo", () => {
-    expect(ui).toContain("Digite <strong>EXCLUIR</strong>");
+  it("confirma pela decisão explícita e mantém a operação no endpoint administrativo", () => {
+    expect(ui).not.toContain("Digite <strong>EXCLUIR</strong>");
+    expect(ui).toContain("Excluir definitivamente");
     expect(server).toContain('action === "excluir_definitivamente"');
     expect(server).toContain('confirmation !== "EXCLUIR"');
     expect(migration).toContain("Digite EXCLUIR para confirmar");

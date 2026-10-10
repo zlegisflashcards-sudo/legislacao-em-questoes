@@ -83,7 +83,8 @@ describe("troca administrativa de e-mail", () => {
     expect(studentsPanel).toContain("O ID do usuário será mantido e os vínculos do aluno serão preservados.");
     expect(studentsPanel).toContain("setSelected({ ...selected, ...updated })");
     expect(studentsPanel).toContain("Remover conta vazia e continuar");
-    expect(studentsPanel).toContain("Digite <strong>REMOVER</strong>");
+    expect(studentsPanel).not.toContain("Digite <strong>REMOVER</strong>");
+    expect(studentsPanel).toContain("Confirmar remoção e continuar");
     expect(studentsPanel).toContain("Abrir aluno duplicado");
   });
 });

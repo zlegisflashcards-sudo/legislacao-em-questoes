@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import {
   AdminArticleConflictError,
   applyArticleSourceStandardization,
+  applyArticleGranularityBatch,
   applyArticleStructuralBatch,
   applyArticleReferenceCleanup,
   deactivateArticleConflictQuestion,
   previewArticleReferenceCleanup,
+  previewArticleGranularityBatch,
   previewArticleStructuralBatch,
   previewArticleSourceStandardization,
 } from "@/lib/admin-article-conflicts-server";
@@ -47,6 +49,12 @@ export async function POST(request: Request) {
     }
     if (body.action === "aplicar_lote_estrutural") {
       return NextResponse.json(await applyArticleStructuralBatch({ contexts: body.contexts, confirmation: String(body.confirmation ?? "") }), { headers });
+    }
+    if (body.action === "previsualizar_lote_granularidade") {
+      return NextResponse.json(await previewArticleGranularityBatch({ contexts: body.contexts, decision: body.decision }), { headers });
+    }
+    if (body.action === "aplicar_lote_granularidade") {
+      return NextResponse.json(await applyArticleGranularityBatch({ contexts: body.contexts, decision: body.decision }), { headers });
     }
     if (body.action === "previsualizar_limpeza_assuntos") {
       return NextResponse.json(await previewArticleReferenceCleanup(body.law), { headers });

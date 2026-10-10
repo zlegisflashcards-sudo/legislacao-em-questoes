@@ -10,7 +10,6 @@ type Row = {
   origem_mapeamento: string; observacao_interna: string; confianca: string | number; legisbot_id?: number | null; origem_contexto?: "questoes" | "legisbot";
 };
 type Preview = { resumo: { encontrados: number; atualizar: number; iguais: number; inexistentes: number } };
-const confirmationPhrase = "APLICAR MAPEAMENTO";
 const csv = (rows: Row[]) => [
   "slug,ordem,assunto,referencia_amigavel,legislacao_consolidada,quantidade_questoes,conflito,incidencia,artigo_recente,origem_mapeamento,observacao_interna,confianca",
   ...rows.map((row) => [row.slug, row.ordem, row.assunto, row.referencia_amigavel, row.legislacao_consolidada, row.quantidade_questoes, row.conflito, row.incidencia, row.artigo_recente, row.origem_mapeamento, row.observacao_interna, row.confianca].map((value) => JSON.stringify(value ?? "")).join(",")),
@@ -21,7 +20,6 @@ export function ArticleMappingCenter({ law }: { law: string }) {
   const [filter, setFilter] = useState("");
   const [fileRows, setFileRows] = useState<Record<string, unknown>[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [confirmation, setConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const load = useCallback(async () => {
     const response = await fetch(`/api/admin/artigos/mapeamento?lei=${encodeURIComponent(law)}`);
@@ -48,7 +46,6 @@ export function ArticleMappingCenter({ law }: { law: string }) {
         confianca: row.confianca === "" ? null : Number(row.confianca),
       }));
       setFileRows(parsed);
-      setConfirmation("");
       setMessage("");
       const response = await fetch("/api/admin/artigos/mapeamento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "previsualizar_importacao", rows: parsed }) });
       const body = await response.json();
@@ -61,10 +58,10 @@ export function ArticleMappingCenter({ law }: { law: string }) {
     }
   };
   const apply = async () => {
-    const response = await fetch("/api/admin/artigos/mapeamento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "aplicar_importacao", rows: fileRows, confirmation }) });
+    const response = await fetch("/api/admin/artigos/mapeamento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "aplicar_importacao", rows: fileRows, confirmation: "APLICAR MAPEAMENTO" }) });
     const body = await response.json();
     setMessage(response.ok ? `${body.atualizar} contexto(s) atualizados.` : body.error);
-    if (response.ok) { setPreview(null); setConfirmation(""); await load(); }
+    if (response.ok) { setPreview(null); await load(); }
   };
 
   return <section className="grid gap-4">
@@ -73,7 +70,7 @@ export function ArticleMappingCenter({ law }: { law: string }) {
       <label>Incidência<select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="">Todas</option><option value="nao_mapeado">Não mapeadas</option><option value="muito_alta">Muito alta</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></label>
       <label>Importar CSV<input type="file" accept=".csv,text/csv" onChange={(event) => event.target.files?.[0] && void read(event.target.files[0])}/></label>
     </div>
-    {preview ? <section className="admin-alert"><strong>Prévia da importação</strong><p>{preview.resumo.encontrados} encontrados · {preview.resumo.atualizar} atualizarão · {preview.resumo.iguais} iguais · {preview.resumo.inexistentes} inexistentes.</p><p>Contextos inexistentes não serão criados nem terão questões modificadas.</p><label>Digite <code>{confirmationPhrase}</code> para confirmar<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}/></label><button className="admin-button primary" type="button" disabled={confirmation !== confirmationPhrase} onClick={() => void apply()}>Confirmar importação</button></section> : null}
+    {preview ? <section className="admin-alert"><strong>Prévia da importação</strong><p>{preview.resumo.encontrados} encontrados · {preview.resumo.atualizar} atualizarão · {preview.resumo.iguais} iguais · {preview.resumo.inexistentes} inexistentes.</p><p>Contextos inexistentes não serão criados nem terão questões modificadas.</p><div className="admin-modal-actions"><button className="admin-button secondary" type="button" onClick={() => setPreview(null)}>Cancelar</button><button className="admin-button primary" type="button" onClick={() => void apply()}>Confirmar importação</button></div></section> : null}
     {message ? <p className="admin-alert">{message}</p> : null}
     <div className="article-result-list">{visible.map((row) => <article className="article-result" key={`${row.slug}:${row.ordem}`}><div><strong>{row.referencia_amigavel || row.assunto}</strong><p>Incidência: {row.incidencia.replaceAll("_", " ")} · {row.artigo_recente ? "Artigo recente" : "Não recente"}</p><small>{row.slug} · {row.ordem} · {row.quantidade_questoes} questão(ões){row.origem_contexto === "legisbot" ? " · Contexto do LegisBot" : ""}{row.conflito ? " · Conflito" : ""}</small></div>{row.quantidade_questoes > 0 ? <Link className="admin-button secondary" href={`/admin/artigos/${encodeURIComponent(row.slug.toLowerCase())}/${encodeURIComponent(row.ordem)}?aba=mapeamento&lei=${encodeURIComponent(law || row.slug.toLowerCase())}`}>Abrir artigo</Link> : row.legisbot_id ? <Link className="admin-button secondary" href={`/admin/legisbot/${encodeURIComponent(String(row.legisbot_id))}`}>Abrir contexto editorial</Link> : null}</article>)}</div>
   </section>;

@@ -1,16 +1,24 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { ArticleSourceConflictDetail } from "@/components/admin/article-source-conflict-detail";
 import { exigirAdministrador } from "@/lib/admin-auth";
 import { getArticleSourceConflict } from "@/lib/admin-article-conflicts-server";
+import { normalizeLegisBotIdentifiers } from "@/lib/legisbot/request-validation";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminArticleConflictPage({ params }: { params: Promise<{ slug: string; ordem: string }> }) {
   const { slug, ordem } = await params;
   await exigirAdministrador();
-  const conflict = await getArticleSourceConflict(slug, ordem);
-  if (!conflict) notFound();
+  const fallbackHref = `/admin/artigos?aba=conflitos&lei=${encodeURIComponent(slug.trim().toLowerCase())}`;
+  let identifiers: { slug: string; ordem: string };
+  try {
+    identifiers = normalizeLegisBotIdentifiers(slug, ordem);
+  } catch {
+    redirect(fallbackHref);
+  }
+  const conflict = await getArticleSourceConflict(identifiers.slug, identifiers.ordem);
+  if (!conflict) redirect(`/admin/artigos?aba=conflitos&lei=${encodeURIComponent(identifiers.slug.toLowerCase())}`);
   return <main className="admin-shell article-center-shell">
     <nav className="law-center-breadcrumb"><Link href="/admin">Administração</Link><span>/</span><Link href="/admin/artigos?aba=conflitos">Conflitos</Link><span>/</span><span>{conflict.slug} + {conflict.ordem}</span></nav>
     <header className="article-context-header"><div><div className="admin-eyebrow">Central do Artigo · Conflitos</div><h1>{conflict.lawTitle}</h1><p>{conflict.lawCode ? `${conflict.lawCode} · ` : ""}código interno: {conflict.slug} · ordem: {conflict.ordem}</p></div><div className="article-header-actions"><Link className="admin-button secondary" href={`/admin/artigos/${encodeURIComponent(conflict.slug.toLowerCase())}/${encodeURIComponent(conflict.ordem)}`}>Abrir artigo</Link><Link className="admin-button secondary" href="/admin/artigos?aba=conflitos">← Lista de conflitos</Link></div></header>

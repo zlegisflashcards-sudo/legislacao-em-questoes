@@ -33,6 +33,8 @@ export type ArticleConflictFilters = {
 
 type StructuralBatchTarget = { slug: string; ordem: string };
 type StructuralBatchCandidate = StructuralBatchTarget & { expectedOrder: string; questionIds: string[] };
+type GranularityDecision = "paragrafo_inteiro" | "recorte_inciso";
+type GranularityBatchCandidate = StructuralBatchTarget & { questionIds: string[] };
 type ReferenceCleanupCandidate = { id: string; slug: string; ordem: string; before: string; after: string };
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
@@ -142,6 +144,12 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const questions = group?.questions ?? structuralGroup?.questions ?? granularity!.questions; const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug; const currentOrder = group?.ordem ?? structuralGroup?.ordem ?? granularity!.ordem;
     const metadata = laws.get(slug);
     const comment = comments.get(key);
+    const reviewTypes = [
+      structuralGroup?.validation.status === "conflict" ? "Conflito estrutural" : structuralGroup?.validation.status === "possible_conflict" ? "Possível conflito estrutural" : null,
+      group ? "Legislação divergente" : null,
+      granularity ? "Pendência de granularidade" : null,
+      comment && ["pendente", "processando"].includes(comment.status) ? "Comentário sem análise" : null,
+    ].filter((value): value is string => Boolean(value));
     return {
       slug,
       ordem: currentOrder,
@@ -154,6 +162,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       comment,
       structuralValidation: structuralGroup?.validation ?? null,
       editorialGranularityPending: Boolean(granularity),
+      reviewTypes,
     };
   });
   // Os indicadores precisam refletir exatamente o mesmo universo da lista.
@@ -233,6 +242,53 @@ export async function applyArticleStructuralBatch(input: { contexts: unknown; co
     }
   }
   return { applied, failed };
+}
+
+function granularityDecision(value: unknown): GranularityDecision {
+  if (value === "paragrafo_inteiro" || value === "recorte_inciso") return value;
+  throw new AdminArticleConflictError(400, "Escolha a decisão editorial de granularidade.");
+}
+
+async function granularityBatchCandidates(targets: StructuralBatchTarget[]) {
+  const db = getSupabaseServerClient();
+  const candidates: GranularityBatchCandidate[] = [];
+  const excluded: Array<StructuralBatchTarget & { reason: string }> = [];
+  for (const target of targets) {
+    const rows = await loadQuestions(true, target);
+    if (!rows.length) { excluded.push({ ...target, reason: "Não há questões ativas neste contexto." }); continue; }
+    if (!rows.some((row) => hasIncisoGranularityPending(row))) { excluded.push({ ...target, reason: "Este contexto não possui pendência de granularidade." }); continue; }
+    const mapping = await db.from("article_context_mappings").select("granularidade_legislacao").eq("slug", target.slug.toLowerCase()).eq("ordem", target.ordem).maybeSingle();
+    if (mapping.error) throw new AdminArticleConflictError(503, "Não foi possível verificar as decisões editoriais de granularidade.");
+    if (mapping.data?.granularidade_legislacao === "paragrafo_inteiro" || mapping.data?.granularidade_legislacao === "recorte_inciso") { excluded.push({ ...target, reason: "A granularidade deste contexto já foi decidida." }); continue; }
+    candidates.push({ ...target, questionIds: rows.map((row) => row.id).sort() });
+  }
+  return { candidates, excluded };
+}
+
+export async function previewArticleGranularityBatch(input: { contexts: unknown; decision: unknown }) {
+  await requireAdmin();
+  const decision = granularityDecision(input.decision);
+  return { ...(await granularityBatchCandidates(structuralBatchTargets(input.contexts))), decision };
+}
+
+export async function applyArticleGranularityBatch(input: { contexts: unknown; decision: unknown }) {
+  await requireAdmin();
+  const decision = granularityDecision(input.decision);
+  const preview = await granularityBatchCandidates(structuralBatchTargets(input.contexts));
+  const applied: Array<GranularityBatchCandidate & { questions: number }> = [];
+  const failed: Array<StructuralBatchTarget & { reason: string }> = [...preview.excluded];
+  for (const candidate of preview.candidates) {
+    try {
+      const result = await applyArticleContextStandardization({
+        law_slug: candidate.slug.toLowerCase(), context_slug: candidate.slug.toLowerCase(), context_ordem: candidate.ordem,
+        changes: {}, granularity_decision: decision, expected_question_ids: candidate.questionIds,
+      });
+      applied.push({ ...candidate, questions: result.questions });
+    } catch (error) {
+      failed.push({ slug: candidate.slug, ordem: candidate.ordem, reason: error instanceof Error ? error.message : "Não foi possível registrar esta decisão." });
+    }
+  }
+  return { applied, failed, decision };
 }
 
 function referenceCleanupLaw(value: unknown) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { ArticleCommunityComments } from "@/components/admin/article-community-comments";
 import { ArticleQuestions } from "@/components/admin/article-questions";
 import LegisBotEditor from "@/components/admin/legisbot-editor";
@@ -18,9 +18,10 @@ const one = (value: string | string[] | undefined) => Array.isArray(value) ? val
 export default async function AdminArticleDetailPage({ params, searchParams }: { params: Promise<{ slug: string; ordem: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [{ slug, ordem }, query] = await Promise.all([params, searchParams]);
   await exigirAdministrador();
-  const article = await getArticleContext(slug, ordem);
-  if (!article) notFound();
   const selectedTab = one(query.aba);
+  const fallbackTab = selectedTab === "conflitos" ? "conflitos" : "artigos";
+  const article = await getArticleContext(slug, ordem);
+  if (!article) redirect(`/admin/artigos?aba=${fallbackTab}&lei=${encodeURIComponent(slug.trim().toLowerCase())}`);
   type ArticleTab = "artigo" | "legisbot" | "comentarios" | "questoes" | "conflitos" | "mapeamento";
   const tab: ArticleTab = ["artigo", "legisbot", "comentarios", "questoes", "conflitos", "mapeamento"].includes(selectedTab)
     ? selectedTab as ArticleTab
