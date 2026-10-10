@@ -97,6 +97,84 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
   const range = { first_order: firstOrder.data?.[0]?.ordem ?? null, last_order: lastOrder.data?.[0]?.ordem ?? null };
   return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, range, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId };
 }
+function questionStructurePath(nodes: QuestionStructureNode[], structureId: number | null) {
+  if (structureId === null) return "Sem estrutura";
+  const labels: string[] = [];
+  let current = nodes.find((node) => node.id === structureId) ?? null;
+  while (current) {
+    labels.unshift(current.nome);
+    current = current.parent_id === null ? null : nodes.find((node) => node.id === current?.parent_id) ?? null;
+  }
+  return labels.length ? labels.join(" › ") : "Estrutura não encontrada";
+}
+
+/** References are searched from the same-law question index, then reloaded with the complete structural fields. */
+export async function searchConferenceQuestionLinkReferences(lawSlug: string, query: unknown, questionId?: unknown) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const device = text(query, "Busca do dispositivo");
+  const omittedId = questionId === null || questionId === undefined || questionId === "" ? null : qid(questionId);
+  const search = await searchAdminQuestions({ lawSlug: current.slug, query: device, sort: "ordem_asc", page: 1, limit: 50 });
+  const ids = search.results.map((item) => item.id).filter((item): item is string => typeof item === "string" && item !== omittedId);
+  if (!ids.length) return { references: [] };
+  const [result, nodes] = await Promise.all([
+    db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).in("id", ids).order("ordem").order("id"),
+    structure(current.id),
+  ]);
+  if (result.error) fail("buscar_referencias_vinculo", result.error);
+  return {
+    references: (result.data ?? []).map((question) => ({
+      id: question.id,
+      structure_id: question.structure_id,
+      assunto: question.assunto,
+      ordem: question.ordem,
+      legislacao: question.legislacao,
+      titulo: question.titulo,
+      capitulo: question.capitulo,
+      secao: question.secao,
+      subsecao: question.subsecao,
+      artigo: question.artigo,
+      structure_label: questionStructurePath(nodes, question.structure_id),
+      pergunta_trecho: plainQuestionText(question.legislacao).slice(0, 240),
+      validation: validateQuestionStructure({ assunto: question.assunto, ordem: question.ordem, lawShortName: current.nome_curto ?? current.codigo }),
+    })),
+  };
+}
+
+/** Copies only contextual fields between two active questions of the same law. */
+export async function correctAdminQuestionLinkFromReference(body: Record<string, unknown>) {
+  await requireAdmin();
+  const current = await law(String(body.law_slug));
+  const targetId = qid(body.id);
+  const referenceId = qid(body.reference_id);
+  if (targetId === referenceId) throw new AdminQuestoesError(400, "Escolha outra questão como referência de vínculo.");
+  const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).in("id", [targetId, referenceId]);
+  if (result.error) fail("carregar_referencia_vinculo", result.error);
+  const target = (result.data ?? []).find((question) => question.id === targetId);
+  const reference = (result.data ?? []).find((question) => question.id === referenceId);
+  if (!target || !reference) throw new AdminQuestoesError(404, "A questão ou a referência não pertence à lei selecionada.");
+  return updateAdminQuestion({
+    law_slug: current.slug,
+    id: target.id,
+    data: {
+      ...target,
+      pergunta: target.pergunta,
+      resposta: target.resposta,
+      justificativa: target.justificativa,
+      structure_id: reference.structure_id,
+      assunto: reference.assunto,
+      legislacao: reference.legislacao,
+      ordem: reference.ordem,
+      titulo: reference.titulo,
+      capitulo: reference.capitulo,
+      secao: reference.secao,
+      subsecao: reference.subsecao,
+      artigo: reference.artigo,
+    },
+    audit_origin: "correcao_vinculo_referencia",
+    audit_reference_id: reference.id,
+  });
+}
 export async function listAdminQuestionConference(lawSlug: string, structureId: unknown) {
   await requireAdmin();
   const current = await law(lawSlug);
@@ -250,7 +328,7 @@ export async function getLegisBotQuestionDraft(lawSlug: string, commentId: unkno
 }
 export async function getAdminQuestion(lawSlug: string, questionId: unknown) { await requireAdmin(); const current = await law(lawSlug); const result = await db().from("questions").select(questionFields).eq("id", qid(questionId)).eq("lei_id", current.id).maybeSingle(); if (result.error) fail("carregar_questao", result.error); if (!result.data) throw new AdminQuestoesError(404, "Questão não encontrada para a lei selecionada."); return { law: current, question: result.data }; }
 export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); const nodes = await structure(current.id); if (nodes.length && d.structure_id === null) throw new AdminQuestoesError(400, "Informe a estrutura para esta lei."); if (d.total_artigos === null || d.total_artigos < 1) throw new AdminQuestoesError(400, "Informe o Total de artigos para exportação Anki."); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); const legisBotId = body.legisbot_id === null || body.legisbot_id === undefined || body.legisbot_id === "" ? null : Number(body.legisbot_id); if (legisBotId !== null && Number.isSafeInteger(legisBotId)) { const converted = await db().from("legisbot_comentarios").update({ context_kind: "comment", status: "pendente", comentario: null, precisa_revisao: false }).eq("id", legisBotId).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem).eq("context_kind", "shadow_question"); if (converted.error) fail("converter_sombra_legisbot", converted.error); } return r.data; }
-export async function updateAdminQuestion(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const questionId = qid(body.id); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d, questionId); const before = await db().from("questions").select(questionFields).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (before.error) fail("ler_questao_antes_edicao", before.error); if (!before.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const r = await db().from("questions").update(values(current, d)).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).select(questionFields).maybeSingle(); if (r.error) fail("editar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const audit = await db().rpc("admin_comercial_auditar", { p_ator_user_id: user.id, p_acao: "atualizar", p_entidade: "questao", p_entidade_id: questionId, p_anterior: before.data, p_posterior: r.data, p_detalhes: { origem: "editor_questoes", slug: before.data.slug, ordem_anterior: before.data.ordem, ordem_posterior: d.ordem } }); if (audit.error) console.error("Falha ao auditar edição individual de questão", { questionId, code: audit.error.code }); const sourceChanged = normalizedImportSource({ titulo: String(before.data.titulo ?? ""), assunto: String(before.data.assunto ?? ""), legislacao: String(before.data.legislacao ?? "") }) !== normalizedImportSource({ titulo: d.titulo ?? "", assunto: d.assunto ?? "", legislacao: d.legislacao ?? "" }); const identifiersChanged = String(before.data.ordem) !== d.ordem; if (sourceChanged || identifiersChanged) { const oldReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", String(before.data.slug).toUpperCase()).eq("ordem", String(before.data.ordem)); if (oldReview.error) fail("sinalizar_revisao_apos_edicao", oldReview.error); if (identifiersChanged) { const newReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem); if (newReview.error) fail("sinalizar_revisao_nova_ordem", newReview.error); } } return r.data; }
+export async function updateAdminQuestion(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const questionId = qid(body.id); const d = draft(body.data); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d, questionId); const before = await db().from("questions").select(questionFields).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (before.error) fail("ler_questao_antes_edicao", before.error); if (!before.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const r = await db().from("questions").update(values(current, d)).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).select(questionFields).maybeSingle(); if (r.error) fail("editar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const auditOrigin = body.audit_origin === "correcao_vinculo_referencia" ? "correcao_vinculo_referencia" : "editor_questoes"; const auditReferenceId = auditOrigin === "correcao_vinculo_referencia" && typeof body.audit_reference_id === "string" && /^[0-9a-f-]{36}$/i.test(body.audit_reference_id) ? body.audit_reference_id : null; const audit = await db().rpc("admin_comercial_auditar", { p_ator_user_id: user.id, p_acao: "atualizar", p_entidade: "questao", p_entidade_id: questionId, p_anterior: before.data, p_posterior: r.data, p_detalhes: { origem: auditOrigin, referencia_questao_id: auditReferenceId, slug: before.data.slug, ordem_anterior: before.data.ordem, ordem_posterior: d.ordem } }); if (audit.error) console.error("Falha ao auditar edição individual de questão", { questionId, code: audit.error.code }); const sourceChanged = normalizedImportSource({ titulo: String(before.data.titulo ?? ""), assunto: String(before.data.assunto ?? ""), legislacao: String(before.data.legislacao ?? "") }) !== normalizedImportSource({ titulo: d.titulo ?? "", assunto: d.assunto ?? "", legislacao: d.legislacao ?? "" }); const identifiersChanged = String(before.data.ordem) !== d.ordem; if (sourceChanged || identifiersChanged) { const oldReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", String(before.data.slug).toUpperCase()).eq("ordem", String(before.data.ordem)); if (oldReview.error) fail("sinalizar_revisao_apos_edicao", oldReview.error); if (identifiersChanged) { const newReview = await db().from("legisbot_comentarios").update({ precisa_revisao: true }).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem); if (newReview.error) fail("sinalizar_revisao_nova_ordem", newReview.error); } } return r.data; }
 export async function updateQuickAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const question = await db().from("questions").select(questionFields).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (question.error) fail("ler_questao", question.error); if (!question.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const input = body.data as Record<string, unknown>; if (!input || Object.keys(input).some((key) => !["pergunta","resposta","justificativa","assunto","legislacao","ordem"].includes(key))) throw new AdminQuestoesError(400, "A edição rápida não permite alterar a estrutura da questão."); return updateAdminQuestion({ law_slug: current.slug, id: question.data.id, data: { ...question.data, ...input } }); }
 async function deleteContentRpc(current: Law, userId: string, questionIds: string[] | null, structureId: number | null, execute: boolean, confirmation?: unknown, jobAction?: unknown) { const result = await db().rpc("admin_delete_law_content_v3", { p_lei_id: current.id, p_question_ids: questionIds, p_structure_id: structureId, p_actor_user_id: userId, p_confirmation: typeof confirmation === "string" ? confirmation : null, p_execute: execute, p_job_action: jobAction === "detach_completed" || jobAction === "cancel_active" ? jobAction : null }); if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : 422, result.error.message); if (!result.data) throw new AdminQuestoesError(404, "Conteúdo não encontrado para exclusão."); return result.data as Record<string, unknown>; }
 export async function questionDeletionSummary(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); return deleteContentRpc(current, user.id, [qid(body.id)], null, false); }

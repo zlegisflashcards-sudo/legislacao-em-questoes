@@ -26,7 +26,9 @@ import {
   setLawQuestionShadowDecision,
   conferenceArticleContext,
   conferenceArticleLink,
+  correctAdminQuestionLinkFromReference,
   searchAdminQuestions,
+  searchConferenceQuestionLinkReferences,
   getAdminQuestion,
   previewAnkiImport,
   previewApkgImport,
@@ -69,6 +71,8 @@ export async function GET(request: Request) {
       ? await getLawQuestionShadowDraft(lawSlug, searchParams.get("unit_id"))
       : lawSlug && searchParams.get("mode") === "conference-article-link"
       ? await conferenceArticleLink(lawSlug, searchParams.get("ordem"))
+      : lawSlug && searchParams.get("mode") === "conference-link-references"
+      ? await searchConferenceQuestionLinkReferences(lawSlug, searchParams.get("q"), searchParams.get("question_id"))
       : lawSlug && searchParams.get("mode") === "structure-reviews"
       ? await getAdminQuestionStructureReviews(lawSlug)
       : lawSlug && searchParams.get("mode") === "conference"
@@ -105,6 +109,7 @@ export async function POST(request: Request) {
     let data: unknown;
     if (body.action === "criar") data = await createAdminQuestion(body);
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
+    else if (body.action === "corrigir_vinculo_referencia") data = await correctAdminQuestionLinkFromReference(body);
     else if (body.action === "decidir_sombra") data = await setLawQuestionShadowDecision(body);
     else if (body.action === "marcar_revisao_estrutura") data = await setAdminQuestionStructureReview(body);
     else if (body.action === "atualizar_rapido") data = await updateQuickAdminQuestion(body);

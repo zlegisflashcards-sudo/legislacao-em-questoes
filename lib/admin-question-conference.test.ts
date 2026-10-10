@@ -76,4 +76,31 @@ describe("modo conferência administrativo", () => {
     expect(client).toContain('rel="noopener noreferrer"');
     expect(client).toContain("contexto precisa ser conferido manualmente");
   });
+
+  it("exibe a prévia da legislação com a ordem vinculada de forma segura", () => {
+    expect(client).toContain("Prévia da legislação");
+    expect(client).toContain("#{current.ordem}");
+    expect(client).toContain("sanitizeLegisQuestoesHtml");
+    expect(client).toContain("Nenhuma legislação vinculada");
+  });
+
+  it("corrige vínculo somente a partir de referência da mesma lei e preserva os dados individuais", () => {
+    expect(server).toContain("searchConferenceQuestionLinkReferences");
+    expect(server).toContain("correctAdminQuestionLinkFromReference");
+    expect(server).toContain('eq("lei_id", current.id).eq("ativo", true).in("id", [targetId, referenceId])');
+    expect(server).toContain("pergunta: target.pergunta");
+    expect(server).toContain('audit_origin: "correcao_vinculo_referencia"');
+    expect(route).toContain('mode") === "conference-link-references"');
+    expect(route).toContain('action === "corrigir_vinculo_referencia"');
+    expect(client).toContain("Corrigir vínculo da questão");
+    expect(client).toContain("Usar dados desta questão");
+    expect(client).toContain("Salvar correção");
+  });
+
+  it("reutiliza o editor completo como alternativa manual sem gravar antes da confirmação", () => {
+    expect(client).toContain("AdminQuestionEditor");
+    expect(client).toContain("Edição completa");
+    expect(client).toContain("Há alterações não salvas na correção");
+    expect(client).toContain('action: "atualizar"');
+  });
 });
