@@ -16,6 +16,7 @@ import { getArticleContext } from "@/lib/admin-article-center-server";
 import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 import { collectPages } from "@/lib/law-question-pagination";
 import { findLawQuestionArticleGaps } from "@/lib/law-question-shadow-gaps";
+import { previewConferenceListUuids } from "@/lib/admin-question-conference-lists";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
@@ -25,7 +26,7 @@ const questionFields = "id,lei_id,structure_id,pergunta,resposta,justificativa,a
 const questionExportPageSize = 500;
 const db = () => getSupabaseServerClient();
 async function requireAdmin() { const user = await obterAdministrador(); if (!user) throw new AdminQuestoesError(401, "Autenticação administrativa obrigatória."); return user; }
-function fail(context: string, error: { code?: string; message?: string; details?: unknown; hint?: string } | null): never { console.error("Falha na administração de questões", { context, code: error?.code ?? null, message: error?.message ?? null, details: error?.details ?? null, hint: error?.hint ?? null }); if (context.includes("sombra") && (error?.code === "42P01" || error?.code === "PGRST205")) throw new AdminQuestoesError(503, "Questões Sombra indisponíveis: aplique a migration 20261005140000_create_law_question_shadows.sql."); throw new AdminQuestoesError(502, "Não foi possível concluir a operação no banco de questões."); }
+function fail(context: string, error: { code?: string; message?: string; details?: unknown; hint?: string } | null): never { console.error("Falha na administração de questões", { context, code: error?.code ?? null, message: error?.message ?? null, details: error?.details ?? null, hint: error?.hint ?? null }); if (context.includes("sombra") && (error?.code === "42P01" || error?.code === "PGRST205")) throw new AdminQuestoesError(503, "Questões Sombra indisponíveis: aplique a migration 20261005140000_create_law_question_shadows.sql."); if (context.includes("lista_conferencia") && (error?.code === "42P01" || error?.code === "PGRST205")) throw new AdminQuestoesError(503, "Listas personalizadas indisponíveis: aplique a migration 20261013120000_create_admin_question_conference_lists.sql."); throw new AdminQuestoesError(502, "Não foi possível concluir a operação no banco de questões."); }
 function slug(value: unknown) { if (typeof value !== "string" || !/^[a-z0-9-]{1,160}$/.test(value)) throw new AdminQuestoesError(400, "Lei inválida."); return value; }
 function id(value: unknown) { if (!Number.isSafeInteger(Number(value)) || Number(value) < 1) throw new AdminQuestoesError(400, "Estrutura inválida."); return Number(value); }
 function qid(value: unknown) { if (typeof value !== "string" || !/^[0-9a-f-]{36}$/i.test(value)) throw new AdminQuestoesError(400, "Questão inválida."); return value; }
@@ -192,6 +193,150 @@ export async function listAdminQuestionConference(lawSlug: string, structureId: 
   const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).in("structure_id", ids).order("ordem").order("id");
   if (result.error) fail("listar_questoes_conferencia", result.error);
   return { law: current, block: { id: root.id, nome: root.nome }, questions: result.data ?? [] };
+}
+
+type ConferenceListRow = { id: string; lei_id: number; nome: string; created_at: string; updated_at: string };
+type ConferenceListItemRow = { list_id: string; question_id: string; position: number };
+function conferenceListId(value: unknown) { return qid(value); }
+function conferenceListName(value: unknown) { const name = text(value, "Nome da lista"); if (name.length > 160) throw new AdminQuestoesError(400, "O nome da lista pode ter no máximo 160 caracteres."); return name; }
+async function questionsByIds(leiId: number, questionIds: string[]) {
+  if (!questionIds.length) return [];
+  const rows: Array<Record<string, unknown>> = [];
+  for (let index = 0; index < questionIds.length; index += 500) {
+    const result = await db().from("questions").select(questionFields).eq("lei_id", leiId).eq("ativo", true).in("id", questionIds.slice(index, index + 500));
+    if (result.error) fail("listar_lista_conferencia_questoes", result.error);
+    rows.push(...(result.data ?? []));
+  }
+  return rows;
+}
+async function loadConferenceList(current: Law, rawListId: unknown) {
+  const listId = conferenceListId(rawListId);
+  const result = await db().from("admin_question_conference_lists").select("id,lei_id,nome,created_at,updated_at").eq("id", listId).eq("lei_id", current.id).maybeSingle();
+  if (result.error) fail("carregar_lista_conferencia", result.error);
+  if (!result.data) throw new AdminQuestoesError(404, "Lista personalizada não encontrada nesta lei.");
+  return result.data as ConferenceListRow;
+}
+async function loadConferenceListImport(current: Law, source: unknown) {
+  let parsed;
+  try { parsed = previewConferenceListUuids(source); }
+  catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "UUIDs inválidos."); }
+  const found = await questionsByIds(current.id, parsed.valid_unique);
+  const foundIds = new Set(found.map((question) => String(question.id).toLowerCase()));
+  const found_question_ids = parsed.valid_unique.filter((id) => foundIds.has(id));
+  const missing_ids = parsed.valid_unique.filter((id) => !foundIds.has(id));
+  return { ...parsed, found_question_ids, missing_ids, found_count: found_question_ids.length };
+}
+async function touchConferenceList(listId: string) {
+  const result = await db().from("admin_question_conference_lists").update({ updated_at: new Date().toISOString() }).eq("id", listId);
+  if (result.error) fail("atualizar_lista_conferencia", result.error);
+}
+async function auditConferenceList(userId: string, action: string, listId: string, before: unknown, after: unknown, details: Record<string, unknown>) {
+  const result = await db().rpc("admin_comercial_auditar", { p_ator_user_id: userId, p_acao: action, p_entidade: "lista_conferencia_questoes", p_entidade_id: listId, p_anterior: before, p_posterior: after, p_detalhes: details });
+  if (result.error) console.error("Falha ao auditar lista personalizada", { listId, code: result.error.code });
+}
+export async function previewAdminQuestionConferenceListImport(body: Record<string, unknown>) {
+  await requireAdmin();
+  const current = await law(String(body.law_slug));
+  return loadConferenceListImport(current, body.source ?? body.uuids);
+}
+export async function listAdminQuestionConferenceLists(lawSlug: string) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const lists = await db().from("admin_question_conference_lists").select("id,lei_id,nome,created_at,updated_at").eq("lei_id", current.id).order("updated_at", { ascending: false });
+  if (lists.error) fail("listar_listas_conferencia", lists.error);
+  const rows = (lists.data ?? []) as ConferenceListRow[];
+  if (!rows.length) return { law: current, lists: [] };
+  const ids = rows.map((list) => list.id);
+  const [items, progress] = await Promise.all([
+    db().from("admin_question_conference_list_items").select("list_id,question_id,position").in("list_id", ids),
+    db().from("admin_question_conference_list_progress").select("list_id,question_id").in("list_id", ids),
+  ]);
+  if (items.error) fail("listar_lista_conferencia_itens", items.error);
+  if (progress.error) fail("listar_lista_conferencia_progresso", progress.error);
+  const itemRows = (items.data ?? []) as ConferenceListItemRow[];
+  const progressRows = (progress.data ?? []) as Array<{ list_id: string; question_id: string }>;
+  const questions = await questionsByIds(current.id, itemRows.map((item) => item.question_id));
+  const available = new Set(questions.map((question) => String(question.id)));
+  const reviewed = new Set(progressRows.map((item) => `${item.list_id}\u0000${item.question_id}`));
+  return { law: current, lists: rows.map((list) => {
+    const entries = itemRows.filter((item) => item.list_id === list.id);
+    const active = entries.filter((item) => available.has(item.question_id));
+    const reviewedCount = active.filter((item) => reviewed.has(`${list.id}\u0000${item.question_id}`)).length;
+    return { ...list, questions_count: active.length, unavailable_count: entries.length - active.length, reviewed_count: reviewedCount, pending_count: active.length - reviewedCount };
+  }) };
+}
+export async function createAdminQuestionConferenceList(body: Record<string, unknown>) {
+  const user = await requireAdmin();
+  const current = await law(String(body.law_slug));
+  const name = conferenceListName(body.nome);
+  const imported = await loadConferenceListImport(current, body.source ?? body.uuids);
+  if (!imported.found_question_ids.length) throw new AdminQuestoesError(422, "Nenhuma questão ativa desta lei foi localizada para criar a lista.");
+  const created = await db().from("admin_question_conference_lists").insert({ lei_id: current.id, nome: name, created_by: user.id }).select("id,lei_id,nome,created_at,updated_at").single();
+  if (created.error || !created.data) fail("criar_lista_conferencia", created.error);
+  const list = created.data as ConferenceListRow;
+  const items = imported.found_question_ids.map((question_id, index) => ({ list_id: list.id, question_id, position: index + 1 }));
+  const inserted = await db().from("admin_question_conference_list_items").insert(items);
+  if (inserted.error) { await db().from("admin_question_conference_lists").delete().eq("id", list.id); fail("criar_lista_conferencia_itens", inserted.error); }
+  await auditConferenceList(user.id, "criar", list.id, null, { ...list, questions_count: items.length }, { origem: "conferidor_uuid" });
+  return { list: { ...list, questions_count: items.length, reviewed_count: 0, pending_count: items.length, unavailable_count: 0 }, import: imported };
+}
+export async function appendAdminQuestionConferenceList(body: Record<string, unknown>) {
+  const user = await requireAdmin();
+  const current = await law(String(body.law_slug));
+  const list = await loadConferenceList(current, body.list_id);
+  const imported = await loadConferenceListImport(current, body.source ?? body.uuids);
+  const existing = await db().from("admin_question_conference_list_items").select("question_id,position").eq("list_id", list.id).order("position", { ascending: false });
+  if (existing.error) fail("listar_lista_conferencia_itens", existing.error);
+  const existingRows = (existing.data ?? []) as Array<{ question_id: string; position: number }>;
+  const existingIds = new Set(existingRows.map((item) => item.question_id.toLowerCase()));
+  const additions = imported.found_question_ids.filter((id) => !existingIds.has(id));
+  const currentLastPosition = Number(existingRows[0]?.position ?? 0);
+  if (additions.length) {
+    const inserted = await db().from("admin_question_conference_list_items").insert(additions.map((question_id, index) => ({ list_id: list.id, question_id, position: currentLastPosition + index + 1 })));
+    if (inserted.error) fail("adicionar_lista_conferencia_itens", inserted.error);
+    await touchConferenceList(list.id);
+    await auditConferenceList(user.id, "atualizar", list.id, { additions: [] }, { additions }, { origem: "conferidor_uuid_adicionar" });
+  }
+  return { added_count: additions.length, already_present_ids: imported.found_question_ids.filter((id) => existingIds.has(id)), import: imported };
+}
+export async function renameAdminQuestionConferenceList(body: Record<string, unknown>) {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); const list = await loadConferenceList(current, body.list_id); const name = conferenceListName(body.nome);
+  const result = await db().from("admin_question_conference_lists").update({ nome: name }).eq("id", list.id).eq("lei_id", current.id).select("id,lei_id,nome,created_at,updated_at").maybeSingle();
+  if (result.error) fail("renomear_lista_conferencia", result.error); if (!result.data) throw new AdminQuestoesError(404, "Lista personalizada não encontrada nesta lei.");
+  await auditConferenceList(user.id, "atualizar", list.id, list, result.data, { origem: "conferidor_renomear" }); return result.data;
+}
+export async function deleteAdminQuestionConferenceList(body: Record<string, unknown>) {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); const list = await loadConferenceList(current, body.list_id);
+  const result = await db().from("admin_question_conference_lists").delete().eq("id", list.id).eq("lei_id", current.id);
+  if (result.error) fail("excluir_lista_conferencia", result.error); await auditConferenceList(user.id, "excluir", list.id, list, null, { origem: "conferidor_excluir_lista" }); return { id: list.id };
+}
+export async function removeAdminQuestionConferenceListItem(body: Record<string, unknown>) {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); const list = await loadConferenceList(current, body.list_id); const questionId = qid(body.question_id);
+  const result = await db().from("admin_question_conference_list_items").delete().eq("list_id", list.id).eq("question_id", questionId).select("question_id").maybeSingle();
+  if (result.error) fail("remover_lista_conferencia_item", result.error); if (!result.data) throw new AdminQuestoesError(404, "Questão não pertence a esta lista.");
+  await touchConferenceList(list.id); await auditConferenceList(user.id, "atualizar", list.id, { question_id: questionId }, null, { origem: "conferidor_remover_questao" }); return { question_id: questionId };
+}
+export async function listAdminQuestionConferenceList(lawSlug: string, rawListId: unknown) {
+  await requireAdmin(); const current = await law(lawSlug); const list = await loadConferenceList(current, rawListId);
+  const items = await db().from("admin_question_conference_list_items").select("list_id,question_id,position").eq("list_id", list.id).order("position");
+  if (items.error) fail("listar_lista_conferencia_itens", items.error);
+  const entries = (items.data ?? []) as ConferenceListItemRow[]; const questions = await questionsByIds(current.id, entries.map((item) => item.question_id)); const byId = new Map(questions.map((question) => [String(question.id), question]));
+  const progress = await db().from("admin_question_conference_list_progress").select("question_id").eq("list_id", list.id);
+  if (progress.error) fail("listar_lista_conferencia_progresso", progress.error);
+  const progressRows = (progress.data ?? []) as Array<{ question_id: string }>;
+  const availableIds = new Set(entries.filter((item) => byId.has(item.question_id)).map((item) => item.question_id));
+  const reviewed_question_ids = progressRows.flatMap((row) => availableIds.has(row.question_id) ? [row.question_id] : []);
+  return { law: current, list: { ...list, total: availableIds.size, reviewed_count: reviewed_question_ids.length, pending_count: availableIds.size - reviewed_question_ids.length, unavailable_count: entries.length - availableIds.size }, questions: entries.flatMap((item) => byId.has(item.question_id) ? [byId.get(item.question_id)!] : []), reviewed_question_ids };
+}
+export async function setAdminQuestionConferenceListProgress(body: Record<string, unknown>) {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); const list = await loadConferenceList(current, body.list_id); const questionId = qid(body.question_id);
+  if (typeof body.reviewed !== "boolean") throw new AdminQuestoesError(400, "Status de conferência inválido.");
+  const question = await db().from("questions").select("id").eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).maybeSingle();
+  if (question.error) fail("validar_lista_conferencia_questao", question.error); if (!question.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada nesta lei.");
+  const membership = await db().from("admin_question_conference_list_items").select("question_id").eq("list_id", list.id).eq("question_id", questionId).maybeSingle();
+  if (membership.error) fail("validar_lista_conferencia_item", membership.error); if (!membership.data) throw new AdminQuestoesError(404, "Questão não pertence a esta lista.");
+  const result = body.reviewed ? await db().from("admin_question_conference_list_progress").upsert({ list_id: list.id, question_id: questionId, reviewed_at: new Date().toISOString(), reviewed_by: user.id }, { onConflict: "list_id,question_id" }) : await db().from("admin_question_conference_list_progress").delete().eq("list_id", list.id).eq("question_id", questionId);
+  if (result.error) fail("salvar_lista_conferencia_progresso", result.error); await touchConferenceList(list.id); return { question_id: questionId, reviewed: body.reviewed };
 }
 export async function getAdminQuestionStructureReviews(lawSlug: string) {
   await requireAdmin();

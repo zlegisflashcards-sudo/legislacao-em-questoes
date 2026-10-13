@@ -52,6 +52,8 @@ function editorHtmlValue(editor: HTMLDivElement, persistedValue: string) {
 export function QuestionRichEditor({ label, value, onChange, required = false, disabled = false }: Props) {
   const [htmlMode, setHtmlMode] = useState(false);
   const visualRef = useRef<HTMLDivElement>(null);
+  const selectedRange = useRef<Range | null>(null);
+  const [referenceOpen, setReferenceOpen] = useState(false); const [referenceSlug, setReferenceSlug] = useState(""); const [referenceOrder, setReferenceOrder] = useState(""); const [referenceError, setReferenceError] = useState("");
 
   useEffect(() => {
     if (!htmlMode && visualRef.current && visualRef.current.innerHTML !== value) {
@@ -64,8 +66,13 @@ export function QuestionRichEditor({ label, value, onChange, required = false, d
     setHtmlMode((current) => !current);
   }
 
+  function captureSelection() { const selection = window.getSelection(); if (selection?.rangeCount && visualRef.current?.contains(selection.anchorNode)) selectedRange.current = selection.getRangeAt(0).cloneRange(); }
+  function openReference() { captureSelection(); const selected = selectedRange.current?.toString().trim() ?? ""; const article = selected.match(/art\.?\s*(\d+)/i)?.[1]; if (article && !referenceOrder) setReferenceOrder(`${article.padStart(4, "0")}.0.00.0.00.0`); setReferenceError(selected ? "" : "Selecione primeiro o trecho que receberá o link."); setReferenceOpen(true); }
+  function insertReference() { const range = selectedRange.current; const editor = visualRef.current; const slug = referenceSlug.trim().toLowerCase(); const ordem = referenceOrder.trim(); if (!range || !editor || !slug || !ordem) { setReferenceError("Informe Slug e Ordem e mantenha um trecho selecionado."); return; } const link = document.createElement("a"); link.href = `/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`; link.textContent = range.toString(); link.target = "_blank"; link.rel = "noopener noreferrer"; range.deleteContents(); range.insertNode(link); onChange(editorHtmlValue(editor, value)); setReferenceOpen(false); selectedRange.current = null; }
+
   return <section className="question-rich-field">
-    <header><label>{label}{required ? " *" : ""}</label><button type="button" disabled={disabled} onClick={toggleMode} aria-label={`Alternar ${label} entre visual e HTML`} title="Alternar visual/HTML">&lt;&gt;</button></header>
-    {htmlMode ? <textarea className="question-rich-html" value={value} required={required} disabled={disabled} spellCheck={false} onChange={(event) => onChange(event.target.value)} /> : <div ref={visualRef} className="question-rich-visual" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-label={`Editor visual: ${label}`} aria-multiline="true" onInput={(event) => onChange(editorHtmlValue(event.currentTarget, value))} />}
+    <header><label>{label}{required ? " *" : ""}</label><span><button type="button" disabled={disabled || htmlMode} onClick={openReference} title="Vincular referência legislativa">⚡ Vincular referência</button><button type="button" disabled={disabled} onClick={toggleMode} aria-label={`Alternar ${label} entre visual e HTML`} title="Alternar visual/HTML">&lt;&gt;</button></span></header>
+    {htmlMode ? <textarea className="question-rich-html" value={value} required={required} disabled={disabled} spellCheck={false} onChange={(event) => onChange(event.target.value)} /> : <div ref={visualRef} className="question-rich-visual" contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-label={`Editor visual: ${label}`} aria-multiline="true" onMouseUp={captureSelection} onKeyUp={captureSelection} onInput={(event) => onChange(editorHtmlValue(event.currentTarget, value))} />}
+    {referenceOpen ? <div className="mt-2 grid gap-2 rounded border border-blue-200 bg-blue-50 p-3"><strong>Vincular referência legislativa</strong><label>Slug da legislação<input value={referenceSlug} onChange={(event) => setReferenceSlug(event.target.value)} placeholder="l13022" /></label><label>Ordem do artigo<input value={referenceOrder} onChange={(event) => setReferenceOrder(event.target.value)} placeholder="0002.0.00.0.00.0" /></label>{referenceSlug && referenceOrder ? <small>Destino: <code>/legisbot/{referenceSlug}/{referenceOrder}</code></small> : null}{referenceError ? <small className="text-red-700">{referenceError}</small> : null}<div className="flex gap-2"><button type="button" className="admin-button secondary" onClick={() => setReferenceOpen(false)}>Cancelar</button><button type="button" className="admin-button primary" onClick={insertReference}>Criar link para o LegisBot</button></div></div> : null}
   </section>;
 }

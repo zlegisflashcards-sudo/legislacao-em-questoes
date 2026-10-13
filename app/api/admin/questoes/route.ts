@@ -19,6 +19,15 @@ import {
   listLawQuestionScopes,
   listAdminQuestions,
   listAdminQuestionConference,
+  listAdminQuestionConferenceLists,
+  listAdminQuestionConferenceList,
+  previewAdminQuestionConferenceListImport,
+  createAdminQuestionConferenceList,
+  appendAdminQuestionConferenceList,
+  renameAdminQuestionConferenceList,
+  deleteAdminQuestionConferenceList,
+  removeAdminQuestionConferenceListItem,
+  setAdminQuestionConferenceListProgress,
   getAdminQuestionStructureReviews,
   setAdminQuestionStructureReview,
   getLawQuestionShadows,
@@ -75,6 +84,10 @@ export async function GET(request: Request) {
       ? await searchConferenceQuestionLinkReferences(lawSlug, searchParams.get("q"), searchParams.get("question_id"))
       : lawSlug && searchParams.get("mode") === "structure-reviews"
       ? await getAdminQuestionStructureReviews(lawSlug)
+      : lawSlug && searchParams.get("mode") === "conference-lists"
+      ? await listAdminQuestionConferenceLists(lawSlug)
+      : lawSlug && searchParams.get("mode") === "conference-list"
+      ? await listAdminQuestionConferenceList(lawSlug, searchParams.get("list_id"))
       : lawSlug && searchParams.get("mode") === "conference"
       ? await listAdminQuestionConference(lawSlug, searchParams.get("structure_id"))
       : lawSlug && searchParams.get("mode") === "search"
@@ -108,6 +121,13 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     let data: unknown;
     if (body.action === "criar") data = await createAdminQuestion(body);
+    else if (body.action === "previsualizar_lista_conferencia") data = await previewAdminQuestionConferenceListImport(body);
+    else if (body.action === "criar_lista_conferencia") data = await createAdminQuestionConferenceList(body);
+    else if (body.action === "adicionar_lista_conferencia") data = await appendAdminQuestionConferenceList(body);
+    else if (body.action === "renomear_lista_conferencia") data = await renameAdminQuestionConferenceList(body);
+    else if (body.action === "excluir_lista_conferencia") data = await deleteAdminQuestionConferenceList(body);
+    else if (body.action === "remover_lista_conferencia_item") data = await removeAdminQuestionConferenceListItem(body);
+    else if (body.action === "marcar_lista_conferencia") data = await setAdminQuestionConferenceListProgress(body);
     else if (body.action === "atualizar") data = await updateAdminQuestion(body);
     else if (body.action === "corrigir_vinculo_referencia") data = await correctAdminQuestionLinkFromReference(body);
     else if (body.action === "decidir_sombra") data = await setLawQuestionShadowDecision(body);
