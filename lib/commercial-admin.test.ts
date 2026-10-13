@@ -124,7 +124,7 @@ describe("fronteira administrativa comercial", () => {
   });
 
   it("mantém histórico editorial separado da auditoria técnica", () => {
-    expect(client).toContain('{ id: "atualizacoes", label: "Atualizações" }');
+    expect(client).not.toContain('{ id: "atualizacoes", label: "Atualizações" }');
     expect(client).toContain("function EditorialUpdatesPanel");
     expect(client).toContain("function AuditPanel");
     expect(server).toContain('.from("historico_atualizacoes_leis")');
