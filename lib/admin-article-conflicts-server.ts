@@ -16,6 +16,7 @@ import {
 import { hasIncisoGranularityPending, validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
 import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
+import { groupDuplicateQuestionStatements } from "@/lib/admin-question-management";
 
 const PAGE_SIZE = 20;
 const STRUCTURAL_BATCH_SIZE = 100;
@@ -92,6 +93,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   await requireAdmin();
   const activeRows = await loadQuestions(true);
   const groups = groupLegisBotSourceConflicts(activeRows);
+  const duplicateStatements = groupDuplicateQuestionStatements(activeRows);
   const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; validation: StructuralValidation }>();
   const granularities = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[] }>();
   const byContext = new Map<string, LegisBotConflictQuestion[]>();
@@ -117,7 +119,12 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     if (type === "legislacao" && !group) return false;
     if (type === "granularidade" && !granularity) return false;
     if (type === "comentario_sem_analise" && (!comment || !["pendente", "processando"].includes(comment.status))) return false;
+    if (type === "pergunta_duplicada") return false;
     return true;
+  });
+  const filteredDuplicates = duplicateStatements.filter((group) => {
+    const slug = group.questions[0]?.slug ?? "";
+    return (!law || slug.toLocaleLowerCase("pt-BR") === law) && (!type || type === "pergunta_duplicada");
   });
   // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
   // atualmente escolhido no filtro. Assim o quadro funciona como um placar
@@ -135,12 +142,45 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       const comment = comments.get(key);
       return Boolean(comment && ["pendente", "processando"].includes(comment.status));
     }).length,
+    duplicateStatements: duplicateStatements.filter((group) => !law || group.questions[0]?.slug.toLocaleLowerCase("pt-BR") === law).length,
   };
+  const entries = [
+    ...filtered.map((key) => ({ kind: "context" as const, key })),
+    ...filteredDuplicates.map((group) => ({ kind: "duplicate" as const, group })),
+  ];
   const requestedPage = Number(filters.page);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
   const start = (page - 1) * PAGE_SIZE;
-  const items = filtered.slice(start, start + PAGE_SIZE).map((key) => {
+  const items = entries.slice(start, start + PAGE_SIZE).map((entry) => {
+    if (entry.kind === "duplicate") {
+      const questions = entry.group.questions;
+      const first = questions[0];
+      const metadata = laws.get(first.slug.toUpperCase());
+      return {
+        slug: first.slug.toUpperCase(),
+        ordem: first.ordem,
+        lawTitle: metadata?.title ?? first.titulo ?? first.slug,
+        lawCode: metadata?.code ?? null,
+        titulo: first.titulo ?? null,
+        assunto: null,
+        flashcards: questions.length,
+        versions: 1,
+        comment: null,
+        structuralValidation: null,
+        editorialGranularityPending: false,
+        reviewTypes: ["Pergunta duplicada"],
+        duplicateQuestions: questions.map((question) => ({
+          id: question.id,
+          slug: question.slug.toUpperCase(),
+          ordem: question.ordem,
+          assunto: question.assunto ?? null,
+          pergunta: question.pergunta,
+          editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/artigos?aba=conflitos&lei=${question.slug.toLowerCase()}&tipo=pergunta_duplicada`)}`,
+        })),
+      };
+    }
+    const key = entry.key;
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const questions = group?.questions ?? structuralGroup?.questions ?? granularity!.questions; const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug; const currentOrder = group?.ordem ?? structuralGroup?.ordem ?? granularity!.ordem;
     const metadata = laws.get(slug);
     const comment = comments.get(key);
@@ -163,6 +203,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       structuralValidation: structuralGroup?.validation ?? null,
       editorialGranularityPending: Boolean(granularity),
       reviewTypes,
+      duplicateQuestions: [],
     };
   });
   // Os indicadores precisam refletir exatamente o mesmo universo da lista.
@@ -183,11 +224,11 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     structuralSuggestions,
     page,
     pages,
-    total: filtered.length,
+    total: entries.length,
     indicators: {
-      pending: filteredContexts.length,
-      laws: new Set(filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? item.granularity!.slug)).size,
-      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? item.granularity!.questions).length, 0),
+      pending: filteredContexts.length + filteredDuplicates.length,
+      laws: new Set([...filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? item.granularity!.slug), ...filteredDuplicates.map((group) => group.questions[0]?.slug ?? "")]).size,
+      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? item.granularity!.questions).length, 0) + filteredDuplicates.reduce((sum, group) => sum + group.questions.length, 0),
     },
     typeCounts,
   };

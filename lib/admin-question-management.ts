@@ -49,3 +49,25 @@ export function normalizedQuestionStatement(value: unknown) {
 export function sameStructureQuestionStatement(a: { pergunta: string }, b: { pergunta: string }) {
   return normalizedQuestionStatement(a.pergunta) === normalizedQuestionStatement(b.pergunta);
 }
+
+export type DuplicateQuestionStatement<T extends { id: string; lei_id: number; pergunta: string }> = {
+  normalizedStatement: string;
+  questions: T[];
+};
+
+/**
+ * Duplicidade editorial é a assertiva inteira na mesma lei. Assunto, ordem e
+ * estrutura apenas localizam a questão: eles não fazem parte da identidade.
+ */
+export function groupDuplicateQuestionStatements<T extends { id: string; lei_id: number; pergunta: string }>(questions: T[]): DuplicateQuestionStatement<T>[] {
+  const groups = new Map<string, T[]>();
+  for (const question of questions) {
+    const normalizedStatement = normalizedQuestionStatement(question.pergunta);
+    if (!normalizedStatement) continue;
+    const key = `${question.lei_id}\u0000${normalizedStatement}`;
+    groups.set(key, [...(groups.get(key) ?? []), question]);
+  }
+  return [...groups.entries()]
+    .filter(([, entries]) => entries.length > 1)
+    .map(([key, entries]) => ({ normalizedStatement: key.slice(key.indexOf("\u0000") + 1), questions: [...entries].sort((left, right) => left.id.localeCompare(right.id)) }));
+}

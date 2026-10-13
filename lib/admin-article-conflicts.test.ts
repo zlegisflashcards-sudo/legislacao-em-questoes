@@ -60,7 +60,7 @@ describe("Central do Artigo — administração de conflitos", () => {
 
   it("filtra por tipo de conflito no servidor e pagina sem enviar todos os registros ao navegador", () => {
     expect(server).toContain("PAGE_SIZE = 20");
-    expect(server).toContain("filtered.slice(start, start + PAGE_SIZE)");
+    expect(server).toContain("entries.slice(start, start + PAGE_SIZE)");
     for (const field of ["filters.law", "filters.type"]) expect(server).toContain(field);
     expect(server).toContain('slug.toLocaleLowerCase("pt-BR") !== law');
     expect(server).toContain('type === "estrutural"');
@@ -172,6 +172,21 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain('"Comentário sem análise"');
     expect(list).toContain('aria-label="Tipos de revisão"');
     expect(list).toContain("item.reviewTypes.map");
+  });
+
+  it("sinaliza duplicidade de assertiva da edição sem bloquear o salvamento nem alterar os registros", () => {
+    expect(server).toContain("groupDuplicateQuestionStatements(activeRows)");
+    expect(server).toContain('"Pergunta duplicada"');
+    expect(server).toContain("duplicateQuestions: questions.map");
+    expect(list).toContain("Perguntas duplicadas");
+    expect(list).toContain("Possível duplicata: mesma assertiva após normalizar apenas HTML e espaços.");
+    expect(list).toContain("Editar questão");
+    expect(list).toContain("Excluir esta questão");
+    expect(list).toContain("Ela pode ser intencional em decks diferentes.");
+    expect(list).toContain("Sim, excluir");
+    expect(list).toContain("Não, manter");
+    expect(list).toContain("question.id");
+    expect(list).toContain("question.editorUrl");
   });
 
   it("oferece prévia e confirmação para limpar HTML dos assuntos sem alterar o restante da questão", () => {
