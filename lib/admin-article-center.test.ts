@@ -13,12 +13,13 @@ describe("Central do Artigo administrativa", () => {
     expect(detail).toContain("await exigirAdministrador()");
   });
 
-  it("pesquisa slug, código, ordem e artigo sem carregar dados no cliente", () => {
+  it("mantém a busca legada de questões e usa a base persistente na aba Artigos", () => {
     expect(server).toContain("slug.ilike");
     expect(server).toContain("codigo.ilike");
     expect(server).toContain("ordem.ilike");
     expect(server).toContain("assunto.ilike");
-    expect(index).toContain("searchArticleContexts(query, lawFilter)");
+    expect(index).toContain("listLegislativeReferences({ lawSlug: lawFilter, query");
+    expect(index).not.toContain("searchArticleContexts(query, lawFilter)");
     expect(index).toContain('name="lei"');
   });
 
@@ -43,10 +44,10 @@ describe("Central do Artigo administrativa", () => {
     expect(conflicts).toContain("Sugerir lote{filters.law");
   });
 
-  it("mantém a contagem de pendências vinculada à lei selecionada em todas as abas", () => {
-    expect(index).toContain("const pendingSummary");
-    expect(index).toContain("listArticleSourceConflicts({ law: lawFilter })");
-    expect(index).toContain("pendingSummary.indicators.pending");
+  it("carrega conflitos apenas na aba correspondente", () => {
+    expect(index).toContain('tab === "conflitos" ? await listArticleSourceConflicts');
+    expect(index).toContain("conflicts ? <span>{conflicts.indicators.pending}</span>");
+    expect(index).not.toContain("const pendingSummary");
   });
 
   it("centraliza as operações administrativas de LegisBot e comunidade nas abas", () => {
@@ -90,13 +91,16 @@ describe("Central do Artigo administrativa", () => {
     expect(server).toContain("questionsCount: group.length");
     expect(server).toContain("legisbot: bot");
     expect(server).toContain("commentsCount:");
-    expect(detail).toContain("O LegisBot é uma camada editorial do dispositivo derivado das questões.");
+    const panel = read("components/admin/article-legisbot-panel.tsx");
+    expect(panel).toContain("base legislativa preparada deste dispositivo");
+    expect(panel).toContain("independente dos conflitos das questões");
   });
 
   it("reutiliza a ação de moderação e as ações editoriais existentes", () => {
     expect(community).toContain("moderateCommunityComment");
-    expect(detail).toContain("LegisBotEditor");
-    expect(detail).toContain("returnHref");
+    const panel = read("components/admin/article-legisbot-panel.tsx");
+    expect(panel).toContain("LegisBotEditor");
+    expect(panel).toContain("returnHref");
   });
 
   it("mantém o editor completo do LegisBot no contexto do artigo", () => {
@@ -109,17 +113,20 @@ describe("Central do Artigo administrativa", () => {
     expect(actions).toContain("articleUrl");
   });
 
-  it("prepara apenas contextos confiáveis como rascunho e preserva a publicação humana", () => {
+  it("prepara o LegisBot a partir da base preparada e preserva a publicação humana", () => {
     const actions = read("app/admin/actions.ts");
     const source = read("lib/legisbot/source.ts");
     const editor = read("components/admin/legisbot-editor.tsx");
-    expect(detail).toContain("prepararContextoLegisBot");
-    expect(detail).toContain("Preparar rascunho do LegisBot");
+    const panel = read("components/admin/article-legisbot-panel.tsx");
+    expect(panel).toContain("prepararContextoLegisBot");
+    expect(panel).toContain("Gerar com API");
+    expect(panel).toContain("Legislação preparada necessária");
     expect(actions).toContain('status: "pendente"');
     expect(actions).toContain("findLegisBotSource");
     expect(actions).toContain('intent === "publish" ? "concluido"');
     expect(editor).toContain('name="intent" value="publish"');
-    expect(source).toContain("subjectVersions.size > 1");
+    expect(source).toContain('from("legislative_references")');
+    expect(source).toContain("Nunca consulta questions");
   });
 
   it("trata divergência entre Assunto e Ordem como conflito estrutural do contexto", () => {

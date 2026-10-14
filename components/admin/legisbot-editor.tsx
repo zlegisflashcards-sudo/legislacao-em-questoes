@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { excluirComentario, salvarComentario, type AdminActionState } from "@/app/admin/actions";
+import { excluirComentario, gerarComentarioLegisBotAdministrativo, salvarComentario, type AdminActionState } from "@/app/admin/actions";
 import { LegisBotRichEditor } from "@/components/admin/legisbot-rich-editor";
 import { ArticleMapping } from "@/components/admin/article-mapping";
 import {
@@ -136,6 +136,7 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
     <form action={action} className="admin-editor-form" onSubmit={confirmIdentifiers}>
       <input type="hidden" name="id" value={savedRecord?.id ?? ""} />
       <input type="hidden" name="context_kind" value={fields.context_kind} />
+      <input type="hidden" name="return_to" value={returnHref} />
       <input ref={identifiersConfirmedRef} type="hidden" name="identifiers_confirmed" defaultValue="" />
       <header className="admin-detail-header">
         <div>
@@ -150,6 +151,12 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
           {canOpenPublic ? <Link className="admin-button secondary" href={publicUrl} target="_blank">Abrir página pública</Link> : null}
           {createQuestionHref ? <Link className="admin-button secondary" href={createQuestionHref}>Criar questão</Link> : null}
           {savedRecord ? <button type="button" className="admin-button secondary" disabled={pending} onClick={duplicate}>Duplicar</button> : null}
+          {savedRecord && !savedRecord.comentario?.trim() ? <form action={gerarComentarioLegisBotAdministrativo}>
+            <input type="hidden" name="slug" value={savedFields.slug} />
+            <input type="hidden" name="ordem" value={savedFields.ordem} />
+            <input type="hidden" name="return_to" value={returnHref} />
+            <button className="admin-button primary" disabled={pending}>{savedRecord.status === "erro" ? "Tentar gerar com API" : "Gerar com API"}</button>
+          </form> : null}
           <button name="intent" value="draft" type="submit" className="admin-button secondary" disabled={pending}>
             {pending ? "Carregando…" : "Salvar como rascunho"}
           </button>

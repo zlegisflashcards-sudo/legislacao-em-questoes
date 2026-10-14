@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { conflictingImportSourceGroups, groupImportSourceWarnings, normalizedImportSource, validateImportSource } from "./import-source";
 import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
-import { createLegisBotSourceSignature, LegisBotSourceError, resolveLegisBotSourceRows } from "./source";
+import { createLegisBotSourceSignature, LegisBotSourceError, legisBotOrderCandidates, resolveLegisBotSourceRows } from "./source";
 
 describe("fonte canônica do LegisBot", () => {
   it("preserva HTML estrutural seguro e remove conteúdo perigoso e atributos visuais", () => {
@@ -57,6 +57,23 @@ describe("fonte canônica do LegisBot", () => {
     }
   });
 
+  it("aceita grafias equivalentes do ano da lei no Assunto", () => {
+    const identifiers = { slug: "L8429", ordem: "0001.0.00.0.00.0" };
+    const row = { id: "a", slug: "l8429", ordem: identifiers.ordem, titulo: "Lei 8.429", assunto: "Art. 1º, Lei 8.429/1992", legislacao: "<p>Texto legal</p>", updated_at: "2026-10-14T00:00:00Z" };
+    expect(resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: "Art. 1º, Lei 8.429/92" }], identifiers, null).questionId).toBe("a");
+  });
+
+  it("procura a Ordem exata antes dos dispositivos superiores", () => {
+    expect(legisBotOrderCandidates("0027.b.01.c.02.b")).toEqual([
+      "0027.b.01.c.02.b",
+      "0027.b.01.c.02.0",
+      "0027.b.01.c.00.0",
+      "0027.b.01.0.00.0",
+      "0027.b.00.0.00.0",
+      "0027.0.00.0.00.0",
+    ]);
+  });
+
   it("sinaliza conflito estrutural na importação, sem tratá-lo como erro", () => {
     const structuralRow = { slug: "cp", ordem: "0027.b.01.0.02.0", titulo: "Código Penal", assunto: "Art. 27-B, § 1º-C, II", legislacao: "<p>Texto</p>" };
     expect(validateImportSource(structuralRow)).toBeNull();
@@ -85,7 +102,7 @@ describe("fonte canônica do LegisBot", () => {
     expect(client).toContain('data-tooltip={MAPPING_FLAG_LABEL[resolvedMappingIncidence]}');
     expect(client).toContain("const incidenceFlag = resolvedMappingIncidence");
     expect(client.match(/\{incidenceFlag\}/g)).toHaveLength(2);
-    expect(overlay).toContain('dadosIniciais={{ titulo: question.titulo ?? "", assunto: question.assunto ?? "", legislacao: question.legislacao ?? "" }}');
+    expect(overlay).toContain('dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }}');
     expect(template).not.toMatch(/encodeURIComponent\((titulo|assunto|legislacao)\)/);
     expect(template).not.toContain("?titulo=");
     expect(template).toContain("Aprofundar neste trecho da lei");

@@ -9,6 +9,9 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { sanitizarComentarioHtml } from "@/lib/legisbot/sanitize-comment-html";
 import { possuiTextoLegislacao, sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 import { findLegisBotSource, LegisBotSourceError } from "@/lib/legisbot/source";
+import { saveLegisBotPrompt } from "@/lib/legisbot/prompt-config";
+import { createSupabaseGenerationRepository } from "@/lib/legisbot/generation-repository";
+import { requestLegisBotGeneration } from "@/lib/legisbot/generation-service";
 import {
   LEGISBOT_COMENTARIO_STATUS,
   type LegisBotComentario,
@@ -133,12 +136,8 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   let trustedSource: Awaited<ReturnType<typeof findLegisBotSource>> | null = null;
   try {
     trustedSource = await findLegisBotSource(supabase, { slug, ordem });
-  } catch (error) {
-    if (error instanceof LegisBotSourceError && error.kind === "conflict") {
-      return { ok: false, message: "Resolva o conflito da fonte do flashcard antes de concluir a revisão." };
-    }
-    // Comentários administrativos legados sem flashcard correspondente continuam
-    // editáveis. A página pública, porém, só usa uma fonte existente em questions.
+  } catch {
+    // Registros legados continuam editáveis mesmo se sua referência ainda não existir.
   }
 
   const payload = {
@@ -173,7 +172,7 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   };
 }
 
-/** Cria apenas o rascunho editorial a partir da fonte confiável em questions. */
+/** Cria apenas o rascunho editorial a partir da base legislativa preparada. */
 export async function prepararContextoLegisBot(formData: FormData) {
   await exigirAdministrador();
   const slug = String(formData.get("slug") ?? "").trim().toUpperCase();
@@ -186,7 +185,7 @@ export async function prepararContextoLegisBot(formData: FormData) {
   try {
     source = await findLegisBotSource(supabase, { slug, ordem });
   } catch (error) {
-    const reason = error instanceof LegisBotSourceError && error.kind === "conflict" ? "conflito" : "fonte";
+    const reason = error instanceof LegisBotSourceError && (error.kind === "not_found" || error.kind === "incomplete") ? "legislacao" : "fonte";
     redirect(`${articleUrl}&erro=${reason}`);
   }
 
@@ -243,4 +242,35 @@ export async function excluirComentario(formData: FormData) {
   revalidatePath("/admin/legisbot");
   revalidatePath("/admin/artigos");
   redirect(`${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}excluido=1`);
+}
+
+export async function salvarPromptLegisBot(formData: FormData) {
+  await exigirAdministrador();
+  await saveLegisBotPrompt(String(formData.get("prompt") ?? ""));
+  revalidatePath("/admin/legisbot/configuracoes");
+}
+
+/** Geração administrativa usa a mesma fonte persistente e a mesma fila do aluno. */
+export async function gerarComentarioLegisBotAdministrativo(formData: FormData) {
+  const user = await exigirAdministrador();
+  const slug = String(formData.get("slug") ?? "").trim().toUpperCase();
+  const ordem = String(formData.get("ordem") ?? "").trim();
+  const returnTo = String(formData.get("return_to") ?? "");
+  if (!SLUG_VALIDO.test(slug) || !ORDEM_VALIDA.test(ordem)) return;
+  const db = getSupabaseServerClient();
+  const existing = await db.from("legisbot_comentarios").select("comentario,status").eq("slug", slug).eq("ordem", ordem).maybeSingle();
+  if (existing.data?.comentario?.trim()) return;
+  const source = await findLegisBotSource(db, { slug, ordem });
+  const outcome = await requestLegisBotGeneration({ repository: createSupabaseGenerationRepository(db) }, user.id, { slug, ordem }, {
+    titulo: source.titulo,
+    assunto: source.assunto,
+    legislacao: source.legislacao,
+    promptLegislacao: source.promptLegislacao,
+    sourceSignature: source.signature,
+  });
+  revalidatePath(`/admin/artigos/${slug.toLowerCase()}/${ordem}`);
+  if (returnTo.startsWith("/admin/")) {
+    const separator = returnTo.includes("?") ? "&" : "?";
+    redirect(`${returnTo}${separator}geracao=${encodeURIComponent(outcome.kind)}`);
+  }
 }

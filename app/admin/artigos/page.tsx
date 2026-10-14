@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArticleSourceConflicts } from "@/components/admin/article-source-conflicts";
 import { listArticleSourceConflicts } from "@/lib/admin-article-conflicts-server";
-import { listArticleContextLaws, listArticleContexts, searchArticleContexts } from "@/lib/admin-article-center-server";
+import { listArticleContextLaws } from "@/lib/admin-article-center-server";
+import { listLegislativeReferences } from "@/lib/admin-legislative-references";
 import { exigirAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { alterarStatusComentario } from "@/app/admin/actions";
@@ -9,6 +10,7 @@ import { moderateCommunityComment } from "@/app/admin/community-actions";
 import { LEGISBOT_COMENTARIO_STATUS, type LegisBotComentario } from "@/lib/legisbot-comentario";
 import { ArticleMappingCenter } from "@/components/admin/article-mapping-center";
 import { ArticleLawCombobox } from "@/components/admin/article-law-combobox";
+import { prepareLegislativeReferences } from "@/app/admin/artigos/reference-actions";
 
 export const dynamic = "force-dynamic";
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -29,26 +31,23 @@ export default async function AdminArticlesPage({ searchParams }: { searchParams
   await exigirAdministrador();
   const conflictFilters = { law: lawFilter, type: one(params.tipo) || one(params.type), ordem_sort: orderDirection };
   const conflicts = tab === "conflitos" ? await listArticleSourceConflicts({ ...conflictFilters, page: Number(one(params.pagina)) || 1 }) : null;
-  // A badge é uma visão do contexto selecionado, não da aba atual. Assim ela
-  // continua informando as pendências da lei mesmo em Artigos, Mapeamento,
-  // LegisBot ou Comentários.
-  const pendingSummary = conflicts && !conflictFilters.type
-    ? conflicts
-    : await listArticleSourceConflicts({ law: lawFilter });
-  const [results, recentArticles, laws] = tab !== "conflitos" && tab !== "mapeamento"
-    ? await Promise.all([query.trim() ? searchArticleContexts(query, lawFilter) : Promise.resolve([]), query.trim() ? Promise.resolve([]) : listArticleContexts(lawFilter), listArticleContextLaws()])
-    : [[], [], await listArticleContextLaws()];
+  const [references, laws] = await Promise.all([
+    tab === "artigos" ? listLegislativeReferences({ lawSlug: lawFilter, query, page: Number(one(params.pagina)) || 1 }) : Promise.resolve(null),
+    listArticleContextLaws(),
+  ]);
   const tabHref = (nextTab: string) => `/admin/artigos?aba=${nextTab}${lawFilter ? `&lei=${encodeURIComponent(lawFilter)}` : ""}&ordem_sort=${orderDirection}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
-  const visibleArticles = (query.trim() ? results : recentArticles).toSorted((left, right) => orderDirection === "recent" ? right.updatedAt.localeCompare(left.updatedAt) : orderDirection === "asc" ? left.ordem.localeCompare(right.ordem) : right.ordem.localeCompare(left.ordem));
+  const referencePageHref = (page: number) => `/admin/artigos?aba=artigos${lawFilter ? `&lei=${encodeURIComponent(lawFilter)}` : ""}&ordem_sort=${orderDirection}${query ? `&q=${encodeURIComponent(query)}` : ""}&pagina=${page}`;
 
   return <main className="admin-shell article-center-shell">
     <Link className="admin-central-link" href="/admin">← Central Administrativa</Link>
     <header className="admin-header"><div><div className="admin-eyebrow">Camada da Lei</div><h1>Artigos e dispositivos</h1><p>Escolha a lei para trabalhar nos seus artigos. LegisBot, comentários, mapeamento e pendências abaixo sempre respeitam esse contexto.</p></div></header>
     <form className="article-context-filter" aria-label="Contexto da lei"><input type="hidden" name="aba" value={tab}/>{query ? <input type="hidden" name="q" value={query}/> : null}<ArticleLawCombobox laws={laws} value={lawFilter}/><label>Ordenação<select name="ordem_sort" defaultValue={orderDirection}><option value="asc">Ordem crescente</option><option value="desc">Ordem decrescente</option><option value="recent">Mais recentes</option></select></label><button className="admin-button secondary">Aplicar contexto</button></form>
-    <nav className="article-tabs" aria-label="Áreas da lei selecionada"><Link className={tab === "artigos" ? "active" : ""} href={tabHref("artigos")}>Artigos</Link><Link className={tab === "mapeamento" ? "active" : ""} href={tabHref("mapeamento")}>Mapeamento</Link><Link className={tab === "legisbot" ? "active" : ""} href={tabHref("legisbot")}>LegisBot</Link><Link className={tab === "comentarios" ? "active" : ""} href={tabHref("comentarios")}>Comentários</Link><Link className={`article-pending-tab ${tab === "conflitos" ? "active" : ""}`} href={tabHref("conflitos")}>Pendências<span>{pendingSummary.indicators.pending}</span></Link></nav>
+    <nav className="article-tabs" aria-label="Áreas da lei selecionada"><Link className={tab === "artigos" ? "active" : ""} href={tabHref("artigos")}>Artigos</Link><Link className={`article-pending-tab ${tab === "conflitos" ? "active" : ""}`} href={tabHref("conflitos")}>Conflitos de questões{conflicts ? <span>{conflicts.indicators.pending}</span> : null}</Link><Link className={tab === "mapeamento" ? "active" : ""} href={tabHref("mapeamento")}>Mapeamento</Link><Link className={tab === "legisbot" ? "active" : ""} href={tabHref("legisbot")}>LegisBot</Link><Link className={tab === "comentarios" ? "active" : ""} href={tabHref("comentarios")}>Comentários</Link></nav>
     {tab === "conflitos" && conflicts ? <ArticleSourceConflicts data={conflicts} filters={conflictFilters} /> : tab === "mapeamento" ? <ArticleMappingCenter law={lawFilter}/> : tab === "legisbot" ? <ArticleLegisBotPanel lawFilter={lawFilter} query={query} status={one(params.status)} orderDirection={orderDirection} /> : tab === "comentarios" ? <ArticleCommunityPanel lawFilter={lawFilter} query={query} status={one(params.status)} orderDirection={orderDirection} /> : <>
       <form className="article-search"><input type="hidden" name="aba" value={tab}/><input type="hidden" name="lei" value={lawFilter}/><input type="hidden" name="ordem_sort" value={orderDirection}/><label htmlFor="article-search">Buscar artigo</label><div><input id="article-search" name="q" defaultValue={query} placeholder="Buscar artigo por lei, código, artigo, ordem, título ou assunto..." autoComplete="off"/><button className="admin-button primary">Buscar</button><Link className="admin-button secondary" href={`/admin/artigos?aba=${tab}${lawFilter ? `&lei=${encodeURIComponent(lawFilter)}` : ""}&ordem_sort=${orderDirection}`}>Limpar busca</Link></div></form>
-      {visibleArticles.length ? <section aria-live="polite"><h2 className="article-section-title">{query.trim() ? `Resultados para “${query}”` : lawFilter ? "Dispositivos da lei selecionada" : "Dispositivos das questões"}</h2><div className="article-result-list">{visibleArticles.map((item) => <article className="article-result" key={`${item.slug}:${item.ordem}`}><div><strong>{item.lawTitle ?? item.titulo}</strong><p>{item.assunto || `Art. ${item.ordem}`} · ordem {item.ordem}</p><small>{item.lawCode ? `${item.lawCode} · ` : ""}{item.slug} · LegisBot: {item.legisbot ? item.legisbot.status : "—"} · {item.commentsCount} comentário(s) · {item.questionsCount} questão(ões) · {item.conflictsCount} conflito(s) · {item.pendingCount} pendência(s)</small></div><Link className="admin-button secondary" href={`/admin/artigos/${encodeURIComponent(item.slug.toLowerCase())}/${encodeURIComponent(item.ordem)}?aba=${item.conflictsCount || item.editorialGranularityPending ? "conflitos" : "artigo"}&lei=${encodeURIComponent(lawFilter || item.slug.toLowerCase())}&ordem_sort=${orderDirection}${query ? `&q=${encodeURIComponent(query)}` : ""}`}>Abrir</Link></article>)}</div></section> : <div className="admin-empty"><h2>Nenhum dispositivo encontrado</h2><p>Não há questões ativas que formem contextos de artigo.</p></div>}
+      {one(params.preparacao) === "concluida" ? <p className="admin-alert success">Referências identificadas. Os textos legislativos existentes foram preservados.</p> : null}
+      {lawFilter ? <form action={prepareLegislativeReferences} className="article-preparation-action"><input type="hidden" name="slug" value={lawFilter}/><button className="admin-button secondary">Identificar novas referências das questões</button><p>Executa sob demanda e só cria referências ainda inexistentes. Não importa nem sobrescreve legislação preparada.</p></form> : null}
+      {references?.records.length ? <section aria-live="polite"><h2 className="article-section-title">{query.trim() ? `Resultados para “${query}”` : lawFilter ? "Referências legislativas preparadas" : "Base legislativa"}</h2><div className="article-result-list">{references.records.map((item) => <article className="article-result" key={item.id}><div><strong>{item.identification}</strong><p>ordem {item.ordem}</p><small>{item.slug} · {item.legislation ? "Legislação preenchida" : "Aguardando texto legislativo"}</small></div><Link className="admin-button secondary" href={`/admin/artigos/${encodeURIComponent(item.slug)}/${encodeURIComponent(item.ordem)}?aba=artigo&lei=${encodeURIComponent(lawFilter || item.slug)}&ordem_sort=${orderDirection}`}>Abrir</Link></article>)}</div><nav className="article-pagination" aria-label="Paginação de referências">{references.page > 1 ? <Link className="admin-button secondary" href={referencePageHref(references.page - 1)}>← Anterior</Link> : null}{references.hasNextPage ? <Link className="admin-button secondary" href={referencePageHref(references.page + 1)}>Próxima →</Link> : null}</nav></section> : <div className="admin-empty"><h2>Nenhuma referência preparada</h2><p>{lawFilter ? "Use a identificação incremental para criar a base a partir das questões, ou aguarde o cadastro editorial." : "Selecione uma legislação para visualizar sua base legislativa."}</p></div>}
     </>}
   </main>;
 }

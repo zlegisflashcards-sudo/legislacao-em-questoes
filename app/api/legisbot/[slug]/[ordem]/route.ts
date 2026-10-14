@@ -1,7 +1,8 @@
-import { findLegisBotComment, reconcileLegisBotCommentSource } from "@/lib/legisbot/generation-repository";
+import { findHierarchicalLegisBotComment } from "@/lib/legisbot/generation-repository";
 import { handleLegisBotRead } from "@/lib/legisbot/read-api";
-import { findLegisBotSource } from "@/lib/legisbot/source";
+import { findHierarchicalLegisBotSource } from "@/lib/legisbot/source";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { registerLegisBotIncident } from "@/lib/legisbot/incident";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +17,9 @@ export async function GET(_request: Request, context: RouteContext) {
     handleLegisBotRead(
       params,
       {
-        find: (identifiers) => findLegisBotComment(supabase, identifiers),
-        resolveSource: (identifiers) => findLegisBotSource(supabase, identifiers),
-        reconcileSource: (source) => reconcileLegisBotCommentSource(supabase, source),
+        find: (identifiers) => findHierarchicalLegisBotComment(supabase, identifiers),
+        resolveSource: (identifiers) => findHierarchicalLegisBotSource(supabase, identifiers),
+        reportIssue: ({ identifiers, type }) => registerLegisBotIncident(supabase, { slug: identifiers.slug, ordem: identifiers.ordem, type }),
       },
     ),
     supabase

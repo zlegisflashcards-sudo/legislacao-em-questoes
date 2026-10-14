@@ -5,6 +5,7 @@ import type { LegisBotComentario } from "@/lib/legisbot-comentario";
 import type { LegisBotIdentifiers } from "./request-validation";
 import type { LegisBotSource } from "./source";
 import { createLegisBotSourceSignature } from "./source";
+import { legisBotOrderCandidates } from "./source";
 import { legalHtmlToStructuredText } from "./sanitize-legal-html-core";
 import {
   GenerationRepositoryError,
@@ -34,6 +35,26 @@ export async function findLegisBotComment(
     .maybeSingle();
   if (error) throw new GenerationRepositoryError("Falha ao consultar o comentário.");
   return data as LegisBotComentario | null;
+}
+
+/** Busca apenas os registros já salvos, da Ordem exata até seus pais. */
+export async function findHierarchicalLegisBotComment(
+  supabase: SupabaseClient,
+  identifiers: LegisBotIdentifiers,
+): Promise<LegisBotComentario | null> {
+  const candidates = legisBotOrderCandidates(identifiers.ordem);
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("*")
+    .eq("slug", identifiers.slug)
+    .in("ordem", candidates);
+  if (error) throw new GenerationRepositoryError("Falha ao consultar o comentário.");
+  const byOrder = new Map((data ?? []).map((item) => [String(item.ordem), item as LegisBotComentario]));
+  for (const ordem of candidates) {
+    const item = byOrder.get(ordem);
+    if (item?.status === "concluido" && item.comentario?.trim()) return item;
+  }
+  return null;
 }
 
 export async function reconcileLegisBotCommentSource(

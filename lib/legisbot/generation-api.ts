@@ -16,7 +16,7 @@ type GenerationApiDependencies = {
   authenticate: (request: Request) => Promise<User | null>;
   getRepository: () => LegisBotGenerationRepository;
   resolveSource: (identifiers: ReturnType<typeof normalizeLegisBotIdentifiers>) => Promise<LegisBotSource>;
-  reconcileSource: (source: LegisBotSource) => Promise<unknown>;
+  reconcileSource?: (source: LegisBotSource) => Promise<unknown>;
   generate?: Parameters<typeof requestLegisBotGeneration>[0]["generate"];
   alertQuota?: (
     context: { slug: string; ordem: string; titulo?: string; assunto?: string },
@@ -38,7 +38,6 @@ export async function handleLegisBotGenerationPost(
     const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
     await assertLegisBotIdentifiersOnlyBody(request);
     const source = await dependencies.resolveSource(identifiers);
-    await dependencies.reconcileSource(source);
     const input = {
       titulo: source.titulo,
       assunto: source.assunto,

@@ -65,7 +65,7 @@ describe("contrato de leitura pública do LegisBot", () => {
       reconcileSource: vi.fn(),
     });
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ success: false, error: "Este conteúdo está temporariamente indisponível enquanto passa por revisão.", reason: "source_conflict" });
+    await expect(response.json()).resolves.toEqual({ success: false, error: "Conteúdo indisponível no momento.", reason: "source_conflict" });
   });
 
   it("o Route Handler GET não contém mutação, RPC, OpenAI ou alerta", () => {

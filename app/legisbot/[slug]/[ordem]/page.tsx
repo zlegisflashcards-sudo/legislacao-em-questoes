@@ -3,7 +3,7 @@ import AdminEditCommentShortcut from "@/components/admin/admin-edit-comment-shor
 import { getPublicCommunityContributionCount } from "@/lib/legisbot-community-server";
 import type { LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 import { normalizeLegisBotIdentifiers } from "@/lib/legisbot/request-validation";
-import { findLegisBotSource } from "@/lib/legisbot/source";
+import { findHierarchicalLegisBotSource } from "@/lib/legisbot/source";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 type LegisBotPageProps = {
@@ -38,7 +38,7 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
   const initialTab = abaInicial(primeiroValor(query.tab) || primeiroValor(query.aba));
   const source = await (async () => {
     try {
-      return await findLegisBotSource(getSupabaseServerClient(), normalizeLegisBotIdentifiers(slug, ordem));
+      return await findHierarchicalLegisBotSource(getSupabaseServerClient(), normalizeLegisBotIdentifiers(slug, ordem));
     } catch {
       return null;
     }

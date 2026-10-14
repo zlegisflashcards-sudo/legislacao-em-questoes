@@ -403,11 +403,11 @@ function shadowCoverage(units: ShadowStoredUnit[], questions: Array<{ id: string
     return { ...unit, status, question_ids: trusted.map((question) => question.id), conflict_question_ids: related.filter((question) => !trusted.includes(question)).map((question) => question.id) };
   });
 }
-async function synchronizeAutomaticQuestionShadows(lawId: number, questions: Array<{ ordem: string }>) {
-  const gaps = findLawQuestionArticleGaps(questions);
+async function synchronizeAutomaticQuestionShadows(law: Law, questions: Array<{ ordem: string }>) {
+  const gaps = findLawQuestionArticleGaps(questions, law.nome_curto);
   if (!gaps.length) return gaps;
   const now = new Date().toISOString();
-  const result = await db().from("admin_law_question_shadow_units").upsert(gaps.map((gap) => ({ lei_id: lawId, identity_key: gap.identityKey, ordem: gap.ordem, assunto: gap.assunto, tipo: "caput", texto_html: "", texto_plano: "", caminho_estrutural: [], source_fingerprint: `automatic-gap-v1:${gap.ordem}`, last_seen_at: now })), { onConflict: "lei_id,identity_key" });
+  const result = await db().from("admin_law_question_shadow_units").upsert(gaps.map((gap) => ({ lei_id: law.id, identity_key: gap.identityKey, ordem: gap.ordem, assunto: gap.assunto, tipo: "caput", texto_html: "", texto_plano: "", caminho_estrutural: [], source_fingerprint: `automatic-gap-v2:${gap.ordem}`, last_seen_at: now })), { onConflict: "lei_id,identity_key" });
   if (result.error) fail("sincronizar_sombras_automaticas", result.error);
   return gaps;
 }
@@ -416,7 +416,7 @@ export async function getLawQuestionShadows(lawSlug: string) {
   const questions = await db().from("questions").select("id,ordem,assunto").eq("lei_id", current.id).eq("ativo", true).order("ordem").order("id");
   if (questions.error) fail("comparar_sombras", questions.error);
   const questionRows = (questions.data ?? []) as Array<{ id: string; ordem: string; assunto: string | null }>;
-  const gaps = await synchronizeAutomaticQuestionShadows(current.id, questionRows);
+  const gaps = await synchronizeAutomaticQuestionShadows(current, questionRows);
   const units = await db().from("admin_law_question_shadow_units").select("id,identity_key,ordem,assunto,tipo,texto_html,texto_plano,caminho_estrutural,decision").eq("lei_id", current.id).like("identity_key", "automatic-gap:%").order("ordem").order("first_seen_at");
   if (units.error) fail("listar_sombras", units.error);
   const activeKeys = new Set(gaps.map((gap) => gap.identityKey));

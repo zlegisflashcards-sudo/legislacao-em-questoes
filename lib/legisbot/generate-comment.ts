@@ -5,6 +5,7 @@ import {
   type DetalhesErroOpenAI,
 } from "./openai-error";
 import { montarPromptLegisBot, type ContextoLegisBot } from "./prompt";
+import { getLegisBotPrompt } from "./prompt-config";
 
 export const LEGISBOT_OPENAI_MODEL = "gpt-5.4-mini";
 
@@ -38,7 +39,7 @@ export async function gerarComentarioLegisBot(
     const response = await openai.responses.create(
       {
         model: LEGISBOT_OPENAI_MODEL,
-        input: montarPromptLegisBot(contexto),
+        input: montarPromptLegisBot(contexto, await getLegisBotPrompt()),
         temperature: 0.3,
         max_output_tokens: 1800,
       },

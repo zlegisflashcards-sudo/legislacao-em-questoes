@@ -58,6 +58,7 @@ export default async function AdminLegisBotPage({ searchParams }: { searchParams
       </div>
       <div className="admin-header-actions">
         <Link className="admin-button primary" href="/admin/legisbot/novo">+ Adicionar comentário</Link>
+        <Link className="admin-button secondary" href="/admin/legisbot/configuracoes">Prompt</Link>
         <span>{user.email}</span>
         <form action={sairAdministrador}><button className="admin-button secondary">Sair</button></form>
       </div>
