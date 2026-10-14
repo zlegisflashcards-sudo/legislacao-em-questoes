@@ -96,7 +96,7 @@ export async function authenticateLawStudent(request: Request, slug: string) {
 
   const [{ data: studentData, error: studentError }, { data: lawData, error: lawError }] = await Promise.all([
     supabase.from("alunos").select("id").eq("user_id", userData.user.id).maybeSingle(),
-    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
+    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
   ]);
   if (studentError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
   const student = record(studentData);

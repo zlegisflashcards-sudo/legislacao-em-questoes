@@ -72,4 +72,18 @@ describe("exportação APKG", () => {
     const parsed = await parseLegisApkg(Buffer.from(exported.bytes));
     expect(parsed.rows.map((row) => row.pergunta)).toEqual(["Primeira cadastrada", "Segunda cadastrada"]);
   });
+
+  it.each([
+    [{ ultima_alteracao_referencia: "Lei nº 15.123/2026", houve_alteracao_legislativa: true }, "Lei nº 15.123/2026"],
+    [{ ultima_alteracao_referencia: null, houve_alteracao_legislativa: false }, "Norma originária"],
+    [{ ultima_alteracao_referencia: null, houve_alteracao_legislativa: true }, "Norma originária"],
+    [{ ultima_alteracao_referencia: "Lei nº 15.123/2026", houve_alteracao_legislativa: false }, "Norma originária"],
+  ])("preenche ultimaAlteracaoLegislativa pelo cadastro da lei", async (update, expected) => {
+    const exported = await buildLawApkg({ slug: "l9605", titulo: "Lei 9.605/98", ...update }, [
+      { id: "questao-a", structure_id: null, pergunta: "Questão A", resposta: "Certo", ordem: "0001.0.00.00", ultima_alteracao_legislativa: "Não usar" },
+      { id: "questao-b", structure_id: 2, pergunta: "Questão B", resposta: "Errado", ordem: "0002.0.00.00", ultima_alteracao_legislativa: "Também não usar" },
+    ], [{ id: 2, parent_id: null, nome: "Capítulo" }]);
+    const parsed = await parseLegisApkg(Buffer.from(exported.bytes));
+    expect(parsed.rows.map((row) => row.ultima_alteracao_legislativa)).toEqual([expected, expected]);
+  });
 });

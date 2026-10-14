@@ -20,7 +20,7 @@ import { previewConferenceListUuids } from "@/lib/admin-question-conference-list
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
-type Law = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null };
+type Law = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null; ultima_alteracao_referencia: string | null; houve_alteracao_legislativa: boolean | null };
 const types: StructureType[] = creatableQuestionStructureTypes;
 const questionFields = "id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo,created_at,updated_at";
 const questionExportPageSize = 500;
@@ -35,7 +35,7 @@ function type(value: unknown) { if (!types.includes(value as StructureType)) thr
 function optionalId(value: unknown) { return value === null || value === undefined || value === "" ? null : id(value); }
 function structureOrder(value: unknown) { if (!Number.isSafeInteger(Number(value)) || Number(value) < 0) throw new AdminQuestoesError(400, "Posição estrutural inválida."); return Number(value); }
 function draft(value: unknown) { try { return parseQuestionDraft(value as Record<string, unknown>); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "Dados da questão inválidos."); } }
-async function law(lawSlug: string): Promise<Law> { const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo").eq("slug", slug(lawSlug)).eq("ativo", true).maybeSingle(); if (r.error) fail("carregar_lei", r.error); if (!r.data) throw new AdminQuestoesError(404, "Lei ativa não encontrada no banco principal."); return r.data as Law; }
+async function law(lawSlug: string): Promise<Law> { const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug(lawSlug)).eq("ativo", true).maybeSingle(); if (r.error) fail("carregar_lei", r.error); if (!r.data) throw new AdminQuestoesError(404, "Lei ativa não encontrada no banco principal."); return r.data as Law; }
 async function structure(leiId: number) { const r = await db().from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page,ativo,created_at,updated_at").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("id"); if (r.error) fail("listar_estrutura", r.error); return [...(r.data ?? [])].sort(compareQuestionStructureNames) as QuestionStructureNode[]; }
 async function validateStructure(leiId: number, structureId: number | null) { if (!structureId) return; const r = await db().from("law_structure").select("id").eq("id", structureId).eq("lei_id", leiId).eq("ativo", true).maybeSingle(); if (r.error) fail("validar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(422, "A estrutura selecionada não pertence à lei ativa."); }
 function values(law: Law, d: QuestionDraft) { return { lei_id: law.id, structure_id: d.structure_id, pergunta: d.pergunta, resposta: d.resposta, justificativa: d.justificativa, assunto: d.assunto, legislacao: d.legislacao, ordem: d.ordem, titulo: d.titulo, total_artigos: d.total_artigos, slug: law.slug, capitulo: d.capitulo, secao: d.secao, subsecao: d.subsecao, artigo: d.artigo }; }

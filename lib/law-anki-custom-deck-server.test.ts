@@ -15,6 +15,7 @@ describe("baralho Anki personalizado", () => {
     expect(server).toContain("A seleção contém uma estrutura fora do conteúdo liberado");
     expect(server).toContain("reviewState(request, slug, input.filter)");
     expect(server).toContain("campanhas_leis_respostas");
-    expect(server).toContain("buildLawApkg({ slug, titulo: result.context.title }");
+    expect(server).toContain("buildLawApkg({ slug, titulo: result.context.title, ultima_alteracao_referencia:");
+    expect(server).toContain("houve_alteracao_legislativa:");
   });
 });

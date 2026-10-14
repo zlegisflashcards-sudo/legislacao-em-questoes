@@ -14,7 +14,7 @@ export async function downloadAuthorizedLawScopeApkg(request: Request, slug: str
   // permanece canônica para que lei completa, recortes e futuras seleções
   // personalizadas usem a mesma hierarquia legislativa no Anki.
   const title = context.title;
-  const exported = await buildLawApkg({ slug, titulo: title }, questions, structure, { fileName: fileName(slug, recorteId) });
+  const exported = await buildLawApkg({ slug, titulo: title, ultima_alteracao_referencia: typeof context.law?.ultima_alteracao_referencia === "string" ? context.law.ultima_alteracao_referencia : null, houve_alteracao_legislativa: context.law?.houve_alteracao_legislativa === true }, questions, structure, { fileName: fileName(slug, recorteId) });
   const body = exported.bytes.buffer.slice(exported.bytes.byteOffset, exported.bytes.byteOffset + exported.bytes.byteLength) as ArrayBuffer;
   return new Response(body, { headers: { "Cache-Control": "private, no-store, max-age=0", "Content-Type": "application/vnd.anki", "Content-Disposition": `attachment; filename="${exported.filename}"`, "X-Content-Type-Options": "nosniff" } });
 }
