@@ -43,7 +43,7 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
       return null;
     }
   })();
-  const [communityCount, incidence] = await Promise.all([getPublicCommunityContributionCount(slug, ordem).catch((error) => {
+  const [communityCount, mapping] = await Promise.all([getPublicCommunityContributionCount(slug, ordem).catch((error) => {
     console.error("[LegisBot] Não foi possível carregar a contagem pública da comunidade.", {
       slug,
       ordem,
@@ -53,16 +53,16 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
   }), (async () => {
     const { data, error } = await getSupabaseServerClient()
       .from("article_context_mappings")
-      .select("incidencia")
+      .select("incidencia,artigo_recente")
       .eq("slug", slug.trim().toLowerCase())
       .eq("ordem", ordem.trim())
       .maybeSingle();
     if (error) {
       console.error("[LegisBot] Não foi possível carregar a incidência editorial.", { slug, ordem, code: error.code });
-      return undefined;
+      return { incidence: undefined, recent: false };
     }
-    return mappingIncidence(data?.incidencia);
-  })().catch(() => undefined)]);
+    return { incidence: mappingIncidence(data?.incidencia), recent: data?.artigo_recente === true };
+  })().catch(() => ({ incidence: undefined, recent: false }))]);
 
   return (
     <LegisBotPageClient
@@ -71,7 +71,8 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
       dadosIniciais={{ titulo: source?.titulo ?? "", assunto: source?.assunto ?? "", legislacao: source?.legislacao ?? "" }}
       initialCommunityCount={communityCount}
       initialTab={initialTab}
-      mappingIncidence={incidence}
+      mappingIncidence={mapping.incidence}
+      articleRecent={mapping.recent}
       adminShortcut={<AdminEditCommentShortcut slug={slug} ordem={ordem} />}
     />
   );

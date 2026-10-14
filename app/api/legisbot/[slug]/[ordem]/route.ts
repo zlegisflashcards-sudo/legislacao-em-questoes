@@ -24,7 +24,7 @@ export async function GET(_request: Request, context: RouteContext) {
     ),
     supabase
       .from("article_context_mappings")
-      .select("incidencia")
+      .select("incidencia,artigo_recente")
       .eq("slug", params.slug.trim().toLowerCase())
       .eq("ordem", params.ordem.trim())
       .maybeSingle(),
@@ -37,6 +37,7 @@ export async function GET(_request: Request, context: RouteContext) {
     {
       ...payload,
       incidencia,
+      artigo_recente: mapping.data?.artigo_recente === true,
     },
     { status: response.status, headers: { "Cache-Control": "no-store" } },
   );

@@ -12,6 +12,7 @@ export type LegisBotOverlayArticle = {
   comentario?: string | null;
   /** Metadado editorial exibido somente no contexto do LegisCast. */
   incidencia?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
+  artigo_recente?: boolean;
 };
 
 export function LegisBotOverlay({ slug, question, articles, initialTab, publicComment, recorteId, onClose }: { slug: string; question: LegisBotOverlayArticle; /** Artigos disponíveis no contexto atual, em ordem de estudo. */ articles?: LegisBotOverlayArticle[]; initialTab: LegisBotStudyTab; publicComment?: string | null; recorteId?: string | null; onClose: () => void }) {
@@ -69,5 +70,5 @@ export function LegisBotOverlay({ slug, question, articles, initialTab, publicCo
     }
   }
 
-  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} showArticleQuestions={Boolean(activeArticle.ordem)} questionsRecorteId={recorteId} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} /></aside></div>;
+  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} articleRecent={activeArticle.artigo_recente === true} showArticleQuestions={Boolean(activeArticle.ordem)} questionsRecorteId={recorteId} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} /></aside></div>;
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { limparApresentacao } from "@/lib/legisbot/clean-comment";
+import styles from "./legisbot-mapping-theme.module.css";
 import LegisBotCommentContent from "@/components/legisbot-comment-content";
 import LegisBotCommunity from "@/components/legisbot-community";
 import { legalHtmlToPlainText } from "@/lib/legisbot-community";
@@ -50,19 +51,13 @@ type LegisBotPageClientProps = {
   publicComment?: string | null;
   /** Incidência editorial, mostrada no cabeçalho quando o artigo é aberto pelo LegisCast. */
   mappingIncidence?: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
+  /** Atualidade editorial é independente da incidência e recebe a bandeira azul. */
+  articleRecent?: boolean;
   showArticleQuestions?: boolean;
   questionsRecorteId?: string | null;
   onPreviousArticle?: () => void;
   onNextArticle?: () => void;
   onClose?: () => void;
-};
-
-const MAPPING_FLAG_LABEL: Record<NonNullable<LegisBotPageClientProps["mappingIncidence"]>, string> = {
-  muito_alta: "Prioridade muito alta",
-  alta: "Prioridade alta",
-  media: "Prioridade média",
-  baixa: "Prioridade baixa",
-  nao_mapeado: "Sem prioridade definida",
 };
 
 type LegisBotApiResponse = {
@@ -76,6 +71,7 @@ type LegisBotApiResponse = {
   reason?: "legisbot_resting" | "rate_limited" | "cooldown" | "attempts_exhausted" | "source_not_found" | "source_incomplete" | "source_conflict" | "source_unavailable";
   precisa_revisao?: boolean;
   incidencia?: NonNullable<LegisBotPageClientProps["mappingIncidence"]>;
+  artigo_recente?: boolean;
 };
 
 type HighlightedLegalTextProps = {
@@ -129,6 +125,7 @@ export default function LegisBotPageClient({
   embedded = false,
   publicComment,
   mappingIncidence,
+  articleRecent = false,
   showArticleQuestions = false,
   questionsRecorteId = null,
   onPreviousArticle,
@@ -159,6 +156,7 @@ export default function LegisBotPageClient({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [needsReview, setNeedsReview] = useState(false);
   const [resolvedMappingIncidence, setResolvedMappingIncidence] = useState(mappingIncidence);
+  const [resolvedArticleRecent, setResolvedArticleRecent] = useState(articleRecent);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
   const assunto = dadosLegislacao.assunto || fallback.assunto;
@@ -189,12 +187,13 @@ export default function LegisBotPageClient({
     setSource(undefined);
     setNeedsReview(false);
     setResolvedMappingIncidence(mappingIncidence);
+    setResolvedArticleRecent(articleRecent);
     setHighlights([]);
     setSelectedHighlight(null);
     setConversationPhase("idle");
     setTypedQuestion("");
     setCommunityCount(initialCommunityCount);
-  }, [dadosIniciais, initialCommunityCount, mappingIncidence, publishedComment, slug, ordem]);
+  }, [articleRecent, dadosIniciais, initialCommunityCount, mappingIncidence, publishedComment, slug, ordem]);
 
   useEffect(() => {
     if (isPublicArticle) return;
@@ -268,6 +267,7 @@ export default function LegisBotPageClient({
         }
         setSource(result.source);
         setNeedsReview(result.precisa_revisao === true);
+        setResolvedArticleRecent(result.artigo_recente === true);
         if (result.incidencia) setResolvedMappingIncidence(result.incidencia);
         if (response.status === 202 || result.source === "processing") {
           retryAttempts += 1;
@@ -362,6 +362,7 @@ export default function LegisBotPageClient({
       }
       setSource(result.source);
       setNeedsReview(result.precisa_revisao === true);
+      setResolvedArticleRecent(result.artigo_recente === true);
       setAnswer(limparApresentacao(result.comment));
       setAnswerState("ready");
     } catch {
@@ -460,14 +461,12 @@ export default function LegisBotPageClient({
     <div className="legisbot-conversation-revealed">{legisBotContent}</div>
   );
 
-  const incidenceFlag = resolvedMappingIncidence && resolvedMappingIncidence !== "nao_mapeado" ? (
-    <span className={`legisbot-mapping-flag legisbot-mapping-flag--${resolvedMappingIncidence}`} role="img" tabIndex={0} aria-label={MAPPING_FLAG_LABEL[resolvedMappingIncidence]} data-tooltip={MAPPING_FLAG_LABEL[resolvedMappingIncidence]}>⚑</span>
-  ) : null;
+  const recentFlag = resolvedArticleRecent ? <span className="legisbot-recent-flag" role="img" aria-label="Artigo recente" title="Artigo recente">⚑</span> : null;
 
-  return <div className={`legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme}>
+  return <div className={`${styles.page} legisbot-page${embedded ? " legisbot-embedded" : ""}`} data-theme={theme} data-mapping-incidence={resolvedMappingIncidence ?? "nao_mapeado"}>
     <main className="legisbot-main" data-source={source}>
       <header className="legisbot-topic-header" data-slug={slug} data-ordem={ordem}>
-        {embedded ? <div className="legisbot-topic-tools legisbot-overlay-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" disabled={!onPreviousArticle} onClick={onPreviousArticle}><span aria-hidden="true">←</span><span>Artigo anterior</span></button><div className="legisbot-overlay-close-group">{incidenceFlag}<button type="button" className="legisbot-overlay-close" aria-label="Fechar aprofundamento e voltar à tela principal" onClick={onClose}>×</button></div><button type="button" className="legislation-back-link legisbot-overlay-next" disabled={!onNextArticle} onClick={onNextArticle}><span>Próximo artigo</span><span aria-hidden="true">→</span></button></div> : adminShortcut || incidenceFlag ? <div className="legisbot-topic-tools">{adminShortcut}<div className="legisbot-topic-actions">{incidenceFlag}</div></div> : null}
+        {embedded ? <div className="legisbot-topic-tools legisbot-overlay-tools"><button type="button" className="legislation-back-link legisbot-overlay-back" disabled={!onPreviousArticle} onClick={onPreviousArticle}><span aria-hidden="true">←</span><span>Artigo anterior</span></button><div className="legisbot-overlay-close-group">{recentFlag}<button type="button" className="legisbot-overlay-close" aria-label="Fechar aprofundamento e voltar à tela principal" onClick={onClose}>×</button></div><button type="button" className="legislation-back-link legisbot-overlay-next" disabled={!onNextArticle} onClick={onNextArticle}><span>Próximo artigo</span><span aria-hidden="true">→</span></button></div> : adminShortcut || recentFlag ? <div className="legisbot-topic-tools">{adminShortcut}<div className="legisbot-topic-actions">{recentFlag}</div></div> : null}
         <h1>{assunto}</h1>
       </header>
 

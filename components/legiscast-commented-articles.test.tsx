@@ -56,6 +56,13 @@ describe("artigos comentados no LegisCast", () => {
     expect(overlay).toContain("mappingIncidence={activeArticle.incidencia}");
     expect(overlay).toContain("incidencia?:");
     expect(component).toContain("#fef08a_35%");
+    const pageClient = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
+    const styles = readFileSync("app/legisbot/legisbot-mapping-theme.module.css", "utf8");
+    expect(pageClient).toContain('data-mapping-incidence={resolvedMappingIncidence ?? "nao_mapeado"}');
+    expect(pageClient).toContain("legisbot-recent-flag");
+    expect(overlay).toContain("articleRecent={activeArticle.artigo_recente === true}");
+    expect(styles).toContain('.page[data-mapping-incidence="muito_alta"]');
+    expect(styles).toContain('background:var(--lb-mapping-dark)');
   });
 
   it("oferece a mesma navegação entre artigos no painel compartilhado", () => {
