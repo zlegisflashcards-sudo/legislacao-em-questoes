@@ -9,6 +9,13 @@ describe("lacunas automáticas para Artigo Sombra", () => {
     ]);
   });
 
+  it("usa ordinal somente até o artigo 9º e inclui o nome curto da lei", () => {
+    expect(findLawQuestionArticleGaps([{ ordem: "0008.0.00.00" }, { ordem: "0031.0.00.00" }], "Lei 9.605/98")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ article: 9, assunto: "Art. 9º, Lei 9.605/98" }),
+      expect.objectContaining({ article: 30, assunto: "Art. 30, Lei 9.605/98" }),
+    ]));
+  });
+
   it("não inventa sombra quando não há intervalo suficiente ou a ordem é inválida", () => {
     expect(findLawQuestionArticleGaps([{ ordem: "0001.0.00.00" }])).toEqual([]);
     expect(findLawQuestionArticleGaps([{ ordem: "sem-ordem" }, { ordem: null }])).toEqual([]);
