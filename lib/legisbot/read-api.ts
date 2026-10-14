@@ -58,6 +58,12 @@ export async function handleLegisBotRead(
     if (error instanceof LegisBotRequestError) {
       return json({ success: false, error: error.publicMessage }, error.status);
     }
+    try {
+      const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
+      await dependencies.reportIssue?.({ identifiers, type: "falha_tecnica" });
+    } catch {
+      // The public response must remain available even if reporting also fails.
+    }
     return json({ success: false, error: "Não foi possível consultar o comentário." }, 503);
   }
 }

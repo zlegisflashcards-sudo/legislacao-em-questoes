@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { IMPORT_CONFIRMATION, normalizeMappingInput } from "./admin-article-mappings";
+import { incidenceFromQuestionCount } from "./article-mapping-incidence";
 import { parseArticleMappingCsvObjects } from "./article-mapping-csv";
 
 describe("mapeamento por contexto", () => {
@@ -21,6 +22,17 @@ describe("mapeamento por contexto", () => {
 
   it("rejeita confiança fora do intervalo permitido", () => {
     expect(() => normalizeMappingInput({ slug: "cp", ordem: "0001.0.00.0.00.0", confianca: 1.01 })).toThrow("entre 0 e 1");
+  });
+
+  it("calcula a prioridade inicial pelas faixas de questões", () => {
+    expect(incidenceFromQuestionCount(0)).toBe("nao_mapeado");
+    expect(incidenceFromQuestionCount(1)).toBe("baixa");
+    expect(incidenceFromQuestionCount(2)).toBe("baixa");
+    expect(incidenceFromQuestionCount(3)).toBe("media");
+    expect(incidenceFromQuestionCount(5)).toBe("media");
+    expect(incidenceFromQuestionCount(6)).toBe("alta");
+    expect(incidenceFromQuestionCount(9)).toBe("alta");
+    expect(incidenceFromQuestionCount(10)).toBe("muito_alta");
   });
 
   it("usa uma frase explícita para confirmar a importação", () => {

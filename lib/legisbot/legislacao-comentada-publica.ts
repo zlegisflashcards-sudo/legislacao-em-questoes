@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "../supabase-server";
 import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "./source";
 import { validateQuestionStructure } from "@/lib/question-structure-consistency";
+import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 
 export type LegislacaoComentadaPublica = {
   slug: string;
@@ -92,7 +93,7 @@ export function consolidarLegislacaoComentadaConfiavel(
         assunto,
         legislacao,
         comentario: commentByContext.get(`${source.slug.toUpperCase()}\u0000${source.ordem}`) ?? null,
-        incidencia: mapping?.incidencia ?? "nao_mapeado",
+        incidencia: mapping?.incidencia ?? incidenceFromQuestionCount(group.length),
         artigo_recente: mapping?.artigo_recente ?? false,
       }];
     })

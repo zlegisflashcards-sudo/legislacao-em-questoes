@@ -15,7 +15,12 @@ const question = (overrides: Partial<{ id: string; slug: string; ordem: string; 
 
 describe("legislação comentada confiável do LegisCast", () => {
   it("mantém um artigo confiável sem comentário publicado", () => {
-    expect(consolidarLegislacaoComentadaConfiavel([question()], [], "Código Penal")).toEqual([expect.objectContaining({ slug: "CP", ordem: "0001.0.00.0.00.0", comentario: null })]);
+    expect(consolidarLegislacaoComentadaConfiavel([question()], [], "Código Penal")).toEqual([expect.objectContaining({ slug: "CP", ordem: "0001.0.00.0.00.0", comentario: null, incidencia: "baixa" })]);
+  });
+
+  it("calcula a incidência pela quantidade de questões quando não existe decisão editorial", () => {
+    const contexts = consolidarLegislacaoComentadaConfiavel(Array.from({ length: 10 }, (_, index) => question({ id: `question-${index}` })), [], "Código Penal");
+    expect(contexts[0]).toMatchObject({ incidencia: "muito_alta" });
   });
 
   it("anexa somente comentário concluído e com conteúdo", () => {

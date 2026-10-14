@@ -36,6 +36,7 @@ type ConversationPhase = "idle" | "asking" | "typing" | "revealed";
 const CONVERSATION_QUESTION = "LegisBot, pode me explicar este artigo?";
 const QUESTION_CHARACTER_DELAY_MS = 20;
 const BOT_TYPING_DELAY_MS = 420;
+const TEMPORARY_UNAVAILABLE_MESSAGE = "🤖 Estou recarregando minha bateria e já volto. Tente novamente mais tarde.";
 
 type LegisBotPageClientProps = {
   slug: string;
@@ -431,7 +432,7 @@ export default function LegisBotPageClient({
         {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
         {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Tente novamente mais tarde.</p> : null}
         {answerState === "limited" ? <p className="answer-status answer-error">{statusMessage}</p> : null}
-        {answerState === "error" ? <p className="answer-status answer-error">{statusMessage || "Não foi possível carregar a explicação no momento. Tente novamente mais tarde."}</p> : null}
+        {answerState === "error" ? <p className="answer-status answer-error">{TEMPORARY_UNAVAILABLE_MESSAGE}</p> : null}
       </div>
     </article>
 

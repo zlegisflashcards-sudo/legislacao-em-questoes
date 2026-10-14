@@ -59,13 +59,16 @@ describe("contrato de leitura pública do LegisBot", () => {
   });
 
   it("GET de fonte conflitante retorna mensagem controlada sem expor conteúdo", async () => {
+    const reportIssue = vi.fn().mockResolvedValue(undefined);
     const response = await handleLegisBotRead({ slug: "CF", ordem: "0001" }, {
       find: vi.fn(),
       resolveSource: vi.fn().mockRejectedValue(new LegisBotSourceError("conflict", "Este conteúdo está temporariamente indisponível enquanto passa por revisão.")),
       reconcileSource: vi.fn(),
+      reportIssue,
     });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ success: false, error: "Conteúdo indisponível no momento.", reason: "source_conflict" });
+    expect(reportIssue).toHaveBeenCalledWith({ identifiers: { slug: "CF", ordem: "0001" }, type: "falha_tecnica" });
   });
 
   it("o Route Handler GET não contém mutação, RPC, OpenAI ou alerta", () => {
@@ -87,6 +90,7 @@ describe("contrato de leitura pública do LegisBot", () => {
     expect(pollingBlock).not.toContain("method: \"POST\"");
     expect(actionBlock).toContain("method: \"POST\"");
     expect(actionBlock).toContain("onClick={() => void gerarComentario()}");
+    expect(client).toContain("Estou recarregando minha bateria e já volto");
   });
 
   it("permite gerar quando o overlay recebe um comentário ainda não publicado", () => {

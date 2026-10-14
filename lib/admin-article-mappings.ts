@@ -1,6 +1,7 @@
 import "server-only";
 
 import { exigirAdministrador } from "@/lib/admin-auth";
+import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export const INCIDENCIAS = ["muito_alta", "alta", "media", "baixa", "nao_mapeado"] as const;
@@ -109,9 +110,9 @@ export async function exportArticleMappings(slug = "") {
       legisbot_id: first.legisbot_id ?? null,
       origem_contexto: first.legisbot_id ? "legisbot" : "questoes",
       conflito: assuntos.size > 1 || legislacoes.size > 1,
-      incidencia: mapping?.incidencia ?? "nao_mapeado",
+      incidencia: mapping?.incidencia ?? incidenceFromQuestionCount(questions.filter((item) => !item.legisbot_id).length),
       artigo_recente: mapping?.artigo_recente ?? false,
-      origem_mapeamento: mapping?.origem_mapeamento ?? "",
+      origem_mapeamento: mapping?.origem_mapeamento ?? (first.legisbot_id ? "" : "questoes_reais"),
       observacao_interna: mapping?.observacao_interna ?? "",
       confianca: mapping?.confianca ?? "",
     };

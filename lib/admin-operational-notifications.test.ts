@@ -47,4 +47,11 @@ describe("notificacoes operacionais administrativas", () => {
     expect(central).toContain("aluno_duplicado: \"Aluno duplicado\"");
     expect(central).toContain("typeLabel");
   });
+
+  it("registra uma notificação administrativa quando o LegisBot fica indisponível", () => {
+    const incident = readFileSync("lib/legisbot/incident.ts", "utf8");
+    expect(incident).toContain('tipo: "erro_legisbot"');
+    expect(incident).toContain('entidadeTipo: "legisbot_ocorrencia"');
+    expect(central).toContain('erro_legisbot: "⚠ LegisBot"');
+  });
 });

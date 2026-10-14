@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createOperationalAdminNotification } from "@/lib/admin-notification-server";
 
 export type LegisBotIncidentType = "vinculacao" | "sem_conteudo" | "legislacao_ausente" | "falha_tecnica";
 
@@ -14,6 +15,17 @@ export async function registerLegisBotIncident(
     p_tipo: input.type,
     p_usuario_id: input.userId ?? null,
   });
-  // A migration can be pending during rollout; logging must never interrupt study.
+  // A migration can be pending during rollout; the student flow must never stop.
   if (result.error) console.error("[LegisBot] Não foi possível registrar ocorrência.", { type: input.type, code: result.error.code });
+
+  // The notification is deliberately independent from the occurrence table: an
+  // alert still reaches the admin during a partial migration rollout.
+  await createOperationalAdminNotification(supabase, {
+    tipo: "erro_legisbot",
+    titulo: "LegisBot indisponível para um trecho",
+    mensagem: `Ocorrência: ${input.type}. Lei ${input.slug.toUpperCase()}, ordem ${input.ordem}.`,
+    link: `/admin/artigos?aba=conflitos&lei=${encodeURIComponent(input.slug.toLowerCase())}&q=${encodeURIComponent(input.ordem)}`,
+    entidadeTipo: "legisbot_ocorrencia",
+    entidadeId: `${input.slug.toLowerCase()}:${input.ordem}:${input.type}`,
+  });
 }

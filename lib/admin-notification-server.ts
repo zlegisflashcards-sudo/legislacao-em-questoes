@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AdminNotificationInput = {
-  tipo: "erro_resend" | "erro_hotmart" | "nova_aquisicao" | "nova_liberacao" | "conta_ativada" | "reembolso_solicitado" | "reembolso_concluido" | "acesso_restaurado";
+  tipo: "erro_resend" | "erro_hotmart" | "erro_legisbot" | "nova_aquisicao" | "nova_liberacao" | "conta_ativada" | "reembolso_solicitado" | "reembolso_concluido" | "acesso_restaurado";
   titulo: string;
   mensagem: string;
   link?: string;
