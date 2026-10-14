@@ -333,7 +333,7 @@ export function AdminQuestionConference({
     next();
   }
   async function move(direction: -1 | 1) {
-    if (currentIndex < 0) return;
+    if (saving || currentIndex < 0) return;
     const target = filtered[currentIndex + direction];
     if (!target) return;
     if (
@@ -349,6 +349,11 @@ export function AdminQuestionConference({
     ) {
       const previous = new Set(reviewedIds);
       setReviewedIds((items) => new Set(items).add(current.id));
+      setEditing(false);
+      setForm(null);
+      setOriginal(null);
+      setKeepOutsideFilter(false);
+      setCurrentId(target.id);
       setSaving(true);
       setError("");
       try {
@@ -367,10 +372,10 @@ export function AdminQuestionConference({
             ? caught.message
             : "Não foi possível salvar o progresso da lista.",
         );
-        return;
       } finally {
         setSaving(false);
       }
+      return;
     }
     setEditing(false);
     setForm(null);

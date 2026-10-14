@@ -63,6 +63,11 @@ describe("listas personalizadas do conferidor", () => {
     expect(client).toMatch(
       /direction === 1 &&\s+customList &&\s+current &&\s+!reviewedIds\.has\(current\.id\)/,
     );
+    const move = client.indexOf("async function move");
+    expect(client.indexOf("setCurrentId(target.id)", move)).toBeLessThan(
+      client.indexOf('action: "marcar_lista_conferencia"', move),
+    );
+    expect(client).toContain("if (saving || currentIndex < 0) return;");
     expect(client).toContain("Remover da lista");
     expect(client).toContain("Pendentes");
     expect(page).toContain("Listas personalizadas");

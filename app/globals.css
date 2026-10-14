@@ -238,3 +238,356 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 .law-data-form{display:grid;gap:18px}.law-data-form-header{padding:2px 2px 0}.law-data-form-header h2{margin:0!important}.law-data-form-header p{margin:5px 0 0;color:#64748b;font-size:14px}.law-data-section{display:grid;gap:14px;border:1px solid #dbe4f0;border-radius:14px;background:#f8fafc;padding:18px}.law-data-section>header h3{margin:0;color:#172033;font-size:17px}.law-data-section>header p{margin:4px 0 0;color:#64748b;font-size:13px}.law-data-fields-grid,.law-data-publication-grid,.law-data-update-grid,.law-data-reference-pair,.law-data-status-grid{display:grid;gap:12px}.law-data-fields-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.law-data-publication-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.law-data-update-grid{grid-template-columns:1fr}.law-data-reference-pair{grid-template-columns:minmax(0,1fr) minmax(190px,.42fr)}.law-data-status-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.law-data-fields-grid label,.law-data-publication-grid>label:not(.law-data-free-access),.law-data-reference-pair label,.law-data-status-grid label{display:grid;gap:6px;color:#334155;font-size:13px;font-weight:800}.law-data-form input:not([type=checkbox]):not([type=hidden]),.law-data-form select,.law-data-form textarea{box-sizing:border-box;min-width:0;min-height:42px;width:100%;border:1px solid #cbd5e1;border-radius:9px;background:#fff;padding:9px 11px;color:#172033;font:inherit}.law-data-form textarea{min-height:82px;resize:vertical}.law-data-wide{grid-column:1/-1}.law-data-free-access{grid-column:1/-1;display:flex;align-items:flex-start;gap:11px;min-height:42px;border:1px solid #dbe4f0;border-radius:10px;background:#fff;padding:11px 13px;color:#475569;font-size:13px;font-weight:500}.law-data-free-access>input[type=checkbox]{width:18px;height:18px;margin:2px 0 0;accent-color:#2563eb}.law-data-free-access>span{display:grid;gap:3px}.law-data-free-access strong{color:#172033;font-size:14px}.law-data-form .commercial-form-actions{margin-top:2px}.law-data-form>.admin-alert{margin:0}
 @media(max-width:900px){.law-data-fields-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.law-data-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.law-data-section{padding:14px}.law-data-fields-grid,.law-data-publication-grid,.law-data-reference-pair,.law-data-status-grid{grid-template-columns:1fr}.law-data-wide{grid-column:auto}.law-data-form .commercial-form-actions{align-items:stretch;flex-direction:column}.law-data-form .commercial-form-actions .admin-button{width:100%}}
+
+/* Listas personalizadas do Conferidor: editor amplo, leitura rápida e ações agrupadas. */
+.conference-list-modal {
+  width: min(100%, 1080px);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 0;
+}
+.conference-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px 28px 21px;
+  border-bottom: 1px solid #dbeafe;
+  background: linear-gradient(135deg, #eff6ff, #fff);
+}
+.conference-list-header h2 {
+  margin: 4px 0 0;
+  color: #172554;
+  font-size: 24px;
+}
+.conference-list-header p:last-child {
+  max-width: 610px;
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.conference-list-alert {
+  margin: 18px 28px 0;
+}
+.conference-list-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+  gap: 20px;
+  padding: 22px 28px 28px;
+}
+.conference-list-builder,
+.conference-list-saved {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid #dbe4f0;
+  border-radius: 15px;
+  background: #f8fafc;
+  padding: 18px;
+}
+.conference-list-builder > header,
+.conference-list-saved > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.conference-list-builder > header > span,
+.conference-list-preview header span {
+  display: grid;
+  flex: 0 0 25px;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+.conference-list-builder h3,
+.conference-list-saved h3,
+.conference-list-preview h4 {
+  margin: 0;
+  color: #172554;
+  font-size: 17px;
+}
+.conference-list-builder header p,
+.conference-list-saved header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.conference-list-builder > label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+.conference-list-builder > label > span,
+.conference-list-file > span {
+  color: #334155;
+}
+.conference-list-builder input:not([type="file"]),
+.conference-list-builder textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  padding: 10px 11px;
+  color: #172033;
+  font: inherit;
+}
+.conference-list-builder input:not([type="file"]) {
+  min-height: 43px;
+}
+.conference-list-builder textarea {
+  min-height: 154px;
+  resize: vertical;
+  line-height: 1.45;
+}
+.conference-list-builder label small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+.conference-list-file {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed #93c5fd;
+  border-radius: 10px;
+  background: #eff6ff;
+  padding: 10px 11px;
+}
+.conference-list-file input {
+  max-width: 220px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+.conference-list-preview-button {
+  justify-self: start;
+}
+.conference-list-append-target {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  padding: 11px 12px;
+}
+.conference-list-append-target span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.conference-list-append-target strong {
+  color: #1e3a8a;
+}
+.conference-list-append-target .admin-link-button {
+  justify-self: start;
+  font-size: 12px;
+}
+.conference-list-preview {
+  display: grid;
+  gap: 13px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  padding: 14px;
+}
+.conference-list-preview header,
+.conference-list-preview header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conference-list-preview header {
+  justify-content: space-between;
+}
+.conference-list-preview header strong {
+  border-radius: 999px;
+  background: #dcfce7;
+  padding: 5px 8px;
+  color: #166534;
+  font-size: 12px;
+}
+.conference-list-preview dl,
+.conference-list-saved li > dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #dbe4f0;
+  border-radius: 9px;
+  background: #dbe4f0;
+}
+.conference-list-preview dl > div,
+.conference-list-saved li > dl > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  background: #fff;
+  padding: 8px;
+}
+.conference-list-preview dt,
+.conference-list-saved dt {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.conference-list-preview dd,
+.conference-list-saved dd {
+  margin: 0;
+  color: #172554;
+  font-size: 16px;
+  font-weight: 900;
+}
+.conference-list-preview .admin-link-button {
+  justify-self: start;
+  font-size: 12px;
+}
+.conference-list-preview .admin-button {
+  justify-self: start;
+}
+.conference-list-saved > header {
+  justify-content: space-between;
+}
+.conference-list-saved > header > span {
+  display: grid;
+  min-width: 29px;
+  height: 29px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 900;
+}
+.conference-list-saved ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.conference-list-saved li {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+}
+.conference-list-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.conference-list-card-heading > div {
+  display: grid;
+  gap: 4px;
+}
+.conference-list-card-heading strong {
+  color: #172554;
+  font-size: 15px;
+}
+.conference-list-card-heading small {
+  color: #64748b;
+  font-size: 11px;
+}
+.conference-list-card-heading > span {
+  flex: none;
+  border-radius: 999px;
+  background: #f1f5f9;
+  padding: 5px 8px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+}
+.conference-list-saved li > dl {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.conference-list-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.conference-list-card-actions .admin-button {
+  min-height: 35px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+.conference-list-empty {
+  margin: 0;
+  border: 1px dashed #cbd5e1;
+  border-radius: 11px;
+  background: #fff;
+  padding: 24px 14px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+@media (max-width: 820px) {
+  .conference-list-layout {
+    grid-template-columns: 1fr;
+  }
+  .conference-list-modal {
+    max-height: calc(100vh - 20px);
+  }
+  .conference-list-header {
+    padding: 20px;
+  }
+  .conference-list-alert {
+    margin-inline: 20px;
+  }
+  .conference-list-layout {
+    padding: 18px 20px 20px;
+  }
+}
+@media (max-width: 560px) {
+  .conference-list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .conference-list-header .admin-button {
+    width: 100%;
+  }
+  .conference-list-builder,
+  .conference-list-saved {
+    padding: 14px;
+  }
+  .conference-list-file {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .conference-list-file input {
+    max-width: 100%;
+  }
+  .conference-list-preview dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .conference-list-saved li > dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .conference-list-card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .conference-list-card-actions .admin-button:first-child {
+    grid-column: 1/-1;
+  }
+  .conference-list-card-actions .admin-button {
+    width: 100%;
+  }
+}
