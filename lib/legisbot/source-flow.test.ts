@@ -97,6 +97,8 @@ describe("fonte canônica do LegisBot", () => {
     expect(page).toContain('.from("article_context_mappings")');
     expect(page).toContain('mappingIncidence={mapping.incidence}');
     expect(page).toContain('articleRecent={mapping.recent}');
+    const route = readFileSync("app/api/legisbot/[slug]/[ordem]/route.ts", "utf8");
+    expect(route).toContain("incidenceFromQuestionCount(questions.error ? 0 : questions.count ?? 0)");
     expect(client).toContain("body: JSON.stringify({})");
     expect(client).toContain("const [resolvedMappingIncidence, setResolvedMappingIncidence] = useState(mappingIncidence)");
     expect(client).toContain("setResolvedMappingIncidence(result.incidencia)");
