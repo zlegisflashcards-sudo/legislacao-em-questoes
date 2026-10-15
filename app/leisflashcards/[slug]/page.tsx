@@ -15,6 +15,7 @@ import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-serv
 import { PublicLawContentTree } from "@/components/public-law-content-tree";
 import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLawCommercialSummary } from "@/lib/public-law-content-tree-server";
 import { isCompositeLawProduct } from "@/lib/product-types";
+import { formatProductPrice } from "@/lib/product-price";
 
 // As quantidades comerciais dos materiais podem ser atualizadas pelo painel.
 // A página deve consultar o estado atual, em vez do snapshot do build.
@@ -35,6 +36,7 @@ type ProdutoCatalogo = {
   nome: string;
   descricao: string | null;
   hotmartUrl: string | null;
+  preco: number | null;
   videoDemoUrl: string | null;
   leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null }>;
   totalFlashcards: number | null;
@@ -45,18 +47,26 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const supabase = getSupabaseServerClient();
     const produtoComVideo = await supabase
       .from("produtos")
-      .select("id,nome,descricao,hotmart_url,video_demo_url,tipo_produto")
+      .select("id,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto")
       .eq("slug", slug)
       .eq("ativo", true)
       .maybeSingle();
-    const produto = produtoComVideo.error
+    const produtoComPreco = produtoComVideo.error
+      ? await supabase
+          .from("produtos")
+          .select("id,nome,descricao,hotmart_url,preco,tipo_produto")
+          .eq("slug", slug)
+          .eq("ativo", true)
+          .maybeSingle()
+      : produtoComVideo;
+    const produto = produtoComPreco.error
       ? await supabase
           .from("produtos")
           .select("id,nome,descricao,hotmart_url,tipo_produto")
           .eq("slug", slug)
           .eq("ativo", true)
           .maybeSingle()
-      : produtoComVideo;
+      : produtoComPreco;
     if (produto.error || !produto.data) return null;
 
     const vinculos = await supabase
@@ -89,7 +99,9 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       "video_demo_url" in produto.data && typeof produto.data.video_demo_url === "string"
         ? produto.data.video_demo_url
         : null;
-    return { tipoProduto: produto.data.tipo_produto, nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, videoDemoUrl, leis, totalFlashcards };
+    const rawPrice = "preco" in produto.data ? produto.data.preco : null;
+    const preco = typeof rawPrice === "number" && Number.isFinite(rawPrice) && rawPrice >= 0 ? rawPrice : typeof rawPrice === "string" && /^\d+(?:\.\d{1,2})?$/.test(rawPrice) ? Number(rawPrice) : null;
+    return { tipoProduto: produto.data.tipo_produto, nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, preco, videoDemoUrl, leis, totalFlashcards };
   } catch {
     return null;
   }
@@ -438,8 +450,7 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
           {avulsa && commercialSummary ? <LegislationState summary={commercialSummary} /> : null}
           {produto.descricao ? <p className="max-w-2xl text-lg leading-8 text-slate-200">{produto.descricao}</p> : null}
           {video ? <div className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]"><iframe className="aspect-video w-full" src={video} title={`Vídeo do produto: ${produto.nome}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div> : null}
-          {produto.hotmartUrl ? <a href={produto.hotmartUrl} className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#062a5f] to-blue-600 px-8 py-5 text-center text-base font-black text-white shadow-[0_18px_40px_rgba(37,99,235,0.42)] ring-1 ring-white/20 transition hover:scale-[1.02] sm:text-lg">Adquirir (garantia Hotmart)</a> : <p className="text-sm font-semibold text-slate-300">Link de aquisição indisponível no momento.</p>}
-          <div className="grid gap-4 sm:grid-cols-3">{["Acesso vitalício", "Acesso ilimitado", "Material atualizado"].map((beneficio) => <div key={beneficio} className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 font-bold shadow-[0_16px_40px_rgba(0,0,0,0.22)]">{beneficio}</div>)}</div>
+          <PurchaseCard hotmartUrl={produto.hotmartUrl} preco={produto.preco} />
         </div>
       </section>
       {avulsa && commercialSummary ? <LawModules summary={commercialSummary} /> : null}
@@ -460,6 +471,17 @@ function LegislationState({ summary }: { summary: PublicLawCommercialSummary }) 
     <p className="text-sm font-semibold uppercase tracking-wide text-blue-200">Estado da legislação</p>
     <h2 id="law-update-title" className={`mt-2 text-xl font-black ${updated ? "text-emerald-200" : "text-amber-200"}`}>{updated ? "✓ Legislação atualizada" : "⚠ Atualização pendente"}</h2>
     {summary.legislation.reference ? <p className="mt-2 text-sm text-slate-100">Última alteração: {summary.legislation.reference}</p> : null}
+  </section>;
+}
+
+function PurchaseCard({ hotmartUrl, preco }: Pick<ProdutoCatalogo, "hotmartUrl" | "preco">) {
+  const formattedPrice = formatProductPrice(preco);
+  return <section className="rounded-2xl border border-slate-700 bg-slate-900/90 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.28)] sm:p-6" aria-label="Aquisição do produto">
+    <p className="text-xs font-bold uppercase tracking-wide text-blue-300">Acesso completo</p>
+    {formattedPrice ? <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-slate-700 pb-5"><p className="text-3xl font-black text-white sm:text-4xl">{formattedPrice}</p><p className="text-sm font-semibold text-slate-300">Pagamento único</p></div> : null}
+    <ul className="mt-5 grid gap-3 text-sm font-bold text-slate-100"><li className="flex items-center gap-3"><span className="text-emerald-400" aria-hidden="true">✓</span>Acesso vitalício</li><li className="flex items-center gap-3"><span className="text-emerald-400" aria-hidden="true">✓</span>Acesso ilimitado</li><li className="flex items-center gap-3"><span className="text-emerald-400" aria-hidden="true">✓</span>Material atualizado</li></ul>
+    <div className="mt-5 rounded-xl bg-blue-950/70 p-4 text-sm text-blue-50"><p className="font-black">📩 Liberação do acesso</p><p className="mt-2 leading-6">Após a confirmação da compra, você receberá no e-mail cadastrado um link para liberar seu acesso à plataforma.</p></div>
+    {hotmartUrl ? <><a href={hotmartUrl} className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-[#3567e8] px-6 py-3 text-center text-base font-black text-white shadow-[0_14px_30px_rgba(37,99,235,0.32)] transition hover:from-blue-500 hover:to-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300">Adquirir agora <span className="ml-2" aria-hidden="true">→</span></a><p className="mt-4 text-center text-xs font-semibold text-slate-300">🛡️ Compra segura pela Hotmart</p></> : <p className="mt-4 text-sm font-semibold text-slate-300">Link de aquisição indisponível no momento.</p>}
   </section>;
 }
 

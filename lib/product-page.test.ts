@@ -24,15 +24,22 @@ describe("página comercial de produto", () => {
     expect(source).toContain("if (produto)");
   });
 
-  it("usa somente o vídeo próprio como vitrine e evita CTAs duplicados", () => {
+  it("usa somente o vídeo próprio como vitrine e concentra a aquisição em um card", () => {
     expect(source).toContain("video_demo_url");
     expect(source).toContain("const video = produto.videoDemoUrl ? getYoutubeEmbedUrl(produto.videoDemoUrl) : null");
     expect(source).not.toContain("const selectedVideoUrl");
     expect(source).not.toContain("videoUrl={videoUrl}");
-    expect(source).toContain("inline-flex w-full items-center justify-center");
+    expect(source).toContain("<PurchaseCard hotmartUrl={produto.hotmartUrl} preco={produto.preco} />");
+    expect(source).toContain("Acesso completo");
+    expect(source).toContain("Adquirir agora");
+    expect(source).toContain("Compra segura pela Hotmart");
+    expect(source).toContain("Link de aquisição indisponível no momento.");
+    expect(source).toContain("formatProductPrice(preco)");
+    const productPage = source.slice(source.indexOf("async function PaginaProduto"));
+    expect(productPage).not.toContain("Adquirir (garantia Hotmart)");
     expect(source).toContain("Vídeo do produto:");
     expect(source).toContain('const isLeiAvulsa = produto.tipoProduto === "lei_avulsa"');
-    expect(source).not.toContain("Comprar agora");
+    expect(source).toContain('select("id,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto")');
   });
 
   it("mostra a projeção estrutural somente para vínculo avulso consistente", () => {
@@ -62,7 +69,8 @@ describe("página comercial de produto", () => {
   });
 
   it("mantém a rota comercial disponível enquanto a coluna de vídeo não foi aplicada", () => {
-    expect(source).toContain("const produto = produtoComVideo.error");
+    expect(source).toContain("const produtoComPreco = produtoComVideo.error");
+    expect(source).toContain("const produto = produtoComPreco.error");
     expect(source).toContain('select("id,nome,descricao,hotmart_url,tipo_produto")');
   });
 

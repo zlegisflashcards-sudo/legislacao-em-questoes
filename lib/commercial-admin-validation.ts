@@ -133,6 +133,25 @@ export function optionalNonNegativeInteger(value: unknown, label: string): numbe
   return nonNegativeInteger(value, label);
 }
 
+/** Valor monetário opcional normalizado para a precisão de numeric(10,2). */
+export function optionalCurrencyAmount(value: unknown, label: string): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const normalized = typeof value === "number"
+    ? String(value)
+    : typeof value === "string"
+      ? value.trim().replace(",", ".")
+      : null;
+  if (!normalized || !/^\d{1,8}(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new CommercialValidationError(`${label} deve ser um valor monetário não negativo com até duas casas decimais.`);
+  }
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount > 99_999_999.99) {
+    throw new CommercialValidationError(`${label} deve ser um valor monetário válido.`);
+  }
+  return amount;
+}
+
 export function optionalIsoDate(value: unknown, label: string): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;

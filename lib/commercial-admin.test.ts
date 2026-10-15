@@ -8,6 +8,7 @@ import {
   LAW_UPDATE_STATUSES,
   idList,
   limitFrom,
+  optionalCurrencyAmount,
   optionalIsoDate,
   optionalNonNegativeInteger,
   optionalProductDemoVideoUrl,
@@ -29,6 +30,7 @@ const productVideoMigration = readFileSync("supabase/migrations/20260807210000_a
 const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
 const postSaleFinalOutcomeMigration = readFileSync("supabase/migrations/20260815100000_add_purchase_post_sale_final_outcome.sql", "utf8");
 const lawConferenceNullableMigration = readFileSync("supabase/migrations/20261005124000_allow_unmarked_law_conference_status.sql", "utf8");
+const productPriceMigration = readFileSync("supabase/migrations/20261015120000_add_product_price.sql", "utf8");
 
 describe("validação da administração comercial", () => {
   it("aceita slug normalizado e rejeita valores perigosos", () => {
@@ -56,6 +58,12 @@ describe("validação da administração comercial", () => {
     expect(LAW_CONFERENCE_STATUSES).toEqual(["para_conferir", "conferido"]);
     expect(EDITORIAL_UPDATE_TYPES).toContain("alteracao_legislativa");
     expect(EDITORIAL_IMPORTANCE).toEqual(["informativa", "recomendada", "essencial"]);
+  });
+
+  it("aceita preço informativo opcional com precisão monetária", () => {
+    expect(optionalCurrencyAmount("49,90", "Preço")).toBe(49.9);
+    expect(optionalCurrencyAmount("", "Preço")).toBeNull();
+    expect(() => optionalCurrencyAmount("49.999", "Preço")).toThrow(CommercialValidationError);
   });
 
   it("permite que a situação de conferência permaneça sem marcação", () => {
@@ -144,6 +152,10 @@ describe("fronteira administrativa comercial", () => {
     expect(productHighlightMigration).toContain("p_dados?'destaque'");
     expect(server).toContain('"destaque"');
     expect(client).toContain('name="destaque"');
+    expect(productPriceMigration).toContain("add column if not exists preco numeric(10,2) null");
+    expect(productPriceMigration).toContain("p_dados?'preco'");
+    expect(server).toContain('"preco"');
+    expect(client).toContain('name="preco"');
   });
 
   it("carrega todas as páginas de leis para a composição de produtos, sem filtrar o estado", () => {
