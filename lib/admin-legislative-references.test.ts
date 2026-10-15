@@ -32,4 +32,13 @@ describe("base legislativa persistente", () => {
     expect(service).toContain("ignoreDuplicates: true");
     expect(service).toContain("range(offset, offset + PAGE_SIZE)");
   });
+
+  it("importa em lote apenas bases vazias e não escolhe legislação divergente", () => {
+    const service = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    const page = readFileSync("app/admin/artigos/page.tsx", "utf8");
+    expect(service).toContain("importQuestionLegislationToReferences");
+    expect(service).toContain("if (versions.size !== 1)");
+    expect(service).toContain('.is("legislacao", null)');
+    expect(page).toContain("Importar recortes das questões para a base");
+  });
 });

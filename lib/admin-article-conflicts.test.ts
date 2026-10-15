@@ -66,9 +66,9 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain('type === "estrutural"');
     expect(server).toContain('type === "possivel_estrutural"');
     expect(server).toContain('type === "legislacao"');
-    expect(server).toContain('type === "comentario_sem_analise"');
+    expect(server).not.toContain('type === "comentario_sem_analise"');
     expect(list).toContain('name="tipo"');
-    expect(list).toContain("Comentário sem análise");
+    expect(list).not.toContain("Comentário sem análise");
     expect(list).toContain("pagina");
   });
 
@@ -169,7 +169,7 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("const reviewTypes = [");
     expect(server).toContain('"Legislação divergente"');
     expect(server).toContain('"Pendência de granularidade"');
-    expect(server).toContain('"Comentário sem análise"');
+    expect(server).not.toContain('"Comentário sem análise"');
     expect(list).toContain('aria-label="Tipos de revisão"');
     expect(list).toContain("item.reviewTypes.map");
   });

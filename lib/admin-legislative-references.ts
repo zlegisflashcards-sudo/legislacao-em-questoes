@@ -4,6 +4,7 @@ import { exigirAdministrador } from "@/lib/admin-auth";
 import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
+import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
 
 export { referenceCandidatesFromQuestions, referencesNotYetStored, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 
@@ -101,6 +102,65 @@ export async function seedLegislativeReferences(lawSlug: string) {
     from += batch;
   }
   return { identified: inserted };
+}
+
+/**
+ * Importação editorial explícita: preenche somente referências ainda vazias.
+ * Em caso de mais de uma legislação materialmente diferente para a mesma Ordem,
+ * não escolhe uma delas automaticamente.
+ */
+export async function importQuestionLegislationToReferences(lawSlug: string) {
+  await exigirAdministrador();
+  const slug = text(lawSlug, 160).toLowerCase();
+  if (!slug) throw new Error("Escolha uma legislação antes de importar os recortes.");
+  await seedLegislativeReferences(slug);
+  const db = getSupabaseServerClient();
+  const references = await db.from("legislative_references")
+    .select("id,ordem,legislacao")
+    .eq("slug", slug);
+  if (references.error) throw new Error("Não foi possível carregar a base legislativa.");
+  const emptyByOrder = new Map((references.data ?? []).flatMap((reference) => {
+    const legislation = typeof reference.legislacao === "string" ? reference.legislacao.trim() : "";
+    return legislation ? [] : [[String(reference.ordem), String(reference.id)] as const];
+  }));
+  if (!emptyByOrder.size) return { imported: 0, skippedExisting: (references.data ?? []).length, skippedConflicts: 0, skippedEmpty: 0 };
+
+  const candidates = new Map<string, Map<string, string>>();
+  let from = 0;
+  const batch = 500;
+  for (;;) {
+    const questions = await db.from("questions").select("ordem,legislacao")
+      .eq("ativo", true).eq("slug", slug).order("id").range(from, from + batch - 1);
+    if (questions.error) throw new Error("Não foi possível carregar os recortes das questões.");
+    for (const question of questions.data ?? []) {
+      const ordem = String(question.ordem ?? "").trim();
+      if (!emptyByOrder.has(ordem)) continue;
+      const legislation = sanitizarHtmlLegislacao(String(question.legislacao ?? "")).trim();
+      const fingerprint = normalizedLegisBotLegislation(legislation);
+      if (!fingerprint) continue;
+      const versions = candidates.get(ordem) ?? new Map<string, string>();
+      if (!versions.has(fingerprint)) versions.set(fingerprint, legislation);
+      candidates.set(ordem, versions);
+    }
+    if ((questions.data ?? []).length < batch) break;
+    from += batch;
+  }
+
+  let imported = 0;
+  let skippedConflicts = 0;
+  let skippedEmpty = 0;
+  const now = new Date().toISOString();
+  for (const [ordem, referenceId] of emptyByOrder) {
+    const versions = candidates.get(ordem);
+    if (!versions?.size) { skippedEmpty += 1; continue; }
+    if (versions.size !== 1) { skippedConflicts += 1; continue; }
+    const legislation = [...versions.values()][0];
+    const saved = await db.from("legislative_references").update({ legislacao: legislation, preparado_em: now })
+      .eq("id", referenceId).is("legislacao", null).select("id").maybeSingle();
+    if (saved.error) throw new Error("Não foi possível importar um dos recortes legislativos.");
+    if (saved.data) imported += 1;
+  }
+  return { imported, skippedExisting: (references.data ?? []).length - emptyByOrder.size, skippedConflicts, skippedEmpty };
 }
 
 export async function saveLegislativeReference(input: { id: string; identification: unknown; legislation: unknown }) {

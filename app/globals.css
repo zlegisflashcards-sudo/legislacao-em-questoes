@@ -96,7 +96,7 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 /* Comunidade pública do LegisBot */
 .community-section{margin-top:42px;padding-top:34px;border-top:1px solid var(--border,#dbeafe);color:var(--text,#0f172a)}
 .legisbot-legal-text{margin:-6px 0 30px;border-left:4px solid #3b82f6;border-radius:0 14px 14px 0;background:color-mix(in srgb,var(--card,#fff) 92%,#eff6ff);padding:18px 20px}.legisbot-legal-text h2{margin:0 0 9px;color:#2563eb;font-size:12px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.legisbot-legal-text p{margin:0;white-space:pre-wrap;line-height:1.7;color:var(--text,#0f172a)}
-.legisbot-legal-html{overflow-wrap:anywhere;color:var(--text,#0f172a);line-height:1.7}.legisbot-legal-html p,.legisbot-legal-html ul,.legisbot-legal-html ol,.legisbot-legal-html blockquote{margin:.65em 0}.legisbot-legal-html table{display:block;width:100%;max-width:100%;overflow-x:auto;border-collapse:collapse}.legisbot-legal-html th,.legisbot-legal-html td{border:1px solid color-mix(in srgb,var(--muted,#64748b) 28%,transparent);padding:8px 10px;text-align:left;vertical-align:top}.legisbot-legal-html th{background:color-mix(in srgb,#3b82f6 10%,var(--card,#fff));font-weight:800}.legisbot-legal-html mark{background:#fef08a;color:inherit}
+.legisbot-legal-html{overflow-wrap:anywhere;white-space:pre-wrap;color:var(--text,#0f172a);line-height:1.7}.legisbot-legal-html p,.legisbot-legal-html ul,.legisbot-legal-html ol,.legisbot-legal-html blockquote{margin:.65em 0}.legisbot-legal-html table{display:block;width:100%;max-width:100%;overflow-x:auto;border-collapse:collapse}.legisbot-legal-html th,.legisbot-legal-html td{border:1px solid color-mix(in srgb,var(--muted,#64748b) 28%,transparent);padding:8px 10px;text-align:left;vertical-align:top}.legisbot-legal-html th{background:color-mix(in srgb,#3b82f6 10%,var(--card,#fff));font-weight:800}.legisbot-legal-html mark{background:#fef08a;color:inherit}
 .community-title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:24px}.community-title-row h2{margin:4px 0 8px;font-size:clamp(25px,4vw,34px);letter-spacing:-.025em}.community-title-row p{margin:0;color:var(--muted,#64748b)}.community-eyebrow{font-size:12px!important;font-weight:900;letter-spacing:.11em;text-transform:uppercase;color:#2563eb!important}.community-title-row label{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;color:var(--muted,#64748b)}.community-title-row select,.community-modal select{min-height:42px;border:1px solid #cbd5e1;border-radius:10px;background:var(--card,#fff);padding:0 34px 0 12px;color:inherit}
 .community-editor,.community-login-callout{margin-top:24px;border:1px solid #bfdbfe;border-radius:18px;background:color-mix(in srgb,var(--card,#fff) 90%,#eff6ff);padding:20px}.community-editor>textarea,.community-inline-editor textarea{width:100%;border:1px solid #cbd5e1;border-radius:13px;background:var(--card,#fff);padding:14px;resize:vertical;color:inherit;font:inherit;line-height:1.65;outline:none}.community-editor>textarea:focus,.community-inline-editor textarea:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #3b82f629}.community-toolbar{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 10px}.community-toolbar button{min-height:36px;border:1px solid #bfdbfe;border-radius:9px;background:var(--card,#fff);padding:0 10px;color:#2563eb;font-size:12px;font-weight:800}.community-editor-footer,.community-context{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.community-editor-footer span{font-size:12px;color:var(--muted,#64748b)}.community-editor-footer>button,.community-modal-actions button:last-child{min-height:44px;border:0;border-radius:11px;background:#2563eb;padding:0 18px;color:#fff;font-weight:900}.community-editor-footer>button:disabled{opacity:.6}.community-context{margin:0 0 12px;color:var(--muted,#64748b);font-size:13px}.community-context button,.community-quote button{border:0;background:none;color:#2563eb;font-weight:800}.community-login-callout p{margin:0 0 12px;font-weight:750}.community-login-callout div{display:flex;gap:10px;flex-wrap:wrap}.community-login-callout a{display:inline-flex;min-height:42px;align-items:center;border-radius:10px;padding:0 16px;font-weight:900}.community-login-callout a:first-child{background:#2563eb;color:#fff}.community-login-callout a:last-child{border:1px solid #93c5fd;color:#2563eb;background:var(--card,#fff)}
 .community-identity{display:flex;flex-wrap:wrap;gap:10px 18px;margin:0 0 12px;border:1px solid #dbeafe;border-radius:12px;padding:11px 13px}.community-identity legend{padding:0 5px;color:var(--muted,#64748b);font-size:12px;font-weight:850}.community-identity label{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:750}.community-official{border-color:#93c5fd;background:color-mix(in srgb,var(--card,#fff) 94%,#eff6ff);box-shadow:inset 3px 0 #3b82f6,0 8px 26px #0f172a08}.community-official .community-comment-header strong{color:#1d4ed8}
@@ -590,4 +590,32 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
   .conference-list-card-actions .admin-button {
     width: 100%;
   }
+}
+
+/* A base legislativa pode conter o dispositivo completo, não apenas uma nota curta. */
+.article-mapping-form > label:has(textarea[placeholder^="Cole aqui o texto legislativo preparado"]) {
+  grid-column: 1/-1;
+}
+
+.article-mapping-form textarea[placeholder^="Cole aqui o texto legislativo preparado"] {
+  min-height: clamp(320px, 52vh, 560px);
+  padding: 16px;
+}
+
+.article-legislative-copy {
+  margin-left: 12px;
+  vertical-align: middle;
+}
+
+.article-law-clear {
+  margin-top: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #2563eb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: left;
 }

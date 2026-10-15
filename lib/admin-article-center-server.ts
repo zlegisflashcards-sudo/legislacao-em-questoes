@@ -7,12 +7,13 @@ import { normalizedLegisBotLegislation, normalizedLegisBotSourceText } from "@/l
 import { articleOrderStructure } from "@/lib/article-order-structure";
 import { hasIncisoGranularityPending, validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
 import { questionStructurePath, type QuestionStructurePathNode } from "@/lib/question-structure-path";
+import { resolveQuestionLegisBotLinks, type QuestionLegisBotResolution } from "@/lib/question-legisbot-links";
 
 const LIMIT = 40;
 
 export type ArticleContext = { id: string; slug: string; ordem: string; titulo: string; assunto: string; legislacao: string; lawTitle: string | null; lawCode: string | null; commentsCount: number; questionsCount: number; conflictsCount: number; pendingCount: number; editorialGranularityPending: boolean; granularityDecision: "paragrafo_inteiro" | "recorte_inciso" | null; trusted: boolean; updatedAt: string; legisbot: LegisBotComentario | null; structuralValidation: StructuralValidation | null };
 export type ArticleInteraction = { id: string; kind: "comentario" | "legisbot"; slug: string; ordem: string; author: string | null; summary: string; status: string; createdAt: string };
-export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; legislacao: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string };
+export type ArticleQuestion = { id: string; slug: string; ordem: string; pergunta: string; resposta: string; assunto: string | null; legislacao: string | null; titulo: string | null; structure_id: number | null; ativo: boolean; updated_at: string; legisbotResolution: QuestionLegisBotResolution };
 export type ArticleSiblingContext = { ordem: string; reference: string; questionsCount: number; current: boolean };
 export type ArticleStructureTrail = { status: "linked"; items: string[] } | { status: "unlinked"; items: [] } | { status: "inconsistent"; items: []; structureIds: number[] };
 
@@ -143,7 +144,10 @@ export async function getArticleQuestions(slug: string, ordem: string): Promise<
   await exigirAdministrador();
   const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,pergunta,resposta,assunto,legislacao,titulo,structure_id,ativo,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).eq("ativo", true).order("updated_at", { ascending: false }).limit(100);
   if (result.error) throw new Error("Não foi possível carregar as questões do artigo.");
-  return (result.data ?? []) as ArticleQuestion[];
+  const rows = (result.data ?? []) as Omit<ArticleQuestion, "legisbotResolution">[];
+  const resolutions = await resolveQuestionLegisBotLinks(rows.map((row) => ({ id: row.id, slug: row.slug, ordem: row.ordem })));
+  const resolutionByQuestion = new Map(resolutions.map((item) => [item.questionId, item]));
+  return rows.map((row) => ({ ...row, legisbotResolution: resolutionByQuestion.get(row.id) ?? { questionId: row.id, status: "sem_legisbot", legisbotId: null, ordem: null, source: null } }));
 }
 
 /** Localização no sumário da lei, derivada exclusivamente do vínculo structure_id das questões. */

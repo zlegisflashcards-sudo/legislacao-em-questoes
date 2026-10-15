@@ -107,19 +107,16 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const decidedGranularities = new Set((decisions.data ?? []).flatMap((item) => item.granularidade_legislacao === "paragrafo_inteiro" || item.granularidade_legislacao === "recorte_inciso" ? [`${String(item.slug).toUpperCase()}\u0000${String(item.ordem)}`] : []));
   for (const key of decidedGranularities) granularities.delete(key);
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys(), ...granularities.keys()])];
-  const [laws, comments] = await Promise.all([Promise.resolve(lawsForValidation), commentsFor(groups)]);
+  const laws = lawsForValidation;
   const law = safeFilter(filters.law);
   const type = safeFilter(filters.type, 40);
   const filtered = contextKeys.filter((key) => {
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug;
-    const metadata = laws.get(slug);
-    const comment = comments.get(key);
     if (law && slug.toLocaleLowerCase("pt-BR") !== law) return false;
     if (type === "estrutural" && structuralGroup?.validation.status !== "conflict") return false;
     if (type === "possivel_estrutural" && structuralGroup?.validation.status !== "possible_conflict") return false;
     if (type === "legislacao" && !group) return false;
     if (type === "granularidade" && !granularity) return false;
-    if (type === "comentario_sem_analise" && (!comment || !["pendente", "processando"].includes(comment.status))) return false;
     if (type === "pergunta_duplicada") return false;
     return true;
   });
@@ -139,10 +136,6 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "possible_conflict").length,
     legislation: contextsForLaw.filter((key) => legalByKey.has(key)).length,
     granularity: contextsForLaw.filter((key) => granularities.has(key)).length,
-    commentWithoutAnalysis: contextsForLaw.filter((key) => {
-      const comment = comments.get(key);
-      return Boolean(comment && ["pendente", "processando"].includes(comment.status));
-    }).length,
     duplicateStatements: duplicateStatements.filter((group) => !law || group.questions[0]?.slug.toLocaleLowerCase("pt-BR") === law).length,
   };
   const entries = [
@@ -191,12 +184,10 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const key = entry.key;
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const questions = group?.questions ?? structuralGroup?.questions ?? granularity!.questions; const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug; const currentOrder = group?.ordem ?? structuralGroup?.ordem ?? granularity!.ordem;
     const metadata = laws.get(slug);
-    const comment = comments.get(key);
     const reviewTypes = [
       structuralGroup?.validation.status === "conflict" ? "Conflito estrutural" : structuralGroup?.validation.status === "possible_conflict" ? "Possível conflito estrutural" : null,
       group ? "Legislação divergente" : null,
       granularity ? "Pendência de granularidade" : null,
-      comment && ["pendente", "processando"].includes(comment.status) ? "Comentário sem análise" : null,
     ].filter((value): value is string => Boolean(value));
     return {
       slug,
@@ -207,7 +198,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       assunto: questions.find((item) => item.assunto?.trim())?.assunto ?? null,
       flashcards: questions.length,
       versions: group?.versions.size ?? 1,
-      comment,
+      comment: null,
       structuralValidation: structuralGroup?.validation ?? null,
       editorialGranularityPending: Boolean(granularity),
       reviewTypes,

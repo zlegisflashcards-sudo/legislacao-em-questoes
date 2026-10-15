@@ -1,17 +1,133 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
-type Update = { id: string; status: string; marcado_em: string; concluido_em: string | null; observacao_publica: string | null; steps: Array<{ step: string; completedAt: string | null }> };
+type Update = {
+  id: string;
+  status: string;
+  marcado_em: string;
+  concluido_em: string | null;
+  observacao_publica: string | null;
+  steps: Array<{ step: string; completedAt: string | null }>;
+};
 type Overview = { law: { lastReference: string | null; lastDate: string | null }; updates: Update[] };
-const labels: Record<string, string> = { legislacao: "Conferir a legislação esquematizada", questoes_artigo: "Revisar as questões do artigo", questoes_outros_artigos: "Pesquisar possíveis questões afetadas em outros artigos", legisbot: "Conferir o LegisBot", legiscast: "Verificar se o LegisCast precisa de atualização", materiais_relacionados: "Conferir os demais materiais relacionados" };
-async function api(method: "GET" | "POST", body?: Record<string, unknown>) { const url = method === "GET" ? `/api/admin/artigos/atualizacoes?slug=${encodeURIComponent(String(body?.slug ?? ""))}&ordem=${encodeURIComponent(String(body?.ordem ?? ""))}` : "/api/admin/artigos/atualizacoes"; const response = await fetch(url, { method, headers: method === "POST" ? { "Content-Type": "application/json" } : undefined, body: method === "POST" ? JSON.stringify(body) : undefined }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Não foi possível salvar."); return data; }
+
+const labels: Record<string, string> = {
+  legislacao: "Conferir a legislação esquematizada",
+  questoes_artigo: "Revisar as questões do artigo",
+  questoes_outros_artigos: "Pesquisar possíveis questões afetadas em outros artigos",
+  legisbot: "Conferir o LegisBot",
+  legiscast: "Verificar se o LegisCast precisa de atualização",
+  materiais_relacionados: "Conferir os demais materiais relacionados",
+};
+
+async function api(method: "GET" | "POST", body?: Record<string, unknown>) {
+  const url = method === "GET"
+    ? `/api/admin/artigos/atualizacoes?slug=${encodeURIComponent(String(body?.slug ?? ""))}&ordem=${encodeURIComponent(String(body?.ordem ?? ""))}`
+    : "/api/admin/artigos/atualizacoes";
+  const response = await fetch(url, {
+    method,
+    headers: method === "POST" ? { "Content-Type": "application/json" } : undefined,
+    body: method === "POST" ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Não foi possível salvar.");
+  return data;
+}
 
 export function ArticleLegislativeUpdates({ slug, ordem }: { slug: string; ordem: string }) {
-  const [data, setData] = useState<Overview | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [observation, setObservation] = useState(""); const [publicNote, setPublicNote] = useState(""); const [reference, setReference] = useState(""); const [date, setDate] = useState("");
-  const load = async () => { try { setData(await api("GET", { slug, ordem })); setError(""); } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar o checklist."); } };
-  useEffect(() => { void load(); }, [slug, ordem]);
-  const act = async (body: Record<string, unknown>) => { try { setBusy(true); setError(""); await api("POST", body); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível salvar."); } finally { setBusy(false); } };
+  const [data, setData] = useState<Overview | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [observation, setObservation] = useState("");
+  const [publicNote, setPublicNote] = useState("");
+  const [reference, setReference] = useState("");
+  const [date, setDate] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<HTMLElement | null>(null);
+
+  const load = async () => {
+    try {
+      setData(await api("GET", { slug, ordem }));
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível carregar o checklist.");
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [slug, ordem]);
+
+  useEffect(() => {
+    setCopyTarget(document.querySelector<HTMLElement>(".article-legisbot > h2"));
+  }, []);
+
+  const act = async (body: Record<string, unknown>) => {
+    try {
+      setBusy(true);
+      setError("");
+      await api("POST", body);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyQuestionLegislation = () => {
+    const source = document.querySelector<HTMLElement>(".article-legisbot > .admin-card .markdown-content");
+    const target = document.querySelector<HTMLTextAreaElement>('textarea[name="legislation"]');
+    if (!source || !target) {
+      setError("Abra a aba Artigo para copiar o recorte das questões para a base legislativa.");
+      return;
+    }
+    target.value = source.innerHTML.trim();
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    target.focus();
+    setCopied(true);
+  };
+
   const open = data?.updates.find((item) => item.status !== "concluida") ?? null;
-  return <section className="article-legislative-updates commercial-card"><header><h2>Atualização legislativa</h2><p>Checklist administrativo do artigo. Nenhuma questão ou legislação será alterada automaticamente.</p></header>{error ? <p className="admin-alert error">{error}</p> : null}{!open ? <div className="grid gap-2"><p>Não há atualização em aberto para este artigo.</p><label>Observação interna opcional<textarea value={observation} onChange={(event) => setObservation(event.target.value)} /></label><button type="button" className="admin-button primary justify-self-start" disabled={busy} onClick={() => void act({ action: "marcar_atualizacao", slug, ordem, observation })}>Marcar para atualização legislativa</button></div> : <article className="rounded-lg border border-amber-200 bg-amber-50 p-4"><p><strong>{open.status === "pendente" ? "Pendente" : "Em revisão"}</strong></p>{open.steps.map((item) => <label className="mt-2 flex gap-2" key={item.step}><input type="checkbox" checked={Boolean(item.completedAt)} disabled={busy} onChange={(event) => void act({ action: "etapa_atualizacao", update_id: open.id, step: item.step, completed: event.target.checked })}/><span>{labels[item.step] ?? item.step}</span></label>)}<div className="mt-4 grid gap-2"><label>Referência da alteração incorporada<input value={reference} onChange={(event) => setReference(event.target.value)} placeholder={data?.law.lastReference ?? "Ex.: Lei nº 00/2026"}/></label><label>Data da incorporação<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><label>Informação pública para alunos<textarea value={publicNote} onChange={(event) => setPublicNote(event.target.value)} placeholder="Material revisado e atualizado." /></label></div><button type="button" className="admin-button primary mt-3" disabled={busy || !reference.trim() || !date || !open.steps.every((item) => item.completedAt)} onClick={() => void act({ action: "concluir_atualizacao", update_id: open.id, reference, incorporation_date: date, public_note: publicNote })}>Concluir, marcar mapeamento e disponibilizar</button></article>}{data?.updates.filter((item) => item.status === "concluida").map((item) => <p className="mt-3 text-sm text-emerald-800" key={item.id}>Atualização disponibilizada aos alunos em {item.concluido_em ? new Date(item.concluido_em).toLocaleDateString("pt-BR") : "—"}{item.observacao_publica ? ` · ${item.observacao_publica}` : ""}</p>)}</section>;
+
+  return (
+    <section className="article-legislative-updates commercial-card">
+      <header>
+        <div><h2>Atualização legislativa</h2><p>Checklist administrativo do artigo. Nenhuma questão ou legislação será alterada automaticamente.</p></div>
+      </header>
+      {copyTarget ? createPortal(<button type="button" className="admin-button secondary article-legislative-copy" onClick={copyQuestionLegislation}>{copied ? "Recorte copiado para a base" : "Usar recorte atual na base"}</button>, copyTarget) : null}
+      {error ? <p className="admin-alert error">{error}</p> : null}
+      {!open ? (
+        <div className="grid gap-2">
+          <p>Não há atualização em aberto para este artigo.</p>
+          <label>Observação interna opcional<textarea value={observation} onChange={(event) => setObservation(event.target.value)} /></label>
+          <button type="button" className="admin-button primary justify-self-start" disabled={busy} onClick={() => void act({ action: "marcar_atualizacao", slug, ordem, observation })}>Marcar para atualização legislativa</button>
+        </div>
+      ) : (
+        <article className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p><strong>{open.status === "pendente" ? "Pendente" : "Em revisão"}</strong></p>
+          {open.steps.map((item) => (
+            <label className="mt-2 flex gap-2" key={item.step}>
+              <input type="checkbox" checked={Boolean(item.completedAt)} disabled={busy} onChange={(event) => void act({ action: "etapa_atualizacao", update_id: open.id, step: item.step, completed: event.target.checked })} />
+              <span>{labels[item.step] ?? item.step}</span>
+            </label>
+          ))}
+          <div className="mt-4 grid gap-2">
+            <label>Referência da alteração incorporada<input value={reference} onChange={(event) => setReference(event.target.value)} placeholder={data?.law.lastReference ?? "Ex.: Lei nº 00/2026"} /></label>
+            <label>Data da incorporação<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+            <label>Informação pública para alunos<textarea value={publicNote} onChange={(event) => setPublicNote(event.target.value)} placeholder="Material revisado e atualizado." /></label>
+          </div>
+          <button type="button" className="admin-button primary mt-3" disabled={busy || !reference.trim() || !date || !open.steps.every((item) => item.completedAt)} onClick={() => void act({ action: "concluir_atualizacao", update_id: open.id, reference, incorporation_date: date, public_note: publicNote })}>Concluir, marcar mapeamento e disponibilizar</button>
+        </article>
+      )}
+      {data?.updates.filter((item) => item.status === "concluida").map((item) => (
+        <p className="mt-3 text-sm text-emerald-800" key={item.id}>
+          Atualização disponibilizada aos alunos em {item.concluido_em ? new Date(item.concluido_em).toLocaleDateString("pt-BR") : "—"}{item.observacao_publica ? ` · ${item.observacao_publica}` : ""}
+        </p>
+      ))}
+    </section>
+  );
 }

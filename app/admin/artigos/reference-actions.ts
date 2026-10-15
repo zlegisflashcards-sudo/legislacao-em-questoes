@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
+import { importQuestionLegislationToReferences, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -11,6 +11,13 @@ export async function prepareLegislativeReferences(formData: FormData) {
   await seedLegislativeReferences(slug);
   revalidatePath("/admin/artigos");
   redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&preparacao=concluida`);
+}
+
+export async function importQuestionLegislation(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  const result = await importQuestionLegislationToReferences(slug);
+  revalidatePath("/admin/artigos");
+  redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&importacao=${encodeURIComponent(`${result.imported},${result.skippedExisting},${result.skippedConflicts},${result.skippedEmpty}`)}`);
 }
 
 export async function savePreparedLegislativeReference(formData: FormData) {
