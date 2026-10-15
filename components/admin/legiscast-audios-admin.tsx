@@ -33,6 +33,7 @@ type Audio = {
   ativo: boolean;
   mp3_available?: boolean;
   final_size_bytes?: number | null;
+  publicado_em?: string | null;
   updated_at?: string | null;
   leis?: { titulo?: string } | null;
 };
@@ -94,6 +95,10 @@ function formatUpdatedAt(value?: string | null) {
         new Date(value),
       )
     : "—";
+}
+function formatPublicationDate(value?: string | null) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "—";
 }
 function tracksForLaw(audios: Audio[], lawId: number) {
   return audios
@@ -753,7 +758,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <p className="text-xs text-slate-500">
                             {formatDuration(audio.duracao_segundos)} ·{" "}
                             {formatSize(audio.final_size_bytes)} ·{" "}
-                            {audio.ativo ? "Ativo" : "Inativo"} · atualizado em{" "}
+                            {audio.ativo ? "Ativo" : "Inativo"} · publicado em {" "}
+                            {formatPublicationDate(audio.publicado_em)} · atualizado em{" "}
                             {formatUpdatedAt(audio.updated_at)}
                           </p>
                         </div>

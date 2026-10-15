@@ -21,6 +21,7 @@ const jobsMigration = readFileSync("supabase/migrations/20260904140000_create_le
 const mp3Migration = readFileSync("supabase/migrations/20260924110000_add_legiscast_mp3_admin_download.sql", "utf8");
 const mp3ReservationMigration = readFileSync("supabase/migrations/20260924123000_fix_legiscast_mp3_job_reservation.sql", "utf8");
 const audioNotApplicableMigration = readFileSync("supabase/migrations/20261001123000_add_law_structure_audio_not_applicable.sql", "utf8");
+const publicationDateMigration = readFileSync("supabase/migrations/20261014160000_add_legiscast_audio_publication_date.sql", "utf8");
 const worker = readFileSync("workers/legiscast-audio/src/index.mjs", "utf8");
 
 describe("LegisCast em áudio", () => {
@@ -170,6 +171,16 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).toContain("Áudio não se aplica");
     expect(adminClient).toContain("structure.audio_not_applicable");
     expect(adminClient).toContain("Sem áudio");
+  });
+
+  it("persiste a data da primeira postagem por faixa, sem confundi-la com edição", () => {
+    expect(publicationDateMigration).toContain("add column if not exists publicado_em date");
+    expect(publicationDateMigration).toContain("set publicado_em = created_at::date");
+    expect(publicationDateMigration).toContain("CURRENT_DATE");
+    expect(publicationDateMigration).toContain("create or replace function public.publish_legiscast_audio_job");
+    expect(admin).toContain("storage_path,publicado_em,created_at,updated_at");
+    expect(adminClient).toContain("publicado em");
+    expect(adminClient).toContain("formatPublicationDate(audio.publicado_em)");
   });
 
   it("renderiza text layer e mantém download e impressão no fluxo autorizado", () => {

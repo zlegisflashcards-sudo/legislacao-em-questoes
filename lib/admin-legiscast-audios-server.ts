@@ -84,7 +84,7 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
   if (laws.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar os áudios do LegisCast.");
   if (normalizedSlug && !laws.data?.length) throw new AdminLegiscastAudioError(404, "Lei ativa não encontrada.");
   const lawId = normalizedSlug ? Number(laws.data?.[0]?.id) : null;
-  let audiosRequest = db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,ordem,ativo,storage_path,created_at,updated_at,leis(titulo,slug)").order("created_at", { ascending: false });
+  let audiosRequest = db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,ordem,ativo,storage_path,publicado_em,created_at,updated_at,leis(titulo,slug)").order("created_at", { ascending: false });
   let jobsRequest = db.from("legiscast_audio_jobs").select("id,lei_id,structure_id,titulo,status,original_size_bytes,final_path,final_size_bytes,mp3_path,mp3_size_bytes,duracao_segundos,erro_codigo,erro_mensagem,tentativas,created_at,leis(titulo,slug)").order("created_at", { ascending: false }).limit(30);
   let structuresRequest = db.from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page,audio_not_applicable").eq("ativo", true).order("ordem");
   if (lawId !== null) { audiosRequest = audiosRequest.eq("lei_id", lawId); jobsRequest = jobsRequest.eq("lei_id", lawId); structuresRequest = structuresRequest.eq("lei_id", lawId); }
