@@ -74,7 +74,7 @@ export async function articleMappings(slug = "") {
   return (result.data ?? []) as StoredMapping[];
 }
 
-export async function exportArticleMappings(slug = "") {
+export async function exportArticleMappings(slug = "", orderDirection: "asc" | "desc" = "asc") {
   await exigirAdministrador();
   const db = getSupabaseServerClient();
   let request = db.from("questions").select("slug,ordem,assunto,legislacao").eq("ativo", true);
@@ -116,7 +116,7 @@ export async function exportArticleMappings(slug = "") {
       observacao_interna: mapping?.observacao_interna ?? "",
       confianca: mapping?.confianca ?? "",
     };
-  }).sort((left, right) => left.slug.localeCompare(right.slug) || left.ordem.localeCompare(right.ordem));
+  }).sort((left, right) => left.slug.localeCompare(right.slug) || (orderDirection === "desc" ? right.ordem.localeCompare(left.ordem) : left.ordem.localeCompare(right.ordem)));
 }
 
 export async function previewMappingImport(rows: MappingInput[]) {

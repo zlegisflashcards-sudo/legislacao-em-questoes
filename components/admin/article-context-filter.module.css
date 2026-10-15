@@ -1,0 +1,46 @@
+.contextFilter {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(180px, 0.7fr) auto;
+}
+
+.contextFilter > :global(.article-law-combobox),
+.contextFilter > label {
+  min-width: 0;
+}
+
+.contextFilter > :global(.admin-button) {
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .contextFilter.contextFilter {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .contextFilter.contextFilter > label {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .contextFilter.contextFilter > :global(.admin-button) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+.tabs {
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: 12px;
+}
+
+@media (max-width: 700px) {
+  .tabs {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+}

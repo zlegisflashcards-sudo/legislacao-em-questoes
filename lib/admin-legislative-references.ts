@@ -35,7 +35,7 @@ function mapReference(row: Record<string, unknown>): LegislativeReference {
   };
 }
 
-export async function listLegislativeReferences(input: { lawSlug?: string; query?: string; page?: number } = {}) {
+export async function listLegislativeReferences(input: { lawSlug?: string; query?: string; page?: number; orderDirection?: "asc" | "desc" } = {}) {
   await exigirAdministrador();
   const lawSlug = text(input.lawSlug, 160).toLowerCase();
   const query = text(input.query, 120).replace(/[,%()]/g, " ");
@@ -44,7 +44,7 @@ export async function listLegislativeReferences(input: { lawSlug?: string; query
   const db = getSupabaseServerClient();
   let request = db.from("legislative_references")
     .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,updated_at")
-    .order("ordem", { ascending: true })
+    .order("ordem", { ascending: input.orderDirection !== "desc" })
     .range(offset, offset + PAGE_SIZE);
   if (lawSlug) request = request.eq("slug", lawSlug);
   if (query) request = request.or(`slug.ilike.%${query}%,ordem.ilike.%${query}%,identificacao.ilike.%${query}%`);

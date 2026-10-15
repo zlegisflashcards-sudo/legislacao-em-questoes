@@ -15,18 +15,18 @@ const csv = (rows: Row[]) => [
   ...rows.map((row) => [row.slug, row.ordem, row.assunto, row.referencia_amigavel, row.legislacao_consolidada, row.quantidade_questoes, row.conflito, row.incidencia, row.artigo_recente, row.origem_mapeamento, row.observacao_interna, row.confianca].map((value) => JSON.stringify(value ?? "")).join(",")),
 ].join("\n");
 
-export function ArticleMappingCenter({ law }: { law: string }) {
+export function ArticleMappingCenter({ law, orderDirection }: { law: string; orderDirection: "asc" | "desc" }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [filter, setFilter] = useState("");
   const [fileRows, setFileRows] = useState<Record<string, unknown>[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => {
-    const response = await fetch(`/api/admin/artigos/mapeamento?lei=${encodeURIComponent(law)}`);
+    const response = await fetch(`/api/admin/artigos/mapeamento?lei=${encodeURIComponent(law)}&ordem_sort=${orderDirection}`);
     const body = await response.json();
     if (response.ok) setRows(body);
     else setMessage(body.error ?? "Não foi possível carregar o mapeamento.");
-  }, [law]);
+  }, [law, orderDirection]);
   useEffect(() => { void load(); }, [load]);
 
   const visible = useMemo(() => rows.filter((row) => filter === "" || filter === row.incidencia), [rows, filter]);

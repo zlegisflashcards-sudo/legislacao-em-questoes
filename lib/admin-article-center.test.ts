@@ -19,6 +19,7 @@ describe("Central do Artigo administrativa", () => {
     expect(server).toContain("ordem.ilike");
     expect(server).toContain("assunto.ilike");
     expect(index).toContain("listLegislativeReferences({ lawSlug: lawFilter, query");
+    expect(index).toContain("orderDirection");
     expect(index).not.toContain("searchArticleContexts(query, lawFilter)");
     expect(index).toContain('name="lei"');
   });
@@ -34,7 +35,7 @@ describe("Central do Artigo administrativa", () => {
     expect(index).toContain('lei=${encodeURIComponent(lawFilter)}');
     expect(index).toContain("one(params.lei) || one(params.law)");
     expect(index).toContain("&ordem_sort=${orderDirection}");
-    expect(index).toContain('className="article-context-filter"');
+    expect(index).toContain("article-context-filter ${styles.contextFilter}");
     expect(index).toContain('name="lei"');
     expect(index).toContain("filters={conflictFilters}");
     const conflicts = read("components/admin/article-source-conflicts.tsx");
@@ -50,12 +51,34 @@ describe("Central do Artigo administrativa", () => {
     expect(index).not.toContain("const pendingSummary");
   });
 
+  it("compacta o seletor de contexto e mantém as abas roláveis no celular", () => {
+    const styles = read("components/admin/article-context-filter.module.css");
+    expect(index).toContain('from "@/components/admin/article-context-filter.module.css"');
+    expect(index).toContain("article-tabs ${styles.tabs}");
+    expect(styles).toContain("flex: 0 0 auto");
+    expect(styles).toContain("-webkit-overflow-scrolling: touch");
+    expect(styles).toContain("scroll-padding-inline: 12px");
+  });
+
+  it("ordena a Central pelo campo ordem, sem critério temporal", () => {
+    const references = read("lib/admin-legislative-references.ts");
+    const mappings = read("lib/admin-article-mappings.ts");
+    const conflicts = read("lib/admin-article-conflicts-server.ts");
+    expect(index).toContain("Ordenar pelo campo ordem");
+    expect(index).not.toContain('value="recent"');
+    expect(index).toContain('.order("ordem", { ascending: orderDirection === "asc" })');
+    expect(references).toContain('.order("ordem", { ascending: input.orderDirection !== "desc" })');
+    expect(mappings).toContain('orderDirection === "desc" ? right.ordem.localeCompare(left.ordem)');
+    expect(conflicts).toContain('filters.orderDirection === "desc" ? -compared : compared');
+  });
+
   it("centraliza as operações administrativas de LegisBot e comunidade nas abas", () => {
     expect(index).toContain("ArticleLegisBotPanel");
     expect(index).toContain("ArticleCommunityPanel");
     expect(index).toContain("alterarStatusComentario");
     expect(index).toContain("moderateCommunityComment");
-    expect(index).toContain('value="recent">Mais recentes');
+    expect(index).toContain('name="ordem_sort"');
+    expect(index).not.toContain('value="recent"');
     expect(index).toContain("Comentado em {formatCommentDate(item.created_at)}");
   });
 

@@ -30,6 +30,7 @@ export type ArticleConflictFilters = {
   law?: string;
   type?: string;
   page?: number;
+  orderDirection?: "asc" | "desc";
 };
 
 type StructuralBatchTarget = { slug: string; ordem: string };
@@ -147,7 +148,14 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const entries = [
     ...filtered.map((key) => ({ kind: "context" as const, key })),
     ...filteredDuplicates.map((group) => ({ kind: "duplicate" as const, group })),
-  ];
+  ].sort((left, right) => {
+    const identifiers = (entry: typeof left) => entry.kind === "context"
+      ? (() => { const item = legalByKey.get(entry.key) ?? structural.get(entry.key) ?? granularities.get(entry.key)!; return { slug: item.slug, ordem: item.ordem }; })()
+      : { slug: entry.group.questions[0]?.slug ?? "", ordem: entry.group.questions[0]?.ordem ?? "" };
+    const first = identifiers(left); const second = identifiers(right);
+    const compared = first.slug.localeCompare(second.slug) || first.ordem.localeCompare(second.ordem);
+    return filters.orderDirection === "desc" ? -compared : compared;
+  });
   const requestedPage = Number(filters.page);
   const pages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));

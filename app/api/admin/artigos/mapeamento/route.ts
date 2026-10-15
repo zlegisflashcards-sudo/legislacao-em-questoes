@@ -21,8 +21,10 @@ const input = (value: unknown): MappingInput => {
 export async function GET(request: Request) {
   try {
     if (!await obterAdministrador()) return NextResponse.json({ error: "Autenticação administrativa obrigatória." }, { status: 401 });
-    const slug = new URL(request.url).searchParams.get("lei") ?? "";
-    return NextResponse.json(await exportArticleMappings(slug));
+    const searchParams = new URL(request.url).searchParams;
+    const slug = searchParams.get("lei") ?? "";
+    const orderDirection = searchParams.get("ordem_sort") === "desc" ? "desc" : "asc";
+    return NextResponse.json(await exportArticleMappings(slug, orderDirection));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha na exportação." }, { status: 400 });
   }
