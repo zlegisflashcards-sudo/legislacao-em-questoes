@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LegisBotIdentifiers } from "./request-validation";
 import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
-import { parseQuestionOrder, validateQuestionStructure } from "@/lib/question-structure-consistency";
+import { validateQuestionStructure } from "@/lib/question-structure-consistency";
+import { legisBotOrderCandidates } from "./order-candidates";
 
 type QuestionSourceRow = { id: string; slug: string; ordem: string; titulo: string | null; assunto: string | null; legislacao: string | null; updated_at: string };
 type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; legislacao: string | null };
 
 export type LegisBotSource = {
+  referenceId: string | null;
   questionId: string;
   slug: string;
   ordem: string;
@@ -41,24 +43,7 @@ export function createLegisBotSourceSignature(input: Pick<LegisBotSource, "titul
   ])).digest("hex");
 }
 
-function parentOrders(ordem: string) {
-  const parsed = parseQuestionOrder(ordem);
-  if (!parsed) return [ordem];
-  const parts = ordem.trim().split(".");
-  const candidates = [parts.join(".")];
-  const add = (next: string[]) => { const value = next.join("."); if (!candidates.includes(value)) candidates.push(value); };
-  if (parts[5] !== "0") add([...parts.slice(0, 5), "0"]);
-  if (parts[4] !== "00") add([...parts.slice(0, 4), "00", "0"]);
-  if (parts[3] !== "0") add([...parts.slice(0, 3), "0", "00", "0"]);
-  if (parts[2] !== "00") add([parts[0], parts[1], "00", "0", "00", "0"]);
-  if (parts[1] !== "0") add([parts[0], "0", "00", "0", "00", "0"]);
-  return candidates;
-}
-
-/** Hierarquia oficial da Ordem: exato → inciso/parágrafo/artigo superiores. */
-export function legisBotOrderCandidates(ordem: string) {
-  return parentOrders(ordem);
-}
+export { legisBotOrderCandidates } from "./order-candidates";
 
 function buildReferenceSource(reference: ReferenceRow, title: string | null): LegisBotSource {
   const legislacao = sanitizeLegalHtmlCore(reference.legislacao ?? "").trim();
@@ -66,7 +51,7 @@ function buildReferenceSource(reference: ReferenceRow, title: string | null): Le
   const assunto = reference.identificacao.trim();
   const titulo = title?.trim() || reference.slug.toUpperCase();
   if (!legislacao || !promptLegislacao) throw new LegisBotSourceError("incomplete", "A legislação preparada deste dispositivo ainda não está disponível.");
-  const source = { questionId: `reference:${reference.id}`, slug: reference.slug.toUpperCase(), ordem: reference.ordem, titulo, assunto, legislacao, promptLegislacao, signature: "" };
+  const source = { referenceId: reference.id, questionId: `reference:${reference.id}`, slug: reference.slug.toUpperCase(), ordem: reference.ordem, titulo, assunto, legislacao, promptLegislacao, signature: "" };
   return { ...source, signature: createLegisBotSourceSignature(source) };
 }
 
@@ -83,7 +68,7 @@ export async function findLegisBotSource(supabase: SupabaseClient, identifiers: 
 
 /** Retorna a primeira fonte preparada na cadeia de pais, sem tocar nas questões. */
 export async function findHierarchicalLegisBotSource(supabase: SupabaseClient, identifiers: LegisBotIdentifiers) {
-  const candidates = parentOrders(identifiers.ordem);
+  const candidates = legisBotOrderCandidates(identifiers.ordem);
   const result = await supabase.from("legislative_references").select("id,slug,ordem,identificacao,legislacao").eq("slug", identifiers.slug.toLowerCase()).in("ordem", candidates);
   if (result.error) throw new LegisBotSourceError("unavailable", "Não foi possível consultar a base legislativa.");
   const byOrder = new Map((result.data ?? []).map((row) => [String(row.ordem), row as ReferenceRow]));
@@ -111,7 +96,7 @@ export function resolveLegisBotSourceRows(rows: QuestionSourceRow[], identifiers
   const titulo = first.titulo?.trim() || fallbackTitle?.trim() || "";
   const assunto = first.assunto?.trim() || "";
   if (!titulo || !assunto || !promptLegislacao) throw new LegisBotSourceError("incomplete", "O flashcard não possui todos os dados necessários para o LegisBot.");
-  const source = { questionId: first.id, slug: identifiers.slug, ordem: identifiers.ordem, titulo, assunto, legislacao, promptLegislacao, signature: "" };
+  const source = { referenceId: null, questionId: first.id, slug: identifiers.slug, ordem: identifiers.ordem, titulo, assunto, legislacao, promptLegislacao, signature: "" };
   const subjects = new Set(rows.map((row) => normalizedLegisBotSourceText(row.assunto ?? "")));
   const laws = new Set(rows.map((row) => normalizedLegisBotLegislation(row.legislacao ?? "")));
   if (subjects.size > 1 || laws.size > 1) throw new LegisBotSourceError("conflict", "Este conteúdo está temporariamente indisponível enquanto passa por revisão.");

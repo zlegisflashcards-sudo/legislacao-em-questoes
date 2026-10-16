@@ -5,6 +5,7 @@ import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
+import { legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/legislative-document-import";
 
 export { referenceCandidatesFromQuestions, referencesNotYetStored, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 
@@ -102,6 +103,74 @@ export async function seedLegislativeReferences(lawSlug: string) {
     from += batch;
   }
   return { identified: inserted };
+}
+
+/**
+ * Reinicia somente a base editorial da lei. Questões e LegisBots são
+ * independentes desses registros e permanecem intactos para uma nova identificação.
+ */
+export async function clearLegislativeReferences(lawSlug: string) {
+  const user = await exigirAdministrador();
+  const slug = text(lawSlug, 160).toLowerCase();
+  if (!slug) throw new Error("Escolha uma legislação antes de limpar a base.");
+  const db = getSupabaseServerClient();
+  const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
+  if (law.error || !law.data) throw new Error("Legislação não encontrada.");
+  const existing = await db.from("legislative_references").select("id", { count: "exact", head: true }).eq("lei_id", law.data.id).eq("slug", slug);
+  if (existing.error) throw new Error("Não foi possível verificar a base legislativa.");
+  const removed = await db.from("legislative_references").delete().eq("lei_id", law.data.id).eq("slug", slug);
+  if (removed.error) throw new Error("Não foi possível limpar a base legislativa.");
+  const audit = await db.rpc("admin_comercial_auditar", {
+    p_ator_user_id: user.id, p_acao: "excluir", p_entidade: "base_legislativa", p_entidade_id: String(law.data.id),
+    p_anterior: { slug, referencias: existing.count ?? 0 }, p_posterior: {},
+    p_detalhes: { origem: "central_artigo_limpar_referencias", preservados: ["questions", "legisbot_comentarios"] },
+  });
+  if (audit.error) console.error("Falha ao auditar limpeza da base legislativa", { slug, code: audit.error.code });
+  return { removed: existing.count ?? 0 };
+}
+
+async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8Array) {
+  const slug = text(lawSlug, 160).toLowerCase();
+  if (!slug) throw new Error("Escolha uma legislação antes de importar o documento.");
+  const parsed = parseLegislativeDocument(legislativeDocumentParagraphs(name, bytes));
+  if (!parsed.references.length) throw new Error("Nenhuma referência estrutural foi encontrada no documento.");
+  const db = getSupabaseServerClient();
+  const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
+  if (law.error || !law.data) throw new Error("Legislação não encontrada.");
+  const stored = await db.from("legislative_references").select("ordem,legislacao").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem));
+  if (stored.error) throw new Error("Não foi possível verificar a base legislativa.");
+  const existing = new Map((stored.data ?? []).map((row) => [String(row.ordem), typeof row.legislacao === "string" && row.legislacao.trim().length > 0]));
+  const candidates = parsed.references.map((reference) => ({ ...reference, operation: existing.has(reference.ordem) ? existing.get(reference.ordem) ? "preservar" as const : "preencher" as const : "criar" as const }));
+  return { slug, lawId: Number(law.data.id), references: candidates, rejected: parsed.rejected };
+}
+
+export async function previewLegislativeDocumentImport(input: { lawSlug: string; name: string; bytes: Uint8Array }) {
+  await exigirAdministrador();
+  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes);
+  return { ...preview, sample: preview.references.slice(0, 20) };
+}
+
+export async function importLegislativeDocument(input: { lawSlug: string; name: string; bytes: Uint8Array; expected: unknown }) {
+  await exigirAdministrador();
+  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes);
+  const expected = Array.isArray(input.expected) ? input.expected : [];
+  const current = preview.references.map(({ ordem, identification, legislation, operation }) => ({ ordem, identification, legislation, operation }));
+  if (JSON.stringify(expected) !== JSON.stringify(current)) throw new Error("O documento ou a base mudaram desde a prévia. Gere uma nova prévia.");
+  const db = getSupabaseServerClient();
+  let created = 0; let filled = 0; let preserved = 0;
+  for (const reference of preview.references) {
+    if (reference.operation === "preservar") { preserved += 1; continue; }
+    if (reference.operation === "criar") {
+      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString() }).select("id").maybeSingle();
+      if (inserted.error || !inserted.data) throw new Error("Não foi possível criar uma referência do documento.");
+      created += 1;
+    } else {
+      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString() }).eq("lei_id", preview.lawId).eq("ordem", reference.ordem).is("legislacao", null).select("id").maybeSingle();
+      if (updated.error) throw new Error("Não foi possível preencher uma referência do documento.");
+      if (updated.data) filled += 1; else preserved += 1;
+    }
+  }
+  return { created, filled, preserved, rejected: preview.rejected.length };
 }
 
 /**

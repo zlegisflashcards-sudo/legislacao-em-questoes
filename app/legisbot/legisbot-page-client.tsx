@@ -15,7 +15,7 @@ import {
   type LegisBotHighlight,
 } from "@/lib/legisbot-highlights";
 
-const fallback = { titulo: "Legislação não informada", assunto: "Artigo não informado" };
+const fallback = { titulo: "Legislação não informada", assunto: "Dispositivo indisponível" };
 const SLUG_VALIDO = /^[A-Z0-9_-]{1,50}$/;
 const ORDEM_VALIDA = /^[A-Za-z0-9._-]{1,20}$/;
 
@@ -159,7 +159,9 @@ export default function LegisBotPageClient({
   const [resolvedArticleRecent, setResolvedArticleRecent] = useState(articleRecent);
 
   const titulo = dadosLegislacao.titulo || fallback.titulo;
-  const assunto = dadosLegislacao.assunto || fallback.assunto;
+  // O cabeçalho é substituído pelos dados canônicos retornados pela API. Não
+  // rotulamos uma falha de resolução como se o artigo nunca tivesse sido enviado.
+  const assunto = dadosLegislacao.assunto || (answerState === "loading" ? "Identificando dispositivo…" : fallback.assunto);
   const textoLegal = legalHtmlToPlainText(dadosLegislacao.legislacao);
   const slugNormalizado = slug.trim().toUpperCase();
   const ordemNormalizada = ordem.trim();

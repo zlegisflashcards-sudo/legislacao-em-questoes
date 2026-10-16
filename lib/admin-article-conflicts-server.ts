@@ -13,7 +13,7 @@ import {
   type LegisBotConflictGroup,
   type LegisBotConflictQuestion,
 } from "@/lib/legisbot/source-conflicts";
-import { hasIncisoGranularityPending, validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
+import { canonicalizeQuestionLawReference, hasIncisoGranularityPending, validateQuestionStructure, type StructuralValidation } from "@/lib/question-structure-consistency";
 import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
 import { groupDuplicateQuestionStatements } from "@/lib/admin-question-management";
@@ -38,6 +38,7 @@ type StructuralBatchCandidate = StructuralBatchTarget & { expectedOrder: string;
 type GranularityDecision = "paragrafo_inteiro" | "recorte_inciso";
 type GranularityBatchCandidate = StructuralBatchTarget & { questionIds: string[] };
 type ReferenceCleanupCandidate = { id: string; slug: string; ordem: string; before: string; after: string };
+type ShortNameStandardizationCandidate = ReferenceCleanupCandidate;
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
 
@@ -391,6 +392,65 @@ export async function applyArticleReferenceCleanup(input: { law: unknown; expect
     }
   }
   return { cleaned, failed, law: referenceCleanupLaw(input.law) || null };
+}
+
+function shortNameStandardizationLaw(value: unknown) {
+  const law = referenceCleanupLaw(value);
+  if (!law) throw new AdminArticleConflictError(400, "Escolha uma lei antes de padronizar o nome curto.");
+  return law;
+}
+
+async function shortNameStandardizationCandidates(rawLaw: unknown) {
+  const law = shortNameStandardizationLaw(rawLaw);
+  const laws = await lawMap();
+  const shortName = laws.get(law.toUpperCase())?.shortName?.trim();
+  if (!shortName) throw new AdminArticleConflictError(422, "Esta lei não possui nome curto cadastrado para usar como referência.");
+  const rows = await loadQuestions(true);
+  const candidates = rows.flatMap((row): ShortNameStandardizationCandidate[] => {
+    if (row.slug.toLocaleLowerCase("pt-BR") !== law) return [];
+    const validation = validateQuestionStructure({ ...row, lawShortName: shortName });
+    if (!validation.differences?.some((difference) => difference.startsWith("lei divergente"))) return [];
+    const before = row.assunto ?? "";
+    const after = canonicalizeQuestionLawReference(before, shortName);
+    return after ? [{ id: row.id, slug: row.slug.toUpperCase(), ordem: row.ordem, before, after }] : [];
+  });
+  return { law, shortName, candidates };
+}
+
+export async function previewArticleShortNameStandardization(rawLaw: unknown) {
+  await requireAdmin();
+  const preview = await shortNameStandardizationCandidates(rawLaw);
+  return { ...preview, sample: preview.candidates.slice(0, 12) };
+}
+
+export async function applyArticleShortNameStandardization(input: { law: unknown; expected: unknown; confirmation: string }) {
+  const user = await requireAdmin();
+  if (input.confirmation !== "PADRONIZAR NOME") throw new AdminArticleConflictError(422, "Digite PADRONIZAR NOME para confirmar.");
+  const preview = await shortNameStandardizationCandidates(input.law);
+  const expected = Array.isArray(input.expected) ? input.expected : [];
+  const current = preview.candidates.map(({ id, before, after }) => ({ id, before, after }));
+  if (JSON.stringify(expected) !== JSON.stringify(current)) throw new AdminArticleConflictError(409, "Os assuntos mudaram desde a prévia. Gere uma nova prévia.");
+  const db = getSupabaseServerClient();
+  const failed: Array<{ id: string; reason: string }> = [];
+  let standardized = 0;
+  for (const candidate of preview.candidates) {
+    try {
+      const updated = await db.from("questions").update({ assunto: candidate.after }).eq("id", candidate.id).eq("ativo", true).eq("assunto", candidate.before).select("id").maybeSingle();
+      if (updated.error) throw new Error("Não foi possível salvar o assunto.");
+      if (!updated.data) throw new Error("O assunto mudou durante a padronização.");
+      const audit = await db.rpc("admin_comercial_auditar", {
+        p_ator_user_id: user.id, p_acao: "atualizar", p_entidade: "questao", p_entidade_id: candidate.id,
+        p_anterior: { assunto: candidate.before, slug: candidate.slug, ordem: candidate.ordem },
+        p_posterior: { assunto: candidate.after, slug: candidate.slug, ordem: candidate.ordem },
+        p_detalhes: { origem: "central_artigo_padronizacao_nome_curto", nome_curto: preview.shortName },
+      });
+      if (audit.error) console.error("Falha ao auditar padronização do nome curto", { questionId: candidate.id, code: audit.error.code });
+      standardized += 1;
+    } catch (error) {
+      failed.push({ id: candidate.id, reason: error instanceof Error ? error.message : "Não foi possível padronizar este assunto." });
+    }
+  }
+  return { standardized, failed, law: preview.law, shortName: preview.shortName };
 }
 
 export async function getArticleSourceConflict(rawSlug: string, rawOrdem: string) {

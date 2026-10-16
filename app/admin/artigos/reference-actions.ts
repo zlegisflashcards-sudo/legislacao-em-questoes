@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { importQuestionLegislationToReferences, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
+import { clearLegislativeReferences, importQuestionLegislationToReferences, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -18,6 +18,14 @@ export async function importQuestionLegislation(formData: FormData) {
   const result = await importQuestionLegislationToReferences(slug);
   revalidatePath("/admin/artigos");
   redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&importacao=${encodeURIComponent(`${result.imported},${result.skippedExisting},${result.skippedConflicts},${result.skippedEmpty}`)}`);
+}
+
+export async function clearPreparedLegislativeReferences(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  if (value(formData, "confirmation") !== "LIMPAR BASE") throw new Error("Digite LIMPAR BASE para confirmar a limpeza.");
+  const result = await clearLegislativeReferences(slug);
+  revalidatePath("/admin/artigos");
+  redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&base=limpa&removidas=${result.removed}`);
 }
 
 export async function savePreparedLegislativeReference(formData: FormData) {

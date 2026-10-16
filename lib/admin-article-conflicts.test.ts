@@ -200,4 +200,15 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Limpar HTML dos assuntos");
     expect(list).toContain("Pergunta, justificativa, legislação, respostas e ordem não serão alteradas.");
   });
+
+  it("padroniza em lote apenas o nome curto da mesma lei, com prévia e sem tocar na Ordem", () => {
+    expect(server).toContain("previewArticleShortNameStandardization");
+    expect(server).toContain("applyArticleShortNameStandardization");
+    expect(server).toContain("canonicalizeQuestionLawReference");
+    expect(server).toContain('input.confirmation !== "PADRONIZAR NOME"');
+    expect(api).toContain('body.action === "previsualizar_padronizacao_nome_curto"');
+    expect(api).toContain('body.action === "aplicar_padronizacao_nome_curto"');
+    expect(list).toContain("Padronizar nome curto");
+    expect(list).toContain("Somente referências com o mesmo número e ano da lei entram no lote.");
+  });
 });

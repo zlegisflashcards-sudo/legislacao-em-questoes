@@ -27,10 +27,12 @@ describe("artigos comentados no LegisCast", () => {
     expect(component).toContain("Nenhum artigo confiável encontrado.");
   });
 
-  it("abre o modal oficial no artigo correto sem navegação full-page", () => {
+  it("usa a âncora permanente quando disponível e preserva o modal como fallback", () => {
     expect(component).toContain("columns-1");
     expect(component).toContain("lg:columns-3");
     expect(component).toContain("setSelectedComment(comment)");
+    expect(component).toContain("continuousLegisBotHref(comment.slug, comment.reference_id)");
+    expect(component).toContain("comment.reference_id ?");
     expect(component).toContain("<LegisBotOverlay");
     expect(component).toContain("slug={selectedComment.slug}");
     expect(component).toContain("question={selectedComment}");

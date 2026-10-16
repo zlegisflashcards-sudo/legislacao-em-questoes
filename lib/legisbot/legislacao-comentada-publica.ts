@@ -14,6 +14,7 @@ export type LegislacaoComentadaPublica = {
   comentario: string | null;
   incidencia: "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
   artigo_recente: boolean;
+  reference_id: string | null;
 };
 
 type QuestionContextRow = {
@@ -95,6 +96,7 @@ export function consolidarLegislacaoComentadaConfiavel(
         comentario: commentByContext.get(`${source.slug.toUpperCase()}\u0000${source.ordem}`) ?? null,
         incidencia: mapping?.incidencia ?? incidenceFromQuestionCount(group.length),
         artigo_recente: mapping?.artigo_recente ?? false,
+        reference_id: null,
       }];
     })
     .sort((a, b) => a.ordem.localeCompare(b.ordem));
@@ -121,10 +123,21 @@ export async function buscarLegislacaoComentadaPublicaPorSlug(slug: string) {
     });
     return [];
   }
-  return consolidarLegislacaoComentadaConfiavel(
+  const consolidated = consolidarLegislacaoComentadaConfiavel(
     (questionsResult.data ?? []) as QuestionContextRow[],
     (commentsResult.data ?? []) as PublishedCommentRow[],
     lawResult.data?.titulo ? String(lawResult.data.titulo) : "",
     mappingsResult.error ? [] : (mappingsResult.data ?? []) as ArticleMappingRow[],
   );
+  const { getContinuousReadingModel } = await import("./continuous-reading-server");
+  const model = await getContinuousReadingModel(slugNormalizado).catch(() => null);
+  if (!model?.integrity.readingAvailable) return consolidated;
+  const resolutionByQuestion = new Map(model.integrity.resolutions.map((resolution) => [resolution.questionId, resolution]));
+  const questions = (questionsResult.data ?? []) as QuestionContextRow[];
+  return consolidated.map((article) => {
+    const targets = new Set(questions
+      .filter((question) => question.slug.toUpperCase() === article.slug && question.ordem === article.ordem)
+      .flatMap((question) => resolutionByQuestion.get(question.id)?.referenceId ? [resolutionByQuestion.get(question.id)!.referenceId!] : []));
+    return { ...article, reference_id: targets.size === 1 ? [...targets][0] : null };
+  });
 }

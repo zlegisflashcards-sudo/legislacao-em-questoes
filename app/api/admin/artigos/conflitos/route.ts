@@ -5,8 +5,10 @@ import {
   applyArticleGranularityBatch,
   applyArticleStructuralBatch,
   applyArticleReferenceCleanup,
+  applyArticleShortNameStandardization,
   deactivateArticleConflictQuestion,
   previewArticleReferenceCleanup,
+  previewArticleShortNameStandardization,
   previewArticleGranularityBatch,
   previewArticleStructuralBatch,
   previewArticleSourceStandardization,
@@ -61,6 +63,12 @@ export async function POST(request: Request) {
     }
     if (body.action === "aplicar_limpeza_assuntos") {
       return NextResponse.json(await applyArticleReferenceCleanup({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? "") }), { headers });
+    }
+    if (body.action === "previsualizar_padronizacao_nome_curto") {
+      return NextResponse.json(await previewArticleShortNameStandardization(body.law), { headers });
+    }
+    if (body.action === "aplicar_padronizacao_nome_curto") {
+      return NextResponse.json(await applyArticleShortNameStandardization({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? "") }), { headers });
     }
     throw new AdminArticleConflictError(400, "Ação de conflito inválida.");
   } catch (error) {

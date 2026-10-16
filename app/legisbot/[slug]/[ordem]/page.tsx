@@ -5,6 +5,9 @@ import type { LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 import { normalizeLegisBotIdentifiers } from "@/lib/legisbot/request-validation";
 import { findHierarchicalLegisBotSource } from "@/lib/legisbot/source";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { redirect } from "next/navigation";
+import { continuousBlockAnchor } from "@/lib/legisbot/continuous-reading-core";
+import { resolveContinuousReference } from "@/lib/legisbot/continuous-reading-server";
 
 type LegisBotPageProps = {
   params: Promise<{
@@ -36,6 +39,18 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
   // `aba` existia nos links antigos do Anki. Os dados de conteúdo presentes em
   // query strings legadas são deliberadamente ignorados, mas preservamos a aba.
   const initialTab = abaInicial(primeiroValor(query.tab) || primeiroValor(query.aba));
+  const continuousReference = await resolveContinuousReference(slug, ordem).catch((error) => {
+    console.error("[LegisBot] Falha ao verificar a leitura contínua; mantendo a página compatível.", {
+      slug,
+      ordem,
+      tipo: error instanceof Error ? error.name : "unknown",
+    });
+    return null;
+  });
+  if (continuousReference) {
+    const tab = initialTab === "legisbot" ? "" : `?tab=${encodeURIComponent(initialTab)}`;
+    redirect(`/legisbot/${encodeURIComponent(slug)}${tab}#${continuousBlockAnchor(continuousReference.id)}`);
+  }
   const source = await (async () => {
     try {
       return await findHierarchicalLegisBotSource(getSupabaseServerClient(), normalizeLegisBotIdentifiers(slug, ordem));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedQuestionOrder, hasIncisoGranularityPending, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
+import { canonicalizeQuestionLawReference, expectedQuestionOrder, hasIncisoGranularityPending, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
 
 describe("validador estrutural Assunto × Ordem", () => {
   const validate = (assunto: string, ordem: string, lawShortName?: string) => validateQuestionStructure({ assunto, ordem, lawShortName });
@@ -55,6 +55,11 @@ describe("validador estrutural Assunto × Ordem", () => {
     expect(validate("Art. 11, Lei 8.113/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["lei divergente: esperado Lei 8.112/90"]) });
     expect(validate("Art. 11, CF", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["referência divergente: esperado Lei 8.112/90"]) });
     expect(validate("Lei 8.113/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["lei divergente: esperado Lei 8.112/90"]) });
+  });
+  it("padroniza em lote apenas variações seguras do nome curto da mesma lei", () => {
+    expect(canonicalizeQuestionLawReference("Art. 1º, Lei nº 11.342/2020", "Lei 11.342/2020, MA")).toBe("Art. 1º, Lei 11.342/2020, MA");
+    expect(canonicalizeQuestionLawReference("Art. 1º, Lei 11.343/2020", "Lei 11.342/2020, MA")).toBeNull();
+    expect(canonicalizeQuestionLawReference("Art. 1º, CF", "Lei 11.342/2020, MA")).toBeNull();
   });
   it("mantém a divergência de artigo independente da referência correta da lei", () => {
     expect(validate("Art. 12, Lei 8.112/90", "0011.0.00.0.00.0", "Lei 8.112/90")).toMatchObject({ status: "conflict", differences: expect.arrayContaining(["artigo na ordem é 11"]) });

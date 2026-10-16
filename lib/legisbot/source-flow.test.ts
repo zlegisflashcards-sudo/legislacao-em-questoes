@@ -110,7 +110,8 @@ describe("fonte canônica do LegisBot", () => {
     expect(template).not.toMatch(/encodeURIComponent\((titulo|assunto|legislacao)\)/);
     expect(template).not.toContain("?titulo=");
     expect(template).toContain("Aprofundar neste trecho da lei");
-    expect(template).toContain("botaoLegisbot.href = hrefBase");
+    expect(template).toContain("stableTarget");
+    expect(template).toContain("? stableTarget : hrefBase");
     expect(template).not.toContain("data-aba=");
   });
 

@@ -255,12 +255,13 @@ function alternarComentarioProfessor() {
 
   var slug = '{{slug}}'.trim();
   var ordem = '{{ordem}}'.trim();
+  var stableTarget = '{{legisbotUrl}}'.trim();
   var base = 'https://www.legisflashcards.com.br/legisbot/';
   var hrefBase = base
     + encodeURIComponent(slug)
     + '/'
     + encodeURIComponent(ordem);
 
-  botaoLegisbot.href = hrefBase;
+  botaoLegisbot.href = (stableTarget && stableTarget.charAt(0) !== '{') ? stableTarget : hrefBase;
 })();
 </script>

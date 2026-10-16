@@ -39,6 +39,15 @@ describe("base legislativa persistente", () => {
     expect(service).toContain("importQuestionLegislationToReferences");
     expect(service).toContain("if (versions.size !== 1)");
     expect(service).toContain('.is("legislacao", null)');
-    expect(page).toContain("Importar recortes das questões para a base");
+    expect(page).toContain("Importar recortes das questões");
+  });
+
+  it("permite reiniciar a base da lei sem apagar questões ou LegisBots", () => {
+    const source = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    expect(source).toContain("clearLegislativeReferences");
+    expect(source).toContain('from("legislative_references").delete()');
+    expect(source).toContain('preservados: ["questions", "legisbot_comentarios"]');
+    expect(source).not.toContain('from("questions").delete()');
+    expect(source).not.toContain('from("legisbot_comentarios").delete()');
   });
 });

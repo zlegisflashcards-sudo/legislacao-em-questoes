@@ -6,7 +6,7 @@ import { ankiLastLegislativeUpdate } from "./law-anki-legislative-update";
 
 // Os templates fazem parte do projeto para também existirem no runtime serverless.
 const templateDirectory = join(process.cwd(), "public", "anki-templates");
-const fieldNames = ["pergunta", "resposta", "justificativa", "assunto", "legislação", "titulo", "TotalArtigos", "ordem", "slug", "ultimaAlteracaoLegislativa", "IDQuestao"];
+const fieldNames = ["pergunta", "resposta", "justificativa", "assunto", "legislação", "titulo", "TotalArtigos", "ordem", "slug", "ultimaAlteracaoLegislativa", "IDQuestao", "legisbotUrl"];
 
 type ExportLaw = { slug: string; titulo: string; ultima_alteracao_referencia?: string | null; houve_alteracao_legislativa?: boolean | null };
 type ExportQuestion = { id: string; structure_id: number | null; pergunta: string; resposta: string; justificativa?: string | null; assunto?: string | null; legislacao?: string | null; titulo?: string | null; total_artigos?: number | null; ordem?: string | null; slug?: string | null; ultima_alteracao_legislativa?: string | null; created_at?: string | null };
@@ -27,7 +27,7 @@ function structurePath(structure: ExportStructure[], structureId: number | null)
   return path;
 }
 
-export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], structure: ExportStructure[], options?: { fileName?: string }) {
+export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], structure: ExportStructure[], options?: { fileName?: string; legisbotDestinations?: ReadonlyMap<string, string> }) {
   const template = template4();
   const notetype = new Notetype({ id: stableAnkiId("legis-certo-errado-4"), name: "1 - certo ou errado 4.0", fields: fieldNames.map((name) => ({ name })), css: template.css, templates: [{ name: "Certo ou Errado", questionFormat: template.front, answerFormat: template.back }] });
   const decks = new Map<string, Deck>();
@@ -44,7 +44,7 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
   for (const question of [...questions].sort((a, b) => String(a.ordem).localeCompare(String(b.ordem)) || String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || a.id.localeCompare(b.id))) {
     const pedagogicalFields = [question.pergunta, question.resposta, question.justificativa ?? "", question.assunto ?? "", question.legislacao ?? ""];
     if (pedagogicalFields.some((value) => /<img\b|\[sound:/i.test(value))) throw new Error(`A questão ${question.ordem ?? question.id} contém mídia. A exportação de mídia ainda não é suportada.`);
-    deckFor(structurePath(structure, question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, question.total_artigos?.toString() ?? "", question.ordem ?? "", question.slug ?? law.slug, lastLegislativeUpdate, question.id] }));
+    deckFor(structurePath(structure, question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, question.total_artigos?.toString() ?? "", question.ordem ?? "", question.slug ?? law.slug, lastLegislativeUpdate, question.id, options?.legisbotDestinations?.get(question.id) ?? ""] }));
   }
 
   const packageFile = new Package();
@@ -62,7 +62,8 @@ export async function exportLawApkg(slug: string) {
   const { listAdminQuestions } = await import("./admin-questoes-server");
   const { law, questions, structure, questionCount } = await listAdminQuestions(slug);
   if (!questions.length) throw new Error("Esta lei ainda não possui questões disponíveis para exportação.");
-  const exported = await buildLawApkg(law, questions, structure);
+  const { getContinuousQuestionDestinations } = await import("./legisbot/continuous-reading-server");
+  const exported = await buildLawApkg(law, questions, structure, { legisbotDestinations: await getContinuousQuestionDestinations(slug) });
   return { ...exported, found: questionCount, exported: exported.notes };
 }
 
@@ -76,7 +77,8 @@ export async function exportLawContentApkg(slug: string) {
   const { listQuestionContent } = await import("./admin-questoes-server");
   const { law, questions, structure } = await listQuestionContent(slug);
   if (!questions.length) throw new Error("Esta lei ainda não possui questões disponíveis para exportação.");
-  return buildLawApkg(law, questions, structure);
+  const { getContinuousQuestionDestinations } = await import("./legisbot/continuous-reading-server");
+  return buildLawApkg(law, questions, structure, { legisbotDestinations: await getContinuousQuestionDestinations(slug) });
 }
 
 export { ankiApkgFileName as apkgFileName, stableAnkiGuid as stableGuid } from "./anki-apkg-identity";

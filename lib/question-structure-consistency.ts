@@ -14,6 +14,29 @@ function lawReferenceDifference(subject: string | null | undefined, lawShortName
   if (!expected || ` ${actual} `.includes(` ${expected} `)) return null;
   return /\blei\b/i.test(subject ?? "") ? `lei divergente: esperado ${expectedLawReference}` : `referência divergente: esperado ${expectedLawReference}`;
 }
+
+type LawReferenceMatch = { text: string; key: string };
+
+function lawReferenceMatch(value: string | null | undefined): LawReferenceMatch | null {
+  const match = value?.match(/\blei(?:\s+estadual)?\s*(?:n\s*[º°o.]?\s*)?(\d{1,3}(?:\.\d{3})*|\d+)\s*\/\s*(\d{2,4})(?:\s*[-,]\s*[a-z]{2})?/i);
+  if (!match) return null;
+  return { text: match[0], key: `${match[1].replace(/\./g, "")}/${match[2]}` };
+}
+
+/**
+ * Sugere a forma cadastrada do nome curto apenas quando a referência numérica
+ * já é a mesma. Nunca corrige uma lei realmente diferente de forma automática.
+ */
+export function canonicalizeQuestionLawReference(subject: string | null | undefined, lawShortName: string | null | undefined) {
+  const before = subject?.trim();
+  const expected = lawShortName?.trim();
+  if (!before || !expected) return null;
+  const currentReference = lawReferenceMatch(before);
+  const expectedReference = lawReferenceMatch(expected);
+  if (!currentReference || !expectedReference || currentReference.key !== expectedReference.key) return null;
+  const after = before.replace(currentReference.text, expected);
+  return after === before ? null : after;
+}
 const romanValues: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
 
 function romanToNumber(value: string) { let result = 0; const letters = value.toUpperCase().split(""); for (let index = 0; index < letters.length; index += 1) { const current = romanValues[letters[index]]; const next = romanValues[letters[index + 1]] ?? 0; if (!current) return null; result += current < next ? -current : current; } return result || null; }
