@@ -5,11 +5,12 @@ import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-leg
 import { createLegisBotSourceSignature, LegisBotSourceError, legisBotOrderCandidates, resolveLegisBotSourceRows } from "./source";
 
 describe("fonte canônica do LegisBot", () => {
-  it("preserva HTML estrutural seguro e remove conteúdo perigoso e atributos visuais", () => {
-    const safe = sanitizeLegalHtmlCore('<table class="anki"><tr onclick="x()"><th style="color:red">Teoria aplicada</th><td>Equivalência</td></tr></table><script>alert(1)</script><iframe src="x"></iframe>');
+  it("preserva HTML estrutural e formatação editorial segura, removendo conteúdo perigoso", () => {
+    const safe = sanitizeLegalHtmlCore('<table class="anki"><tr onclick="x()"><th style="color:red;position:fixed">Teoria aplicada</th><td><span style="font-weight:700;color:#123456">Equivalência</span></td></tr></table><script>alert(1)</script><iframe src="x"></iframe>');
     expect(safe).toContain("<table>");
-    expect(safe).toContain("<th>Teoria aplicada</th>");
-    expect(safe).not.toMatch(/script|iframe|onclick|style=|class=/i);
+    expect(safe).toContain('<th style="color:red">Teoria aplicada</th>');
+    expect(safe).toContain('font-weight:700');
+    expect(safe).not.toMatch(/script|iframe|onclick|position:fixed|class=/i);
   });
 
   it("converte tabela, parágrafos, listas, incisos e alíneas em texto estruturado para o prompt", () => {
@@ -111,7 +112,9 @@ describe("fonte canônica do LegisBot", () => {
     expect(template).not.toContain("?titulo=");
     expect(template).toContain("Aprofundar neste trecho da lei");
     expect(template).toContain("stableTarget");
-    expect(template).toContain("? stableTarget : hrefBase");
+    expect(template).toContain("stableTarget.indexOf('#bloco-') === -1");
+    expect(template).toContain("botaoLegisbot.hidden = true");
+    expect(template).not.toContain("hrefBase");
     expect(template).not.toContain("data-aba=");
   });
 

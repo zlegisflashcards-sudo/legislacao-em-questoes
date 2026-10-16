@@ -2,15 +2,30 @@ import sanitizeHtml from "sanitize-html";
 import { decodeHtmlEntities } from "../legisbot-community";
 
 const ALLOWED_TAGS = [
-  "br", "b", "strong", "i", "em", "mark", "p", "div", "ul", "ol", "li",
+  "br", "b", "strong", "i", "em", "u", "mark", "span", "p", "div", "ul", "ol", "li",
   "blockquote", "table", "thead", "tbody", "tr", "th", "td", "section", "article",
   "h1", "h2", "h3", "h4", "h5", "h6",
 ] as const;
 
+const SAFE_COLOR = [/^#[0-9a-f]{3,8}$/i, /^rgb\([\d\s,.%]+\)$/i, /^rgba\([\d\s,.%]+\)$/i, /^[a-z]+$/i];
+
 export function sanitizeLegalHtmlCore(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: [...ALLOWED_TAGS],
-    allowedAttributes: { th: ["scope", "colspan", "rowspan"], td: ["colspan", "rowspan"] },
+    allowedAttributes: {
+      span: ["style"], p: ["style"], div: ["style"], mark: ["style"],
+      th: ["scope", "colspan", "rowspan", "style"], td: ["colspan", "rowspan", "style"],
+    },
+    allowedStyles: {
+      "*": {
+        color: SAFE_COLOR,
+        "background-color": SAFE_COLOR,
+        "font-weight": [/^(?:normal|bold|bolder|lighter|[1-9]00)$/i],
+        "font-style": [/^(?:normal|italic|oblique)$/i],
+        "text-decoration": [/^(?:none|underline|line-through)(?:\s+(?:underline|line-through))?$/i],
+        "text-align": [/^(?:left|right|center|justify)$/i],
+      },
+    },
     allowedSchemes: [],
     nonTextTags: ["script", "style", "textarea", "option", "noscript", "iframe", "object", "embed", "form"],
     disallowedTagsMode: "discard",

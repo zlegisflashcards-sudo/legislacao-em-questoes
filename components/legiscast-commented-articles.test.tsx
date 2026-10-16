@@ -27,16 +27,14 @@ describe("artigos comentados no LegisCast", () => {
     expect(component).toContain("Nenhum artigo confiável encontrado.");
   });
 
-  it("usa a âncora permanente quando disponível e preserva o modal como fallback", () => {
+  it("usa a âncora permanente quando disponível e não inventa destino no fallback", () => {
     expect(component).toContain("columns-1");
     expect(component).toContain("lg:columns-3");
-    expect(component).toContain("setSelectedComment(comment)");
     expect(component).toContain("continuousLegisBotHref(comment.slug, comment.reference_id)");
     expect(component).toContain("comment.reference_id ?");
-    expect(component).toContain("<LegisBotOverlay");
-    expect(component).toContain("slug={selectedComment.slug}");
-    expect(component).toContain("question={selectedComment}");
-    expect(component).toContain("onClose={() => setSelectedComment(null)}");
+    expect(component).toContain('aria-disabled="true"');
+    expect(component).toContain("Destino editorial ainda não definido");
+    expect(component).not.toContain("<LegisBotOverlay");
     expect(component).not.toContain("next/link");
     expect(component).not.toContain("window.location");
     expect(component).toContain("Ver mais");
@@ -49,7 +47,6 @@ describe("artigos comentados no LegisCast", () => {
     expect(overlay).toContain("embedded");
     expect(overlay).toContain("onClose={onClose}");
     expect(overlay).toContain("showArticleQuestions={Boolean(activeArticle.ordem)}");
-    expect(component).toContain("recorteId={recorteId}");
     expect(overlay).toContain('event.key === "Escape"');
     expect(component).toContain("data-recorte-id={recorteId ?? undefined}");
   });
@@ -68,7 +65,6 @@ describe("artigos comentados no LegisCast", () => {
   });
 
   it("oferece a mesma navegação entre artigos no painel compartilhado", () => {
-    expect(component).toContain("articles={comments}");
     expect(studyClient).toContain("function useLegisBotArticleNavigation");
     expect(studyClient).toContain("articles={navigationArticles.length ? navigationArticles");
     expect(overlay).toContain("const previousArticle");

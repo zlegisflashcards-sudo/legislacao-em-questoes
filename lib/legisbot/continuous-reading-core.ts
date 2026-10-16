@@ -25,7 +25,7 @@ export type ManualCommentTarget = {
 
 export type QuestionReferenceResolution = {
   questionId: string;
-  status: "manual" | "hierarchy" | "missing" | "invalid_manual" | "invalid_order";
+  status: "manual" | "hierarchy" | "missing" | "ambiguous" | "invalid_manual" | "invalid_order";
   referenceId: string | null;
   ordem: string | null;
   reason: string | null;
@@ -73,7 +73,8 @@ export function resolveContinuousReadingIntegrity(input: {
 }): ReadingIntegrity {
   const lawSlug = input.lawSlug.trim().toLowerCase();
   const references = input.references.filter((reference) => reference.slug.trim().toLowerCase() === lawSlug);
-  const referenceByOrder = new Map(references.map((reference) => [reference.ordem, reference]));
+  const referencesByOrder = new Map<string, ContinuousReferenceSummary[]>();
+  for (const reference of references) referencesByOrder.set(reference.ordem, [...(referencesByOrder.get(reference.ordem) ?? []), reference]);
   const manualByQuestion = new Map((input.manualTargets ?? []).map((target) => [target.questionId, target]));
 
   const resolutions = input.questions.map<QuestionReferenceResolution>((question) => {
@@ -82,10 +83,11 @@ export function resolveContinuousReadingIntegrity(input: {
       if (!manual.slug || !manual.ordem || manual.slug.trim().toLowerCase() !== lawSlug) {
         return { questionId: question.id, status: "invalid_manual", referenceId: null, ordem: manual.ordem, reason: "O vínculo manual aponta para outra legislação ou para um destino inexistente." };
       }
-      const reference = referenceByOrder.get(manual.ordem);
-      if (!reference?.prepared) {
-        return { questionId: question.id, status: "invalid_manual", referenceId: reference?.id ?? null, ordem: manual.ordem, reason: "O bloco definido manualmente não possui texto legislativo preparado." };
+      const manualReferences = (referencesByOrder.get(manual.ordem) ?? []).filter((reference) => reference.prepared);
+      if (manualReferences.length !== 1) {
+        return { questionId: question.id, status: "invalid_manual", referenceId: null, ordem: manual.ordem, reason: manualReferences.length > 1 ? "O vínculo manual possui mais de um bloco legislativo possível." : "O bloco definido manualmente não possui texto legislativo preparado." };
       }
+      const reference = manualReferences[0];
       return { questionId: question.id, status: "manual", referenceId: reference.id, ordem: reference.ordem, reason: null };
     }
 
@@ -93,10 +95,9 @@ export function resolveContinuousReadingIntegrity(input: {
       return { questionId: question.id, status: "invalid_order", referenceId: null, ordem: question.ordem, reason: "A questão não possui uma ordem estrutural válida para esta legislação." };
     }
     for (const ordem of legisBotOrderCandidates(question.ordem.trim())) {
-      const reference = referenceByOrder.get(ordem);
-      if (reference?.prepared) {
-        return { questionId: question.id, status: "hierarchy", referenceId: reference.id, ordem: reference.ordem, reason: null };
-      }
+      const candidates = (referencesByOrder.get(ordem) ?? []).filter((reference) => reference.prepared);
+      if (candidates.length > 1) return { questionId: question.id, status: "ambiguous", referenceId: null, ordem, reason: "Mais de um bloco legislativo pode representar esta questão." };
+      if (candidates.length === 1) return { questionId: question.id, status: "hierarchy", referenceId: candidates[0].id, ordem: candidates[0].ordem, reason: null };
     }
     return { questionId: question.id, status: "missing", referenceId: null, ordem: null, reason: "Nenhum bloco legislativo preparado foi encontrado na cadeia estrutural da questão." };
   });
@@ -115,4 +116,33 @@ export function resolveContinuousReadingIntegrity(input: {
     completeness: null,
     resolutions,
   };
+}
+
+/**
+ * Compatibilidade dos endereços antigos /legisbot/[slug]/[ordem]. Se houver
+ * questão nessa Ordem, a resolução editorial da questão vence a inferência pela
+ * própria Ordem. Destinos ausentes ou divergentes nunca são escolhidos por acaso.
+ */
+export function resolveLegacyReferenceId(input: {
+  rawOrder: string;
+  questions: ContinuousQuestion[];
+  references: ContinuousReferenceSummary[];
+  resolutions: QuestionReferenceResolution[];
+}) {
+  const canonicalOrder = legisBotOrderCandidates(input.rawOrder.trim())[0];
+  const matchingQuestions = input.questions.filter((question) => legisBotOrderCandidates(question.ordem.trim())[0] === canonicalOrder);
+  if (matchingQuestions.length) {
+    const byQuestion = new Map(input.resolutions.map((resolution) => [resolution.questionId, resolution]));
+    const resolved = matchingQuestions.map((question) => byQuestion.get(question.id));
+    if (resolved.some((resolution) => !resolution?.referenceId)) return null;
+    const referenceIds = new Set(resolved.map((resolution) => resolution!.referenceId!));
+    return referenceIds.size === 1 ? [...referenceIds][0] : null;
+  }
+
+  for (const order of legisBotOrderCandidates(input.rawOrder.trim())) {
+    const candidates = input.references.filter((reference) => reference.ordem === order && reference.prepared);
+    if (candidates.length > 1) return null;
+    if (candidates.length === 1) return candidates[0].id;
+  }
+  return null;
 }

@@ -135,9 +135,10 @@ export async function buscarLegislacaoComentadaPublicaPorSlug(slug: string) {
   const resolutionByQuestion = new Map(model.integrity.resolutions.map((resolution) => [resolution.questionId, resolution]));
   const questions = (questionsResult.data ?? []) as QuestionContextRow[];
   return consolidated.map((article) => {
-    const targets = new Set(questions
-      .filter((question) => question.slug.toUpperCase() === article.slug && question.ordem === article.ordem)
-      .flatMap((question) => resolutionByQuestion.get(question.id)?.referenceId ? [resolutionByQuestion.get(question.id)!.referenceId!] : []));
-    return { ...article, reference_id: targets.size === 1 ? [...targets][0] : null };
+    const articleQuestions = questions.filter((question) => question.slug.toUpperCase() === article.slug && question.ordem === article.ordem);
+    const resolutions = articleQuestions.map((question) => resolutionByQuestion.get(question.id));
+    const targets = new Set(resolutions.flatMap((resolution) => resolution?.referenceId ? [resolution.referenceId] : []));
+    const completelyResolved = resolutions.length > 0 && resolutions.every((resolution) => Boolean(resolution?.referenceId));
+    return { ...article, reference_id: completelyResolved && targets.size === 1 ? [...targets][0] : null };
   });
 }

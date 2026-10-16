@@ -15,7 +15,10 @@ describe("exportação APKG", () => {
     expect(back).toContain("Aprofundar neste trecho da lei");
     expect(back.match(/class=\"lf-legisbot-link lf-card-action\"/g)).toHaveLength(1);
     expect(back).toContain("var stableTarget = '{{legisbotUrl}}'.trim()");
-    expect(back).toContain("? stableTarget : hrefBase");
+    expect(back).toContain("stableTarget.indexOf('#bloco-') === -1");
+    expect(back).toContain("botaoLegisbot.hidden = true");
+    expect(back).toContain("botaoLegisbot.href = stableTarget");
+    expect(back).not.toContain("hrefBase");
     expect(back).not.toContain("data-aba=");
   });
 

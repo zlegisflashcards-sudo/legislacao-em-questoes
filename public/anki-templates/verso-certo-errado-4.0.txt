@@ -253,15 +253,12 @@ function alternarComentarioProfessor() {
   var botaoLegisbot = document.getElementById('lf_legisbot');
   if (!botaoLegisbot) return;
 
-  var slug = '{{slug}}'.trim();
-  var ordem = '{{ordem}}'.trim();
   var stableTarget = '{{legisbotUrl}}'.trim();
-  var base = 'https://www.legisflashcards.com.br/legisbot/';
-  var hrefBase = base
-    + encodeURIComponent(slug)
-    + '/'
-    + encodeURIComponent(ordem);
-
-  botaoLegisbot.href = (stableTarget && stableTarget.charAt(0) !== '{') ? stableTarget : hrefBase;
+  if (!stableTarget || stableTarget.charAt(0) === '{' || stableTarget.indexOf('#bloco-') === -1) {
+    botaoLegisbot.hidden = true;
+    botaoLegisbot.removeAttribute('href');
+    return;
+  }
+  botaoLegisbot.href = stableTarget;
 })();
 </script>

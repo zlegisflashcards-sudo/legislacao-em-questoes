@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { continuousBlockAnchor, continuousLegisBotHref, referenceIdFromHash, resolveContinuousReadingIntegrity } from "./continuous-reading-core";
+import { continuousBlockAnchor, continuousLegisBotHref, referenceIdFromHash, resolveContinuousReadingIntegrity, resolveLegacyReferenceId } from "./continuous-reading-core";
 import { legisBotOrderCandidates } from "./order-candidates";
 
 const ref = (id: string, ordem: string, prepared = true) => ({ id, slug: "l6513ma", ordem, identificacao: ordem, sourceQuestionId: null, prepared });
 const ids = {
   article: "a0e5ad8d-e1f2-4f56-96e5-7017238daa49",
   paragraph: "45a8e781-8381-4001-a985-54d8f1b29d03",
+  other: "c769eca4-9b60-421e-916a-64e86609fb01",
 };
 
 describe("continuous-reading-core", () => {
@@ -39,6 +40,31 @@ describe("continuous-reading-core", () => {
       manualTargets: [{ questionId: "q1", commentId: 20, slug: "L6513MA", ordem: "0002.0.02.0.00.0" }],
     });
     expect(result.resolutions[0]).toMatchObject({ status: "manual", referenceId: ids.paragraph, ordem: "0002.0.02.0.00.0" });
+  });
+
+  it("faz o link antigo respeitar o vínculo manual antes da Ordem", () => {
+    const questions = [{ id: "q1", slug: "l6513ma", ordem: "0001.0.00.0.00.0", structureId: 114 }];
+    const references = [ref(ids.article, "0001.0.00.0.00.0"), ref(ids.paragraph, "0002.0.02.0.00.0")];
+    const integrity = resolveContinuousReadingIntegrity({
+      lawSlug: "l6513ma",
+      questions,
+      references,
+      manualTargets: [{ questionId: "q1", commentId: 20, slug: "L6513MA", ordem: "0002.0.02.0.00.0" }],
+    });
+    expect(resolveLegacyReferenceId({ rawOrder: "0001.0.00.00", questions, references, resolutions: integrity.resolutions })).toBe(ids.paragraph);
+  });
+
+  it("não escolhe silenciosamente quando questões da mesma Ordem divergem", () => {
+    const questions = [
+      { id: "q1", slug: "l6513ma", ordem: "0001.0.00.0.00.0", structureId: 114 },
+      { id: "q2", slug: "l6513ma", ordem: "0001.0.00.0.00.0", structureId: 114 },
+    ];
+    const references = [ref(ids.article, "0001.0.00.0.00.0"), ref(ids.paragraph, "0002.0.02.0.00.0"), ref(ids.other, "0003.0.00.0.00.0")];
+    const resolutions = [
+      { questionId: "q1", status: "manual" as const, referenceId: ids.paragraph, ordem: "0002.0.02.0.00.0", reason: null },
+      { questionId: "q2", status: "manual" as const, referenceId: ids.other, ordem: "0003.0.00.0.00.0", reason: null },
+    ];
+    expect(resolveLegacyReferenceId({ rawOrder: "0001.0.00.00", questions, references, resolutions })).toBeNull();
   });
 
   it("bloqueia liberação quando um vínculo manual está quebrado ou falta bloco", () => {

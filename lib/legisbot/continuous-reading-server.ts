@@ -4,12 +4,12 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import {
   resolveContinuousReadingIntegrity,
+  resolveLegacyReferenceId,
   type ContinuousQuestion,
   type ContinuousReferenceSummary,
   type ManualCommentTarget,
   type ReadingIntegrity,
 } from "./continuous-reading-core";
-import { legisBotOrderCandidates } from "./order-candidates";
 import { continuousLegisBotHref } from "./continuous-reading-core";
 
 const PAGE_SIZE = 500;
@@ -151,16 +151,13 @@ export async function getContinuousReadingBlocks(model: ContinuousReadingModel, 
 export async function resolveContinuousReference(rawSlug: string, rawOrder: string) {
   const model = await getContinuousReadingModel(rawSlug);
   if (!model?.integrity.readingAvailable) return null;
-  const orders = legisBotOrderCandidates(rawOrder.trim());
-  for (const order of orders) {
-    const exact = model.references.find((reference) => reference.ordem === order && reference.prepared);
-    if (exact) return exact;
-  }
-  const questionResolutions = model.integrity.resolutions.filter((resolution) => resolution.ordem && resolution.referenceId);
-  const matchingQuestion = (await allQuestions(model.law.id)).find((question) => orders.includes(question.ordem));
-  if (!matchingQuestion) return null;
-  const resolution = questionResolutions.find((item) => item.questionId === matchingQuestion.id);
-  return resolution?.referenceId ? model.references.find((reference) => reference.id === resolution.referenceId) ?? null : null;
+  const referenceId = resolveLegacyReferenceId({
+    rawOrder,
+    questions: (await allQuestions(model.law.id)).map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id })),
+    references: model.references,
+    resolutions: model.integrity.resolutions,
+  });
+  return referenceId ? model.references.find((reference) => reference.id === referenceId) ?? null : null;
 }
 
 /** Destinos canônicos para exportadores. Retorna vazio quando a lei não está liberada. */
