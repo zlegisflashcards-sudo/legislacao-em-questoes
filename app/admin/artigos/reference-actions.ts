@@ -22,7 +22,7 @@ export async function importQuestionLegislation(formData: FormData) {
 
 export async function clearPreparedLegislativeReferences(formData: FormData) {
   const slug = value(formData, "slug").toLowerCase();
-  if (value(formData, "confirmation") !== "LIMPAR BASE") throw new Error("Digite LIMPAR BASE para confirmar a limpeza.");
+  if (value(formData, "confirmation") !== "LIMPAR BASE") redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&erro=confirmacao_limpeza`);
   const result = await clearLegislativeReferences(slug);
   revalidatePath("/admin/artigos");
   redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&base=limpa&removidas=${result.removed}`);
