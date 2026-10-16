@@ -8,7 +8,7 @@ import styles from "./continuous-reading.module.css";
 type HierarchyNode = { id: number; type: string; name: string };
 type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[] };
 type Block = Reference & { legislation: string };
-type TocNode = { key: string; label: string; reference: Reference; children: TocNode[]; referenceIds: string[]; device: boolean };
+type TocNode = { key: string; label: string; reference: Reference; children: TocNode[]; referenceIds: string[] };
 
 const PAGE_SIZE = 30;
 
@@ -22,15 +22,13 @@ function structureTree(references: Reference[]): TocNode[] {
       const siblings = childrenByPath.get(parentPath) ?? roots;
       let item = siblings.find((candidate) => candidate.key === path);
       if (!item) {
-        item = { key: path, label: node.name, reference, children: [], referenceIds: [], device: false };
+        item = { key: path, label: node.name, reference, children: [], referenceIds: [] };
         siblings.push(item);
         childrenByPath.set(path, item.children);
       }
       item.referenceIds.push(reference.id);
       parentPath = path;
     }
-    const siblings = childrenByPath.get(parentPath) ?? roots;
-    siblings.push({ key: `reference:${reference.id}`, label: reference.identificacao, reference, children: [], referenceIds: [reference.id], device: true });
   }
   return roots;
 }
@@ -38,8 +36,8 @@ function structureTree(references: Reference[]): TocNode[] {
 function StructureItems({ nodes, activeId, onNavigate }: { nodes: TocNode[]; activeId: string | null; onNavigate: (reference: Reference) => void }) {
   return <ol>{nodes.map((node) => {
     const active = Boolean(activeId && node.referenceIds.includes(activeId));
-    return <li key={node.key} className={node.device ? styles.tocDevice : styles.tocSection}>
-      <a className={active ? styles.tocActive : undefined} aria-current={node.device && active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference.id)}`} onClick={() => onNavigate(node.reference)}>{node.label}</a>
+    return <li key={node.key} className={styles.tocSection}>
+      <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference.id)}`} onClick={() => onNavigate(node.reference)}>{node.label}</a>
       {node.children.length ? <StructureItems nodes={node.children} activeId={activeId} onNavigate={onNavigate} /> : null}
     </li>;
   })}</ol>;

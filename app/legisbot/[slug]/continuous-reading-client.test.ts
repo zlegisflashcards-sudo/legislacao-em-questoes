@@ -13,8 +13,10 @@ describe("leitura contínua pública", () => {
     expect(client).not.toContain("Legislação em construção");
   });
 
-  it("inclui cada dispositivo no sumário hierárquico e acompanha o item ativo", () => {
-    expect(client).toContain('key: `reference:${reference.id}`');
+  it("mostra somente a estrutura no sumário e acompanha a seção ativa", () => {
+    expect(client).not.toContain('key: `reference:${reference.id}`');
+    expect(client).not.toContain("reference.identificacao, reference");
+    expect(client).toContain("for (const node of reference.hierarchy)");
     expect(client).toContain("aria-current");
     expect(client).toContain("IntersectionObserver");
     expect(client).toContain("setMobileTocOpen(false)");
