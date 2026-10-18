@@ -34,7 +34,7 @@ export default async function AdminArticlesPage({ searchParams }: { searchParams
   const lawFilter = (one(params.lei) || one(params.law)).toLowerCase();
   const orderDirection: "asc" | "desc" = one(params.ordem_sort) === "desc" ? "desc" : "asc";
   await exigirAdministrador();
-  const conflictFilters = { law: lawFilter, type: many(params.tipo) || many(params.type), ordem_sort: orderDirection, orderDirection };
+  const conflictFilters = { law: lawFilter, type: many(params.tipo) || many(params.type), typeMode: one(params.tipo_modo) === "all" ? "all" as const : "any" as const, ordem_sort: orderDirection, orderDirection };
   const conflicts = tab === "conflitos" ? await listArticleSourceConflicts({ ...conflictFilters, page: Number(one(params.pagina)) || 1 }) : null;
   const [references, laws] = await Promise.all([
     tab === "artigos" ? listLegislativeReferences({ lawSlug: lawFilter, query, page: Number(one(params.pagina)) || 1, orderDirection }) : Promise.resolve(null),

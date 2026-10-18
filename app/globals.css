@@ -242,6 +242,7 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 .article-conflicts-type-filter p{width:100%;margin:-3px 0 1px;color:#64748b;font-size:12px}
 .article-conflicts-type-filter label{display:inline-flex;min-width:0;align-items:center;gap:6px;color:#334155;font-size:13px;font-weight:650}
 .article-conflicts-type-filter input{width:16px;height:16px;accent-color:#2563eb}
+.article-conflicts-type-mode{display:flex;flex-basis:100%;flex-wrap:wrap;gap:8px 14px;border-top:1px solid #e2e8f0;padding-top:8px}.article-conflicts-type-mode label{font-size:12px!important}
 .article-conflicts-clear-types{border:0;background:transparent;padding:0;color:#2563eb;font:inherit;font-size:12px;font-weight:800;cursor:pointer;text-decoration:underline}
 .article-conflicts-filter select{box-sizing:border-box;width:100%;min-height:42px}
 .article-conflicts-selection-summary{min-width:0;flex:1 1 18rem}.article-conflicts-selection-summary p{margin:0}

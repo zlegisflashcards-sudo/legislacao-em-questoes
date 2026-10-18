@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type ConflictList = Awaited<ReturnType<typeof import("@/lib/admin-article-conflicts-server").listArticleSourceConflicts>>;
-type Filters = { law?: string; type?: string; ordem_sort?: string };
+type Filters = { law?: string; type?: string; typeMode?: "any" | "all"; ordem_sort?: string };
 
 const SESSION_KEY = "legisbot-conflicts-resolved-session";
 const STRUCTURAL_BATCH_SESSION_KEY = "legisbot-conflicts-structural-batch";
@@ -58,7 +58,7 @@ export function ArticleSourceConflicts({ data, filters }: { data: ConflictList; 
   useEffect(() => { if (selectionHydrated) window.sessionStorage.setItem(STRUCTURAL_BATCH_SESSION_KEY, JSON.stringify(selected)); }, [selected, selectionHydrated]);
   const hrefForPage = (page: number) => {
     const params = new URLSearchParams({ aba: "conflitos" });
-    for (const [key, value] of Object.entries(filters)) if (value) params.set(key === "law" ? "lei" : key === "type" ? "tipo" : key, value);
+    for (const [key, value] of Object.entries(filters)) if (value) params.set(key === "law" ? "lei" : key === "type" ? "tipo" : key === "typeMode" ? "tipo_modo" : key, value);
     params.set("pagina", String(page));
     return `/admin/artigos?${params}`;
   };
@@ -90,7 +90,7 @@ export function ArticleSourceConflicts({ data, filters }: { data: ConflictList; 
       <input type="hidden" name="aba" value="conflitos" />
       <input type="hidden" name="lei" value={filters.law ?? ""} />
       <input type="hidden" name="ordem_sort" value={filters.ordem_sort ?? "asc"} />
-      <fieldset className="article-conflicts-type-filter"><legend>Tipo de revisão</legend><p>Mostra contextos com qualquer tipo marcado.</p>{[["estrutural", "Conflito estrutural"], ["possivel_estrutural", "Possível conflito estrutural"], ["legislacao", "Legislação divergente"], ["granularidade", "Granularidade"], ["pergunta_duplicada", "Pergunta duplicada"]].map(([value, label]) => <label key={value}><input type="checkbox" name="tipo" value={value} checked={selectedReviewTypes.includes(value)} onChange={(event) => setSelectedReviewTypes((current) => event.currentTarget.checked ? [...new Set([...current, value])] : current.filter((item) => item !== value))} />{label}</label>)}{selectedReviewTypes.length ? <button type="button" className="article-conflicts-clear-types" onClick={() => setSelectedReviewTypes([])}>Desmarcar tipos</button> : null}</fieldset>
+      <fieldset className="article-conflicts-type-filter"><legend>Tipo de revisão</legend><p>Escolha um tipo isolado ou combine vários.</p>{[["estrutural", "Conflito estrutural"], ["possivel_estrutural", "Possível conflito estrutural"], ["legislacao", "Legislação divergente"], ["granularidade", "Granularidade"], ["pergunta_duplicada", "Pergunta duplicada"]].map(([value, label]) => <label key={value}><input type="checkbox" name="tipo" value={value} checked={selectedReviewTypes.includes(value)} onChange={(event) => setSelectedReviewTypes((current) => event.currentTarget.checked ? [...new Set([...current, value])] : current.filter((item) => item !== value))} />{label}</label>)}{selectedReviewTypes.length > 1 ? <span className="article-conflicts-type-mode"><label><input type="radio" name="tipo_modo" value="any" defaultChecked={filters.typeMode !== "all"} />Qualquer tipo marcado</label><label><input type="radio" name="tipo_modo" value="all" defaultChecked={filters.typeMode === "all"} />Todos os tipos marcados</label></span> : <input type="hidden" name="tipo_modo" value="any" />}{selectedReviewTypes.length ? <button type="button" className="article-conflicts-clear-types" onClick={() => setSelectedReviewTypes([])}>Desmarcar tipos</button> : null}</fieldset>
       <div className="article-conflicts-filter-actions flex items-end gap-2"><button className="admin-button primary">Filtrar</button><Link className="admin-button secondary" href={`/admin/artigos?aba=conflitos${filters.law ? `&lei=${encodeURIComponent(filters.law)}` : ""}&ordem_sort=${filters.ordem_sort ?? "asc"}`}>Limpar</Link></div>
     </form>
     {batchError ? <section className="admin-alert error" role="alert"><p>{batchError}</p>{diagnostic ? <details><summary>Ver detalhes</summary><p>Ação: <code>{diagnostic.action}</code> · Estado: {diagnostic.state === "not_applied" ? "não aplicado" : "resultado ainda não confirmado"}.</p><p>Código: <code>{diagnostic.code}</code> · Operação: <code>{diagnostic.operationId}</code></p><button type="button" className="admin-button secondary" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(diagnostic, null, 2))}>Copiar diagnóstico</button></details> : null}</section> : null}
