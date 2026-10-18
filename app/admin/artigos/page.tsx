@@ -18,6 +18,7 @@ import { ArticleReadingIntegrity } from "@/components/admin/article-reading-inte
 
 export const dynamic = "force-dynamic";
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
+const many = (value: string | string[] | undefined) => (Array.isArray(value) ? value : value ? [value] : []).flatMap((item) => item.split(",")).map((item) => item.trim()).filter(Boolean).join(",");
 const botStatusLabel = { pendente: "Rascunho / pendente", processando: "Processando", concluido: "Publicado", erro: "Erro" } as const;
 const formatCommentDate = (value: unknown) => {
   if (typeof value !== "string") return "Data não informada";
@@ -33,7 +34,7 @@ export default async function AdminArticlesPage({ searchParams }: { searchParams
   const lawFilter = (one(params.lei) || one(params.law)).toLowerCase();
   const orderDirection: "asc" | "desc" = one(params.ordem_sort) === "desc" ? "desc" : "asc";
   await exigirAdministrador();
-  const conflictFilters = { law: lawFilter, type: one(params.tipo) || one(params.type), ordem_sort: orderDirection, orderDirection };
+  const conflictFilters = { law: lawFilter, type: many(params.tipo) || many(params.type), ordem_sort: orderDirection, orderDirection };
   const conflicts = tab === "conflitos" ? await listArticleSourceConflicts({ ...conflictFilters, page: Number(one(params.pagina)) || 1 }) : null;
   const [references, laws] = await Promise.all([
     tab === "artigos" ? listLegislativeReferences({ lawSlug: lawFilter, query, page: Number(one(params.pagina)) || 1, orderDirection }) : Promise.resolve(null),

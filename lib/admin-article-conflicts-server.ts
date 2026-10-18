@@ -197,20 +197,22 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys(), ...granularities.keys()])];
   const laws = lawsForValidation;
   const law = safeFilter(filters.law);
-  const type = safeFilter(filters.type, 40);
+  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "granularidade", "pergunta_duplicada"].includes(value)));
+  const hasTypeFilter = selectedTypes.size > 0;
   const filtered = contextKeys.filter((key) => {
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const granularity = granularities.get(key); const slug = group?.slug ?? structuralGroup?.slug ?? granularity!.slug;
     if (law && slug.toLocaleLowerCase("pt-BR") !== law) return false;
-    if (type === "estrutural" && structuralGroup?.validation.status !== "conflict") return false;
-    if (type === "possivel_estrutural" && structuralGroup?.validation.status !== "possible_conflict") return false;
-    if (type === "legislacao" && !group) return false;
-    if (type === "granularidade" && !granularity) return false;
-    if (type === "pergunta_duplicada") return false;
+    if (hasTypeFilter && !(
+      (selectedTypes.has("estrutural") && structuralGroup?.validation.status === "conflict")
+      || (selectedTypes.has("possivel_estrutural") && structuralGroup?.validation.status === "possible_conflict")
+      || (selectedTypes.has("legislacao") && Boolean(group))
+      || (selectedTypes.has("granularidade") && Boolean(granularity))
+    )) return false;
     return true;
   });
   const filteredDuplicates = duplicateStatements.filter((group) => {
     const slug = group.questions[0]?.slug ?? "";
-    return (!law || slug.toLocaleLowerCase("pt-BR") === law) && (!type || type === "pergunta_duplicada");
+    return (!law || slug.toLocaleLowerCase("pt-BR") === law) && (!hasTypeFilter || selectedTypes.has("pergunta_duplicada"));
   });
   // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
   // atualmente escolhido no filtro. Assim o quadro funciona como um placar

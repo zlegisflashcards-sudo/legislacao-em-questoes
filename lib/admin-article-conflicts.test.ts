@@ -63,11 +63,13 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("entries.slice(start, start + PAGE_SIZE)");
     for (const field of ["filters.law", "filters.type"]) expect(server).toContain(field);
     expect(server).toContain('slug.toLocaleLowerCase("pt-BR") !== law');
-    expect(server).toContain('type === "estrutural"');
-    expect(server).toContain('type === "possivel_estrutural"');
-    expect(server).toContain('type === "legislacao"');
+    expect(server).toContain("selectedTypes.has(\"estrutural\")");
+    expect(server).toContain("selectedTypes.has(\"possivel_estrutural\")");
+    expect(server).toContain("selectedTypes.has(\"legislacao\")");
     expect(server).not.toContain('type === "comentario_sem_analise"');
     expect(list).toContain('name="tipo"');
+    expect(list).toContain('type="checkbox"');
+    expect(list).toContain("qualquer tipo marcado");
     expect(list).not.toContain("Comentário sem análise");
     expect(list).toContain("pagina");
   });

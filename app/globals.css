@@ -237,8 +237,14 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 /* Conflitos: os controles são longos por natureza; em telas estreitas eles
    precisam permanecer legíveis e acionáveis, sem criar rolagem horizontal. */
 .article-conflicts-filter label{min-width:min(100%,20rem)}
+.article-conflicts-type-filter{display:flex;min-width:min(100%,32rem);flex:1 1 32rem;flex-wrap:wrap;gap:8px 14px;margin:0;border:0;padding:0}
+.article-conflicts-type-filter legend{width:100%;padding:0;color:#172033;font-size:14px;font-weight:800}
+.article-conflicts-type-filter p{width:100%;margin:-3px 0 1px;color:#64748b;font-size:12px}
+.article-conflicts-type-filter label{display:inline-flex;min-width:0;align-items:center;gap:6px;color:#334155;font-size:13px;font-weight:650}
+.article-conflicts-type-filter input{width:16px;height:16px;accent-color:#2563eb}
+.article-conflicts-clear-types{border:0;background:transparent;padding:0;color:#2563eb;font:inherit;font-size:12px;font-weight:800;cursor:pointer;text-decoration:underline}
 .article-conflicts-filter select{box-sizing:border-box;width:100%;min-height:42px}
-.article-conflicts-batch-toolbar>p{min-width:0;margin:0;flex:1 1 18rem}
+.article-conflicts-selection-summary{min-width:0;flex:1 1 18rem}.article-conflicts-selection-summary p{margin:0}
 .article-conflicts-batch-actions{min-width:0;align-items:stretch}
 .article-conflicts-batch-actions select{min-height:40px;min-width:15rem;border:1px solid #cbd5e1;border-radius:9px;background:#fff;padding:0 10px;color:#334155;font:inherit;font-size:14px;font-weight:700}
 .article-conflict-card code,.article-conflict-card p,.article-conflict-card strong{overflow-wrap:anywhere}
@@ -248,6 +254,8 @@ html[data-legisbot-theme="dark"] { background: #07111f; }
 @media(max-width:700px){
   .article-conflicts-filter{display:grid!important;grid-template-columns:1fr;padding:14px}
   .article-conflicts-filter label{min-width:0;width:100%}
+  .article-conflicts-type-filter{min-width:0;display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .article-conflicts-type-filter legend,.article-conflicts-type-filter p{grid-column:1/-1}
   .article-conflicts-filter-actions{display:grid!important;grid-template-columns:1fr 1fr;width:100%}
   .article-conflicts-filter-actions .admin-button{width:100%}
   .article-conflicts-batch-toolbar{align-items:stretch!important;padding:14px}
