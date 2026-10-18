@@ -15,7 +15,7 @@ import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, val
 import { getArticleContext } from "@/lib/admin-article-center-server";
 import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 import { collectPages } from "@/lib/law-question-pagination";
-import { findLawQuestionArticleGaps } from "@/lib/law-question-shadow-gaps";
+import { findLawQuestionStructureGaps } from "@/lib/law-question-shadow-gaps";
 import { previewConferenceListUuids } from "@/lib/admin-question-conference-lists";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -393,52 +393,48 @@ export async function conferenceArticleLink(lawSlug: string, orderValue: unknown
 }
 
 type ShadowStoredUnit = { id: string; identity_key: string; ordem: string | null; assunto: string; tipo: "caput" | "paragrafo"; texto_html: string; texto_plano: string; caminho_estrutural: string[]; decision: "nao_cabe_questao" | "revogado" | null };
-const shadowPath = (value: unknown) => Array.isArray(value) ? value.map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean).slice(0, 12) : [];
-function shadowCoverage(units: ShadowStoredUnit[], questions: Array<{ id: string; ordem: string; assunto: string | null }>) {
+function shadowCoverage(units: ShadowStoredUnit[]) {
   return units.map((unit) => {
-    const related = unit.ordem ? questions.filter((question) => question.ordem === unit.ordem) : [];
-    const trusted = related.filter((question) => validateQuestionStructure(question).status === "valid");
-    const hasConflict = related.length > trusted.length || questions.some((question) => question.assunto && question.assunto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(unit.assunto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()) && question.ordem !== unit.ordem);
-    const status = unit.decision ? "dispensada" : !unit.ordem ? "ambigua" : trusted.length ? "coberta" : hasConflict ? "conflito" : "sombra";
-    return { ...unit, status, question_ids: trusted.map((question) => question.id), conflict_question_ids: related.filter((question) => !trusted.includes(question)).map((question) => question.id) };
+    const status = unit.decision ? "dispensada" : "sombra";
+    return { ...unit, status, question_ids: [], conflict_question_ids: [] };
   });
 }
-async function synchronizeAutomaticQuestionShadows(law: Law, questions: Array<{ ordem: string }>) {
-  const gaps = findLawQuestionArticleGaps(questions, law.nome_curto);
+async function synchronizeAutomaticQuestionShadows(law: Law, nodes: QuestionStructureNode[], questions: Array<{ structure_id: number | null }>) {
+  const gaps = findLawQuestionStructureGaps(nodes, questions);
   if (!gaps.length) return gaps;
   const now = new Date().toISOString();
-  const result = await db().from("admin_law_question_shadow_units").upsert(gaps.map((gap) => ({ lei_id: law.id, identity_key: gap.identityKey, ordem: gap.ordem, assunto: gap.assunto, tipo: "caput", texto_html: "", texto_plano: "", caminho_estrutural: [], source_fingerprint: `automatic-gap-v2:${gap.ordem}`, last_seen_at: now })), { onConflict: "lei_id,identity_key" });
+  const result = await db().from("admin_law_question_shadow_units").upsert(gaps.map((gap) => ({ lei_id: law.id, identity_key: gap.identityKey, ordem: null, assunto: gap.assunto, tipo: "caput", texto_html: "", texto_plano: "", caminho_estrutural: gap.path, source_fingerprint: `automatic-structure-v1:${gap.structureId}`, last_seen_at: now })), { onConflict: "lei_id,identity_key" });
   if (result.error) fail("sincronizar_sombras_automaticas", result.error);
   return gaps;
 }
 export async function getLawQuestionShadows(lawSlug: string) {
   await requireAdmin(); const current = await law(lawSlug);
-  const questions = await db().from("questions").select("id,ordem,assunto").eq("lei_id", current.id).eq("ativo", true).order("ordem").order("id");
+  const [questions, nodes] = await Promise.all([db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true).order("ordem").order("id"), structure(current.id)]);
   if (questions.error) fail("comparar_sombras", questions.error);
-  const questionRows = (questions.data ?? []) as Array<{ id: string; ordem: string; assunto: string | null }>;
-  const gaps = await synchronizeAutomaticQuestionShadows(current, questionRows);
-  const units = await db().from("admin_law_question_shadow_units").select("id,identity_key,ordem,assunto,tipo,texto_html,texto_plano,caminho_estrutural,decision").eq("lei_id", current.id).like("identity_key", "automatic-gap:%").order("ordem").order("first_seen_at");
+  const questionRows = (questions.data ?? []) as Array<{ id: string; structure_id: number | null }>;
+  const gaps = await synchronizeAutomaticQuestionShadows(current, nodes, questionRows);
+  const units = await db().from("admin_law_question_shadow_units").select("id,identity_key,ordem,assunto,tipo,texto_html,texto_plano,caminho_estrutural,decision").eq("lei_id", current.id).like("identity_key", "automatic-structure:%").order("first_seen_at");
   if (units.error) fail("listar_sombras", units.error);
   const activeKeys = new Set(gaps.map((gap) => gap.identityKey));
-  const covered = shadowCoverage(((units.data ?? []) as ShadowStoredUnit[]).filter((unit) => activeKeys.has(unit.identity_key)), questionRows);
+  const covered = shadowCoverage(((units.data ?? []) as ShadowStoredUnit[]).filter((unit) => activeKeys.has(unit.identity_key)));
   return { units: covered };
 }
 export async function setLawQuestionShadowDecision(body: Record<string, unknown>) {
   const admin = await requireAdmin(); const current = await law(String(body.law_slug)); const unitId = qid(body.unit_id); const decision = body.decision === "nao_cabe_questao" || body.decision === "revogado" ? body.decision : body.decision === null ? null : undefined;
-  if (decision === undefined) throw new AdminQuestoesError(400, "Decisão do Artigo Sombra inválida.");
-  const result = await db().from("admin_law_question_shadow_units").update({ decision, decided_at: decision ? new Date().toISOString() : null, decided_by: decision ? admin.id : null }).eq("id", unitId).eq("lei_id", current.id).like("identity_key", "automatic-gap:%").select("id").maybeSingle();
-  if (result.error) fail("decidir_sombra", result.error); if (!result.data) throw new AdminQuestoesError(404, "Unidade do Artigo Sombra não pertence à lei atual.");
+  if (decision === undefined) throw new AdminQuestoesError(400, "Decisão da Questão Sombra inválida.");
+  const result = await db().from("admin_law_question_shadow_units").update({ decision, decided_at: decision ? new Date().toISOString() : null, decided_by: decision ? admin.id : null }).eq("id", unitId).eq("lei_id", current.id).like("identity_key", "automatic-structure:%").select("id").maybeSingle();
+  if (result.error) fail("decidir_sombra", result.error); if (!result.data) throw new AdminQuestoesError(404, "Unidade da Questão Sombra não pertence à lei atual.");
   return await getLawQuestionShadows(current.slug);
 }
 export async function getLawQuestionShadowDraft(lawSlug: string, unitId: unknown) {
-  await requireAdmin(); const current = await law(lawSlug); const result = await db().from("admin_law_question_shadow_units").select("id,ordem,assunto,texto_html,caminho_estrutural,decision").eq("id", qid(unitId)).eq("lei_id", current.id).like("identity_key", "automatic-gap:%").maybeSingle();
-  if (result.error) fail("carregar_sombra_para_questao", result.error); if (!result.data || result.data.decision || !result.data.ordem) throw new AdminQuestoesError(422, "Esta unidade não possui vínculo confiável para criar uma questão.");
+  await requireAdmin(); const current = await law(lawSlug); const result = await db().from("admin_law_question_shadow_units").select("id,identity_key,decision").eq("id", qid(unitId)).eq("lei_id", current.id).like("identity_key", "automatic-structure:%").maybeSingle();
+  if (result.error) fail("carregar_sombra_para_questao", result.error); const structureMatch = result.data?.identity_key.match(/^automatic-structure:(\d+)$/); if (!result.data || result.data.decision || !structureMatch) throw new AdminQuestoesError(422, "Esta Questão Sombra não possui um bloco estrutural disponível.");
   const [nodes, deckDefaults] = await Promise.all([
     structure(current.id),
     getLawQuestionDeckDefaults(current.id),
   ]);
-  const targetPath = shadowPath(result.data.caminho_estrutural); const candidates = nodes.filter((node) => { const path: string[] = []; for (let currentNode: QuestionStructureNode | undefined = node; currentNode; currentNode = currentNode.parent_id ? nodes.find((item) => item.id === currentNode!.parent_id) : undefined) path.unshift(currentNode.nome.trim()); return path.length === targetPath.length && path.every((name, index) => name === targetPath[index]); });
-  return { unit_id: result.data.id, data: { ...blankShadowQuestion(result.data.ordem, result.data.assunto, result.data.texto_html), ...deckDefaults, structure_id: candidates.length === 1 ? candidates[0].id : null }, structure_warning: targetPath.length ? candidates.length !== 1 ? "A estrutura informada não corresponde de forma única à Central da Lei; escolha o bloco manualmente." : null : "Esta Sombra foi detectada por uma lacuna de Ordem. Informe legislação e estrutura antes de salvar a questão." };
+  const structureId = Number(structureMatch[1]); if (!nodes.some((node) => node.id === structureId)) throw new AdminQuestoesError(422, "O bloco estrutural desta Questão Sombra não está mais ativo.");
+  return { unit_id: result.data.id, data: { ...blankShadowQuestion("", "", ""), ...deckDefaults, structure_id: structureId }, structure_warning: "O bloco estrutural já foi preenchido. Informe Assunto, Ordem e legislação antes de salvar a questão." };
 }
 function blankShadowQuestion(ordem: string, assunto: string, legislacao: string): QuestionDraft { return { structure_id: null, pergunta: "", resposta: "Certo", justificativa: "", assunto, legislacao, ordem, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }; }
 async function getLawQuestionDeckDefaults(leiId: number) {

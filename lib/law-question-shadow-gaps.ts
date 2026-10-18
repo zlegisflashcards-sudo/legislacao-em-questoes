@@ -1,44 +1,31 @@
-import { expectedQuestionOrder } from "@/lib/question-structure-consistency";
+import type { QuestionStructureNode } from "@/lib/questoes-structure";
 
-export type LawQuestionArticleGap = {
-  article: number;
-  ordem: string;
+export type LawQuestionStructureGap = {
+  structureId: number;
   assunto: string;
   identityKey: string;
+  path: string[];
 };
 
-/**
- * Mantém a convenção jurídica brasileira: ordinal só até o artigo 9º.
- * O nome curto é incluído quando conhecido para que a Sombra já abra com
- * uma referência completa no editor, sem depender de uma questão existente.
- */
-export function formatLawQuestionShadowSubject(article: number, lawShortName?: string | null) {
-  const reference = `Art. ${article}${article <= 9 ? "º" : ""}`;
-  const shortName = lawShortName?.trim();
-  return shortName ? `${reference}, ${shortName}` : reference;
+function pathForStructure(node: QuestionStructureNode, byId: Map<number, QuestionStructureNode>) {
+  const path: string[] = [];
+  const visited = new Set<number>();
+  for (let current: QuestionStructureNode | undefined = node; current && !visited.has(current.id); current = current.parent_id === null ? undefined : byId.get(current.parent_id)) {
+    visited.add(current.id);
+    path.unshift(current.nome.trim());
+  }
+  return path.filter(Boolean);
 }
 
 /**
- * A ausência é editorialmente uma candidata, não uma afirmação de que o
- * artigo existe: leis podem pular números, ter artigos revogados ou letras.
+ * Uma Questão Sombra representa um bloco final da estrutura que ainda não
+ * possui questão ativa. Não infere artigos ausentes pela numeração da Ordem.
  */
-export function findLawQuestionArticleGaps(rows: Array<{ ordem: string | null | undefined }>, lawShortName?: string | null): LawQuestionArticleGap[] {
-  const covered = new Set<number>();
-  for (const row of rows) {
-    const firstPart = row.ordem?.trim().split(".")[0] ?? "";
-    if (!/^\d+$/.test(firstPart)) continue;
-    const article = Number(firstPart);
-    if (Number.isSafeInteger(article) && article > 0) covered.add(article);
-  }
-  if (covered.size < 2) return [];
-  const first = Math.min(...covered);
-  const last = Math.max(...covered);
-  const gaps: LawQuestionArticleGap[] = [];
-  for (let article = first + 1; article < last; article += 1) {
-    if (covered.has(article)) continue;
-    const ordem = expectedQuestionOrder({ artigo: String(article) });
-    if (!ordem) continue;
-    gaps.push({ article, ordem, assunto: formatLawQuestionShadowSubject(article, lawShortName), identityKey: `automatic-gap:${ordem}` });
-  }
-  return gaps;
+export function findLawQuestionStructureGaps(nodes: QuestionStructureNode[], questions: Array<{ structure_id: number | null }>): LawQuestionStructureGap[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const parents = new Set(nodes.flatMap((node) => node.parent_id === null ? [] : [node.parent_id]));
+  const linked = new Set(questions.flatMap((question) => question.structure_id === null ? [] : [question.structure_id]));
+  return nodes
+    .filter((node) => !parents.has(node.id) && !linked.has(node.id))
+    .map((node) => ({ structureId: node.id, assunto: node.nome.trim(), identityKey: `automatic-structure:${node.id}`, path: pathForStructure(node, byId) }));
 }
