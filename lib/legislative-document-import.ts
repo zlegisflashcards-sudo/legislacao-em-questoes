@@ -5,8 +5,6 @@ export type LegislativeDocumentParse = { references: LegislativeDocumentReferenc
 
 const decode = (value: string) => value.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 const escapeHtml = (value: string) => decode(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const roman: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
-const romanNumber = (value: string) => { let total = 0; const letters = value.toUpperCase().split(""); for (let index = 0; index < letters.length; index += 1) { const current = roman[letters[index]]; const next = roman[letters[index + 1]] ?? 0; if (!current) return null; total += current < next ? -current : current; } return total || null; };
 
 function enabledProperty(runProperties: string, property: string) {
   const match = new RegExp(`<w:${property}(?:\\s[^>]*)?\\s*/?>`, "i").exec(runProperties);
@@ -65,11 +63,9 @@ function heading(value: string, context: Context): Context | null {
   const article = /^art\.?\s*(\d+)\s*(?:º|o)?(?:\s*-\s*([a-z]))?\.?$/i.exec(line);
   if (article) return { article: Number(article[1]), articleLetter: article[2]?.toLowerCase() };
   const paragraph = /^§\s*(\d+|único)\s*(?:º|o)?(?:\s*-\s*([a-z]))?\.?$/i.exec(line);
-  if (paragraph && context.article) return { ...context, paragraph: paragraph[1].toLowerCase() === "único" ? 1 : Number(paragraph[1]), paragraphLetter: paragraph[2]?.toLowerCase(), inciso: undefined, incisoLetter: undefined };
-  const item = /^(?:inciso\s+)?([ivxlcdm]+)(?:\s*-\s*([a-z]))?\.?$/i.exec(line);
-  if (item && context.article) { const inciso = romanNumber(item[1]); return inciso ? { ...context, inciso, incisoLetter: item[2]?.toLowerCase() } : null; }
-  const letter = /^(?:alínea\s+)?([a-z])\)?$/i.exec(line);
-  if (letter && context.article && context.inciso) return { ...context, incisoLetter: letter[1].toLowerCase() };
+  // Only numbered paragraphs have their own prepared block. Parágrafo único,
+  // incisos and alíneas stay in the current continuous reading block.
+  if (paragraph && context.article && paragraph[1].toLowerCase() !== "único") return { ...context, paragraph: Number(paragraph[1]), paragraphLetter: paragraph[2]?.toLowerCase(), inciso: undefined, incisoLetter: undefined };
   return null;
 }
 
@@ -83,7 +79,14 @@ export function parseLegislativeDocument(paragraphs: string[]): LegislativeDocum
   for (const paragraph of paragraphs) {
     const plainParagraph = decode(paragraph.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "")).trim();
     const next = heading(paragraph, context);
-    if (next) { flush(); context = next; current = { context, identification: plainParagraph.replace(/^#{1,6}\s*/, "").trim(), lines: [] }; continue; }
+    if (next) {
+      flush();
+      context = next;
+      // The structural heading is legal text too. Keep it in the saved body so
+      // the reading page never loses the visible Art./§ identifier.
+      current = { context, identification: plainParagraph.replace(/^#{1,6}\s*/, "").trim(), lines: [paragraph] };
+      continue;
+    }
     if (!current) { rejected.push(`${plainParagraph.slice(0, 80)}: texto fora de um título estrutural.`); continue; }
     current.lines.push(paragraph);
   }

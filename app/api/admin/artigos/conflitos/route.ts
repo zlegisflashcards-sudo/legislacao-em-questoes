@@ -20,13 +20,21 @@ export const runtime = "nodejs";
 
 const headers = { "Cache-Control": "no-store, max-age=0" };
 
-function failure(error: unknown) {
-  if (error instanceof AdminArticleConflictError) return NextResponse.json({ error: error.message }, { status: error.status, headers });
-  console.error("Falha interna na correção de conflitos de flashcards.");
-  return NextResponse.json({ error: "Não foi possível concluir a correção do conflito." }, { status: 500, headers });
+function failure(error: unknown, action: string, operationId: string) {
+  if (error instanceof AdminArticleConflictError) return NextResponse.json({
+    error: error.message,
+    diagnostic: { operationId, action, code: error.code, state: "not_applied", retryable: error.status >= 500, details: error.details },
+  }, { status: error.status, headers });
+  console.error("Falha interna na correção de conflitos de flashcards.", { operationId, action, error });
+  return NextResponse.json({
+    error: "Não foi possível confirmar a conclusão desta ação. O servidor não forneceu um motivo específico.",
+    diagnostic: { operationId, action, code: "unexpected_conflict_error", state: "unknown", retryable: false, details: {} },
+  }, { status: 500, headers });
 }
 
 export async function POST(request: Request) {
+  const operationId = crypto.randomUUID();
+  let action = "desconhecida";
   try {
     if (!await obterAdministrador()) throw new AdminArticleConflictError(401, "Autenticação administrativa obrigatória.");
     let body: Record<string, unknown>;
@@ -34,6 +42,7 @@ export async function POST(request: Request) {
     catch { throw new AdminArticleConflictError(400, "Corpo da solicitação inválido."); }
     const slug = String(body.slug ?? "");
     const ordem = String(body.ordem ?? "");
+    action = String(body.action ?? "desconhecida");
     if (body.action === "previsualizar_padronizacao") {
       return NextResponse.json(await previewArticleSourceStandardization(slug, ordem, String(body.version_id ?? "")), { headers });
     }
@@ -62,16 +71,16 @@ export async function POST(request: Request) {
       return NextResponse.json(await previewArticleReferenceCleanup(body.law), { headers });
     }
     if (body.action === "aplicar_limpeza_assuntos") {
-      return NextResponse.json(await applyArticleReferenceCleanup({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? "") }), { headers });
+      return NextResponse.json(await applyArticleReferenceCleanup({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? ""), operationId: body.operation_id }), { headers });
     }
     if (body.action === "previsualizar_padronizacao_nome_curto") {
       return NextResponse.json(await previewArticleShortNameStandardization(body.law), { headers });
     }
     if (body.action === "aplicar_padronizacao_nome_curto") {
-      return NextResponse.json(await applyArticleShortNameStandardization({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? "") }), { headers });
+      return NextResponse.json(await applyArticleShortNameStandardization({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? ""), operationId: body.operation_id }), { headers });
     }
     throw new AdminArticleConflictError(400, "Ação de conflito inválida.");
   } catch (error) {
-    return failure(error);
+    return failure(error, action, operationId);
   }
 }

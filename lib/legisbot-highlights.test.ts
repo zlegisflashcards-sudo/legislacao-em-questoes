@@ -11,6 +11,11 @@ import {
 
 const highlightsComponent = readFileSync("components/legisbot-personal-highlights.tsx", "utf8");
 const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
+const overlay = readFileSync("components/legisbot-overlay.tsx", "utf8");
+const canonicalValidationMigration = readFileSync(
+  "supabase/migrations/20261016120000_validate_highlights_against_legislative_references.sql",
+  "utf8",
+);
 
 const highlight: LegisBotHighlight = {
   id: "4a1da739-c1ad-40d1-9f86-4b604162d09b",
@@ -40,8 +45,9 @@ describe("destaques pessoais do LegisBot", () => {
 
   it("usa um único seletor modal com a seleção nativa da legislação", () => {
     expect(highlightsComponent).toContain("selectionArea.current");
-    expect(highlightsComponent).toContain("textarea.selectionStart");
-    expect(highlightsComponent).toContain("textarea.selectionEnd");
+    expect(highlightsComponent).toContain("window.getSelection()");
+    expect(highlightsComponent).toContain('document.addEventListener("selectionchange"');
+    expect(highlightsComponent).toContain("prefixRange.toString().length");
     expect(highlightsComponent).toContain("legislationText.slice(start, end)");
     expect(legisBotPage).toContain("legislationText={textoLegal}");
     expect(legisBotPage).not.toContain("selectionEnabled");
@@ -51,6 +57,19 @@ describe("destaques pessoais do LegisBot", () => {
     expect(highlightsComponent).toContain("response.status === 201");
     expect(highlightsComponent).toContain("/api/legisbot/destaques/${lastCreatedHighlight.id}");
     expect(highlightsComponent).toContain("item.id !== lastCreatedHighlight.id");
+  });
+
+  it("propaga os destaques da janela para a leitura contínua", () => {
+    expect(legisBotPage).toContain("onPersonalHighlightsChange?.(items)");
+    expect(overlay).toContain("onHighlightsChange?.(activeArticle.ordem");
+    expect(overlay).toContain("const handleHighlightsChange = useCallback");
+  });
+
+  it("valida novos destaques contra a fonte canônica da leitura contínua", () => {
+    expect(canonicalValidationMigration).toContain("public.legislative_references");
+    expect(canonicalValidationMigration).toContain("lower(reference.slug) = lower(new.slug)");
+    expect(canonicalValidationMigration).toContain("reference.ordem = new.ordem");
+    expect(canonicalValidationMigration).toContain("public.legisbot_comentarios");
   });
 
   it("desfaz todos os destaques do artigo pelas exclusões existentes", () => {

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegisBotOverlay } from "@/components/legisbot-overlay";
 import { continuousBlockAnchor, referenceIdFromHash } from "@/lib/legisbot/continuous-reading-core";
+import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
 import styles from "./continuous-reading.module.css";
 
 type HierarchyNode = { id: number; type: string; name: string };
@@ -48,9 +49,98 @@ function TableOfContents({ references, activeId, onNavigate }: { references: Ref
   return nodes.length ? <StructureItems nodes={nodes} activeId={activeId} onNavigate={onNavigate} /> : <p>Estrutura ainda não informada.</p>;
 }
 
+function hierarchyIntroducedBy(reference: Reference, previous?: Reference) {
+  const sharedDepth = reference.hierarchy.findIndex((node, index) => {
+    const previousNode = previous?.hierarchy[index];
+    return !previousNode || previousNode.id !== node.id || previousNode.type !== node.type;
+  });
+  return sharedDepth < 0 ? [] : reference.hierarchy.slice(sharedDepth);
+}
+
+function ReadingStructureHeadings({ nodes }: { nodes: HierarchyNode[] }) {
+  if (!nodes.length) return null;
+  return <header className={styles.readingStructure} aria-label="Estrutura da legislação">
+    {nodes.map((node) => <p key={`${node.type}:${node.id}`} data-structure-type={node.type}>{node.name}</p>)}
+  </header>;
+}
+
+function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: LegisBotHighlight[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.innerHTML = html;
+    for (const highlight of [...highlights].sort((a, b) => a.start - b.start)) {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      let node = walker.nextNode();
+      while (node) {
+        nodes.push(node as Text);
+        node = walker.nextNode();
+      }
+      const renderedText = nodes.map((item) => item.data).join("");
+      const matches: number[] = [];
+      let match = renderedText.indexOf(highlight.text);
+      while (match >= 0) {
+        matches.push(match);
+        match = renderedText.indexOf(highlight.text, match + 1);
+      }
+      let renderedStart: number | undefined = matches.sort((a, b) => Math.abs(a - highlight.start) - Math.abs(b - highlight.start))[0];
+      let renderedEnd: number | undefined = renderedStart === undefined ? undefined : renderedStart + highlight.text.length;
+      if (renderedStart === undefined) {
+        const fragments = highlight.text.split(/\n+/).map((part) => part.trim()).filter(Boolean);
+        let cursor = 0;
+        for (const fragment of fragments) {
+          const fragmentStart = renderedText.indexOf(fragment, cursor);
+          if (fragmentStart < 0) {
+            renderedStart = undefined;
+            renderedEnd = undefined;
+            break;
+          }
+          if (renderedStart === undefined) renderedStart = fragmentStart;
+          renderedEnd = fragmentStart + fragment.length;
+          cursor = renderedEnd;
+        }
+      }
+      if (renderedStart === undefined || renderedEnd === undefined) continue;
+      let offset = 0;
+      let startNode: Text | null = null;
+      let endNode: Text | null = null;
+      let startOffset = 0;
+      let endOffset = 0;
+      for (const textNode of nodes) {
+        const nextOffset = offset + textNode.data.length;
+        if (!startNode && renderedStart >= offset && renderedStart <= nextOffset) {
+          startNode = textNode;
+          startOffset = renderedStart - offset;
+        }
+        if (renderedEnd >= offset && renderedEnd <= nextOffset) {
+          endNode = textNode;
+          endOffset = renderedEnd - offset;
+          break;
+        }
+        offset = nextOffset;
+      }
+      if (!startNode || !endNode) continue;
+      const range = document.createRange();
+      range.setStart(startNode, startOffset);
+      range.setEnd(endNode, endOffset);
+      const mark = document.createElement("mark");
+      mark.className = `personal-highlight ${highlight.color}`;
+      mark.dataset.highlightId = highlight.id;
+      mark.append(range.extractContents());
+      range.insertNode(mark);
+    }
+  }, [highlights, html]);
+
+  return <div ref={containerRef} className={styles.legalHtml} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 export default function ContinuousReadingClient({ slug, title, references, initialBlocks, initialTab }: { slug: string; title: string; references: Reference[]; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights" }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
+  const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
   const [loadingPages, setLoadingPages] = useState<Set<number>>(() => new Set());
   const [failedPages, setFailedPages] = useState<Set<number>>(() => new Set());
   const [selected, setSelected] = useState<Block | null>(null);
@@ -164,6 +254,24 @@ export default function ContinuousReadingClient({ slug, title, references, initi
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
   }
 
+  const updateBlockHighlights = useCallback((ordem: string, items: LegisBotHighlight[]) => {
+    const reference = prepared.find((item) => item.ordem === ordem);
+    if (!reference) return;
+    setBlockHighlights((current) => {
+      const currentItems = current.get(reference.id) ?? [];
+      if (currentItems.length === items.length && currentItems.every((item, index) => (
+        item.id === items[index]?.id
+        && item.start === items[index]?.start
+        && item.end === items[index]?.end
+        && item.color === items[index]?.color
+        && item.updatedAt === items[index]?.updatedAt
+      ))) return current;
+      const next = new Map(current);
+      next.set(reference.id, items);
+      return next;
+    });
+  }, [prepared]);
+
   function openFromArticle(block: Block, article: HTMLElement) {
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && selection.toString().trim()) return;
@@ -179,7 +287,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
         <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Interaja com a legislação</strong><span>Toque em um artigo ou parágrafo para grifar, adicionar comentários ou solicitar uma explicação ao LegisBot.</span></aside>
       </header>
       {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
-      <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={() => setMobileTocOpen((open) => !open)}>☰ <span>Sumário</span></button><span aria-live="polite">{prepared.find((item) => item.id === activeId)?.identificacao ?? "Início da lei"}</span></div>
+      <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={() => setMobileTocOpen((open) => !open)}>☰ <span>Sumário</span></button><span className={styles.mobileTocPrompt}>📖 Clique na Lei</span><span className={styles.mobileTocCurrent} aria-live="polite">{prepared.find((item) => item.id === activeId)?.identificacao ?? "Início da lei"}</span></div>
       {mobileTocOpen ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><h2>Sumário</h2><button type="button" aria-label="Fechar sumário" onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents references={prepared} activeId={activeId} onNavigate={navigate} /></nav></div> : null}
       <div className={`${styles.layout} ${desktopTocOpen ? "" : styles.layoutTocClosed}`}>
         <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents references={prepared} activeId={activeId} onNavigate={navigate} /></nav> : null}</aside>
@@ -187,8 +295,10 @@ export default function ContinuousReadingClient({ slug, title, references, initi
           {prepared.map((reference, index) => {
             const block = blocks.get(reference.id);
             const page = Math.floor(index / PAGE_SIZE);
-            return <article
-              key={reference.id}
+            const introducedHierarchy = hierarchyIntroducedBy(reference, prepared[index - 1]);
+            return <Fragment key={reference.id}>
+              <ReadingStructureHeadings nodes={introducedHierarchy} />
+              <article
               id={continuousBlockAnchor(reference.id)}
               data-load-page={block ? undefined : page}
               className={`${styles.block} ${block ? styles.blockInteractive : ""} ${focusedId === reference.id ? styles.blockFocused : ""}`}
@@ -204,12 +314,13 @@ export default function ContinuousReadingClient({ slug, title, references, initi
                 openBlock(block, event.currentTarget);
               } : undefined}
             >
-              {block ? <div className={styles.legalHtml} dangerouslySetInnerHTML={{ __html: block.legislation }} /> : <div className={styles.placeholder} aria-busy={loadingPages.has(page)}><span className={styles.srOnly}>{failedPages.has(page) ? "Não foi possível carregar este bloco." : "Carregando texto legislativo"}</span><div className={styles.placeholderLine}/><div className={styles.placeholderLine}/>{failedPages.has(page) ? <button type="button" className={styles.retry} onClick={() => void loadPage(page)}>Tentar carregar novamente</button> : null}</div>}
-            </article>;
+              {block ? <ContinuousLegalHtml html={block.legislation} highlights={blockHighlights.get(reference.id) ?? []} /> : <div className={styles.placeholder} aria-busy={loadingPages.has(page)}><span className={styles.srOnly}>{failedPages.has(page) ? "Não foi possível carregar este bloco." : "Carregando texto legislativo"}</span><div className={styles.placeholderLine}/><div className={styles.placeholderLine}/>{failedPages.has(page) ? <button type="button" className={styles.retry} onClick={() => void loadPage(page)}>Tentar carregar novamente</button> : null}</div>}
+              </article>
+            </Fragment>;
           })}
         </section>
       </div>
     </main>
-    {selected ? <LegisBotOverlay slug={slug} question={{ ordem: selected.ordem, titulo: title, assunto: selected.identificacao, legislacao: selected.legislation }} initialTab={initialTab} onClose={closeOverlay} /> : null}
+    {selected ? <LegisBotOverlay slug={slug} question={{ ordem: selected.ordem, titulo: title, assunto: selected.identificacao, legislacao: selected.legislation }} initialTab={initialTab} onHighlightsChange={updateBlockHighlights} onClose={closeOverlay} /> : null}
   </div>;
 }

@@ -177,6 +177,30 @@
   box-shadow: 0 12px 34px #1e3a5f0c;
 }
 
+.readingStructure {
+  display: grid;
+  gap: 5px;
+  border-bottom: 1px solid #dbe6f6;
+  background: linear-gradient(90deg, #eff6ff 0%, #f8fbff 72%, #fff 100%);
+  padding: 20px 32px 17px;
+}
+
+.readingStructure p {
+  margin: 0;
+  color: #1e3a5f;
+  font-size: .83rem;
+  font-weight: 900;
+  letter-spacing: .045em;
+  line-height: 1.38;
+  text-transform: uppercase;
+}
+
+.readingStructure p + p {
+  padding-left: 15px;
+  color: #475569;
+  font-size: .78rem;
+}
+
 .block {
   scroll-margin-top: 104px;
   border-bottom: 1px solid #e5edf7;
@@ -487,8 +511,24 @@
     font-weight: 850;
   }
 
-  .mobileTocBar > span {
+  .mobileTocPrompt {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     min-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    text-align: center;
+    color: #52657e;
+    font-size: .78rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobileTocCurrent {
+    min-width: 0;
+    margin-left: auto;
     overflow: hidden;
     color: #52657e;
     font-size: .78rem;
@@ -538,6 +578,9 @@
   .mobileTocPanel a.tocActive { background: #eff6ff; color: #1d4ed8; }
 
   .content { border-radius: 16px; }
+  .readingStructure { padding: 17px 19px 14px; }
+  .readingStructure p { font-size: .78rem; }
+  .readingStructure p + p { padding-left: 10px; font-size: .74rem; }
   .block { padding: 24px 19px; }
   .blockHeader { gap: 10px; }
   .legalHtml { font-size: .98rem; }

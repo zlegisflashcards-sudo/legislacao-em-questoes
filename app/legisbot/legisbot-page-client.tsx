@@ -55,6 +55,7 @@ type LegisBotPageClientProps = {
   articleRecent?: boolean;
   showArticleQuestions?: boolean;
   questionsRecorteId?: string | null;
+  onPersonalHighlightsChange?: (highlights: LegisBotHighlight[]) => void;
   onPreviousArticle?: () => void;
   onNextArticle?: () => void;
   onClose?: () => void;
@@ -128,6 +129,7 @@ export default function LegisBotPageClient({
   articleRecent = false,
   showArticleQuestions = false,
   questionsRecorteId = null,
+  onPersonalHighlightsChange,
   onPreviousArticle,
   onNextArticle,
   onClose,
@@ -392,7 +394,8 @@ export default function LegisBotPageClient({
 
   const updateHighlights = useCallback((items: LegisBotHighlight[]) => {
     setHighlights(items);
-  }, []);
+    onPersonalHighlightsChange?.(items);
+  }, [onPersonalHighlightsChange]);
 
   const selectHighlight = useCallback((item: LegisBotHighlight) => {
     if (activeStudyTab !== "highlights") return;

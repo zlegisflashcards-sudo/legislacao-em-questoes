@@ -84,7 +84,7 @@ export default function LegisBotPersonalHighlights({
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorSelection, setSelectorSelection] = useState<HighlightSelection | null>(null);
   const [lastCreatedHighlight, setLastCreatedHighlight] = useState<LegisBotHighlight | null>(null);
-  const selectionArea = useRef<HTMLTextAreaElement>(null);
+  const selectionArea = useRef<HTMLDivElement>(null);
   const returnPath = `/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`;
   const apiUrl = `/api/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}/destaques`;
 
@@ -144,14 +144,33 @@ export default function LegisBotPersonalHighlights({
     };
   }, [loadWithToken]);
 
-  function captureSelectorSelection() {
-    const textarea = selectionArea.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = legislationText.slice(start, end);
-    setSelectorSelection(text.trim() ? { start, end, text } : null);
-  }
+  const captureSelectorSelection = useCallback(() => {
+    const area = selectionArea.current;
+    const selection = window.getSelection();
+    if (!area || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      setSelectorSelection(null);
+      return;
+    }
+    const selectedRange = selection.getRangeAt(0);
+    if (!area.contains(selectedRange.commonAncestorContainer)) {
+      setSelectorSelection(null);
+      return;
+    }
+    const prefixRange = document.createRange();
+    prefixRange.selectNodeContents(area);
+    prefixRange.setEnd(selectedRange.startContainer, selectedRange.startOffset);
+    const start = prefixRange.toString().length;
+    const text = selectedRange.toString();
+    const end = start + text.length;
+    setSelectorSelection(text.trim() && legislationText.slice(start, end) === text ? { start, end, text } : null);
+  }, [legislationText]);
+
+  useEffect(() => {
+    if (!selectorOpen) return;
+    const capture = () => window.setTimeout(captureSelectorSelection, 0);
+    document.addEventListener("selectionchange", capture);
+    return () => document.removeEventListener("selectionchange", capture);
+  }, [captureSelectorSelection, selectorOpen]);
 
   function closeSelector() {
     setSelectorOpen(false);
@@ -315,7 +334,7 @@ export default function LegisBotPersonalHighlights({
     {selectorOpen ? <div className="community-modal-backdrop" role="presentation"><div className="community-modal highlight-selector" role="dialog" aria-modal="true" aria-labelledby="highlight-selector-title">
       <h3 id="highlight-selector-title">Selecionar trecho da legislação</h3>
       <p>Selecione somente o trecho que deseja destacar.</p>
-      <textarea ref={selectionArea} readOnly value={legislationText} rows={14} onSelect={captureSelectorSelection} onTouchEnd={() => window.setTimeout(captureSelectorSelection, 80)} />
+      <div ref={selectionArea} className="highlight-selector-text" role="textbox" aria-readonly="true" tabIndex={0} onMouseUp={captureSelectorSelection} onTouchEnd={() => window.setTimeout(captureSelectorSelection, 180)}>{legislationText}</div>
       {selectorSelection ? <p className="highlight-selector-selection"><strong>Trecho selecionado:</strong> “{selectorSelection.text}”</p> : <p className="highlight-selector-hint">Selecione o texto com o mouse ou toque e segure no celular.</p>}
       <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor do destaque" />
       <div className="community-modal-actions"><button type="button" onClick={closeSelector}>Cancelar</button><button type="button" disabled={!selectorSelection || saving} onClick={() => { if (selectorSelection) void createOrReplaceHighlight(selectorSelection); }}>{saving ? "Carregando…" : "Salvar destaque"}</button></div>

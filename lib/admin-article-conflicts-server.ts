@@ -23,7 +23,12 @@ const STRUCTURAL_BATCH_SIZE = 100;
 const QUESTION_FIELDS = "id,lei_id,slug,ordem,titulo,assunto,legislacao,pergunta,resposta,justificativa,ativo,updated_at";
 
 export class AdminArticleConflictError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(
+    public status: number,
+    message: string,
+    public readonly code = "conflict_operation_failed",
+    public readonly details: Record<string, string | null> = {},
+  ) { super(message); }
 }
 
 export type ArticleConflictFilters = {
@@ -39,6 +44,7 @@ type GranularityDecision = "paragrafo_inteiro" | "recorte_inciso";
 type GranularityBatchCandidate = StructuralBatchTarget & { questionIds: string[] };
 type ReferenceCleanupCandidate = { id: string; slug: string; ordem: string; before: string; after: string };
 type ShortNameStandardizationCandidate = ReferenceCleanupCandidate;
+type ConflictOperationAction = "limpar_html_assunto" | "padronizar_nome_curto" | "manter_granularidade" | "aplicar_estrutura";
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
 
@@ -68,12 +74,93 @@ async function loadQuestions(activeOnly: boolean, pair?: { slug: string; ordem: 
   return rows;
 }
 
+async function loadQuestionsForLaw(activeOnly: boolean, law: string) {
+  const db = getSupabaseServerClient();
+  const rows: LegisBotConflictQuestion[] = [];
+  for (let from = 0; ; from += 1000) {
+    let request = db.from("questions").select(QUESTION_FIELDS).eq("slug", law.toLowerCase()).order("id").range(from, from + 999);
+    if (activeOnly) request = request.eq("ativo", true);
+    const result = await request;
+    if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os flashcards desta lei.", "questions_query_failed", { law });
+    const page = (result.data ?? []) as LegisBotConflictQuestion[];
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return rows;
+}
+
 async function lawMap() {
   const result = await getSupabaseServerClient().from("leis").select("id,slug,titulo,codigo,nome_curto");
   if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar as leis.");
   return new Map((result.data ?? []).map((law) => [String(law.slug).toUpperCase(), {
     id: Number(law.id), title: String(law.titulo), code: law.codigo ? String(law.codigo) : null, shortName: law.nome_curto ? String(law.nome_curto) : null,
   }]));
+}
+
+async function persistConflictOperation(input: {
+  userId: string;
+  lawSlug: string;
+  action: ConflictOperationAction;
+  filters: Record<string, unknown>;
+  items: Array<{ id: string; slug: string; ordem: string; pendingTypes: string[]; before: Record<string, unknown>; after: Record<string, unknown> }>;
+}) {
+  const laws = await lawMap();
+  const law = laws.get(input.lawSlug.toUpperCase());
+  if (!law) throw new AdminArticleConflictError(404, "A lei escolhida não foi encontrada.", "law_not_found", { law: input.lawSlug });
+  const db = getSupabaseServerClient();
+  const created = await db.from("question_conflict_operations").insert({
+    lei_id: law.id,
+    lei_slug: input.lawSlug.toLowerCase(),
+    action: input.action,
+    filters: input.filters,
+    created_by: input.userId,
+    summary: { questions: input.items.length, pending: input.items.reduce((total, item) => total + item.pendingTypes.length, 0) },
+  }).select("id").single();
+  if (created.error || !created.data) throw new AdminArticleConflictError(503, "Não foi possível registrar a prévia do lote.", "operation_preview_not_saved");
+  if (!input.items.length) return String(created.data.id);
+  const inserted = await db.from("question_conflict_operation_items").insert(input.items.map((item) => ({
+    operation_id: created.data.id,
+    question_id: item.id,
+    slug: item.slug.toLowerCase(),
+    ordem: item.ordem,
+    pending_types: item.pendingTypes,
+    before_value: item.before,
+    after_value: item.after,
+  })));
+  if (!inserted.error) return String(created.data.id);
+  await db.from("question_conflict_operations").update({ status: "failed", summary: { reason: "operation_items_not_saved" } }).eq("id", created.data.id);
+  throw new AdminArticleConflictError(503, "Não foi possível congelar as questões da prévia.", "operation_items_not_saved", { operationId: String(created.data.id) });
+}
+
+async function startConflictOperation(operationId: unknown, action: ConflictOperationAction, law: string) {
+  if (typeof operationId !== "string" || !/^[0-9a-f-]{36}$/i.test(operationId)) {
+    throw new AdminArticleConflictError(409, "A prévia deste lote não é válida. Atualize a comparação antes de continuar.", "operation_preview_required");
+  }
+  const db = getSupabaseServerClient();
+  const operation = await db.from("question_conflict_operations").select("id,action,lei_slug,status").eq("id", operationId).maybeSingle();
+  if (operation.error || !operation.data || operation.data.action !== action || String(operation.data.lei_slug).toLowerCase() !== law.toLowerCase() || operation.data.status !== "prepared") {
+    throw new AdminArticleConflictError(409, "A prévia deste lote foi alterada ou já utilizada. Gere uma nova prévia.", "operation_preview_stale", { operationId });
+  }
+  const started = await db.from("question_conflict_operations").update({ status: "running", started_at: new Date().toISOString() }).eq("id", operationId).eq("status", "prepared");
+  if (started.error) throw new AdminArticleConflictError(503, "Não foi possível iniciar o lote preparado.", "operation_start_failed", { operationId });
+  return operationId;
+}
+
+async function finishConflictOperation(input: { operationId: string; action: ConflictOperationAction; applied: string[]; noChange: string[]; failed: Array<{ id: string; reason: string }>; }) {
+  const db = getSupabaseServerClient();
+  const updateItems = async (ids: string[], status: "applied" | "no_change" | "failed", reason?: string) => {
+    if (!ids.length) return;
+    const result = await db.from("question_conflict_operation_items").update({ status, reason: reason ?? null, reason_code: reason ? "write_failed" : null, applied_at: status === "applied" ? new Date().toISOString() : null }).eq("operation_id", input.operationId).in("question_id", ids);
+    if (result.error) console.error("Falha ao registrar resultado do lote", { operationId: input.operationId, status, code: result.error.code });
+  };
+  await updateItems(input.applied, "applied");
+  await updateItems(input.noChange, "no_change");
+  for (const failure of input.failed) await updateItems([failure.id], "failed", failure.reason);
+  const status = input.failed.length ? (input.applied.length || input.noChange.length ? "partial" : "failed") : "completed";
+  const summary = { action: input.action, applied: input.applied.length, noChange: input.noChange.length, failed: input.failed.length };
+  const completed = await db.from("question_conflict_operations").update({ status, summary, completed_at: new Date().toISOString() }).eq("id", input.operationId);
+  if (completed.error) console.error("Falha ao concluir operação de conflitos", { operationId: input.operationId, code: completed.error.code });
+  return { status, summary };
 }
 
 async function commentsFor(groups: LegisBotConflictGroup[]) {
@@ -340,9 +427,9 @@ function referenceCleanupLaw(value: unknown) {
 
 async function referenceCleanupCandidates(rawLaw: unknown) {
   const law = referenceCleanupLaw(rawLaw);
-  const rows = await loadQuestions(true);
+  if (!law) throw new AdminArticleConflictError(400, "Escolha uma lei antes de preparar a limpeza dos assuntos.", "law_required");
+  const rows = await loadQuestionsForLaw(true, law);
   return rows.flatMap((row): ReferenceCleanupCandidate[] => {
-    if (law && row.slug.toLocaleLowerCase("pt-BR") !== law) return [];
     const before = row.assunto ?? "";
     const after = normalizeQuestionLegalReference(before);
     return before !== after ? [{ id: row.id, slug: row.slug.toUpperCase(), ordem: row.ordem, before, after }] : [];
@@ -350,20 +437,31 @@ async function referenceCleanupCandidates(rawLaw: unknown) {
 }
 
 export async function previewArticleReferenceCleanup(rawLaw: unknown) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const candidates = await referenceCleanupCandidates(rawLaw);
-  return { law: referenceCleanupLaw(rawLaw) || null, candidates, sample: candidates.slice(0, 12) };
+  const law = referenceCleanupLaw(rawLaw);
+  const operationId = await persistConflictOperation({
+    userId: user.id, lawSlug: law, action: "limpar_html_assunto", filters: { law, source: "conflicts" },
+    items: candidates.map((candidate) => ({ id: candidate.id, slug: candidate.slug, ordem: candidate.ordem, pendingTypes: ["html_no_assunto"], before: { assunto: candidate.before }, after: { assunto: candidate.after } })),
+  });
+  return { law, candidates, sample: candidates.slice(0, 12), operationId };
 }
 
-export async function applyArticleReferenceCleanup(input: { law: unknown; expected: unknown; confirmation: string }) {
+export async function applyArticleReferenceCleanup(input: { law: unknown; expected: unknown; confirmation: string; operationId: unknown }) {
   const user = await requireAdmin();
   if (input.confirmation !== "LIMPAR ASSUNTOS") throw new AdminArticleConflictError(422, "Digite LIMPAR ASSUNTOS para confirmar.");
+  const law = referenceCleanupLaw(input.law);
+  const operationId = await startConflictOperation(input.operationId, "limpar_html_assunto", law);
   const candidates = await referenceCleanupCandidates(input.law);
   const expected = Array.isArray(input.expected) ? input.expected : [];
   const current = candidates.map(({ id, before, after }) => ({ id, before, after }));
-  if (JSON.stringify(expected) !== JSON.stringify(current)) throw new AdminArticleConflictError(409, "Os assuntos mudaram desde a prévia. Gere uma nova prévia.");
+  if (JSON.stringify(expected) !== JSON.stringify(current)) {
+    await finishConflictOperation({ operationId, action: "limpar_html_assunto", applied: [], noChange: [], failed: current.map((candidate) => ({ id: candidate.id, reason: "Os assuntos mudaram desde a prévia." })) });
+    throw new AdminArticleConflictError(409, "Os assuntos mudaram desde a prévia. Gere uma nova prévia.", "preview_changed", { operationId });
+  }
   const db = getSupabaseServerClient();
   const failed: Array<{ id: string; reason: string }> = [];
+  const applied: string[] = [];
   let cleaned = 0;
   for (const candidate of candidates) {
     try {
@@ -386,12 +484,13 @@ export async function applyArticleReferenceCleanup(input: { law: unknown; expect
         p_detalhes: { origem: "central_artigo_limpeza_assuntos" },
       });
       if (audit.error) console.error("Falha ao auditar limpeza de assunto", { questionId: candidate.id, code: audit.error.code });
-      cleaned += 1;
+      cleaned += 1; applied.push(candidate.id);
     } catch (error) {
       failed.push({ id: candidate.id, reason: error instanceof Error ? error.message : "Não foi possível limpar este assunto." });
     }
   }
-  return { cleaned, failed, law: referenceCleanupLaw(input.law) || null };
+  const operation = await finishConflictOperation({ operationId, action: "limpar_html_assunto", applied, noChange: [], failed });
+  return { cleaned, failed, law, operationId, operation };
 }
 
 function shortNameStandardizationLaw(value: unknown) {
@@ -405,7 +504,7 @@ async function shortNameStandardizationCandidates(rawLaw: unknown) {
   const laws = await lawMap();
   const shortName = laws.get(law.toUpperCase())?.shortName?.trim();
   if (!shortName) throw new AdminArticleConflictError(422, "Esta lei não possui nome curto cadastrado para usar como referência.");
-  const rows = await loadQuestions(true);
+  const rows = await loadQuestionsForLaw(true, law);
   const candidates = rows.flatMap((row): ShortNameStandardizationCandidate[] => {
     if (row.slug.toLocaleLowerCase("pt-BR") !== law) return [];
     const validation = validateQuestionStructure({ ...row, lawShortName: shortName });
@@ -418,20 +517,29 @@ async function shortNameStandardizationCandidates(rawLaw: unknown) {
 }
 
 export async function previewArticleShortNameStandardization(rawLaw: unknown) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const preview = await shortNameStandardizationCandidates(rawLaw);
-  return { ...preview, sample: preview.candidates.slice(0, 12) };
+  const operationId = await persistConflictOperation({
+    userId: user.id, lawSlug: preview.law, action: "padronizar_nome_curto", filters: { law: preview.law, source: "conflicts", shortName: preview.shortName },
+    items: preview.candidates.map((candidate) => ({ id: candidate.id, slug: candidate.slug, ordem: candidate.ordem, pendingTypes: ["lei_divergente"], before: { assunto: candidate.before }, after: { assunto: candidate.after } })),
+  });
+  return { ...preview, sample: preview.candidates.slice(0, 12), operationId };
 }
 
-export async function applyArticleShortNameStandardization(input: { law: unknown; expected: unknown; confirmation: string }) {
+export async function applyArticleShortNameStandardization(input: { law: unknown; expected: unknown; confirmation: string; operationId: unknown }) {
   const user = await requireAdmin();
   if (input.confirmation !== "PADRONIZAR NOME") throw new AdminArticleConflictError(422, "Digite PADRONIZAR NOME para confirmar.");
   const preview = await shortNameStandardizationCandidates(input.law);
+  const operationId = await startConflictOperation(input.operationId, "padronizar_nome_curto", preview.law);
   const expected = Array.isArray(input.expected) ? input.expected : [];
   const current = preview.candidates.map(({ id, before, after }) => ({ id, before, after }));
-  if (JSON.stringify(expected) !== JSON.stringify(current)) throw new AdminArticleConflictError(409, "Os assuntos mudaram desde a prévia. Gere uma nova prévia.");
+  if (JSON.stringify(expected) !== JSON.stringify(current)) {
+    await finishConflictOperation({ operationId, action: "padronizar_nome_curto", applied: [], noChange: [], failed: current.map((candidate) => ({ id: candidate.id, reason: "Os assuntos mudaram desde a prévia." })) });
+    throw new AdminArticleConflictError(409, "Os assuntos mudaram desde a prévia. Gere uma nova prévia.", "preview_changed", { operationId });
+  }
   const db = getSupabaseServerClient();
   const failed: Array<{ id: string; reason: string }> = [];
+  const applied: string[] = [];
   let standardized = 0;
   for (const candidate of preview.candidates) {
     try {
@@ -445,12 +553,13 @@ export async function applyArticleShortNameStandardization(input: { law: unknown
         p_detalhes: { origem: "central_artigo_padronizacao_nome_curto", nome_curto: preview.shortName },
       });
       if (audit.error) console.error("Falha ao auditar padronização do nome curto", { questionId: candidate.id, code: audit.error.code });
-      standardized += 1;
+      standardized += 1; applied.push(candidate.id);
     } catch (error) {
       failed.push({ id: candidate.id, reason: error instanceof Error ? error.message : "Não foi possível padronizar este assunto." });
     }
   }
-  return { standardized, failed, law: preview.law, shortName: preview.shortName };
+  const operation = await finishConflictOperation({ operationId, action: "padronizar_nome_curto", applied, noChange: [], failed });
+  return { standardized, failed, law: preview.law, shortName: preview.shortName, operationId, operation };
 }
 
 export async function getArticleSourceConflict(rawSlug: string, rawOrdem: string) {

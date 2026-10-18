@@ -22,10 +22,22 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("setMobileTocOpen(false)");
   });
 
+  it("insere títulos e capítulos no fluxo da lei sem repeti-los em cada dispositivo", () => {
+    expect(client).toContain("function hierarchyIntroducedBy");
+    expect(client).toContain("<ReadingStructureHeadings nodes={introducedHierarchy}");
+    expect(client).toContain('aria-label="Estrutura da legislação"');
+    expect(client).toContain("reference.hierarchy.slice(sharedDepth)");
+  });
+
   it("mantém sumário recolhível, sticky no celular e margem segura para âncoras", () => {
     expect(client).toContain("desktopTocOpen");
     expect(client).toContain("mobileTocOpen");
+    expect(client).toContain("☰ <span>Sumário</span>");
+    expect(client).toContain("📖 Clique na Lei");
+    expect(client).toContain("styles.mobileTocCurrent");
+    expect(client).toContain("prepared.find((item) => item.id === activeId)?.identificacao");
     expect(styles).toContain("position: sticky");
+    expect(styles).toContain("transform: translateX(-50%)");
     expect(styles).toContain("scroll-margin-top");
     expect(styles).toContain("env(safe-area-inset-bottom)");
   });
@@ -33,5 +45,12 @@ describe("leitura contínua pública", () => {
   it("não redireciona silenciosamente quando a âncora não existe", () => {
     expect(client).toContain("setMissingTarget(true)");
     expect(client).toContain("Este dispositivo não está disponível nesta versão da legislação");
+  });
+
+  it("mantém os destaques salvos no bloco da leitura contínua", () => {
+    expect(client).toContain("blockHighlights");
+    expect(client).toContain("ContinuousLegalHtml");
+    expect(client).toContain("onHighlightsChange={updateBlockHighlights}");
+    expect(client).toContain("personal-highlight ${highlight.color}");
   });
 });

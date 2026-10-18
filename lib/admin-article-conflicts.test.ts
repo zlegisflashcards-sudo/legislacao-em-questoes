@@ -211,4 +211,28 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Padronizar nome curto");
     expect(list).toContain("Somente referências com o mesmo número e ano da lei entram no lote.");
   });
+
+  it("congela a prévia de saneamentos simples por UUID e registra o resultado de cada item", () => {
+    const migration = readFileSync("supabase/migrations/20261017110000_create_question_conflict_operations.sql", "utf8");
+    expect(migration).toContain("question_conflict_operations");
+    expect(migration).toContain("question_conflict_operation_items");
+    expect(migration).toContain("unique (operation_id, question_id)");
+    expect(migration).toContain("question_editorial_decisions");
+    expect(migration).toContain("unique (question_id, decision_type, signature)");
+    expect(migration).toContain("enable row level security");
+    expect(server).toContain("persistConflictOperation");
+    expect(server).toContain("startConflictOperation");
+    expect(server).toContain("finishConflictOperation");
+    expect(server).toContain('"operation_preview_stale"');
+    expect(api).toContain("operationId: body.operation_id");
+    expect(list).toContain("operation_id: referenceCleanupPreview.operationId");
+    expect(list).toContain("operation_id: shortNamePreview.operationId");
+  });
+
+  it("devolve diagnóstico estruturado em vez de esconder a causa da falha", () => {
+    expect(api).toContain("diagnostic: { operationId, action, code");
+    expect(api).toContain('state: "unknown"');
+    expect(list).toContain("Ver detalhes");
+    expect(list).toContain("Copiar diagnóstico");
+  });
 });

@@ -85,7 +85,30 @@ export async function searchArticleContexts(rawQuery: string, lawSlug = ""): Pro
 export async function listArticleContexts(lawSlug = ""): Promise<ArticleContext[]> { return consolidateQuestionContexts(await sourceQuestions("", lawSlug)); }
 export async function listArticleContextLaws() { await exigirAdministrador(); const result = await getSupabaseServerClient().from("leis").select("slug,titulo,codigo").eq("ativo", true).order("titulo"); if (result.error) throw new Error("Não foi possível carregar as leis."); return (result.data ?? []).map((law) => ({ slug: String(law.slug), title: String(law.titulo), code: law.codigo ? String(law.codigo) : null })); }
 export async function listTrustedQuestionArticleContexts(): Promise<ArticleContext[]> { return (await listArticleContexts()).filter((item) => item.trusted); }
-export async function getArticleContext(slug: string, ordem: string): Promise<ArticleContext | null> { await exigirAdministrador(); const result = await getSupabaseServerClient().from("questions").select("id,slug,ordem,titulo,assunto,legislacao,updated_at").eq("ativo", true).eq("slug", slug.toLowerCase()).eq("ordem", ordem); if (result.error) throw new Error("Não foi possível carregar o contexto das questões."); return (await consolidateQuestionContexts(result.data as SourceQuestion[]))[0] ?? null; }
+export async function getArticleContext(slug: string, ordem: string): Promise<ArticleContext | null> {
+  await exigirAdministrador();
+  const db = getSupabaseServerClient();
+  const result = await db.from("questions").select("id,slug,ordem,titulo,assunto,legislacao,updated_at").eq("ativo", true).eq("slug", slug.toLowerCase()).eq("ordem", ordem);
+  if (result.error) throw new Error("Não foi possível carregar o contexto das questões.");
+  const fromQuestions = (await consolidateQuestionContexts(result.data as SourceQuestion[]))[0];
+  if (fromQuestions) return fromQuestions;
+
+  // A prepared reference is an editorial entity in its own right. It must open
+  // even when this dispositivo has no active flashcard or community comment.
+  const [reference, law] = await Promise.all([
+    db.from("legislative_references").select("id,slug,ordem,identificacao,legislacao,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).maybeSingle(),
+    db.from("leis").select("titulo,codigo").eq("slug", slug.toLowerCase()).maybeSingle(),
+  ]);
+  if (reference.error || law.error) throw new Error("Não foi possível carregar a referência legislativa.");
+  if (!reference.data) return null;
+  return {
+    id: String(reference.data.id), slug: String(reference.data.slug).toUpperCase(), ordem: String(reference.data.ordem),
+    titulo: String(law.data?.titulo ?? reference.data.slug), assunto: String(reference.data.identificacao), legislacao: String(reference.data.legislacao ?? ""),
+    lawTitle: law.data?.titulo ? String(law.data.titulo) : null, lawCode: law.data?.codigo ? String(law.data.codigo) : null,
+    commentsCount: 0, questionsCount: 0, conflictsCount: 0, pendingCount: 0, editorialGranularityPending: false,
+    granularityDecision: null, trusted: true, updatedAt: String(reference.data.updated_at), legisbot: null, structuralValidation: null,
+  };
+}
 
 export async function getLatestArticleInteractions(): Promise<ArticleInteraction[]> {
   await exigirAdministrador();

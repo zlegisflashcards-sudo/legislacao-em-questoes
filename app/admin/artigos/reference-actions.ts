@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { clearLegislativeReferences, importQuestionLegislationToReferences, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
+import { clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -26,6 +26,23 @@ export async function clearPreparedLegislativeReferences(formData: FormData) {
   const result = await clearLegislativeReferences(slug);
   revalidatePath("/admin/artigos");
   redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&base=limpa&removidas=${result.removed}`);
+}
+
+export async function previewLegislativeReferenceIdentifierRepair(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&reparo_identificadores=previa`);
+}
+
+export async function applyLegislativeReferenceIdentifierRepair(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  if (value(formData, "confirmation") !== "REPARAR IDENTIFICADORES") {
+    redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&reparo_identificadores=confirmacao`);
+  }
+  let expected: Array<{ id: string; updatedAt: string }> = [];
+  try { expected = JSON.parse(value(formData, "expected")); } catch { /* handled below */ }
+  const result = await repairLegislativeReferenceIdentifiers({ lawSlug: slug, expected });
+  revalidatePath("/admin/artigos");
+  redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&reparo_identificadores=aplicado&reparadas=${result.repaired}&ignoradas=${result.skipped}`);
 }
 
 export async function savePreparedLegislativeReference(formData: FormData) {

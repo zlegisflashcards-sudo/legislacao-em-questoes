@@ -6,6 +6,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
 import { legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/legislative-document-import";
+import { planLegislativeReferenceIdentifierRepair, type LegislativeReferenceIdentifierRepair } from "@/lib/legislative-reference-identifiers";
 
 export { referenceCandidatesFromQuestions, referencesNotYetStored, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 
@@ -65,6 +66,61 @@ export async function getLegislativeReference(slug: string, ordem: string) {
     .maybeSingle();
   if (result.error) throw new Error("Não foi possível carregar a referência legislativa.");
   return result.data ? mapReference(result.data as Record<string, unknown>) : null;
+}
+
+/** Read-only preview. The actual repair only prefixes missing Art./§ labels. */
+export async function previewLegislativeReferenceIdentifierRepair(lawSlug: string) {
+  await exigirAdministrador();
+  const slug = text(lawSlug, 160).toLowerCase();
+  if (!slug) throw new Error("Escolha uma legislação antes de revisar identificadores.");
+  const db = getSupabaseServerClient();
+  const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
+  if (law.error || !law.data) throw new Error("Legislação não encontrada.");
+  const result = await db.from("legislative_references")
+    .select("id,ordem,identificacao,legislacao,updated_at")
+    .eq("lei_id", law.data.id).eq("slug", slug).not("legislacao", "is", null).order("ordem");
+  if (result.error) throw new Error("Não foi possível revisar a base legislativa.");
+  const repairs = (result.data ?? []).flatMap((row) => {
+    const repair = planLegislativeReferenceIdentifierRepair({
+      id: String(row.id), ordem: String(row.ordem), identification: String(row.identificacao),
+      legislation: row.legislacao ? String(row.legislacao) : null, updatedAt: String(row.updated_at),
+    });
+    return repair ? [repair] : [];
+  });
+  return { slug, lawId: Number(law.data.id), repairs };
+}
+
+/**
+ * Creates one immutable backup per repaired reference, then updates only a row
+ * that still has the exact revision shown in the preview. A second run is a no-op.
+ */
+export async function repairLegislativeReferenceIdentifiers(input: { lawSlug: string; expected: Array<{ id: string; updatedAt: string }> }) {
+  const user = await exigirAdministrador();
+  const preview = await previewLegislativeReferenceIdentifierRepair(input.lawSlug);
+  const expected = new Map((Array.isArray(input.expected) ? input.expected : []).map((item) => [String(item.id), String(item.updatedAt)]));
+  if (!expected.size) throw new Error("Gere a prévia antes de confirmar o reparo.");
+  const db = getSupabaseServerClient();
+  let repaired = 0;
+  let skipped = 0;
+  for (const repair of preview.repairs as LegislativeReferenceIdentifierRepair[]) {
+    if (expected.get(repair.id) !== repair.updatedAt) { skipped += 1; continue; }
+    const backup = await db.from("legislative_reference_identifier_repairs").insert({
+      reference_id: repair.id,
+      lei_id: preview.lawId,
+      slug: preview.slug, ordem: repair.ordem, identificacao: repair.identification,
+      legislacao_anterior: repair.legislation, legislacao_reparada: repair.repairedLegislation,
+      repaired_by: user.id,
+    });
+    if (backup.error) {
+      if (backup.error.code === "23505") { skipped += 1; continue; }
+      throw new Error("Não foi possível criar o backup do reparo.");
+    }
+    const updated = await db.from("legislative_references").update({ legislacao: repair.repairedLegislation })
+      .eq("id", repair.id).eq("updated_at", repair.updatedAt).select("id").maybeSingle();
+    if (updated.error) throw new Error("Não foi possível aplicar o reparo na base legislativa.");
+    if (updated.data) repaired += 1; else skipped += 1;
+  }
+  return { repaired, skipped, found: preview.repairs.length };
 }
 
 /** Explicit, paginated discovery. It is never invoked while opening the Articles tab. */
