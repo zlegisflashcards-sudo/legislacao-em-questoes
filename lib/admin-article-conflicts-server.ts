@@ -326,7 +326,12 @@ function structuralBatchTargets(input: unknown): StructuralBatchTarget[] {
   const unique = new Map<string, StructuralBatchTarget>();
   for (const value of input) {
     if (!value || typeof value !== "object") throw new AdminArticleConflictError(400, "Contexto selecionado inválido.");
-    const identifiers = normalizeLegisBotIdentifiers(String((value as Record<string, unknown>).slug ?? ""), String((value as Record<string, unknown>).ordem ?? ""));
+    let identifiers: StructuralBatchTarget;
+    try {
+      identifiers = normalizeLegisBotIdentifiers(String((value as Record<string, unknown>).slug ?? ""), String((value as Record<string, unknown>).ordem ?? ""));
+    } catch {
+      throw new AdminArticleConflictError(400, "Um dos contextos selecionados possui Slug ou Ordem inválidos.", "invalid_context_identifiers");
+    }
     unique.set(`${identifiers.slug}\u0000${identifiers.ordem}`, identifiers);
   }
   return [...unique.values()];
@@ -336,9 +341,20 @@ async function structuralBatchCandidates(targets: StructuralBatchTarget[]) {
   const candidates: StructuralBatchCandidate[] = [];
   const excluded: Array<StructuralBatchTarget & { reason: string }> = [];
   for (const target of targets) {
-    const rows = await loadQuestions(true, target);
+    let rows: LegisBotConflictQuestion[];
+    try { rows = await loadQuestions(true, target); }
+    catch (error) {
+      if (error instanceof AdminArticleConflictError) throw error;
+      excluded.push({ ...target, reason: "Não foi possível carregar as questões deste contexto." });
+      continue;
+    }
     if (!rows.length) { excluded.push({ ...target, reason: "Não há questões ativas neste contexto." }); continue; }
-    const validations = rows.map((row) => validateQuestionStructure(row));
+    let validations: StructuralValidation[];
+    try { validations = rows.map((row) => validateQuestionStructure(row)); }
+    catch {
+      excluded.push({ ...target, reason: "A estrutura deste contexto não pôde ser interpretada com segurança. Revise a Ordem individualmente." });
+      continue;
+    }
     const expectedOrders = new Set(validations.filter((item) => item.status === "conflict" && item.expectedOrder).map((item) => item.expectedOrder!));
     if (!validations.every((item) => item.status === "conflict" && item.expectedOrder) || expectedOrders.size !== 1) {
       excluded.push({ ...target, reason: "O contexto não possui uma única ordem sugerida com segurança." }); continue;

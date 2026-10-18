@@ -25,7 +25,12 @@ function failure(error: unknown, action: string, operationId: string) {
     error: error.message,
     diagnostic: { operationId, action, code: error.code, state: "not_applied", retryable: error.status >= 500, details: error.details },
   }, { status: error.status, headers });
-  console.error("Falha interna na correção de conflitos de flashcards.", { operationId, action, error });
+  console.error("Falha interna na correção de conflitos de flashcards.", {
+    operationId,
+    action,
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
   return NextResponse.json({
     error: "Não foi possível confirmar a conclusão desta ação. O servidor não forneceu um motivo específico.",
     diagnostic: { operationId, action, code: "unexpected_conflict_error", state: "unknown", retryable: false, details: {} },
