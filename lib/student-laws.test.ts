@@ -201,7 +201,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>", ">🤖 Lei Interativa</Link>", "interactiveLawHref"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {

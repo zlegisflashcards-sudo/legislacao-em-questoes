@@ -232,14 +232,10 @@
 .mapArticle:hover,
 .mapArticle:focus-visible { transform: translateY(-2px); border-color: #60a5fa; box-shadow: 0 9px 22px #1e3a5f14; outline: none; }
 .mapArticle strong { font-size: 1rem; }
-.mapArticleMeta { display: flex; align-items: center; min-width: 0; }
-.mapArticle small { color: #64748b; font-size: .7rem; font-weight: 750; }
-.mapArticle small b { color: #334155; font-weight: 900; }
-.priority_muito_alta { border-color: #f87171; background: #fee2e2; }
-.priority_alta { border-color: #fca5a5; background: #fff1f2; }
-.priority_media { border-color: #fecdd3; background: #fff7ed; }
-.priority_baixa { border-color: #fde68a; background: #fffbeb; }
-.priority_nao_mapeado { border-color: #dbe6f6; background: #f8fafc; }
+.incidence_cinza { border-color: #cbd5e1; background: #f8fafc; }
+.incidence_amarelo { border-color: #facc15; background: #fefce8; }
+.incidence_laranja { border-color: #fb923c; background: #fff7ed; }
+.incidence_vermelho { border-color: #f87171; background: #fef2f2; }
 .mapArticleRecent { box-shadow: inset 0 0 0 2px #38bdf8; }
 .cardRecentFlag { position: absolute; top: 10px; right: 11px; color: #0284c7; font-size: 1rem; line-height: 1; }
 .mapArticleRecent strong { padding-right: 22px; }

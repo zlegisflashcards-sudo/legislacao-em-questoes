@@ -21,7 +21,13 @@ const PRIORITY_LABELS: Record<Priority, string> = {
   baixa: "Prioridade baixa",
   nao_mapeado: "Sem prioridade definida",
 };
-const PRIORITY_LEVELS: Record<Priority, number> = { muito_alta: 4, alta: 3, media: 2, baixa: 1, nao_mapeado: 0 };
+type IncidenceBand = "cinza" | "amarelo" | "laranja" | "vermelho";
+function incidenceBand(linkedQuestions: number): IncidenceBand {
+  if (linkedQuestions >= 9) return "vermelho";
+  if (linkedQuestions >= 5) return "laranja";
+  if (linkedQuestions >= 3) return "amarelo";
+  return "cinza";
+}
 
 function FlameIcon() {
   return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M18.3 3.5c1.1 5.3-2.2 7.3-3.8 10.1-1.2-1.1-1.8-2.5-1.7-4.3-4 3.2-6.3 7-5.4 11.1.8 4 4.2 7.1 8.6 7.1 4.8 0 8.7-3.8 8.7-8.5 0-5.6-3.8-10.6-6.4-15.5Z"/><path d="M17.3 16.4c.4 2-1.2 3-2.1 4.2-.6-.6-1-1.4-1-2.2-1.6 1.4-2.4 3-2 4.8.4 1.8 1.9 3.1 3.9 3.1 2.2 0 4-1.7 4-3.8 0-2.5-1.5-4.6-2.8-6.1Z"/></svg>;
@@ -119,12 +125,11 @@ function InteractiveLawMap({ references, onOpen }: { references: Reference[]; on
       <label><span className={styles.srOnly}>Pesquisar dispositivo</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar artigo ou assunto..." /></label>
       <label><span className={styles.srOnly}>Filtrar por prioridade</span><select value={filter} onChange={(event) => setFilter(event.target.value as Priority | "todas")}><option value="todas">Todas as prioridades</option>{PRIORITY_ORDER.map((priority) => <option key={priority} value={priority}>{PRIORITY_LABELS[priority]}</option>)}</select></label>
     </div>
-    <div className={styles.priorityLegend} aria-label="Legenda do mapa"><span className={styles.priorityGradient} aria-hidden="true" /><span>Calor: quantidade de questões vinculadas</span><span className={styles.recentLegend}><i aria-hidden="true">⚑</i>Conteúdo recente</span></div>
+    <div className={styles.priorityLegend} aria-label="Legenda do mapa"><span className={styles.priorityGradient} aria-hidden="true" /><span>Incidência: cinza, amarelo (3+), laranja (5+) e vermelho (9+)</span><span className={styles.recentLegend}><i aria-hidden="true">⚑</i>Conteúdo recente</span></div>
     {ordered.length ? <ol className={styles.mapGrid} aria-live="polite">{ordered.map((reference) => <li key={reference.id}>
-      <a href={`#${continuousBlockAnchor(reference.id)}`} className={`${styles.mapArticle} ${styles[`priority_${reference.priority}`]} ${reference.recent ? styles.mapArticleRecent : ""}`} title={`${PRIORITY_LABELS[reference.priority]}${reference.recent ? " · Conteúdo recente" : ""}`} onClick={(event) => { event.preventDefault(); onOpen(reference); }}>
+      <a href={`#${continuousBlockAnchor(reference.id)}`} className={`${styles.mapArticle} ${styles[`incidence_${incidenceBand(reference.linkedQuestions)}`]} ${reference.recent ? styles.mapArticleRecent : ""}`} title={`${PRIORITY_LABELS[reference.priority]}${reference.recent ? " · Conteúdo recente" : ""}`} onClick={(event) => { event.preventDefault(); onOpen(reference); }}>
         {reference.recent ? <span className={styles.cardRecentFlag} role="img" aria-label="Conteúdo recente" title="Conteúdo recente">⚑</span> : null}
         <strong>{reference.identificacao}</strong>
-        <span className={styles.mapArticleMeta}><small><b>Calor {PRIORITY_LEVELS[reference.priority]}/4</b><span aria-hidden="true"> · </span>{reference.linkedQuestions} {reference.linkedQuestions === 1 ? "questão" : "questões"}</small></span>
       </a>
     </li>)}</ol> : <p className={styles.mapEmpty}>Nenhum dispositivo encontrado com esses filtros.</p>}
   </section>;

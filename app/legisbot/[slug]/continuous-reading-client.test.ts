@@ -21,9 +21,14 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("reference.linkedQuestions > 0");
     expect(client).toContain('reference.priority !== "nao_mapeado"');
     expect(client).not.toContain('reference.hierarchy.at(-1)?.name');
-    expect(client).toContain("Calor: quantidade de questões vinculadas");
-    expect(client).toContain("Calor {PRIORITY_LEVELS[reference.priority]}/4");
-    expect(client).toContain("reference.linkedQuestions === 1 ? \"questão\" : \"questões\"");
+    expect(client).toContain("Incidência: cinza, amarelo (3+), laranja (5+) e vermelho (9+)");
+    expect(client).toContain("function incidenceBand(linkedQuestions: number)");
+    expect(client).not.toContain("Calor {PRIORITY_LEVELS[reference.priority]}/4");
+    expect(client).not.toContain("reference.linkedQuestions === 1 ? \"questão\" : \"questões\"");
+    expect(styles).toContain(".incidence_cinza");
+    expect(styles).toContain(".incidence_amarelo");
+    expect(styles).toContain(".incidence_laranja");
+    expect(styles).toContain(".incidence_vermelho");
     expect(client).toContain('className={styles.cardRecentFlag}');
     expect(client).toContain('aria-label="Conteúdo recente"');
     expect(server).toContain("priority: publicPriority(linkedQuestions)");
