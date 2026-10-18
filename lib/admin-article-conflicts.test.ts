@@ -126,7 +126,7 @@ describe("Central do Artigo — administração de conflitos", () => {
   });
 
   it("calcula pendências diretamente dos flashcards ativos e ignora HTML visual equivalente", () => {
-    expect(server).toContain("const activeRows = await loadQuestions(true)");
+    expect(server).toContain("const activeRows = law ? await loadQuestionsForLaw(true, law) : await loadQuestions(true)");
     expect(server).toContain("groupLegisBotSourceConflicts(activeRows)");
     expect(server).toContain("const filteredContexts = filtered.map");
     expect(server).toContain("pending: filteredContexts.length");
@@ -151,7 +151,7 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("structuralSuggestions");
     expect(api).toContain('body.action === "aplicar_lote_estrutural"');
     expect(list).toContain("Marcar para lote");
-    expect(list).toContain("Sugerir lote");
+    expect(list).toContain("Selecionar Ordens elegíveis");
     expect(list).toContain("Confirmar solução em lote");
   });
 
@@ -162,7 +162,7 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("granularity_decision: decision");
     expect(api).toContain('body.action === "previsualizar_lote_granularidade"');
     expect(api).toContain('body.action === "aplicar_lote_granularidade"');
-    expect(list).toContain("Revisar granularidade");
+    expect(list).toContain("Pré-visualizar decisão");
     expect(list).toContain("Decidir granularidade em lote");
     expect(list).toContain("nenhuma pergunta, resposta, legislação ou ordem será alterada");
     expect(list).not.toContain("Digite APLICAR GRANULARIDADE");
@@ -182,10 +182,12 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain('"Pergunta duplicada"');
     expect(server).toContain("duplicateQuestions: questions.map");
     expect(list).toContain("Perguntas duplicadas");
-    expect(list).toContain("Possível duplicata: mesma assertiva após normalizar apenas HTML e espaços.");
+    expect(list).toContain("Duplicatas comprovadamente idênticas: mesma assertiva após normalizar HTML e espaços.");
     expect(list).toContain("Editar questão");
-    expect(list).toContain("Excluir esta questão");
-    expect(list).toContain("Ela pode ser intencional em decks diferentes.");
+    expect(list).toContain("Pré-visualizar inativação em lote");
+    expect(server).toContain("previewArticleDuplicateDeactivation");
+    expect(server).toContain("applyArticleDuplicateDeactivation");
+    expect(list).toContain("A inativação em lote preserva a primeira questão");
     expect(list).toContain("Sim, excluir");
     expect(list).toContain("Não, manter");
     expect(list).toContain("question.id");

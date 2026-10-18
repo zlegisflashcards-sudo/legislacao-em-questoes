@@ -6,9 +6,11 @@ import {
   applyArticleStructuralBatch,
   applyArticleReferenceCleanup,
   applyArticleShortNameStandardization,
+  applyArticleDuplicateDeactivation,
   deactivateArticleConflictQuestion,
   previewArticleReferenceCleanup,
   previewArticleShortNameStandardization,
+  previewArticleDuplicateDeactivation,
   previewArticleGranularityBatch,
   previewArticleStructuralBatch,
   previewArticleSourceStandardization,
@@ -83,6 +85,12 @@ export async function POST(request: Request) {
     }
     if (body.action === "aplicar_padronizacao_nome_curto") {
       return NextResponse.json(await applyArticleShortNameStandardization({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? ""), operationId: body.operation_id }), { headers });
+    }
+    if (body.action === "previsualizar_inativacao_duplicadas") {
+      return NextResponse.json(await previewArticleDuplicateDeactivation({ law: body.law, questionIds: body.question_ids }), { headers });
+    }
+    if (body.action === "aplicar_inativacao_duplicadas") {
+      return NextResponse.json(await applyArticleDuplicateDeactivation({ law: body.law, questionIds: body.question_ids, confirmation: String(body.confirmation ?? "") }), { headers });
     }
     throw new AdminArticleConflictError(400, "Ação de conflito inválida.");
   } catch (error) {

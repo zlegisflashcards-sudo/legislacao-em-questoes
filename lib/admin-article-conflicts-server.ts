@@ -48,6 +48,7 @@ type ShortNameStandardizationCandidate = ReferenceCleanupCandidate;
 type ConflictOperationAction = "limpar_html_assunto" | "padronizar_nome_curto" | "manter_granularidade" | "aplicar_estrutura";
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
+type DuplicateBatchCandidate = { id: string; slug: string; ordem: string; pergunta: string };
 
 async function requireAdmin() {
   const user = await obterAdministrador();
@@ -181,7 +182,12 @@ async function commentsFor(groups: LegisBotConflictGroup[]) {
 
 export async function listArticleSourceConflicts(filters: ArticleConflictFilters = {}) {
   await requireAdmin();
-  const activeRows = await loadQuestions(true);
+  // A Central normalmente é aberta a partir de uma lei fixada. Não carregue a
+  // base inteira apenas para montar os avisos desse contexto: as validações
+  // continuam sendo feitas no servidor, mas a leitura já nasce limitada à lei.
+  // Sem esse filtro, o comportamento anterior é preservado para a visão global.
+  const law = safeFilter(filters.law);
+  const activeRows = law ? await loadQuestionsForLaw(true, law) : await loadQuestions(true);
   const groups = groupLegisBotSourceConflicts(activeRows);
   const duplicateStatements = groupDuplicateQuestionStatements(activeRows);
   const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; validation: StructuralValidation }>();
@@ -197,7 +203,6 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   for (const key of decidedGranularities) granularities.delete(key);
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys(), ...granularities.keys()])];
   const laws = lawsForValidation;
-  const law = safeFilter(filters.law);
   const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "granularidade", "pergunta_duplicada"].includes(value)));
   const hasTypeFilter = selectedTypes.size > 0;
   const typeMode = filters.typeMode === "all" ? "all" : "any";
@@ -592,6 +597,60 @@ export async function applyArticleShortNameStandardization(input: { law: unknown
   }
   const operation = await finishConflictOperation({ operationId, action: "padronizar_nome_curto", applied, noChange: [], failed });
   return { standardized, failed, law: preview.law, shortName: preview.shortName, operationId, operation };
+}
+
+function duplicateBatchInput(input: { law: unknown; questionIds: unknown }) {
+  const law = referenceCleanupLaw(input.law);
+  if (!law) throw new AdminArticleConflictError(400, "Escolha uma lei antes de preparar a inativação de duplicatas.", "law_required");
+  if (!Array.isArray(input.questionIds) || !input.questionIds.length || input.questionIds.length > STRUCTURAL_BATCH_SIZE) {
+    throw new AdminArticleConflictError(400, "Selecione de 1 a 100 questões duplicadas para este lote.", "duplicate_selection_invalid");
+  }
+  const ids = [...new Set(input.questionIds.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)))];
+  if (!ids.length || ids.length !== input.questionIds.length) throw new AdminArticleConflictError(400, "A seleção contém UUIDs de questão inválidos.", "duplicate_selection_invalid");
+  return { law, ids };
+}
+
+async function duplicateBatchPreview(input: { law: unknown; questionIds: unknown }) {
+  const { law, ids } = duplicateBatchInput(input);
+  const rows = await loadQuestionsForLaw(true, law);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const selected = ids.map((id) => byId.get(id)).filter((row): row is LegisBotConflictQuestion => Boolean(row));
+  const missing = ids.filter((id) => !byId.has(id));
+  if (!selected.length) throw new AdminArticleConflictError(409, "As questões selecionadas não estão mais ativas nesta lei. Atualize a verificação.", "duplicate_selection_stale");
+  const groups = groupDuplicateQuestionStatements(rows);
+  const group = groups.find((candidate) => selected.every((row) => candidate.questions.some((item) => item.id === row.id)));
+  if (!group) throw new AdminArticleConflictError(422, "As questões selecionadas não formam uma duplicata comprovadamente idêntica. Nenhuma questão será inativada.", "duplicate_not_identical");
+  const keeper = group.questions[0];
+  const candidates = selected.filter((row) => row.id !== keeper.id).map((row) => ({ id: row.id, slug: row.slug.toUpperCase(), ordem: row.ordem, pergunta: row.pergunta }));
+  if (!candidates.length) throw new AdminArticleConflictError(422, "A questão preservada foi selecionada sozinha. Marque ao menos uma cópia adicional.", "duplicate_keeper_only");
+  return {
+    law,
+    retained: { id: keeper.id, slug: keeper.slug.toUpperCase(), ordem: keeper.ordem, pergunta: keeper.pergunta },
+    candidates,
+    ignored: missing.map((id) => ({ id, reason: "A questão não está mais ativa nesta lei." })),
+  };
+}
+
+export async function previewArticleDuplicateDeactivation(input: { law: unknown; questionIds: unknown }) {
+  await requireAdmin();
+  return duplicateBatchPreview(input);
+}
+
+export async function applyArticleDuplicateDeactivation(input: { law: unknown; questionIds: unknown; confirmation: string }) {
+  await requireAdmin();
+  if (input.confirmation !== "INATIVAR DUPLICADAS") throw new AdminArticleConflictError(422, "Digite INATIVAR DUPLICADAS para confirmar. A operação é reversível pela gestão de questões.", "duplicate_confirmation_required");
+  const preview = await duplicateBatchPreview(input);
+  const applied: string[] = [];
+  const failed: Array<{ id: string; reason: string }> = [...preview.ignored];
+  for (const candidate of preview.candidates) {
+    try {
+      await deactivateAdminQuestion({ law_slug: preview.law, id: candidate.id });
+      applied.push(candidate.id);
+    } catch (error) {
+      failed.push({ id: candidate.id, reason: error instanceof Error ? error.message : "Não foi possível inativar esta duplicata." });
+    }
+  }
+  return { retained: preview.retained, applied, failed, reversible: true };
 }
 
 export async function getArticleSourceConflict(rawSlug: string, rawOrdem: string) {
