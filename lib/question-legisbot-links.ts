@@ -17,6 +17,14 @@ export type QuestionLegisBotResolution = {
 type QuestionIdentifier = { id: string; slug: string; ordem: string };
 type BotRow = { id: number; slug: string; ordem: string; status: string; comentario: string | null };
 
+const QUERY_BATCH_SIZE = 150;
+
+function chunks<T>(items: T[], size = QUERY_BATCH_SIZE) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
 function available(row: BotRow) {
   return row.status === "concluido" && Boolean(row.comentario?.trim());
 }
@@ -25,20 +33,33 @@ function available(row: BotRow) {
 export async function resolveQuestionLegisBotLinks(questions: QuestionIdentifier[]): Promise<QuestionLegisBotResolution[]> {
   if (!questions.length) return [];
   const db = getSupabaseServerClient();
-  const ids = questions.map((item) => item.id);
-  const linksResult = await db.from("question_legisbot_links").select("question_id,legisbot_id").in("question_id", ids);
-  if (linksResult.error) throw new Error("Não foi possível consultar os vínculos de LegisBot.");
-  const linkedIds = [...new Set((linksResult.data ?? []).map((row) => Number(row.legisbot_id)).filter(Number.isSafeInteger))];
+  const ids = [...new Set(questions.map((item) => item.id))];
+  const links = [] as { question_id: string; legisbot_id: number }[];
+  for (const batch of chunks(ids)) {
+    const linksResult = await db.from("question_legisbot_links").select("question_id,legisbot_id").in("question_id", batch);
+    if (linksResult.error) throw new Error("Não foi possível consultar os vínculos de LegisBot.");
+    links.push(...((linksResult.data ?? []) as { question_id: string; legisbot_id: number }[]));
+  }
+  const linkedIds = [...new Set(links.map((row) => Number(row.legisbot_id)).filter(Number.isSafeInteger))];
   const candidates = [...new Set(questions.flatMap((item) => legisBotOrderCandidates(item.ordem)))];
   const slugs = [...new Set(questions.map((item) => item.slug.toUpperCase()))];
-  const [linkedBots, hierarchyBots] = await Promise.all([
-    linkedIds.length ? db.from("legisbot_comentarios").select("id,slug,ordem,status,comentario").in("id", linkedIds) : Promise.resolve({ data: [], error: null }),
-    db.from("legisbot_comentarios").select("id,slug,ordem,status,comentario").in("slug", slugs).in("ordem", candidates),
-  ]);
-  if (linkedBots.error || hierarchyBots.error) throw new Error("Não foi possível consultar os conteúdos do LegisBot.");
-  const linkedById = new Map((linkedBots.data ?? []).map((row) => [Number(row.id), row as BotRow]));
-  const linkByQuestion = new Map((linksResult.data ?? []).map((row) => [String(row.question_id), Number(row.legisbot_id)]));
-  const hierarchy = new Map((hierarchyBots.data ?? []).map((row) => [`${String(row.slug).toUpperCase()}\u0000${String(row.ordem)}`, row as BotRow]));
+  const linkedBots: BotRow[] = [];
+  const hierarchyBots: BotRow[] = [];
+  for (const batch of chunks(linkedIds)) {
+    const result = await db.from("legisbot_comentarios").select("id,slug,ordem,status,comentario").in("id", batch);
+    if (result.error) throw new Error("Não foi possível consultar os conteúdos vinculados do LegisBot.");
+    linkedBots.push(...((result.data ?? []) as BotRow[]));
+  }
+  // A CF pode gerar milhares de candidatas estruturais. Consultá-las de uma só
+  // vez estoura o limite de URL do PostgREST; os lotes preservam a mesma regra.
+  for (const batch of chunks(candidates)) {
+    const result = await db.from("legisbot_comentarios").select("id,slug,ordem,status,comentario").in("slug", slugs).in("ordem", batch);
+    if (result.error) throw new Error("Não foi possível consultar os conteúdos hierárquicos do LegisBot.");
+    hierarchyBots.push(...((result.data ?? []) as BotRow[]));
+  }
+  const linkedById = new Map(linkedBots.map((row) => [Number(row.id), row]));
+  const linkByQuestion = new Map(links.map((row) => [String(row.question_id), Number(row.legisbot_id)]));
+  const hierarchy = new Map(hierarchyBots.map((row) => [`${String(row.slug).toUpperCase()}\u0000${String(row.ordem)}`, row]));
   return questions.map((question) => {
     const manual = linkedById.get(linkByQuestion.get(question.id) ?? -1);
     if (manual && available(manual)) return { questionId: question.id, status: "vinculado", legisbotId: manual.id, ordem: manual.ordem, source: "manual" };

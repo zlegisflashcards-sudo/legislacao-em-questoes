@@ -30,6 +30,13 @@ describe("vinculação de questões ao LegisBot", () => {
     expect(service).toContain("if (manual && available(manual))");
   });
 
+  it("consulta vínculos e candidatas estruturais em lotes para leis grandes", () => {
+    expect(service).toContain("const QUERY_BATCH_SIZE = 150");
+    expect(service).toContain("for (const batch of chunks(ids))");
+    expect(service).toContain("for (const batch of chunks(candidates))");
+    expect(service).toContain("limite de URL do PostgREST");
+  });
+
   it("permite busca e vínculo em lote, limitados no servidor", () => {
     expect(service).toContain("pageSize = Math.min(50");
     expect(service).toContain("ids.length > 100");
