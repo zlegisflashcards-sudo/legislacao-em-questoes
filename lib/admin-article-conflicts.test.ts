@@ -170,6 +170,27 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("item.reviewTypes.map");
   });
 
+  it("separa erros que exigem correção de avisos editoriais no resumo", () => {
+    expect(list).toContain('aria-label="Resumo de erros e avisos"');
+    expect(list).toContain("Exigem correção");
+    expect(list).toContain("Exigem revisão editorial");
+    expect(list).toContain('tone="error" label="Conflitos estruturais"');
+    expect(list).toContain('tone="error" label="Perguntas duplicadas"');
+    expect(list).toContain('tone="error" label="Sem bloco de artigo"');
+    expect(list).toContain('tone="warning" label="Legislação divergente"');
+  });
+
+  it("lista questões órfãs como erro e abre o editor para vinculá-las ao bloco correto", () => {
+    expect(server).toContain("const orphanQuestions = await articleBlockOrphans(activeRows)");
+    expect(server).toContain("resolveContinuousReadingIntegrity");
+    expect(server).toContain('"sem_bloco_artigo"');
+    expect(server).toContain('reviewTypes: ["Sem bloco de artigo"]');
+    expect(server).toContain('question_id=${encodeURIComponent(question.id)}');
+    expect(list).toContain('"Sem bloco de artigo"');
+    expect(list).toContain("Vincular ao bloco");
+    expect(list).toContain("Ela fica fora da leitura contínua e dos destinos do LegisBot");
+  });
+
   it("sinaliza duplicidade de assertiva da edição sem bloquear o salvamento nem alterar os registros", () => {
     expect(server).toContain("groupDuplicateQuestionStatements(activeRows)");
     expect(server).toContain('"Pergunta duplicada"');

@@ -17,10 +17,12 @@ import { canonicalizeQuestionLawReference, hasIncisoGranularityPending, validate
 import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
 import { groupDuplicateQuestionStatements } from "@/lib/admin-question-management";
+import { resolveContinuousReadingIntegrity, type ManualCommentTarget } from "@/lib/legisbot/continuous-reading-core";
 
 const PAGE_SIZE = 20;
 const STRUCTURAL_BATCH_SIZE = 100;
-const QUESTION_FIELDS = "id,lei_id,slug,ordem,titulo,assunto,legislacao,pergunta,resposta,justificativa,ativo,updated_at";
+const QUESTION_FIELDS = "id,lei_id,structure_id,slug,ordem,titulo,assunto,legislacao,pergunta,resposta,justificativa,ativo,updated_at";
+type ConflictQuestion = LegisBotConflictQuestion & { structure_id: number | null };
 
 export class AdminArticleConflictError extends Error {
   constructor(
@@ -49,6 +51,7 @@ type ConflictOperationAction = "limpar_html_assunto" | "padronizar_nome_curto" |
 
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
 type DuplicateBatchCandidate = { id: string; slug: string; ordem: string; pergunta: string };
+type OrphanQuestion = { question: ConflictQuestion; reason: string; status: string };
 
 async function requireAdmin() {
   const user = await obterAdministrador();
@@ -62,14 +65,14 @@ function safeFilter(value: unknown, max = 120) {
 
 async function loadQuestions(activeOnly: boolean, pair?: { slug: string; ordem: string }) {
   const db = getSupabaseServerClient();
-  const rows: LegisBotConflictQuestion[] = [];
+  const rows: ConflictQuestion[] = [];
   for (let from = 0; ; from += 1000) {
     let request = db.from("questions").select(QUESTION_FIELDS).order("id").range(from, from + 999);
     if (activeOnly) request = request.eq("ativo", true);
     if (pair) request = request.eq("slug", pair.slug.toLowerCase()).eq("ordem", pair.ordem);
     const result = await request;
     if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os flashcards.");
-    const page = (result.data ?? []) as LegisBotConflictQuestion[];
+    const page = (result.data ?? []) as ConflictQuestion[];
     rows.push(...page);
     if (page.length < 1000) break;
   }
@@ -78,13 +81,13 @@ async function loadQuestions(activeOnly: boolean, pair?: { slug: string; ordem: 
 
 async function loadQuestionsForLaw(activeOnly: boolean, law: string) {
   const db = getSupabaseServerClient();
-  const rows: LegisBotConflictQuestion[] = [];
+  const rows: ConflictQuestion[] = [];
   for (let from = 0; ; from += 1000) {
     let request = db.from("questions").select(QUESTION_FIELDS).eq("slug", law.toLowerCase()).order("id").range(from, from + 999);
     if (activeOnly) request = request.eq("ativo", true);
     const result = await request;
     if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os flashcards desta lei.", "questions_query_failed", { law });
-    const page = (result.data ?? []) as LegisBotConflictQuestion[];
+    const page = (result.data ?? []) as ConflictQuestion[];
     rows.push(...page);
     if (page.length < 1000) break;
   }
@@ -97,6 +100,61 @@ async function lawMap() {
   return new Map((result.data ?? []).map((law) => [String(law.slug).toUpperCase(), {
     id: Number(law.id), title: String(law.titulo), code: law.codigo ? String(law.codigo) : null, shortName: law.nome_curto ? String(law.nome_curto) : null,
   }]));
+}
+
+function chunks<T>(items: T[], size = 200) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
+/**
+ * Usa a mesma resolução da leitura contínua: uma questão só está vinculada
+ * quando encontra um bloco legislativo preparado por ordem ou vínculo manual.
+ */
+async function articleBlockOrphans(questions: ConflictQuestion[]): Promise<OrphanQuestion[]> {
+  if (!questions.length) return [];
+  const db = getSupabaseServerClient();
+  const slugs = [...new Set(questions.map((question) => question.slug.toLowerCase()))];
+  const references = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").in("slug", slugs);
+  if (references.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os blocos legislativos preparados.", "legislative_references_query_failed");
+  const links: Array<{ question_id: string; legisbot_id: number }> = [];
+  for (const ids of chunks(questions.map((question) => question.id))) {
+    const result = await db.from("question_legisbot_links").select("question_id,legisbot_id").in("question_id", ids);
+    if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os vínculos editoriais das questões.", "question_links_query_failed");
+    links.push(...(result.data ?? []).map((link) => ({ question_id: String(link.question_id), legisbot_id: Number(link.legisbot_id) })).filter((link) => Number.isSafeInteger(link.legisbot_id)));
+  }
+  const comments: Array<{ id: number; slug: string; ordem: string }> = [];
+  for (const ids of chunks([...new Set(links.map((link) => link.legisbot_id))])) {
+    const result = await db.from("legisbot_comentarios").select("id,slug,ordem").in("id", ids);
+    if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os destinos editoriais das questões.", "legisbot_comments_query_failed");
+    comments.push(...(result.data ?? []).map((comment) => ({ id: Number(comment.id), slug: String(comment.slug), ordem: String(comment.ordem) })).filter((comment) => Number.isSafeInteger(comment.id)));
+  }
+  const commentsById = new Map(comments.map((comment) => [comment.id, comment]));
+  const manualTargets: ManualCommentTarget[] = links.map((link) => {
+    const target = commentsById.get(link.legisbot_id);
+    return { questionId: link.question_id, commentId: link.legisbot_id, slug: target?.slug ?? null, ordem: target?.ordem ?? null };
+  });
+  const byLaw = new Map<string, ConflictQuestion[]>();
+  for (const question of questions) {
+    const slug = question.slug.toLowerCase();
+    byLaw.set(slug, [...(byLaw.get(slug) ?? []), question]);
+  }
+  const result: OrphanQuestion[] = [];
+  for (const [slug, lawQuestions] of byLaw) {
+    const integrity = resolveContinuousReadingIntegrity({
+      lawSlug: slug,
+      questions: lawQuestions.map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id })),
+      references: (references.data ?? []).map((reference) => ({ id: String(reference.id), slug: String(reference.slug), ordem: String(reference.ordem), identificacao: String(reference.identificacao), sourceQuestionId: reference.source_question_id ? String(reference.source_question_id) : null, prepared: Boolean(reference.preparado_em) })),
+      manualTargets,
+    });
+    const questionById = new Map(lawQuestions.map((question) => [question.id, question]));
+    for (const resolution of integrity.resolutions) {
+      const question = questionById.get(resolution.questionId);
+      if (question && !resolution.referenceId) result.push({ question, reason: resolution.reason ?? "Nenhum bloco legislativo foi resolvido para esta questão.", status: resolution.status });
+    }
+  }
+  return result;
 }
 
 async function persistConflictOperation(input: {
@@ -190,6 +248,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const activeRows = law ? await loadQuestionsForLaw(true, law) : await loadQuestions(true);
   const groups = groupLegisBotSourceConflicts(activeRows);
   const duplicateStatements = groupDuplicateQuestionStatements(activeRows);
+  const orphanQuestions = await articleBlockOrphans(activeRows);
   const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; validation: StructuralValidation }>();
   const byContext = new Map<string, LegisBotConflictQuestion[]>();
   for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
@@ -198,7 +257,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys()])];
   const laws = lawsForValidation;
-  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada"].includes(value)));
+  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada", "sem_bloco_artigo"].includes(value)));
   const hasTypeFilter = selectedTypes.size > 0;
   const typeMode = filters.typeMode === "all" ? "all" : "any";
   const filtered = contextKeys.filter((key) => {
@@ -218,6 +277,17 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const slug = group.questions[0]?.slug ?? "";
     return (!law || slug.toLocaleLowerCase("pt-BR") === law) && (!hasTypeFilter || (typeMode === "any" && selectedTypes.has("pergunta_duplicada")) || (typeMode === "all" && selectedTypes.size === 1 && selectedTypes.has("pergunta_duplicada")));
   });
+  const filteredOrphans = orphanQuestions.filter(({ question }) => {
+    const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`;
+    const structuralGroup = structural.get(key);
+    const matchingTypes = new Set([
+      "sem_bloco_artigo",
+      structuralGroup?.validation.status === "conflict" ? "estrutural" : null,
+      structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
+      legalByKey.has(key) ? "legislacao" : null,
+    ].filter((value): value is string => Boolean(value)));
+    return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && (!hasTypeFilter || (typeMode === "all" ? [...selectedTypes].every((value) => matchingTypes.has(value)) : [...selectedTypes].some((value) => matchingTypes.has(value))));
+  });
   // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
   // atualmente escolhido no filtro. Assim o quadro funciona como um placar
   // de avisos pendentes para a lei.
@@ -230,14 +300,18 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "possible_conflict").length,
     legislation: contextsForLaw.filter((key) => legalByKey.has(key)).length,
     duplicateStatements: duplicateStatements.filter((group) => !law || group.questions[0]?.slug.toLocaleLowerCase("pt-BR") === law).length,
+    orphanQuestions: orphanQuestions.filter(({ question }) => !law || question.slug.toLocaleLowerCase("pt-BR") === law).length,
   };
   const entries = [
     ...filtered.map((key) => ({ kind: "context" as const, key })),
     ...filteredDuplicates.map((group) => ({ kind: "duplicate" as const, group })),
+    ...filteredOrphans.map((orphan) => ({ kind: "orphan" as const, orphan })),
   ].sort((left, right) => {
     const identifiers = (entry: typeof left) => entry.kind === "context"
       ? (() => { const item = legalByKey.get(entry.key) ?? structural.get(entry.key)!; return { slug: item.slug, ordem: item.ordem }; })()
-      : { slug: entry.group.questions[0]?.slug ?? "", ordem: entry.group.questions[0]?.ordem ?? "" };
+      : entry.kind === "duplicate"
+        ? { slug: entry.group.questions[0]?.slug ?? "", ordem: entry.group.questions[0]?.ordem ?? "" }
+        : { slug: entry.orphan.question.slug, ordem: entry.orphan.question.ordem };
     const first = identifiers(left); const second = identifiers(right);
     const compared = first.slug.localeCompare(second.slug) || first.ordem.localeCompare(second.ordem);
     return filters.orderDirection === "desc" ? -compared : compared;
@@ -247,6 +321,27 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
   const start = (page - 1) * PAGE_SIZE;
   const items = entries.slice(start, start + PAGE_SIZE).map((entry) => {
+    if (entry.kind === "orphan") {
+      const { question, reason, status } = entry.orphan;
+      const metadata = laws.get(question.slug.toUpperCase());
+      return {
+        slug: question.slug.toUpperCase(),
+        ordem: question.ordem,
+        lawTitle: metadata?.title ?? question.titulo ?? question.slug,
+        lawCode: metadata?.code ?? null,
+        titulo: question.titulo ?? null,
+        assunto: question.assunto ?? null,
+        flashcards: 1,
+        versions: 1,
+        comment: null,
+        structuralValidation: null,
+        editorialGranularityPending: false,
+        reviewTypes: ["Sem bloco de artigo"],
+        duplicateQuestions: [],
+        orphanQuestion: { id: question.id, pergunta: question.pergunta, reason, status },
+        editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos&tipo=sem_bloco_artigo`)}`,
+      };
+    }
     if (entry.kind === "duplicate") {
       const questions = entry.group.questions;
       const first = questions[0];
@@ -273,6 +368,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
           pergunta: question.pergunta,
           editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos&tipo=pergunta_duplicada`)}`,
         })),
+        orphanQuestion: null,
       };
     }
     const key = entry.key;
@@ -296,6 +392,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       editorialGranularityPending: false,
       reviewTypes,
       duplicateQuestions: [],
+      orphanQuestion: null,
       editorUrl: `/admin/leis/${encodeURIComponent(slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(questions[0]!.id)}&retorno=${encodeURIComponent(`/admin/leis/${slug.toLowerCase()}/questoes?visao=conflitos`)}`,
     };
   });
@@ -318,9 +415,9 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     pages,
     total: entries.length,
     indicators: {
-      pending: filteredContexts.length + filteredDuplicates.length,
-      laws: new Set([...filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? ""), ...filteredDuplicates.map((group) => group.questions[0]?.slug ?? "")]).size,
-      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? []).length, 0) + filteredDuplicates.reduce((sum, group) => sum + group.questions.length, 0),
+      pending: filteredContexts.length + filteredDuplicates.length + filteredOrphans.length,
+      laws: new Set([...filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? ""), ...filteredDuplicates.map((group) => group.questions[0]?.slug ?? ""), ...filteredOrphans.map(({ question }) => question.slug)]).size,
+      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? []).length, 0) + filteredDuplicates.reduce((sum, group) => sum + group.questions.length, 0) + filteredOrphans.length,
     },
     typeCounts,
   };
@@ -607,7 +704,7 @@ async function duplicateBatchPreview(input: { law: unknown; questionIds: unknown
   const { law, ids } = duplicateBatchInput(input);
   const rows = await loadQuestionsForLaw(true, law);
   const byId = new Map(rows.map((row) => [row.id, row]));
-  const selected = ids.map((id) => byId.get(id)).filter((row): row is LegisBotConflictQuestion => Boolean(row));
+  const selected = ids.map((id) => byId.get(id)).filter((row): row is ConflictQuestion => Boolean(row));
   const missing = ids.filter((id) => !byId.has(id));
   if (!selected.length) throw new AdminArticleConflictError(409, "As questões selecionadas não estão mais ativas nesta lei. Atualize a verificação.", "duplicate_selection_stale");
   const groups = groupDuplicateQuestionStatements(rows);
