@@ -29,9 +29,10 @@ export function buildAdministrativePreviewItems(lawSlug: string, references: Pre
     if (parentKey) { coveredBy.set(key(item.slug, item.ordem), parentKey); items.delete(key(item.slug, item.ordem)); }
   }
   let unresolvedQuestionCount = 0;
+  const orphanQuestions: PreviewQuestionRow[] = [];
   for (const question of questions) {
     const ordem = question.ordem.trim();
-    if (!parseQuestionOrder(ordem)) { unresolvedQuestionCount += 1; continue; }
+    if (!parseQuestionOrder(ordem)) { unresolvedQuestionCount += 1; orphanQuestions.push(question); continue; }
     const itemKey = key(lawSlug, ordem);
     let item = items.get(coveredBy.get(itemKey) ?? itemKey);
     if (!item) {
@@ -49,5 +50,5 @@ export function buildAdministrativePreviewItems(lawSlug: string, references: Pre
     item.questionIds.push(question.id);
     if (item.status === "pending") item.pendingQuestionCount += 1;
   }
-  return { items: [...items.values()].sort((left, right) => left.ordem.localeCompare(right.ordem)), unresolvedQuestionCount };
+  return { items: [...items.values()].sort((left, right) => left.ordem.localeCompare(right.ordem)), unresolvedQuestionCount, orphanQuestions };
 }

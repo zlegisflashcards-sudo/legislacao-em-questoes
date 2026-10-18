@@ -648,6 +648,15 @@
   padding: 6px 10px;
 }
 
+.previewFilter { display: flex; align-items: end; gap: 10px; margin: 0 0 16px; border: 1px solid #dbe6f6; border-radius: 14px; background: #fff; padding: 11px 13px; }
+.previewFilter label { display: grid; gap: 5px; color: #475569; font-size: .78rem; font-weight: 850; }
+.previewFilter select { min-height: 40px; min-width: 230px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; padding: 0 10px; color: #172033; font: inherit; }
+.previewOrphans { display: grid; gap: 10px; }
+.previewOrphans h2 { margin: 0; color: #102a56; font-size: 1.15rem; }
+.previewOrphans > p { margin: 0; color: #52657e; }
+.previewOrphans > article { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid #fed7aa; border-left: 4px solid #fb923c; border-radius: 13px; background: #fffaf5; padding: 14px; }
+.previewOrphans p { margin: 5px 0 0; color: #64748b; font-size: .85rem; }
+
 .previewList { display: grid; gap: 12px; }
 .previewReading { overflow: hidden; border: 1px solid #d9e4f2; border-radius: 20px; background: #fff; box-shadow: 0 12px 34px #1e3a5f0c; }
 .previewReadingBlock { border-bottom: 1px solid #e5edf7; padding: 28px 32px; }
@@ -766,6 +775,10 @@
   .comingSoon h2 { font-size: 1.85rem; }
   .preparationBadge { width: 100%; justify-content: center; }
   .previewStats { display: grid; grid-template-columns: 1fr; }
+  .previewFilter { align-items: stretch; flex-direction: column; }
+  .previewFilter select, .previewFilter .admin-button { width: 100%; }
+  .previewOrphans > article { align-items: stretch; flex-direction: column; }
+  .previewOrphans .admin-button { width: 100%; justify-content: center; }
   .previewStats span { text-align: center; }
   .previewItem { align-items: stretch; flex-direction: column; gap: 14px; padding: 16px; }
   .previewReading { border-radius: 16px; }

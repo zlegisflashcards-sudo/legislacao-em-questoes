@@ -12,6 +12,7 @@ import {
 } from "./continuous-reading-core";
 import { continuousLegisBotHref } from "./continuous-reading-core";
 import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
+import { resolveQuestionLegisBotLinks } from "@/lib/question-legisbot-links";
 
 const PAGE_SIZE = 500;
 
@@ -127,7 +128,10 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
   const targets = await manualTargets(questions.map((question) => question.id));
   const questionInput: ContinuousQuestion[] = questions.map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id }));
   const referenceInput: ContinuousReferenceSummary[] = references.map((reference) => ({ id: reference.id, slug: reference.slug, ordem: reference.ordem, identificacao: reference.identificacao, sourceQuestionId: reference.source_question_id, prepared: Boolean(reference.preparado_em) }));
-  const integrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
+  const sourceIntegrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
+  const legisBotLinks = await resolveQuestionLegisBotLinks(questions.map((question) => ({ id: question.id, slug: law.slug, ordem: question.ordem })));
+  const orphanQuestions = legisBotLinks.filter((resolution) => resolution.status === "sem_legisbot").length;
+  const integrity: ReadingIntegrity = { ...sourceIntegrity, readingAvailable: sourceIntegrity.readingAvailable && orphanQuestions === 0 };
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const structureByReference = new Map<string, number>();

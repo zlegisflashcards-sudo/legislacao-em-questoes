@@ -3,6 +3,7 @@ import "server-only";
 import { exigirAdministrador } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { buildAdministrativePreviewItems, type AdministrativePreviewItem, type PreviewQuestionRow, type PreviewReferenceRow } from "@/lib/admin-legislative-preview-core";
+import { resolveQuestionLegisBotLinks } from "@/lib/question-legisbot-links";
 
 type LawRow = { id: number; slug: string; titulo: string; nome_curto: string | null };
 type ReferenceRow = PreviewReferenceRow;
@@ -13,6 +14,8 @@ export type AdministrativeLegislativePreview = {
   law: LawRow;
   items: AdministrativePreviewItem[];
   unresolvedQuestionCount: number;
+  orphanQuestions: PreviewQuestionRow[];
+  unpositionedQuestions: PreviewQuestionRow[];
 };
 
 /**
@@ -37,10 +40,15 @@ export async function getAdministrativeLegislativePreview(rawSlug: string): Prom
   if (questionResult.error) throw new Error("Não foi possível contar as questões da prévia.");
 
   const assembled = buildAdministrativePreviewItems(law.slug, (referenceResult.data ?? []) as ReferenceRow[], (questionResult.data ?? []) as QuestionRow[]);
+  const questionRows = (questionResult.data ?? []) as QuestionRow[];
+  const resolutions = await resolveQuestionLegisBotLinks(questionRows.map((question) => ({ id: question.id, slug: law.slug, ordem: question.ordem })));
+  const orphanIds = new Set(resolutions.filter((resolution) => resolution.status === "sem_legisbot").map((resolution) => resolution.questionId));
 
   return {
     law,
     items: assembled.items,
     unresolvedQuestionCount: assembled.unresolvedQuestionCount,
+    orphanQuestions: questionRows.filter((question) => orphanIds.has(question.id)),
+    unpositionedQuestions: assembled.orphanQuestions,
   };
 }
