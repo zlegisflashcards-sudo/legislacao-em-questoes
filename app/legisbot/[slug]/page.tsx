@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import ContinuousReadingClient from "./continuous-reading-client";
 import styles from "./continuous-reading.module.css";
 import { getContinuousReadingBlocks, getContinuousReadingModel } from "@/lib/legisbot/continuous-reading-server";
 import type { LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Lei Interativa | LegisFlashcards",
+  description: "Estude a legislação por prioridade no mapa ou percorra a lei completa em leitura ativa.",
+};
 
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
 function initialTab(value: string): Exclude<LegisBotStudyTab, "questions"> { return value === "community" || value === "highlights" ? value : "legisbot"; }

@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { LegiscastAudioPlayer } from "@/components/legiscast-audio-player";
 import { LegiscastPdfActions, LegiscastPdfViewer, type LegiscastPdfNavigationTarget } from "@/components/legiscast-pdf-viewer";
-import { LegiscastCommentedArticles } from "@/components/legiscast-commented-articles";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
-import type { LegislacaoComentadaPublica } from "@/lib/legisbot/legislacao-comentada-publica";
 import type { LawStudyData } from "@/lib/law-study";
 import { supabase } from "@/lib/supabase";
 
@@ -15,7 +13,7 @@ function LegiscastSkeleton() {
   return <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 sm:py-10" aria-busy="true" aria-label="Carregando LegisCast"><div className="h-28 animate-pulse rounded-3xl border border-blue-100 bg-slate-100" /><section className="mt-5 grid overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]"><div className="hidden h-[calc(74vh+4rem)] animate-pulse border-r border-slate-200 bg-slate-100 lg:block" /><div className="h-[calc(74vh+4rem)] animate-pulse bg-slate-50 p-6"><div className="h-8 w-40 rounded bg-slate-200" /><div className="mt-5 h-44 rounded-xl bg-slate-200" /><div className="mt-5 space-y-3 border-t border-slate-200 pt-4">{[1, 2, 3, 4, 5].map((item) => <div key={item} className="h-10 rounded bg-slate-200" />)}</div></div></section></div>;
 }
 
-export function LawLegiscastPageClient({ slug, recorteId, commentedArticles = [] }: { slug: string; recorteId: string | null; commentedArticles?: LegislacaoComentadaPublica[] }) {
+export function LawLegiscastPageClient({ slug, recorteId }: { slug: string; recorteId: string | null }) {
   const [study, setStudy] = useState<LawStudyData | null>(null); const [scopeName, setScopeName] = useState<string | null>(null); const [error, setError] = useState(""); const [pdfReady, setPdfReady] = useState(false); const [audioReady, setAudioReady] = useState(false); const [attempt, setAttempt] = useState(0); const [mobilePdfOpen, setMobilePdfOpen] = useState(false); const [mobileLayout, setMobileLayout] = useState<boolean | null>(null); const [targetPdfPage, setTargetPdfPage] = useState<LegiscastPdfNavigationTarget | null>(null);
   const completePdf = useCallback(() => setPdfReady(true), []); const completeAudio = useCallback(() => setAudioReady(true), []); const resolveScope = useCallback((name: string | null) => setScopeName(name), []); const fail = useCallback((message: string) => setError(message), []); const navigateToPdfPage = useCallback((page: number) => { setTargetPdfPage((current) => ({ page, requestId: (current?.requestId ?? 0) + 1 })); }, []);
   useEffect(() => { setScopeName(null); }, [slug, recorteId]);
@@ -41,7 +39,6 @@ export function LawLegiscastPageClient({ slug, recorteId, commentedArticles = []
         </div>
         <div className="min-h-0 min-w-0 p-4 pt-0 sm:p-6 lg:h-[calc(74vh+4rem)]"><LegiscastAudioPlayer key={`audio-${attempt}`} slug={slug} recorteId={recorteId} embedded onReady={completeAudio} onError={fail} onNavigateToPdfPage={navigateToPdfPage} onScopeResolved={resolveScope} />{pdf ? <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3 lg:hidden" aria-labelledby="mobile-pdf-title"><header className="mb-3 flex items-center gap-3"><img src="/icons/pdf.png" alt="" aria-hidden="true" className="h-11 w-11 shrink-0 rounded-lg object-contain" /><div className="min-w-0 text-left"><h3 id="mobile-pdf-title" className="font-black text-[#062a5f]">Material em PDF</h3><p className="text-xs text-slate-600">Acesse a legislação esquematizada desta lei.</p></div></header><LegiscastPdfActions slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} onExpand={() => setMobilePdfOpen(true)} /></section> : <p className="mt-6 rounded-xl bg-slate-50 p-3 text-sm text-slate-600 lg:hidden">O PDF desta lei não está disponível no momento.</p>}</div>
       </section>
-      <div className="mt-10 border-t border-slate-200 pt-2 lg:mt-0 lg:border-t-0 lg:pt-0"><LegiscastCommentedArticles comments={commentedArticles} recorteId={recorteId} /></div>
     </div>
     {!pageReady ? <div className="absolute inset-x-4 top-6 sm:inset-x-6 sm:top-10"><LegiscastSkeleton /></div> : null}
     {mobilePdfOpen && pdf ? <div className="fixed inset-0 z-[120] flex flex-col bg-white p-3 lg:hidden" role="dialog" aria-modal="true" aria-label={`PDF: ${study.law.title}`}><div className="mb-2 flex items-center justify-between gap-3"><strong className="min-w-0 truncate text-[#062a5f]">{study.law.title}</strong><button type="button" onClick={() => setMobilePdfOpen(false)} className="min-h-11 rounded-xl bg-blue-700 px-4 font-black text-white" aria-label="Fechar PDF">Fechar ×</button></div><div className="min-h-0 flex-1 overflow-hidden"><LegiscastPdfViewer slug={slug} materialId={pdf.id} recorteId={recorteId} title={study.law.title} targetPage={targetPdfPage} /></div></div> : null}

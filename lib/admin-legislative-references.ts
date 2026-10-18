@@ -20,6 +20,8 @@ export type LegislativeReference = {
   identification: string;
   legislation: string | null;
   preparedAt: string | null;
+  status: "pendente" | "preparada" | "revogada";
+  revokingLaw: string | null;
   updatedAt: string;
 };
 
@@ -34,6 +36,8 @@ function mapReference(row: Record<string, unknown>): LegislativeReference {
     identification: String(row.identificacao),
     legislation: row.legislacao ? String(row.legislacao) : null,
     preparedAt: row.preparado_em ? String(row.preparado_em) : null,
+    status: row.situacao === "revogada" ? "revogada" : row.situacao === "preparada" || Boolean(row.legislacao) ? "preparada" : "pendente",
+    revokingLaw: row.lei_revogadora ? String(row.lei_revogadora) : null,
     updatedAt: String(row.updated_at),
   };
 }
@@ -46,7 +50,7 @@ export async function listLegislativeReferences(input: { lawSlug?: string; query
   const offset = (page - 1) * PAGE_SIZE;
   const db = getSupabaseServerClient();
   let request = db.from("legislative_references")
-    .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,updated_at")
+    .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,situacao,lei_revogadora,updated_at")
     .order("ordem", { ascending: input.orderDirection !== "desc" })
     .range(offset, offset + PAGE_SIZE);
   if (lawSlug) request = request.eq("slug", lawSlug);
@@ -60,7 +64,7 @@ export async function listLegislativeReferences(input: { lawSlug?: string; query
 export async function getLegislativeReference(slug: string, ordem: string) {
   await exigirAdministrador();
   const result = await getSupabaseServerClient().from("legislative_references")
-    .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,updated_at")
+    .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,situacao,lei_revogadora,updated_at")
     .eq("slug", slug.trim().toLowerCase())
     .eq("ordem", ordem.trim())
     .maybeSingle();
@@ -217,11 +221,11 @@ export async function importLegislativeDocument(input: { lawSlug: string; name: 
   for (const reference of preview.references) {
     if (reference.operation === "preservar") { preserved += 1; continue; }
     if (reference.operation === "criar") {
-      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString() }).select("id").maybeSingle();
+      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada" }).select("id").maybeSingle();
       if (inserted.error || !inserted.data) throw new Error("Não foi possível criar uma referência do documento.");
       created += 1;
     } else {
-      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString() }).eq("lei_id", preview.lawId).eq("ordem", reference.ordem).is("legislacao", null).select("id").maybeSingle();
+      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", lei_revogadora: null, revogado_em: null }).eq("lei_id", preview.lawId).eq("ordem", reference.ordem).is("legislacao", null).select("id").maybeSingle();
       if (updated.error) throw new Error("Não foi possível preencher uma referência do documento.");
       if (updated.data) filled += 1; else preserved += 1;
     }
@@ -280,7 +284,7 @@ export async function importQuestionLegislationToReferences(lawSlug: string) {
     if (!versions?.size) { skippedEmpty += 1; continue; }
     if (versions.size !== 1) { skippedConflicts += 1; continue; }
     const legislation = [...versions.values()][0];
-    const saved = await db.from("legislative_references").update({ legislacao: legislation, preparado_em: now })
+    const saved = await db.from("legislative_references").update({ legislacao: legislation, preparado_em: now, situacao: "preparada", lei_revogadora: null, revogado_em: null })
       .eq("id", referenceId).is("legislacao", null).select("id").maybeSingle();
     if (saved.error) throw new Error("Não foi possível importar um dos recortes legislativos.");
     if (saved.data) imported += 1;
@@ -288,15 +292,39 @@ export async function importQuestionLegislationToReferences(lawSlug: string) {
   return { imported, skippedExisting: (references.data ?? []).length - emptyByOrder.size, skippedConflicts, skippedEmpty };
 }
 
-export async function saveLegislativeReference(input: { id: string; identification: unknown; legislation: unknown }) {
+export async function saveLegislativeReference(input: { id: string; identification: unknown; legislation: unknown; status?: unknown; revokingLaw?: unknown }) {
   await exigirAdministrador();
   const identification = text(input.identification, 500);
   const legislation = sanitizarHtmlLegislacao(text(input.legislation));
   if (!input.id.trim() || !identification) throw new Error("A identificação do dispositivo é obrigatória.");
+  const status = input.status === "revogada" ? "revogada" : legislation ? "preparada" : "pendente";
+  const revokingLaw = text(input.revokingLaw, 500);
+  if (status === "revogada" && !revokingLaw) throw new Error("Informe a lei que revogou este dispositivo antes de salvar.");
   const result = await getSupabaseServerClient().from("legislative_references").update({
     identificacao: identification,
     legislacao: legislation || null,
     preparado_em: legislation ? new Date().toISOString() : null,
+    situacao: status,
+    lei_revogadora: status === "revogada" ? revokingLaw : null,
+    revogado_em: status === "revogada" ? new Date().toISOString() : null,
   }).eq("id", input.id).select("id").maybeSingle();
   if (result.error || !result.data) throw new Error("Não foi possível salvar a referência legislativa.");
+}
+
+/** Creates the one canonical reference for an already identified question context. */
+export async function createLegislativeReferenceFromPreview(input: { lawSlug: string; ordem: unknown; identification: unknown }) {
+  await exigirAdministrador();
+  const slug = text(input.lawSlug, 160).toLowerCase();
+  const ordem = text(input.ordem, 160);
+  const identification = text(input.identification, 500);
+  if (!slug || !ordem || !identification) throw new Error("A referência precisa de lei, Ordem e identificação antes de ser cadastrada.");
+  const db = getSupabaseServerClient();
+  const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
+  if (law.error || !law.data) throw new Error("Legislação não encontrada para criar a referência.");
+  const existing = await db.from("legislative_references").select("id").eq("lei_id", law.data.id).eq("ordem", ordem).maybeSingle();
+  if (existing.error) throw new Error("Não foi possível verificar a referência antes de criar.");
+  if (existing.data) return { id: String(existing.data.id), created: false };
+  const created = await db.from("legislative_references").insert({ lei_id: law.data.id, slug, ordem, identificacao: identification, situacao: "pendente" }).select("id").maybeSingle();
+  if (created.error || !created.data) throw new Error("Não foi possível criar a referência legislativa. Confira se a Ordem pertence a esta lei.");
+  return { id: String(created.data.id), created: true };
 }

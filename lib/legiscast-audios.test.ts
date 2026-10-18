@@ -103,7 +103,7 @@ describe("LegisCast em áudio", () => {
     expect(client).toContain("const pageReady = mobileLayout !== null && audioReady && (mobileLayout || pdfReady)");
     expect(client).toContain("LegiscastSkeleton");
     expect(client).toContain('pageReady ? "" : "invisible"');
-    expect(client).toContain("<LegiscastCommentedArticles");
+    expect(client).not.toContain("<LegiscastCommentedArticles");
     expect(client).toContain("!pageReady ? <div");
     expect(client).toContain("Tentar novamente");
     expect(client).not.toContain("setTimeout");
@@ -234,15 +234,14 @@ describe("LegisCast em áudio", () => {
     expect(player.match(/<audio /g)).toHaveLength(1);
   });
 
-  it("mantém no mobile capa, player, playlist, ações do PDF e artigos nessa ordem", () => {
+  it("mantém no mobile capa, player, playlist e ações do PDF sem duplicar o mapa da Lei Interativa", () => {
     const cover = lawLegiscastClient.indexOf("Capa dos hosts do LegisCast");
     const actions = lawLegiscastClient.indexOf("<LegiscastPdfActions");
     const playerPosition = lawLegiscastClient.indexOf("<LegiscastAudioPlayer key=");
-    const articles = lawLegiscastClient.indexOf("<LegiscastCommentedArticles");
     expect(cover).toBeGreaterThan(-1);
     expect(playerPosition).toBeGreaterThan(cover);
     expect(actions).toBeGreaterThan(playerPosition);
-    expect(articles).toBeGreaterThan(actions);
+    expect(lawLegiscastClient).not.toContain("<LegiscastCommentedArticles");
     expect(player).toContain("<StructureSummary");
     expect(player.indexOf('aria-label="Posição da reprodução"')).toBeLessThan(player.lastIndexOf("<StructureSummary"));
   });

@@ -14,6 +14,7 @@ import { applyLegislativeReferenceIdentifierRepair, clearPreparedLegislativeRefe
 import { previewLegislativeReferenceIdentifierRepair as getIdentifierRepairPreview } from "@/lib/admin-legislative-references";
 import styles from "@/components/admin/article-context-filter.module.css";
 import { ArticleReadingIntegrity } from "@/components/admin/article-reading-integrity";
+import { listArticleLegisBotConflicts, type ArticleLegisBotConflict } from "@/lib/admin-article-legisbot-conflicts";
 
 export const dynamic = "force-dynamic";
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -27,12 +28,11 @@ const formatCommentDate = (value: unknown) => {
 export default async function AdminArticlesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const requestedTab = one(params.aba);
-  const tab = requestedTab === "comentarios" ? "comentarios" : requestedTab === "legisbot" ? "legisbot" : requestedTab === "mapeamento" ? "mapeamento" : "artigos";
+  const tab = requestedTab === "comentarios" ? "comentarios" : requestedTab === "legisbot" ? "legisbot" : requestedTab === "mapeamento" ? "mapeamento" : requestedTab === "conflitos" ? "conflitos" : "artigos";
   const query = one(params.q);
   const lawFilter = (one(params.lei) || one(params.law)).toLowerCase();
   const orderDirection: "asc" | "desc" = one(params.ordem_sort) === "desc" ? "desc" : "asc";
   await exigirAdministrador();
-  if (requestedTab === "conflitos" && lawFilter) redirect(`/admin/leis/${encodeURIComponent(lawFilter)}/questoes?visao=conflitos`);
   const [references, laws] = await Promise.all([
     tab === "artigos" ? listLegislativeReferences({ lawSlug: lawFilter, query, page: Number(one(params.pagina)) || 1, orderDirection }) : Promise.resolve(null),
     listArticleContextLaws(),
@@ -46,8 +46,8 @@ export default async function AdminArticlesPage({ searchParams }: { searchParams
     <Link className="admin-central-link" href="/admin">← Central Administrativa</Link>
     <header className="admin-header"><div><div className="admin-eyebrow">Camada da Lei</div><h1>Artigos e dispositivos</h1><p>Escolha a lei para trabalhar nos seus artigos. LegisBot, comentários, mapeamento e pendências abaixo sempre respeitam esse contexto.</p></div></header>
     <form className={`article-context-filter ${styles.contextFilter}`} aria-label="Contexto da lei"><input type="hidden" name="aba" value={tab}/>{query ? <input type="hidden" name="q" value={query}/> : null}<ArticleLawCombobox laws={laws} value={lawFilter}/><label>Ordenar pelo campo ordem<select name="ordem_sort" defaultValue={orderDirection}><option value="asc">Ordem crescente</option><option value="desc">Ordem decrescente</option></select></label><button className="admin-button secondary">Aplicar contexto</button></form>
-    <nav className={`article-tabs ${styles.tabs}`} aria-label="Áreas da lei selecionada"><Link className={tab === "artigos" ? "active" : ""} href={tabHref("artigos")}>Artigos</Link><Link className={tab === "mapeamento" ? "active" : ""} href={tabHref("mapeamento")}>Mapeamento</Link><Link className={tab === "legisbot" ? "active" : ""} href={tabHref("legisbot")}>LegisBot</Link><Link className={tab === "comentarios" ? "active" : ""} href={tabHref("comentarios")}>Comentários</Link></nav>
-    {tab === "mapeamento" ? <ArticleMappingCenter law={lawFilter} orderDirection={orderDirection}/> : tab === "legisbot" ? <ArticleLegisBotPanel lawFilter={lawFilter} query={query} status={one(params.status)} orderDirection={orderDirection} /> : tab === "comentarios" ? <ArticleCommunityPanel lawFilter={lawFilter} query={query} status={one(params.status)} orderDirection={orderDirection} /> : <>
+    <nav className={`article-tabs ${styles.tabs}`} aria-label="Áreas da lei selecionada"><Link className={tab === "artigos" ? "active" : ""} href={tabHref("artigos")}>Artigos</Link><Link className={tab === "conflitos" ? "active has-conflict" : "has-conflict"} href={tabHref("conflitos")}>Conflitos de artigos</Link><Link className={tab === "mapeamento" ? "active" : ""} href={tabHref("mapeamento")}>Mapeamento</Link><Link className={tab === "legisbot" ? "active" : ""} href={tabHref("legisbot")}>LegisBot</Link><Link className={tab === "comentarios" ? "active" : ""} href={tabHref("comentarios")}>Comentários</Link></nav>
+    {tab === "conflitos" ? <ArticleLegisBotConflictsPanel lawFilter={lawFilter} /> : tab === "mapeamento" ? <ArticleMappingCenter law={lawFilter} orderDirection={orderDirection}/> : tab === "legisbot" ? <ArticleLegisBotPanel lawFilter={lawFilter} query={query} status={one(params.status)} orderDirection={orderDirection} /> : tab === "comentarios" ? <ArticleCommunityPanel lawFilter={lawFilter} query={query} status={one(params.status)} orderDirection={orderDirection} /> : <>
       <form className="article-search"><input type="hidden" name="aba" value={tab}/><input type="hidden" name="lei" value={lawFilter}/><input type="hidden" name="ordem_sort" value={orderDirection}/><label htmlFor="article-search">Buscar artigo</label><div><input id="article-search" name="q" defaultValue={query} placeholder="Buscar artigo por lei, código, artigo, ordem, título ou assunto..." autoComplete="off"/><button className="admin-button primary">Buscar</button><Link className="admin-button secondary" href={`/admin/artigos?aba=${tab}${lawFilter ? `&lei=${encodeURIComponent(lawFilter)}` : ""}&ordem_sort=${orderDirection}`}>Limpar busca</Link></div></form>
       {one(params.preparacao) === "concluida" ? <p className="admin-alert success">Referências identificadas. Os textos legislativos existentes foram preservados.</p> : null}
       {one(params.importacao) ? <p className="admin-alert success">Importação concluída: {one(params.importacao).split(",")[0] ?? "0"} base(s) preenchida(s). Textos já preparados foram preservados; referências divergentes ou sem recorte foram ignoradas.</p> : null}
@@ -60,6 +60,18 @@ export default async function AdminArticlesPage({ searchParams }: { searchParams
       {references?.records.length ? <section aria-live="polite"><h2 className="article-section-title">{query.trim() ? `Resultados para “${query}”` : lawFilter ? "Referências legislativas preparadas" : "Base legislativa"}</h2><div className="article-result-list">{references.records.map((item) => <article className="article-result" key={item.id}><div><strong>{item.identification}</strong><p>ordem {item.ordem}</p><small>{item.slug} · {item.legislation ? "Legislação preenchida" : "Aguardando texto legislativo"}</small></div><Link className="admin-button secondary" href={`/admin/artigos/${encodeURIComponent(item.slug)}/${encodeURIComponent(item.ordem)}?aba=artigo&lei=${encodeURIComponent(lawFilter || item.slug)}&ordem_sort=${orderDirection}`}>Abrir</Link></article>)}</div><nav className="article-pagination" aria-label="Paginação de referências">{references.page > 1 ? <Link className="admin-button secondary" href={referencePageHref(references.page - 1)}>← Anterior</Link> : null}{references.hasNextPage ? <Link className="admin-button secondary" href={referencePageHref(references.page + 1)}>Próxima →</Link> : null}</nav></section> : <div className="admin-empty"><h2>Nenhuma referência preparada</h2><p>{lawFilter ? "Use a identificação incremental para criar a base a partir das questões, ou aguarde o cadastro editorial." : "Selecione uma legislação para visualizar sua base legislativa."}</p></div>}
     </>}
   </main>;
+}
+
+const articleConflictLabel: Record<ArticleLegisBotConflict["kind"], string> = { estrutura: "Estrutura da referência", duplicata: "Duplicidade do LegisBot", falha_tecnica: "Falha técnica do LegisBot", granularidade: "Exceção de granularidade" };
+
+async function ArticleLegisBotConflictsPanel({ lawFilter }: { lawFilter: string }) {
+  if (!lawFilter) return <section className="admin-empty"><h2>Escolha uma lei</h2><p>Selecione uma lei para verificar inconsistências da base legislativa e do LegisBot.</p></section>;
+  const conflicts = await listArticleLegisBotConflicts(lawFilter);
+  const actionable = conflicts.filter((item) => !item.informational);
+  const informational = conflicts.filter((item) => item.informational);
+  const grouped = new Map<ArticleLegisBotConflict["kind"], ArticleLegisBotConflict[]>();
+  for (const item of conflicts) grouped.set(item.kind, [...(grouped.get(item.kind) ?? []), item]);
+  return <section><header className="article-comments-heading"><div><h2>Conflitos de artigos</h2><p>Somente inconsistências da referência legislativa e do LegisBot. Conflitos editoriais de questões ficam na Central da Lei, em Gestão de Questões.</p></div></header><div className="article-conflict-summary"><article><strong>Pendências para revisar</strong><span>{actionable.length}</span></article><article><strong>Etiquetas de granularidade</strong><span>{informational.length}</span></article></div>{conflicts.length ? <div className="article-result-list">{[...grouped.entries()].map(([kind, items]) => <section key={kind} className="article-conflict-group"><h3>{articleConflictLabel[kind]} <span>{items.length}</span></h3>{items.map((item, index) => { const href = item.legisbotId ? `/admin/legisbot/${item.legisbotId}` : item.referenceId ? `/admin/artigos/legisbot-preview?lei=${encodeURIComponent(lawFilter)}&editar=${encodeURIComponent(item.referenceId)}` : `/admin/artigos?aba=legisbot&lei=${encodeURIComponent(lawFilter)}`; return <article className="article-result" key={`${item.kind}:${item.ordem}:${item.legisbotId ?? item.referenceId ?? index}`}><div><strong>{item.title}</strong><p>ordem {item.ordem}</p><small>{item.detail}</small></div><Link className="admin-button secondary" href={href}>{item.informational ? "Ver referência" : "Revisar"}</Link></article>; })}</section>)}</div> : <div className="admin-empty"><h2>Nenhuma inconsistência encontrada</h2><p>A base legislativa e os registros do LegisBot não apresentam pendências técnicas nesta lei. A ausência de LegisBot em um artigo não é conflito.</p></div>}</section>;
 }
 
 async function ArticleLegisBotPanel({ lawFilter, query, status, orderDirection }: { lawFilter: string; query: string; status: string; orderDirection: "asc" | "desc" }) {

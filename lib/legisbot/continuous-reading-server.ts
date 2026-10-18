@@ -11,6 +11,7 @@ import {
   type ReadingIntegrity,
 } from "./continuous-reading-core";
 import { continuousLegisBotHref } from "./continuous-reading-core";
+import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 
 const PAGE_SIZE = 500;
 
@@ -20,9 +21,17 @@ type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: st
 type StructureRow = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number };
 type LinkRow = { question_id: string; legisbot_id: number };
 type CommentTargetRow = { id: number; slug: string; ordem: string };
+type MappingRow = { slug: string; ordem: string; artigo_recente: boolean | null };
+
+export type ContinuousReadingPriority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 
 export type ContinuousHierarchyNode = { id: number; type: string; name: string };
-export type ContinuousReadingReference = ContinuousReferenceSummary & { hierarchy: ContinuousHierarchyNode[] };
+export type ContinuousReadingReference = ContinuousReferenceSummary & {
+  hierarchy: ContinuousHierarchyNode[];
+  priority: ContinuousReadingPriority;
+  recent: boolean;
+  linkedQuestions: number;
+};
 export type ContinuousReadingBlock = ContinuousReadingReference & { legislation: string };
 
 export type ContinuousReadingModel = {
@@ -30,6 +39,10 @@ export type ContinuousReadingModel = {
   references: ContinuousReadingReference[];
   integrity: ReadingIntegrity;
 };
+
+function publicPriority(questionCount: number): ContinuousReadingPriority {
+  return incidenceFromQuestionCount(questionCount);
+}
 
 function chunks<T>(items: T[], size = 200) {
   const result: T[][] = [];
@@ -104,10 +117,11 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
   if (lawResult.error) throw new Error("Não foi possível consultar a legislação.");
   if (!lawResult.data) return null;
   const law = lawResult.data as LawRow;
-  const [questions, references, structure] = await Promise.all([
+  const [questions, references, structure, mappings] = await Promise.all([
     allQuestions(law.id),
     allReferenceSummaries(law.id),
     db.from("law_structure").select("id,parent_id,tipo,nome,ordem").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
+    db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
   ]);
   if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
   const targets = await manualTargets(questions.map((question) => question.id));
@@ -127,10 +141,32 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     if (question?.structure_id) structureByReference.set(resolution.referenceId, question.structure_id);
   }
 
+  const questionCountByReference = new Map<string, number>();
+  for (const resolution of integrity.resolutions) {
+    if (!resolution.referenceId) continue;
+    questionCountByReference.set(resolution.referenceId, (questionCountByReference.get(resolution.referenceId) ?? 0) + 1);
+  }
+  const mappingByContext = new Map(
+    ((mappings.error ? [] : mappings.data ?? []) as MappingRow[]).map((mapping) => [
+      `${mapping.slug.toLowerCase()}\u0000${mapping.ordem}`,
+      mapping,
+    ]),
+  );
+
   return {
     law,
     integrity,
-    references: referenceInput.map((reference) => ({ ...reference, hierarchy: hierarchyPath(structureByReference.get(reference.id) ?? null, (structure.data ?? []) as StructureRow[]) })),
+    references: referenceInput.map((reference) => {
+      const linkedQuestions = questionCountByReference.get(reference.id) ?? 0;
+      const mapping = mappingByContext.get(`${reference.slug.toLowerCase()}\u0000${reference.ordem}`);
+      return {
+        ...reference,
+        hierarchy: hierarchyPath(structureByReference.get(reference.id) ?? null, (structure.data ?? []) as StructureRow[]),
+        priority: publicPriority(linkedQuestions),
+        recent: mapping?.artigo_recente === true,
+        linkedQuestions,
+      };
+    }),
   };
 }
 

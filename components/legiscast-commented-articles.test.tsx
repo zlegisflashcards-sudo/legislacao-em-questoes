@@ -7,8 +7,8 @@ const studyClient = readFileSync("components/legis-questoes-study-client.tsx", "
 const repository = readFileSync("lib/legisbot/legislacao-comentada-publica.ts", "utf8");
 const page = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", "utf8");
 
-describe("artigos comentados no LegisCast", () => {
-  it("deriva a legislação de questions e associa somente comentários concluídos", () => {
+describe("mapa legislativo migrado para a Lei Interativa", () => {
+  it("mantém o repositório legado disponível, mas retira a consulta da página do LegisCast", () => {
     expect(repository).toContain('from("questions")');
     expect(repository).toContain('eq("ativo", true)');
     expect(repository).toContain('.eq("slug", slugNormalizado)');
@@ -16,7 +16,13 @@ describe("artigos comentados no LegisCast", () => {
     expect(repository).toContain('.not("comentario", "is", null)');
     expect(repository).toContain('comment.status === "concluido"');
     expect(repository).toContain("legislations.size !== 1 || subjects.size !== 1");
-    expect(page).toContain("buscarLegislacaoComentadaPublicaPorSlug(slug)");
+    expect(page).not.toContain("buscarLegislacaoComentadaPublicaPorSlug(slug)");
+  });
+
+  it("não monta mais o mapa dentro do LegisCast", () => {
+    const lawClient = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
+    expect(lawClient).not.toContain("LegiscastCommentedArticles");
+    expect(lawClient).not.toContain("commentedArticles");
   });
 
   it("não renderiza a seção vazia, limita inicialmente e pesquisa a lista completa", () => {
