@@ -155,23 +155,16 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Confirmar solução em lote");
   });
 
-  it("permite decidir a granularidade por lote sem alterar os flashcards", () => {
-    expect(server).toContain("previewArticleGranularityBatch");
-    expect(server).toContain("applyArticleGranularityBatch");
-    expect(server).toContain("hasIncisoGranularityPending(row)");
-    expect(server).toContain("granularity_decision: decision");
-    expect(api).toContain('body.action === "previsualizar_lote_granularidade"');
-    expect(api).toContain('body.action === "aplicar_lote_granularidade"');
-    expect(list).toContain("Pré-visualizar decisão");
-    expect(list).toContain("Decidir granularidade em lote");
-    expect(list).toContain("nenhuma pergunta, resposta, legislação ou ordem será alterada");
-    expect(list).not.toContain("Digite APLICAR GRANULARIDADE");
+  it("não apresenta granularidade como pendência da Central", () => {
+    expect(server).not.toContain('"granularidade", "pergunta_duplicada"');
+    expect(list).not.toContain("Granularidade: manter como está");
+    expect(list).not.toContain('label="Granularidade"');
   });
 
   it("exibe explicitamente todos os tipos de revisão de cada contexto", () => {
     expect(server).toContain("const reviewTypes = [");
     expect(server).toContain('"Legislação divergente"');
-    expect(server).toContain('"Pendência de granularidade"');
+    expect(server).not.toContain('"Pendência de granularidade"');
     expect(server).not.toContain('"Comentário sem análise"');
     expect(list).toContain('aria-label="Tipos de revisão"');
     expect(list).toContain("item.reviewTypes.map");
