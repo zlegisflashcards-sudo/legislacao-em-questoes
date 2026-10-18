@@ -328,20 +328,23 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   };
 }
 
-function structuralBatchTargets(input: unknown): StructuralBatchTarget[] {
+function structuralBatchTargets(input: unknown): { targets: StructuralBatchTarget[]; excluded: Array<StructuralBatchTarget & { reason: string }> } {
   if (!Array.isArray(input) || !input.length || input.length > STRUCTURAL_BATCH_SIZE) throw new AdminArticleConflictError(400, "Selecione de 1 a 100 contextos para a correção em lote.");
   const unique = new Map<string, StructuralBatchTarget>();
+  const excluded: Array<StructuralBatchTarget & { reason: string }> = [];
   for (const value of input) {
     if (!value || typeof value !== "object") throw new AdminArticleConflictError(400, "Contexto selecionado inválido.");
+    const raw = { slug: String((value as Record<string, unknown>).slug ?? "").trim(), ordem: String((value as Record<string, unknown>).ordem ?? "").trim() };
     let identifiers: StructuralBatchTarget;
     try {
-      identifiers = normalizeLegisBotIdentifiers(String((value as Record<string, unknown>).slug ?? ""), String((value as Record<string, unknown>).ordem ?? ""));
+      identifiers = normalizeLegisBotIdentifiers(raw.slug, raw.ordem);
     } catch {
-      throw new AdminArticleConflictError(400, "Um dos contextos selecionados possui Slug ou Ordem inválidos.", "invalid_context_identifiers");
+      excluded.push({ ...raw, reason: "Slug ou Ordem inválidos para uma sugestão automática. Revise este contexto individualmente." });
+      continue;
     }
     unique.set(`${identifiers.slug}\u0000${identifiers.ordem}`, identifiers);
   }
-  return [...unique.values()];
+  return { targets: [...unique.values()], excluded };
 }
 
 async function structuralBatchCandidates(targets: StructuralBatchTarget[]) {
@@ -375,15 +378,18 @@ async function structuralBatchCandidates(targets: StructuralBatchTarget[]) {
 
 export async function previewArticleStructuralBatch(input: unknown) {
   await requireAdmin();
-  return structuralBatchCandidates(structuralBatchTargets(input));
+  const parsed = structuralBatchTargets(input);
+  const preview = await structuralBatchCandidates(parsed.targets);
+  return { ...preview, excluded: [...parsed.excluded, ...preview.excluded] };
 }
 
 export async function applyArticleStructuralBatch(input: { contexts: unknown; confirmation: string }) {
   await requireAdmin();
   if (input.confirmation !== "APLICAR ORDENS") throw new AdminArticleConflictError(422, "Digite APLICAR ORDENS para confirmar.");
-  const preview = await structuralBatchCandidates(structuralBatchTargets(input.contexts));
+  const parsed = structuralBatchTargets(input.contexts);
+  const preview = await structuralBatchCandidates(parsed.targets);
   const applied: Array<StructuralBatchCandidate & { questions: number }> = [];
-  const failed: Array<StructuralBatchTarget & { reason: string }> = [...preview.excluded];
+  const failed: Array<StructuralBatchTarget & { reason: string }> = [...parsed.excluded, ...preview.excluded];
   for (const candidate of preview.candidates) {
     try {
       const result = await applyArticleContextStandardization({ law_slug: candidate.slug.toLowerCase(), context_slug: candidate.slug.toLowerCase(), context_ordem: candidate.ordem, changes: { ordem: candidate.expectedOrder }, expected_question_ids: candidate.questionIds });
@@ -419,15 +425,18 @@ async function granularityBatchCandidates(targets: StructuralBatchTarget[]) {
 export async function previewArticleGranularityBatch(input: { contexts: unknown; decision: unknown }) {
   await requireAdmin();
   const decision = granularityDecision(input.decision);
-  return { ...(await granularityBatchCandidates(structuralBatchTargets(input.contexts))), decision };
+  const parsed = structuralBatchTargets(input.contexts);
+  const preview = await granularityBatchCandidates(parsed.targets);
+  return { ...preview, excluded: [...parsed.excluded, ...preview.excluded], decision };
 }
 
 export async function applyArticleGranularityBatch(input: { contexts: unknown; decision: unknown }) {
   await requireAdmin();
   const decision = granularityDecision(input.decision);
-  const preview = await granularityBatchCandidates(structuralBatchTargets(input.contexts));
+  const parsed = structuralBatchTargets(input.contexts);
+  const preview = await granularityBatchCandidates(parsed.targets);
   const applied: Array<GranularityBatchCandidate & { questions: number }> = [];
-  const failed: Array<StructuralBatchTarget & { reason: string }> = [...preview.excluded];
+  const failed: Array<StructuralBatchTarget & { reason: string }> = [...parsed.excluded, ...preview.excluded];
   for (const candidate of preview.candidates) {
     try {
       const result = await applyArticleContextStandardization({
