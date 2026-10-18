@@ -31,23 +31,26 @@ describe("Central do Artigo administrativa", () => {
     expect(index).toContain('href={tabHref("artigos")}>Artigos');
   });
 
-  it("preserva o slug selecionado entre as abas, inclusive Conflitos", () => {
+  it("preserva o slug selecionado nas abas da Central do Artigo e delega conflitos à gestão de questões", () => {
     expect(index).toContain('lei=${encodeURIComponent(lawFilter)}');
     expect(index).toContain("one(params.lei) || one(params.law)");
     expect(index).toContain("&ordem_sort=${orderDirection}");
     expect(index).toContain("article-context-filter ${styles.contextFilter}");
     expect(index).toContain('name="lei"');
-    expect(index).toContain("filters={conflictFilters}");
+    expect(index).not.toContain("Conflitos de questões");
     const conflicts = read("components/admin/article-source-conflicts.tsx");
     expect(conflicts).toContain('type="hidden" name="lei"');
     expect(conflicts).toContain('type="hidden" name="ordem_sort"');
     expect(conflicts).toContain('key === "law" ? "lei" : key === "type" ? "tipo" : key');
-    expect(conflicts).toContain("Sugerir lote{filters.law");
+    expect(conflicts).toContain("baseQuery");
+    expect(read("components/admin/admin-law-questions.tsx")).toContain("Conflitos de questões");
   });
 
-  it("carrega conflitos apenas na aba correspondente", () => {
-    expect(index).toContain('tab === "conflitos" ? await listArticleSourceConflicts');
-    expect(index).toContain("conflicts ? <span>{conflicts.indicators.pending}</span>");
+  it("carrega conflitos apenas na visão correspondente da gestão de questões", () => {
+    const questionsPage = read("app/admin/leis/[slug]/questoes/page.tsx");
+    expect(questionsPage).toContain('initialView === "conflitos" ? await listArticleSourceConflicts');
+    expect(questionsPage).toContain('initialView={initialView} conflicts={conflicts}');
+    expect(index).not.toContain("listArticleSourceConflicts");
     expect(index).not.toContain("const pendingSummary");
   });
 
@@ -160,19 +163,11 @@ describe("Central do Artigo administrativa", () => {
     expect(detail).toContain("Ordem esperada");
   });
 
-  it("permite decidir a granularidade de contextos por inciso sem alterar questões automaticamente", () => {
-    const standardization = read("lib/admin-article-context-standardization.ts");
-    const panel = read("components/admin/question-standardization-panel.tsx");
+  it("mantém granularidade apenas como observação editorial no artigo", () => {
     const migration = read("supabase/migrations/20261007130000_add_article_context_granularity_decision.sql");
     expect(detail).toContain("granularityPending={article.editorialGranularityPending}");
-    expect(detail).toContain("Possível erro editorial");
-    expect(detail).toContain("Analisar possível erro");
-    expect(panel).toContain("Manter como está");
-    expect(panel).toContain("Alterar o recorte da legislação");
-    expect(panel).toContain("possível inconsistência é de granularidade");
-    expect(panel).toContain("granularity_decision");
-    expect(standardization).toContain("Object.keys(questionPatch).length");
-    expect(standardization).toContain("granularidade_legislacao");
+    expect(detail).toContain("A granularidade é apenas informativa e não exige correção.");
+    expect(detail).not.toContain("Analisar possível erro");
     expect(server).toContain("granularidade_legislacao");
     expect(migration).toContain("granularidade_legislacao");
   });

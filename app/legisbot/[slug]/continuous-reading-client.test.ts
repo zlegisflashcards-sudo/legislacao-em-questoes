@@ -53,4 +53,10 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("onHighlightsChange={updateBlockHighlights}");
     expect(client).toContain("personal-highlight ${highlight.color}");
   });
+
+  it("usa a própria leitura contínua como prévia e abre a edição administrativa por bloco", () => {
+    expect(client).toContain("adminPreview = false");
+    expect(client).toContain("/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(block.ordem)}?aba=artigo");
+    expect(client).toContain("<ReadingStructureHeadings nodes={introducedHierarchy} />");
+  });
 });

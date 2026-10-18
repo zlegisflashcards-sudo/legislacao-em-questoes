@@ -137,7 +137,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, references, initialBlocks, initialTab }: { slug: string; title: string; references: Reference[]; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights" }) {
+export default function ContinuousReadingClient({ slug, title, references, initialBlocks, initialTab, adminPreview = false }: { slug: string; title: string; references: Reference[]; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
@@ -275,7 +275,19 @@ export default function ContinuousReadingClient({ slug, title, references, initi
   function openFromArticle(block: Block, article: HTMLElement) {
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && selection.toString().trim()) return;
+    if (adminPreview) {
+      window.location.assign(`/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(block.ordem)}?aba=artigo&lei=${encodeURIComponent(slug.toLowerCase())}`);
+      return;
+    }
     openBlock(block, article);
+  }
+
+  function activateBlock(block: Block, trigger: HTMLElement) {
+    if (adminPreview) {
+      window.location.assign(`/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(block.ordem)}?aba=artigo&lei=${encodeURIComponent(slug.toLowerCase())}`);
+      return;
+    }
+    openBlock(block, trigger);
   }
 
   return <div className={styles.page}>
@@ -284,7 +296,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
         <p className={styles.eyebrow}>LegisBot · Leitura contínua</p>
         <h1>{title}</h1>
         <p>Leia os dispositivos disponíveis em sequência e abra o aprofundamento quando precisar.</p>
-        <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Interaja com a legislação</strong><span>Toque em um artigo ou parágrafo para grifar, adicionar comentários ou solicitar uma explicação ao LegisBot.</span></aside>
+        <aside className={styles.guidance} aria-label="Orientação de uso"><strong>{adminPreview ? "Revise a legislação" : "Interaja com a legislação"}</strong><span>{adminPreview ? "Toque em um bloco para abrir sua edição na Base Legislativa." : "Toque em um artigo ou parágrafo para grifar, adicionar comentários ou solicitar uma explicação ao LegisBot."}</span></aside>
       </header>
       {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
       <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={() => setMobileTocOpen((open) => !open)}>☰ <span>Sumário</span></button><span className={styles.mobileTocPrompt}>📖 Clique na Lei</span><span className={styles.mobileTocCurrent} aria-live="polite">{prepared.find((item) => item.id === activeId)?.identificacao ?? "Início da lei"}</span></div>
@@ -311,7 +323,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
               onKeyDown={block ? (event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
-                openBlock(block, event.currentTarget);
+                activateBlock(block, event.currentTarget);
               } : undefined}
             >
               {block ? <ContinuousLegalHtml html={block.legislation} highlights={blockHighlights.get(reference.id) ?? []} /> : <div className={styles.placeholder} aria-busy={loadingPages.has(page)}><span className={styles.srOnly}>{failedPages.has(page) ? "Não foi possível carregar este bloco." : "Carregando texto legislativo"}</span><div className={styles.placeholderLine}/><div className={styles.placeholderLine}/>{failedPages.has(page) ? <button type="button" className={styles.retry} onClick={() => void loadPage(page)}>Tentar carregar novamente</button> : null}</div>}
@@ -321,6 +333,6 @@ export default function ContinuousReadingClient({ slug, title, references, initi
         </section>
       </div>
     </main>
-    {selected ? <LegisBotOverlay slug={slug} question={{ ordem: selected.ordem, titulo: title, assunto: selected.identificacao, legislacao: selected.legislation }} initialTab={initialTab} onHighlightsChange={updateBlockHighlights} onClose={closeOverlay} /> : null}
+    {selected && !adminPreview ? <LegisBotOverlay slug={slug} question={{ ordem: selected.ordem, titulo: title, assunto: selected.identificacao, legislacao: selected.legislation }} initialTab={initialTab} onHighlightsChange={updateBlockHighlights} onClose={closeOverlay} /> : null}
   </div>;
 }

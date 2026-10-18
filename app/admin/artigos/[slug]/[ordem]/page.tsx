@@ -23,6 +23,7 @@ export default async function AdminArticleDetailPage({ params, searchParams }: {
   const [{ slug, ordem }, query] = await Promise.all([params, searchParams]);
   await exigirAdministrador();
   const selectedTab = one(query.aba);
+  if (selectedTab === "conflitos") redirect(`/admin/leis/${encodeURIComponent(slug.trim().toLowerCase())}/questoes?visao=conflitos`);
   const article = await getArticleContext(slug, ordem);
   if (!article) redirect(`/admin/artigos?aba=${selectedTab === "conflitos" ? "conflitos" : "artigos"}&lei=${encodeURIComponent(slug.trim().toLowerCase())}`);
   const tab: ArticleTab = ["artigo", "legisbot", "comentarios", "questoes", "conflitos", "mapeamento"].includes(selectedTab) ? selectedTab as ArticleTab : "artigo";

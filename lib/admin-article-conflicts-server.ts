@@ -264,13 +264,14 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
         structuralValidation: null,
         editorialGranularityPending: false,
         reviewTypes: ["Pergunta duplicada"],
+        editorUrl: null,
         duplicateQuestions: questions.map((question) => ({
           id: question.id,
           slug: question.slug.toUpperCase(),
           ordem: question.ordem,
           assunto: question.assunto ?? null,
           pergunta: question.pergunta,
-          editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/artigos?aba=conflitos&lei=${question.slug.toLowerCase()}&tipo=pergunta_duplicada`)}`,
+          editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos&tipo=pergunta_duplicada`)}`,
         })),
       };
     }
@@ -295,6 +296,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       editorialGranularityPending: false,
       reviewTypes,
       duplicateQuestions: [],
+      editorUrl: `/admin/leis/${encodeURIComponent(slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(questions[0]!.id)}&retorno=${encodeURIComponent(`/admin/leis/${slug.toLowerCase()}/questoes?visao=conflitos`)}`,
     };
   });
   // Os indicadores precisam refletir exatamente o mesmo universo da lista.

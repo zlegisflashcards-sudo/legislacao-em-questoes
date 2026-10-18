@@ -1,20 +1,31 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+import ContinuousReadingClient from "@/app/legisbot/[slug]/continuous-reading-client";
+import styles from "@/app/legisbot/[slug]/continuous-reading.module.css";
 import { exigirAdministrador } from "@/lib/admin-auth";
-import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getContinuousReadingBlocks, getContinuousReadingModel } from "@/lib/legisbot/continuous-reading-server";
 
-const textHtml = (value: string) => value.includes("<") ? sanitizarHtmlLegislacao(value) : `<p>${value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br />")}</p>`;
+export const dynamic = "force-dynamic";
+
+function PreviewShell({ slug, children }: { slug: string; children: ReactNode }) {
+  return <><Link className="admin-central-link" href={`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}`}>← Voltar para a Base Legislativa</Link><p className="admin-eyebrow">Prévia administrativa — mesma leitura que será exibida aos alunos</p>{children}</>;
+}
 
 export default async function LegisBotPreviewPage({ searchParams }: { searchParams: Promise<{ lei?: string }> }) {
   await exigirAdministrador();
   const slug = (await searchParams).lei?.trim().toLowerCase() ?? "";
   if (!slug) return <main className="admin-shell article-center-shell"><p className="admin-empty">Escolha uma lei para visualizar a prévia.</p></main>;
-  const db = getSupabaseServerClient();
-  const [law, references] = await Promise.all([
-    db.from("leis").select("titulo,nome_curto").eq("slug", slug).maybeSingle(),
-    db.from("legislative_references").select("ordem,identificacao,legislacao").eq("slug", slug).not("legislacao", "is", null).order("ordem").limit(500),
-  ]);
-  if (law.error || references.error) throw new Error("Não foi possível gerar a prévia da legislação.");
-  const records = (references.data ?? []).filter((item) => typeof item.legislacao === "string" && item.legislacao.trim());
-  return <main className="admin-shell article-center-shell legisbot-preview-page"><Link className="admin-central-link" href={`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}`}>← Voltar para a Base Legislativa</Link><header className="admin-header"><div><div className="admin-eyebrow">Prévia administrativa</div><h1>{law.data?.nome_curto || law.data?.titulo || slug}</h1><p>Simulação da leitura contínua da futura Legislação Interativa. Apenas referências com texto preparado são exibidas.</p></div></header><div className="legisbot-preview-layout"><aside className="legisbot-preview-toc"><strong>Sumário</strong>{records.map((item) => <a key={item.ordem} href={`#ordem-${item.ordem}`}>{item.identificacao}</a>)}</aside><section className="legisbot-preview-content">{records.length ? records.map((item) => <article id={`ordem-${item.ordem}`} key={item.ordem} className="legisbot-preview-block"><header><span>ordem {item.ordem}</span><h2>{item.identificacao}</h2></header><div className="legisbot-legal-html" dangerouslySetInnerHTML={{ __html: textHtml(String(item.legislacao)) }} /></article>) : <div className="admin-empty"><h2>Nenhum texto legislativo preparado</h2><p>Prepare ou importe referências para visualizar a leitura contínua.</p></div>}</section></div></main>;
+
+  try {
+    const model = await getContinuousReadingModel(slug);
+    if (!model) return <main className={`${styles.page} admin-shell`}><PreviewShell slug={slug}><section className={`${styles.shell} ${styles.empty}`}><h1>Legislação não encontrada</h1><p>Confira a lei selecionada ou volte à Base Legislativa.</p></section></PreviewShell></main>;
+    if (!model.integrity.readingAvailable) {
+      return <main className={`${styles.page} admin-shell`}><PreviewShell slug={slug}><section className={`${styles.shell} ${styles.empty} ${styles.comingSoon}`}><div className={styles.noveltyIcon} aria-hidden="true">✨</div><p className={styles.eyebrow}>Novidade no LegisBot</p><h1>{model.law.nome_curto || model.law.titulo}</h1><h2>Uma nova forma de estudar a lei está chegando</h2><p>Esta é a mesma mensagem que o aluno verá enquanto a leitura contínua não estiver pronta para esta legislação.</p><div className={styles.preparationBadge}><span aria-hidden="true">●</span> Estamos preparando os últimos detalhes</div></section></PreviewShell></main>;
+    }
+    const initialBlocks = await getContinuousReadingBlocks(model, 0, 30);
+    return <main className="admin-shell"><PreviewShell slug={slug}><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} references={model.references} initialBlocks={initialBlocks} initialTab="legisbot" adminPreview /></PreviewShell></main>;
+  } catch (error) {
+    console.error("[Admin] Falha ao montar prévia da leitura contínua.", { slug, tipo: error instanceof Error ? error.name : "unknown" });
+    return <main className={`${styles.page} admin-shell`}><PreviewShell slug={slug}><section className={`${styles.shell} ${styles.empty}`}><h1>Prévia temporariamente indisponível</h1><p>A leitura contínua não pôde ser verificada agora.</p></section></PreviewShell></main>;
+  }
 }
