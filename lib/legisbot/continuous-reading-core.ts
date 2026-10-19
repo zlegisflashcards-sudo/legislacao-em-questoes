@@ -16,11 +16,9 @@ export type ContinuousQuestion = {
   structureId: number | null;
 };
 
-export type ManualCommentTarget = {
+export type ManualReferenceTarget = {
   questionId: string;
-  commentId: number;
-  slug: string | null;
-  ordem: string | null;
+  referenceId: string;
 };
 
 export type QuestionReferenceResolution = {
@@ -69,7 +67,7 @@ export function resolveContinuousReadingIntegrity(input: {
   lawSlug: string;
   questions: ContinuousQuestion[];
   references: ContinuousReferenceSummary[];
-  manualTargets?: ManualCommentTarget[];
+  manualTargets?: ManualReferenceTarget[];
 }): ReadingIntegrity {
   const lawSlug = input.lawSlug.trim().toLowerCase();
   const references = input.references.filter((reference) => reference.slug.trim().toLowerCase() === lawSlug);
@@ -80,14 +78,8 @@ export function resolveContinuousReadingIntegrity(input: {
   const resolutions = input.questions.map<QuestionReferenceResolution>((question) => {
     const manual = manualByQuestion.get(question.id);
     if (manual) {
-      if (!manual.slug || !manual.ordem || manual.slug.trim().toLowerCase() !== lawSlug) {
-        return { questionId: question.id, status: "invalid_manual", referenceId: null, ordem: manual.ordem, reason: "O vínculo manual aponta para outra legislação ou para um destino inexistente." };
-      }
-      const manualReferences = (referencesByOrder.get(manual.ordem) ?? []).filter((reference) => reference.prepared);
-      if (manualReferences.length !== 1) {
-        return { questionId: question.id, status: "invalid_manual", referenceId: null, ordem: manual.ordem, reason: manualReferences.length > 1 ? "O vínculo manual possui mais de um bloco legislativo possível." : "O bloco definido manualmente não possui texto legislativo preparado." };
-      }
-      const reference = manualReferences[0];
+      const reference = references.find((candidate) => candidate.id === manual.referenceId && candidate.prepared);
+      if (!reference) return { questionId: question.id, status: "invalid_manual", referenceId: null, ordem: null, reason: "O vínculo manual aponta para um bloco legislativo inexistente ou não preparado nesta legislação." };
       return { questionId: question.id, status: "manual", referenceId: reference.id, ordem: reference.ordem, reason: null };
     }
 

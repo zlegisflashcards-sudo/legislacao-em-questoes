@@ -37,7 +37,7 @@ describe("continuous-reading-core", () => {
       lawSlug: "l6513ma",
       references: [ref(ids.article, "0001.0.00.0.00.0"), ref(ids.paragraph, "0002.0.02.0.00.0")],
       questions: [{ id: "q1", slug: "l6513ma", ordem: "0001.0.00.0.00.0", structureId: 114 }],
-      manualTargets: [{ questionId: "q1", commentId: 20, slug: "L6513MA", ordem: "0002.0.02.0.00.0" }],
+      manualTargets: [{ questionId: "q1", referenceId: ids.paragraph }],
     });
     expect(result.resolutions[0]).toMatchObject({ status: "manual", referenceId: ids.paragraph, ordem: "0002.0.02.0.00.0" });
   });
@@ -49,7 +49,7 @@ describe("continuous-reading-core", () => {
       lawSlug: "l6513ma",
       questions,
       references,
-      manualTargets: [{ questionId: "q1", commentId: 20, slug: "L6513MA", ordem: "0002.0.02.0.00.0" }],
+      manualTargets: [{ questionId: "q1", referenceId: ids.paragraph }],
     });
     expect(resolveLegacyReferenceId({ rawOrder: "0001.0.00.00", questions, references, resolutions: integrity.resolutions })).toBe(ids.paragraph);
   });
@@ -75,7 +75,7 @@ describe("continuous-reading-core", () => {
         { id: "q1", slug: "l6513ma", ordem: "0001.0.00.0.00.0", structureId: 114 },
         { id: "q2", slug: "l6513ma", ordem: "0002.0.00.0.00.0", structureId: 114 },
       ],
-      manualTargets: [{ questionId: "q1", commentId: 21, slug: "OUTRA", ordem: "0001.0.00.0.00.0" }],
+      manualTargets: [{ questionId: "q1", referenceId: ids.other }],
     });
     expect(result.readingAvailable).toBe(false);
     expect(result.pendingQuestions).toBe(2);

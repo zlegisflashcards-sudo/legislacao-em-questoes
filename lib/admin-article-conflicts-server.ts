@@ -17,7 +17,8 @@ import { canonicalizeQuestionLawReference, hasIncisoGranularityPending, validate
 import { applyArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
 import { groupDuplicateQuestionStatements } from "@/lib/admin-question-management";
-import { resolveContinuousReadingIntegrity, type ManualCommentTarget } from "@/lib/legisbot/continuous-reading-core";
+import { resolveContinuousReadingIntegrity } from "@/lib/legisbot/continuous-reading-core";
+import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 
 const PAGE_SIZE = 20;
 const STRUCTURAL_BATCH_SIZE = 100;
@@ -102,12 +103,6 @@ async function lawMap() {
   }]));
 }
 
-function chunks<T>(items: T[], size = 200) {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
-  return result;
-}
-
 /**
  * Usa a mesma resolução da leitura contínua: uma questão só está vinculada
  * quando encontra um bloco legislativo preparado por ordem ou vínculo manual.
@@ -118,23 +113,7 @@ async function articleBlockOrphans(questions: ConflictQuestion[]): Promise<Orpha
   const slugs = [...new Set(questions.map((question) => question.slug.toLowerCase()))];
   const references = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").in("slug", slugs);
   if (references.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os blocos legislativos preparados.", "legislative_references_query_failed");
-  const links: Array<{ question_id: string; legisbot_id: number }> = [];
-  for (const ids of chunks(questions.map((question) => question.id))) {
-    const result = await db.from("question_legisbot_links").select("question_id,legisbot_id").in("question_id", ids);
-    if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os vínculos editoriais das questões.", "question_links_query_failed");
-    links.push(...(result.data ?? []).map((link) => ({ question_id: String(link.question_id), legisbot_id: Number(link.legisbot_id) })).filter((link) => Number.isSafeInteger(link.legisbot_id)));
-  }
-  const comments: Array<{ id: number; slug: string; ordem: string }> = [];
-  for (const ids of chunks([...new Set(links.map((link) => link.legisbot_id))])) {
-    const result = await db.from("legisbot_comentarios").select("id,slug,ordem").in("id", ids);
-    if (result.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os destinos editoriais das questões.", "legisbot_comments_query_failed");
-    comments.push(...(result.data ?? []).map((comment) => ({ id: Number(comment.id), slug: String(comment.slug), ordem: String(comment.ordem) })).filter((comment) => Number.isSafeInteger(comment.id)));
-  }
-  const commentsById = new Map(comments.map((comment) => [comment.id, comment]));
-  const manualTargets: ManualCommentTarget[] = links.map((link) => {
-    const target = commentsById.get(link.legisbot_id);
-    return { questionId: link.question_id, commentId: link.legisbot_id, slug: target?.slug ?? null, ordem: target?.ordem ?? null };
-  });
+  const manualTargets = await listManualQuestionReferenceTargets(questions.map((question) => question.id));
   const byLaw = new Map<string, ConflictQuestion[]>();
   for (const question of questions) {
     const slug = question.slug.toLowerCase();

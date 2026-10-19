@@ -7,12 +7,11 @@ import {
   resolveLegacyReferenceId,
   type ContinuousQuestion,
   type ContinuousReferenceSummary,
-  type ManualCommentTarget,
   type ReadingIntegrity,
 } from "./continuous-reading-core";
 import { continuousLegisBotHref } from "./continuous-reading-core";
 import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
-import { resolveQuestionLegisBotLinks } from "@/lib/question-legisbot-links";
+import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 
 const PAGE_SIZE = 500;
 
@@ -20,8 +19,6 @@ type LawRow = { id: number; slug: string; titulo: string; nome_curto: string | n
 type QuestionRow = { id: string; slug: string; ordem: string; structure_id: number | null };
 type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; source_question_id: string | null; preparado_em: string | null };
 type StructureRow = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number };
-type LinkRow = { question_id: string; legisbot_id: number };
-type CommentTargetRow = { id: number; slug: string; ordem: string };
 type MappingRow = { slug: string; ordem: string; artigo_recente: boolean | null };
 
 export type ContinuousReadingPriority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
@@ -43,12 +40,6 @@ export type ContinuousReadingModel = {
 
 function publicPriority(questionCount: number): ContinuousReadingPriority {
   return incidenceFromQuestionCount(questionCount);
-}
-
-function chunks<T>(items: T[], size = 200) {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
-  return result;
 }
 
 async function allQuestions(lawId: number) {
@@ -73,29 +64,6 @@ async function allReferenceSummaries(lawId: number) {
     if ((result.data?.length ?? 0) < PAGE_SIZE) break;
   }
   return rows;
-}
-
-async function manualTargets(questionIds: string[]) {
-  if (!questionIds.length) return [] as ManualCommentTarget[];
-  const db = getSupabaseServerClient();
-  const links: LinkRow[] = [];
-  for (const ids of chunks(questionIds)) {
-    const result = await db.from("question_legisbot_links").select("question_id,legisbot_id").in("question_id", ids);
-    if (result.error) throw new Error("Não foi possível verificar os vínculos editoriais manuais.");
-    links.push(...((result.data ?? []) as LinkRow[]));
-  }
-  const commentIds = [...new Set(links.map((link) => Number(link.legisbot_id)).filter(Number.isSafeInteger))];
-  const comments: CommentTargetRow[] = [];
-  for (const ids of chunks(commentIds)) {
-    const result = await db.from("legisbot_comentarios").select("id,slug,ordem").in("id", ids);
-    if (result.error) throw new Error("Não foi possível verificar os destinos manuais do LegisBot.");
-    comments.push(...((result.data ?? []) as CommentTargetRow[]));
-  }
-  const byId = new Map(comments.map((comment) => [Number(comment.id), comment]));
-  return links.map((link) => {
-    const target = byId.get(Number(link.legisbot_id));
-    return { questionId: link.question_id, commentId: Number(link.legisbot_id), slug: target?.slug ?? null, ordem: target?.ordem ?? null };
-  });
 }
 
 function hierarchyPath(structureId: number | null, structure: StructureRow[]) {
@@ -125,13 +93,10 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
   ]);
   if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
-  const targets = await manualTargets(questions.map((question) => question.id));
+  const targets = await listManualQuestionReferenceTargets(questions.map((question) => question.id));
   const questionInput: ContinuousQuestion[] = questions.map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id }));
   const referenceInput: ContinuousReferenceSummary[] = references.map((reference) => ({ id: reference.id, slug: reference.slug, ordem: reference.ordem, identificacao: reference.identificacao, sourceQuestionId: reference.source_question_id, prepared: Boolean(reference.preparado_em) }));
-  const sourceIntegrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
-  const legisBotLinks = await resolveQuestionLegisBotLinks(questions.map((question) => ({ id: question.id, slug: law.slug, ordem: question.ordem })));
-  const orphanQuestions = legisBotLinks.filter((resolution) => resolution.status === "sem_legisbot").length;
-  const integrity: ReadingIntegrity = { ...sourceIntegrity, readingAvailable: sourceIntegrity.readingAvailable && orphanQuestions === 0 };
+  const integrity: ReadingIntegrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const structureByReference = new Map<string, number>();
