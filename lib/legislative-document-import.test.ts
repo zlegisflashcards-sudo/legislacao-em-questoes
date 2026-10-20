@@ -19,6 +19,37 @@ describe("importação de documento legislativo", () => {
     expect(result.references[0].legislation).toContain("§ único.");
   });
 
+  it("usa o título estrutural apenas para identificar o bloco, sem duplicá-lo no HTML salvo", () => {
+    const result = parseLegislativeDocument([
+      "# Art. 1º",
+      "Art. 1º - Não há crime sem lei anterior que o defina.",
+    ]);
+    expect(result.references).toHaveLength(1);
+    expect(result.references[0]).toMatchObject({ ordem: "0001.0.00.0.00.0", identification: "Art. 1º" });
+    expect(result.references[0].legislation).toBe("Art. 1º - Não há crime sem lei anterior que o defina.");
+    expect(result.references[0].legislation).not.toContain("# Art. 1º");
+  });
+
+  it("preserva a identificação visível quando o caput após o título não repete Art.", () => {
+    const result = parseLegislativeDocument([
+      "# Art. 1º",
+      "Não há crime sem lei anterior que o defina.",
+    ]);
+    expect(result.references).toHaveLength(1);
+    expect(result.references[0].legislation).toBe("Art. 1º Não há crime sem lei anterior que o defina.");
+  });
+
+  it("não acrescenta o identificador quando o caput já o contém", () => {
+    const result = parseLegislativeDocument([
+      "# Art. 1º",
+      "Art. 1º. Caput.",
+      "# § 1º-C",
+      "§ 1º-C. Texto do parágrafo.",
+    ]);
+    expect(result.references).toHaveLength(2);
+    expect(result.references[1].legislation).toBe("§ 1º-C. Texto do parágrafo.");
+  });
+
   it("não aceita texto sem um título estrutural", () => {
     const result = parseLegislativeDocument(["Texto solto", "Art. 1º", "Caput."]);
     expect(result.references).toHaveLength(1);
@@ -35,7 +66,7 @@ describe("importação de documento legislativo", () => {
     const paragraphs = legislativeDocumentParagraphs("lei.docx", bytes);
     const parsed = parseLegislativeDocument(paragraphs);
     expect(parsed.references).toHaveLength(1);
-    expect(parsed.references[0].legislation).toContain("Art. 2º");
+    expect(parsed.references[0].legislation).not.toContain("<p>Art. 2º</p>");
     expect(parsed.references[0].legislation).toContain("<strong>Texto em negrito</strong>");
     expect(parsed.references[0].legislation).toContain('<span style="color:#1D4ED8"><em><br>linha colorida</em></span>');
     expect(parsed.references[0].legislation).toContain("<table>");

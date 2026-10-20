@@ -5,6 +5,32 @@ export type LegislativeDocumentParse = { references: LegislativeDocumentReferenc
 
 const decode = (value: string) => value.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 const escapeHtml = (value: string) => decode(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const plain = (value: string) => decode(value.replace(/<br\s*\/?\s*>/gi, " ").replace(/<[^>]+>/g, " ")).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+
+function normalizedIdentifier(value: string) {
+  return plain(value)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[º°]/g, "")
+    .replace(/(\d)o\b/gi, "$1")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim().toLowerCase();
+}
+
+function bodyAlreadyIdentified(legislation: string, identification: string) {
+  const expected = normalizedIdentifier(identification);
+  const received = normalizedIdentifier(plain(legislation).slice(0, Math.max(identification.length + 24, 80)));
+  return Boolean(expected) && (received === expected || received.startsWith(`${expected} `));
+}
+
+/** Keeps a visible Art./§ in the saved body when the DOCX caput omits it. */
+function preserveVisibleIdentifier(legislation: string, identification: string) {
+  const content = legislation.trim();
+  if (!content || bodyAlreadyIdentified(content, identification)) return content;
+  const label = escapeHtml(identification);
+  const firstParagraph = /^<p(\s[^>]*)?>/i.exec(content);
+  if (firstParagraph) return `${firstParagraph[0]}${label} ${content.slice(firstParagraph[0].length)}`;
+  return `${label} ${content}`;
+}
 
 function enabledProperty(runProperties: string, property: string) {
   const match = new RegExp(`<w:${property}(?:\\s[^>]*)?\\s*/?>`, "i").exec(runProperties);
@@ -75,16 +101,18 @@ export function parseLegislativeDocument(paragraphs: string[]): LegislativeDocum
   const rejected: string[] = [];
   let context: Context = {};
   let current: { context: Context; identification: string; lines: string[] } | null = null;
-  const flush = () => { if (!current) return; const legislation = current.lines.join("\n\n").trim(); if (!legislation) rejected.push(`${current.identification}: sem texto legislativo.`); else references.push({ ordem: orderOf(current.context), identification: current.identification, legislation }); current = null; };
+  const flush = () => { if (!current) return; const importedBody = current.lines.join("\n\n").trim(); const legislation = preserveVisibleIdentifier(importedBody, current.identification); if (!legislation) rejected.push(`${current.identification}: sem texto legislativo.`); else references.push({ ordem: orderOf(current.context), identification: current.identification, legislation }); current = null; };
   for (const paragraph of paragraphs) {
     const plainParagraph = decode(paragraph.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "")).trim();
     const next = heading(paragraph, context);
     if (next) {
       flush();
       context = next;
-      // The structural heading is legal text too. Keep it in the saved body so
-      // the reading page never loses the visible Art./§ identifier.
-      current = { context, identification: plainParagraph.replace(/^#{1,6}\s*/, "").trim(), lines: [paragraph] };
+      // O título estrutural define o bloco, a identificação e a Ordem, mas não
+      // faz parte do HTML legislativo salvo. No DOCX, o parágrafo seguinte é o
+      // texto normativo e conserva o seu próprio “Art.”/“§”, quando houver.
+      // Assim não repetimos o Título 1 dentro da leitura contínua.
+      current = { context, identification: plainParagraph.replace(/^#{1,6}\s*/, "").trim(), lines: [] };
       continue;
     }
     if (!current) { rejected.push(`${plainParagraph.slice(0, 80)}: texto fora de um título estrutural.`); continue; }
