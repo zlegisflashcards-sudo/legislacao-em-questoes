@@ -482,11 +482,17 @@
   color: #172033;
   font-size: 1rem;
   line-height: 1.78;
-  white-space: pre-wrap;
+  /* Ignore line breaks used only to format the HTML between block tags. */
+  white-space: normal;
 }
 
 .legalHtml :where(p, div, ul, ol, blockquote, table) {
   margin: 0 0 1em;
+}
+
+.legalHtml :where(p, div, li, blockquote, th, td) {
+  /* Preserve intentional line breaks inside each legislative block. */
+  white-space: pre-wrap;
 }
 
 .legalHtml table {

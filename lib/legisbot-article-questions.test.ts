@@ -18,11 +18,9 @@ describe("questões no contexto do LegisBot", () => {
     expect(page).toContain("<LegisBotArticleQuestions");
   });
 
-  it("oferece a Lei Interativa na barra flutuante e preserva o dispositivo atual", () => {
-    expect(tabs).toContain('className="legisbot-interactive-law-link"');
-    expect(tabs).toContain("Lei Interativa");
-    expect(tabs).toContain("/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}");
-    expect(tabs).toContain('aria-label="Abrir Lei Interativa neste dispositivo"');
+  it("não repete o atalho da Lei Interativa dentro do aprofundamento", () => {
+    expect(tabs).not.toContain('className="legisbot-interactive-law-link"');
+    expect(tabs).not.toContain('aria-label="Abrir Lei Interativa neste dispositivo"');
   });
 
   it("consulta somente as questões do slug, ordem e recorte autorizados", () => {

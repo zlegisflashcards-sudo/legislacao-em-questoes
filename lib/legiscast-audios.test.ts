@@ -10,6 +10,7 @@ const pdfPageMigration = readFileSync("supabase/migrations/20260911120000_add_la
 const optionalTitleMigration = readFileSync("supabase/migrations/20260911150000_make_legiscast_audio_titles_optional.sql", "utf8");
 const server = readFileSync("lib/legiscast-audios-server.ts", "utf8");
 const player = readFileSync("components/legiscast-audio-player.tsx", "utf8");
+const globalStyles = readFileSync("app/globals.css", "utf8");
 const admin = readFileSync("lib/admin-legiscast-audios-server.ts", "utf8");
 const adminClient = readFileSync("components/admin/legiscast-audios-admin.tsx", "utf8");
 const adminRoute = readFileSync("app/api/admin/legiscast-audios/route.ts", "utf8");
@@ -85,6 +86,10 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain("tracksByStructure");
     expect(player).toContain("Sumário da lei");
     expect(player).toContain("overflow-y-auto");
+    expect(player).toContain("legiscast-summary-scroll");
+    expect(globalStyles).toContain(".legiscast-summary-scroll{scrollbar-gutter:stable;scrollbar-width:thin");
+    expect(globalStyles).toContain(".legiscast-summary-scroll::-webkit-scrollbar-thumb");
+    expect(globalStyles).toContain(".legiscast-summary-scroll{overflow-y:scroll}");
     expect(player).toContain("aria-current");
   });
 

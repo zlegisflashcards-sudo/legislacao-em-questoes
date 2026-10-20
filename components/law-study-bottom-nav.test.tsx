@@ -5,13 +5,19 @@ const source = readFileSync("components/law-study-bottom-nav.tsx", "utf8");
 const questionPage = readFileSync("app/estudar/lei/[slug]/page.tsx", "utf8");
 const ankiPage = readFileSync("app/estudar/lei/[slug]/anki/page.tsx", "utf8");
 const legiscastPage = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", "utf8");
+const interactiveLawPage = readFileSync("app/legisbot/[slug]/page.tsx", "utf8");
 
 describe("navegação responsiva dos modos da lei", () => {
-  it("monta as três rotas e preserva recorte_id somente quando presente", () => {
+  it("monta as quatro rotas e preserva recorte_id somente nos modos de estudo", () => {
     expect(source).toContain('suffix: ""');
     expect(source).toContain('suffix: "/anki"');
     expect(source).toContain('suffix: "/legiscast"');
+    expect(source).toContain('label: "Lei Interativa"');
+    expect(source).toContain('mode: "lei_interativa"');
+    expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}`');
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
+    expect(source).toContain("grid-cols-4");
+    expect(source).toContain("<ScannerIcon mobile={mobile} />");
   });
 
   it("mantém a barra inferior no mobile e unifica a pill lateral em tablet e desktop", () => {
@@ -27,9 +33,11 @@ describe("navegação responsiva dos modos da lei", () => {
     expect(source).toContain("env(safe-area-inset-bottom)");
   });
 
-  it("é reutilizada nos três modos", () => {
+  it("é reutilizada nos quatro modos", () => {
     expect(questionPage).toContain('activeMode="questoes"');
     expect(ankiPage).toContain('activeMode="anki"');
     expect(legiscastPage).toContain('activeMode="legiscast"');
+    expect(interactiveLawPage).toContain('activeMode="lei_interativa"');
+    expect(interactiveLawPage).toContain("<LawStudyBottomNav");
   });
 });
