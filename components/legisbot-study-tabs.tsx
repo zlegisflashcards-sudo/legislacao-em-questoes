@@ -28,7 +28,7 @@ export default function LegisBotStudyTabs({
   onActiveTabChange,
 }: LegisBotStudyTabsProps) {
   const [activeTab, setActiveTab] = useState<LegisBotStudyTab>(initialTab);
-  const [openedTabs, setOpenedTabs] = useState<Set<LegisBotStudyTab>>(() => new Set([initialTab]));
+  const [openedTabs, setOpenedTabs] = useState<Set<LegisBotStudyTab>>(() => new Set([initialTab, "highlights"]));
   const id = useId().replace(/:/g, "");
 
   const tabs: Array<{ key: LegisBotStudyTab; icon: string; label: string; content: ReactNode }> = [

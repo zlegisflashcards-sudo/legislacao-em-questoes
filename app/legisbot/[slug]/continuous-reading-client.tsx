@@ -5,12 +5,14 @@ import { LegisBotOverlay } from "@/components/legisbot-overlay";
 import { continuousBlockAnchor, referenceIdFromHash } from "@/lib/legisbot/continuous-reading-core";
 import { canLoadContinuousPage, completedContinuousPage } from "@/lib/legisbot/continuous-reading-pagination";
 import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
+import { supabase } from "@/lib/supabase";
 import styles from "./continuous-reading.module.css";
 
 type HierarchyNode = { id: number; type: string; name: string };
 type Priority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[]; priority: Priority; recent: boolean; linkedQuestions: number };
 type Block = Reference & { legislation: string };
+type BlockText = Pick<Block, "id" | "legislation">;
 type TocNode = { key: string; label: string; reference: Reference; children: TocNode[]; referenceIds: string[] };
 
 const PAGE_SIZE = 30;
@@ -46,7 +48,7 @@ function LegisBotGuide({ title, mode, adminPreview }: { title: string; mode: "ma
     <div className={styles.botSpeech}>
       <p className={styles.eyebrow}>Lei Interativa · LegisBot</p>
       <h1>{title}</h1>
-      <p>{mapMode ? "Eu organizei os dispositivos pela quantidade de questões. Comece pelos pontos mais quentes e toque em um artigo para aprofundar." : "Vamos percorrer a lei inteira. Toque em qualquer dispositivo para grifar, comentar ou pedir minha explicação."}</p>
+      <p>{mapMode ? "Organizei os dispositivos por prioridade estatística. Comece pelos pontos mais quentes e toque em um artigo para aprofundar." : "Vamos percorrer a lei inteira. Toque em qualquer dispositivo para grifar, comentar ou pedir minha explicação."}</p>
     </div>
   </header>;
 }
@@ -106,7 +108,14 @@ function normalizeSearch(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
-function InteractiveLawMap({ references, onOpen }: { references: Reference[]; onOpen: (reference: Reference) => void }) {
+function mapArticleLabel(identification: string, lawShortName: string) {
+  const suffix = `, ${lawShortName}`;
+  return lawShortName && identification.endsWith(suffix)
+    ? identification.slice(0, -suffix.length)
+    : identification;
+}
+
+function InteractiveLawMap({ references, lawShortName, onOpen }: { references: Reference[]; lawShortName: string; onOpen: (reference: Reference) => void }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Priority | "todas">("todas");
   const normalizedQuery = normalizeSearch(query);
@@ -130,7 +139,8 @@ function InteractiveLawMap({ references, onOpen }: { references: Reference[]; on
     {ordered.length ? <ol className={styles.mapGrid} aria-live="polite">{ordered.map((reference) => <li key={reference.id}>
       <a href={`#${continuousBlockAnchor(reference.id)}`} className={`${styles.mapArticle} ${styles[`incidence_${incidenceBand(reference.linkedQuestions)}`]} ${reference.recent ? styles.mapArticleRecent : ""}`} title={`${PRIORITY_LABELS[reference.priority]}${reference.recent ? " · Conteúdo recente" : ""}`} onClick={(event) => { event.preventDefault(); onOpen(reference); }}>
         {reference.recent ? <span className={styles.cardRecentFlag} role="img" aria-label="Conteúdo recente" title="Conteúdo recente">⚑</span> : null}
-        <strong>{reference.identificacao}</strong>
+        <strong>{mapArticleLabel(reference.identificacao, lawShortName)}</strong>
+        <small>{lawShortName}</small>
       </a>
     </li>)}</ol> : <p className={styles.mapEmpty}>Nenhum dispositivo encontrado com esses filtros.</p>}
   </section>;
@@ -211,6 +221,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
 
 export default function ContinuousReadingClient({ slug, title, references, initialBlocks, initialTab, adminPreview = false }: { slug: string; title: string; references: Reference[]; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
+  const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">(adminPreview ? "leitura" : "mapa");
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
@@ -226,6 +237,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
   const requestedPagesRef = useRef(new Set<number>());
+  const loadedHighlightReferencesRef = useRef(new Set<string>());
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto");
   const ignoreHashRef = useRef(false);
 
@@ -234,16 +246,21 @@ export default function ContinuousReadingClient({ slug, title, references, initi
     if (requestedPagesRef.current.has(page)) return;
     const offset = page * PAGE_SIZE;
     if (offset >= prepared.length) return;
+    const referenceIds = prepared.slice(offset, offset + PAGE_SIZE).map((reference) => reference.id);
+    if (!referenceIds.length) return;
     requestedPagesRef.current.add(page);
     setFailedPages((current) => { const next = new Set(current); next.delete(page); return next; });
     setLoadingPages((current) => new Set(current).add(page));
     try {
-      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?offset=${offset}&limit=${PAGE_SIZE}`, { cache: "no-store" });
-      const result = await response.json() as { blocks?: Block[] };
+      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}`, { cache: "no-store" });
+      const result = await response.json() as { blocks?: BlockText[] };
       if (!response.ok || !result.blocks) throw new Error("load_failed");
       setBlocks((current) => {
         const next = new Map(current);
-        for (const block of result.blocks ?? []) next.set(block.id, block);
+        for (const block of result.blocks ?? []) {
+          const reference = preparedById.get(block.id);
+          if (reference) next.set(block.id, { ...reference, legislation: block.legislation });
+        }
         return next;
       });
       setLoadedPages((current) => completedContinuousPage(current, page));
@@ -253,11 +270,33 @@ export default function ContinuousReadingClient({ slug, title, references, initi
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [loadedPages, loadingPages, prepared.length, slug]);
+  }, [loadedPages, loadingPages, prepared, preparedById, slug]);
 
   useEffect(() => {
     setLoadedPages(new Set(initialBlocks.length ? [0] : []));
   }, [initialBlocks, prepared]);
+
+  useEffect(() => {
+    const referenceIds = [...blocks.keys()].filter((id) => !loadedHighlightReferencesRef.current.has(id)).slice(0, PAGE_SIZE);
+    if (!referenceIds.length || adminPreview) return;
+    let active = true;
+    const controller = new AbortController();
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/destaques?reference_ids=${encodeURIComponent(referenceIds.join(","))}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+      const result = await response.json().catch(() => null) as { success?: boolean; highlights?: Array<LegisBotHighlight & { referenceId: string }> } | null;
+      if (!active || !response.ok || !result?.success) return;
+      for (const id of referenceIds) loadedHighlightReferencesRef.current.add(id);
+      setBlockHighlights((current) => {
+        const next = new Map(current);
+        for (const id of referenceIds) next.set(id, (result.highlights ?? []).filter((highlight) => highlight.referenceId === id));
+        return next;
+      });
+    })();
+    return () => { active = false; controller.abort(); };
+  }, [adminPreview, blocks, slug]);
 
   const navigate = useCallback((reference: Reference) => {
     const index = prepared.findIndex((item) => item.id === reference.id);
@@ -410,7 +449,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
         <button type="button" role="tab" aria-selected={studyMode === "mapa"} className={studyMode === "mapa" ? styles.studyModeActive : undefined} onClick={showMap}><span className={styles.modeIcon}><FlameIcon /></span><span><strong>Mapa</strong><small>Estudo por prioridade</small></span></button>
         <button type="button" role="tab" aria-selected={studyMode === "leitura"} className={studyMode === "leitura" ? styles.studyModeActive : undefined} onClick={() => setStudyMode("leitura")}><span className={styles.modeIcon}><ScannerIcon active={studyMode === "leitura"} /></span><span><strong>Leitura</strong><small>Estude toda a lei</small></span></button>
       </div> : null}
-      {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} onOpen={openFromMap} /> : <>
+      {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
         {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
         <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={() => setMobileTocOpen((open) => !open)}>☰ <span>Sumário</span></button><span className={styles.mobileTocPrompt}>📖 Clique na Lei</span><span className={styles.mobileTocCurrent} aria-live="polite">{prepared.find((item) => item.id === activeId)?.identificacao ?? "Início da lei"}</span></div>

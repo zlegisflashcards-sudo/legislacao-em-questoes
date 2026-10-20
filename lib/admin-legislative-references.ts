@@ -21,8 +21,24 @@ export class LegislativeDocumentImportError extends Error {
   }
 }
 
-function inventoryImportError(error: { code?: unknown } | null) {
+function inventoryImportError(error: { code?: unknown; message?: unknown; details?: unknown; hint?: unknown } | null) {
   const code = typeof error?.code === "string" && error.code ? error.code : "unknown";
+  const category = ["42P01", "PGRST205"].includes(code)
+    ? "inventario_indisponivel"
+    : code === "42501"
+      ? "permissao"
+      : ["23502", "23505", "23514"].includes(code)
+        ? "restricao"
+        : "falha_do_inventario";
+  // Não expõe detalhes do banco ao navegador; os sinais abaixo bastam para a
+  // triagem administrativa e não incluem valores, SQL ou dados pessoais.
+  console.error("[Importação legislativa] falha no inventário", {
+    code,
+    category,
+    hasMessage: typeof error?.message === "string" && error.message.length > 0,
+    hasDetails: typeof error?.details === "string" && error.details.length > 0,
+    hasHint: typeof error?.hint === "string" && error.hint.length > 0,
+  });
   if (["42P01", "PGRST205"].includes(code)) {
     return new LegislativeDocumentImportError(`Inventário oficial indisponível neste ambiente (código ${code}): a tabela ainda não foi criada pela migration 20261019110000.`, code, 503);
   }

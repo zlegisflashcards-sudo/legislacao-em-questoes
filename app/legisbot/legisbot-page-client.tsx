@@ -197,7 +197,7 @@ export default function LegisBotPageClient({
     setConversationPhase("idle");
     setTypedQuestion("");
     setCommunityCount(initialCommunityCount);
-  }, [articleRecent, dadosIniciais, initialCommunityCount, mappingIncidence, publishedComment, slug, ordem]);
+  }, [articleRecent, dadosIniciais.assunto, dadosIniciais.legislacao, dadosIniciais.titulo, initialCommunityCount, mappingIncidence, publishedComment, slug, ordem]);
 
   useEffect(() => {
     if (isPublicArticle) return;
@@ -438,7 +438,7 @@ export default function LegisBotPageClient({
         {answerState === "timeout" ? <p className="answer-status">A explicação ainda está sendo preparada. Tente novamente em alguns instantes.</p> : null}
         {answerState === "quota" ? <p className="answer-status answer-error">🤖 O LegisBot está descansando um pouco. Tente novamente mais tarde.</p> : null}
         {answerState === "limited" ? <p className="answer-status answer-error">{statusMessage}</p> : null}
-        {answerState === "error" ? <p className="answer-status answer-error">{TEMPORARY_UNAVAILABLE_MESSAGE}</p> : null}
+        {answerState === "error" ? <p className="answer-status answer-error">{statusMessage || TEMPORARY_UNAVAILABLE_MESSAGE}</p> : null}
       </div>
     </article>
 

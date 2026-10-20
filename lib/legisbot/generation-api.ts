@@ -12,6 +12,8 @@ import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import type { DetalhesErroOpenAI } from "./openai-error";
 import { LegisBotSourceError, type LegisBotSource } from "./source";
 
+type IncidentType = "vinculacao" | "sem_conteudo" | "legislacao_ausente" | "falha_tecnica";
+
 type GenerationApiDependencies = {
   authenticate: (request: Request) => Promise<User | null>;
   getRepository: () => LegisBotGenerationRepository;
@@ -22,6 +24,7 @@ type GenerationApiDependencies = {
     context: { slug: string; ordem: string; titulo?: string; assunto?: string },
     details: DetalhesErroOpenAI,
   ) => Promise<unknown>;
+  reportIssue?: (input: { identifiers: ReturnType<typeof normalizeLegisBotIdentifiers>; type: IncidentType; userId?: string }) => Promise<unknown>;
   logError?: (message: string) => void;
 };
 
@@ -30,10 +33,12 @@ export async function handleLegisBotGenerationPost(
   params: { slug: string; ordem: string },
   dependencies: GenerationApiDependencies,
 ): Promise<Response> {
+  let authenticatedUserId: string | undefined;
   try {
     validateLegisBotRequestOrigin(request);
     const user = await dependencies.authenticate(request);
     if (!user) return json({ success: false, error: "Entre na sua conta para gerar o comentário." }, 401);
+    authenticatedUserId = user.id;
 
     const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
     await assertLegisBotIdentifiersOnlyBody(request);
@@ -102,6 +107,14 @@ export async function handleLegisBotGenerationPost(
       outcome.kind === "temporary_failure" ? 503 : 500);
   } catch (error) {
     if (error instanceof LegisBotSourceError) {
+      const type: IncidentType = error.kind === "not_found"
+        ? "vinculacao"
+        : error.kind === "incomplete"
+          ? "sem_conteudo"
+          : "falha_tecnica";
+      // O alerta é melhor esforço: a explicação pública jamais depende do
+      // painel administrativo estar disponível.
+      try { await dependencies.reportIssue?.({ identifiers: normalizeLegisBotIdentifiers(params.slug, params.ordem), type, userId: authenticatedUserId }); } catch { /* best effort */ }
       const status = error.kind === "not_found" ? 404 : error.kind === "conflict" ? 409 : error.kind === "incomplete" ? 422 : 503;
       return json({ success: false, error: error.publicMessage, reason: `source_${error.kind}` }, status);
     }
@@ -111,7 +124,12 @@ export async function handleLegisBotGenerationPost(
     if (error instanceof GenerationRepositoryError && error.invalidInput) {
       return json({ success: false, error: "Os dados do trecho estão incompletos ou inválidos." }, 400);
     }
-    dependencies.logError?.("Falha ao processar solicitação autenticada.");
+    // Mantém o diagnóstico útil para a administração sem registrar conteúdo
+    // legislativo, prompt, token ou mensagem bruta de infraestrutura.
+    const category = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]*$/.test(error.name)
+      ? error.name
+      : "unknown";
+    dependencies.logError?.(`Falha ao processar solicitação autenticada. categoria=${category}`);
     return json({ success: false, error: "Não foi possível processar a solicitação." }, 500);
   }
 }

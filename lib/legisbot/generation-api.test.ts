@@ -53,6 +53,31 @@ function repo(): LegisBotGenerationRepository {
 }
 
 describe("contrato do POST autenticado", () => {
+  it("registra somente uma categoria sanitizada para falhas inesperadas", async () => {
+    const logError = vi.fn();
+    const response = await handleLegisBotGenerationPost(request(), { slug: "L123", ordem: "1" }, {
+      authenticate: vi.fn().mockResolvedValue(user),
+      getRepository: repo,
+      resolveSource: vi.fn().mockRejectedValue(new Error("segredo que não deve ir ao log")),
+      logError,
+    });
+    expect(response.status).toBe(500);
+    expect(logError).toHaveBeenCalledWith("Falha ao processar solicitação autenticada. categoria=Error");
+    expect(logError.mock.calls.flat().join(" ")).not.toContain("segredo");
+  });
+
+  it("registra no painel o problema canônico de fonte sem impedir a resposta pública", async () => {
+    const reportIssue = vi.fn().mockResolvedValue(undefined);
+    const response = await handleLegisBotGenerationPost(request(), { slug: "L123", ordem: "1" }, {
+      authenticate: vi.fn().mockResolvedValue(user),
+      getRepository: repo,
+      resolveSource: vi.fn().mockRejectedValue(new LegisBotSourceError("incomplete", "Texto preparado ausente.")),
+      reportIssue,
+    });
+    expect(response.status).toBe(422);
+    expect(reportIssue).toHaveBeenCalledWith(expect.objectContaining({ type: "sem_conteudo", userId: user.id }));
+  });
+
   it("retorna 401 e não acessa o repositório sem sessão", async () => {
     const getRepository = vi.fn();
     const response = await handleLegisBotGenerationPost(request(), { slug: "L123", ordem: "1" }, {

@@ -3,12 +3,12 @@ import "server-only";
 import { CommunityApiError } from "@/lib/legisbot-community-server";
 import { normalizeLegalText } from "@/lib/legisbot-highlights";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { findLegisBotSource, LegisBotSourceError } from "@/lib/legisbot/source";
+import { findHierarchicalLegisBotSource, LegisBotSourceError } from "@/lib/legisbot/source";
 import { normalizeLegisBotIdentifiers } from "@/lib/legisbot/request-validation";
 
 export async function getStoredLegislationText(slug: string, ordem: string) {
   try {
-    const source = await findLegisBotSource(
+    const source = await findHierarchicalLegisBotSource(
       getSupabaseServerClient(),
       normalizeLegisBotIdentifiers(slug, ordem),
     );
@@ -23,7 +23,7 @@ export async function getStoredLegislationText(slug: string, ordem: string) {
 
 export async function getStoredLegislationSource(slug: string, ordem: string) {
   try {
-    const source = await findLegisBotSource(
+    const source = await findHierarchicalLegisBotSource(
       getSupabaseServerClient(),
       normalizeLegisBotIdentifiers(slug, ordem),
     );

@@ -13,6 +13,7 @@ import { continuousLegisBotHref } from "./continuous-reading-core";
 import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
+import { getContinuousReadingBlockTexts, type ContinuousReadingBlockText, type ContinuousReadingBlockTextRepository } from "./continuous-reading-block-texts-core";
 
 const PAGE_SIZE = 500;
 
@@ -163,6 +164,24 @@ export async function getContinuousReadingBlocks(model: ContinuousReadingModel, 
   return selected.flatMap((reference) => {
     const legislation = legislationById.get(reference.id);
     return legislation ? [{ ...reference, legislation }] : [];
+  });
+}
+
+export { getContinuousReadingBlockTexts, type ContinuousReadingBlockText, type ContinuousReadingBlockTextRepository } from "./continuous-reading-block-texts-core";
+
+export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawIds: string[]) {
+  const db = getSupabaseServerClient();
+  return getContinuousReadingBlockTexts(rawSlug, rawIds, {
+    async findActiveLaw(slug) {
+      const result = await db.from("leis").select("id").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();
+      if (result.error) throw new Error("Não foi possível consultar a legislação.");
+      return result.data ? { id: Number(result.data.id) } : null;
+    },
+    async findPreparedBlocks(lawId, referenceIds) {
+      const result = await db.from("legislative_references").select("id,legislacao").eq("lei_id", lawId).not("preparado_em", "is", null).in("id", referenceIds);
+      if (result.error) throw new Error("Não foi possível carregar os blocos legislativos.");
+      return (result.data ?? []).map((row) => ({ id: String(row.id), legislation: String(row.legislacao ?? "") }));
+    },
   });
 }
 

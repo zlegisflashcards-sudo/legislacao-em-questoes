@@ -10,7 +10,7 @@ describe("leitura contínua pública", () => {
   it("apresenta a Lei Interativa como ambiente conduzido pelo LegisBot", () => {
     expect(client).toContain("Lei Interativa");
     expect(client).toContain("LegisBotGuide");
-    expect(client).toContain("Eu organizei os dispositivos pela quantidade de questões");
+    expect(client).toContain("Organizei os dispositivos por prioridade estatística");
     expect(client).toContain("Vamos percorrer a lei inteira");
     expect(client).toContain("Mapa de prioridade");
     expect(client).toContain("Estudo por prioridade");
@@ -26,8 +26,13 @@ describe("leitura contínua pública", () => {
     expect(client).toContain('first.ordem.localeCompare(second.ordem, "pt-BR", { numeric: true })');
     expect(client).not.toContain("PRIORITY_ORDER.indexOf(first.priority) - PRIORITY_ORDER.indexOf(second.priority)");
     expect(client).toContain("function incidenceBand(linkedQuestions: number)");
+    expect(client).toContain("lawShortName={title}");
+    expect(client).toContain("<small>{lawShortName}</small>");
+    expect(client).toContain("function mapArticleLabel");
     expect(client).toContain("canLoadContinuousPage");
     expect(client).toContain("completedContinuousPage");
+    expect(client).toContain("reference_ids=${encodeURIComponent(referenceIds.join(\",\"))}");
+    expect(client).toContain("const preparedById = useMemo");
     expect(client).toContain('if (linkedQuestions >= 6) return "vermelho"');
     expect(client).toContain('if (linkedQuestions >= 4) return "laranja"');
     expect(client).toContain('if (linkedQuestions >= 2) return "amarelo"');
@@ -37,6 +42,7 @@ describe("leitura contínua pública", () => {
     expect(styles).toContain(".incidence_amarelo");
     expect(styles).toContain(".incidence_laranja");
     expect(styles).toContain(".incidence_vermelho");
+    expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(client).toContain('className={styles.cardRecentFlag}');
     expect(client).toContain('aria-label="Conteúdo recente"');
     expect(server).toContain("priority: publicPriority(linkedQuestions)");
@@ -102,6 +108,9 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("blockHighlights");
     expect(client).toContain("ContinuousLegalHtml");
     expect(client).toContain("onHighlightsChange={updateBlockHighlights}");
+    expect(client).toContain("reference_ids=");
+    expect(client).toContain("loadedHighlightReferencesRef");
+    expect(client).toContain("controller.abort()");
     expect(client).toContain("personal-highlight ${highlight.color}");
   });
 

@@ -10,10 +10,11 @@ describe("carregamento da leitura contínua", () => {
     expect(resolver).not.toContain("await allQuestions(model.law.id)");
   });
 
-  it("mantém a paginação dependente de uma verificação de integridade do servidor", () => {
+  it("usa o índice canônico da página e não remonta o modelo ao buscar textos", () => {
     const route = readFileSync("app/api/legisbot/[slug]/references/route.ts", "utf8");
-    expect(route).toContain("getContinuousReadingModel(slug)");
-    expect(route).toContain("model.integrity.readingAvailable");
-    expect(route).toContain("getContinuousReadingBlocks(model, offset, limit)");
+    expect(route).toContain("getContinuousReadingBlockTextsForLaw(slug, referenceIds)");
+    expect(route).toContain("reference_ids");
+    expect(route).not.toContain("getContinuousReadingModel(slug)");
+    expect(route).not.toContain("getContinuousReadingBlocks(model");
   });
 });

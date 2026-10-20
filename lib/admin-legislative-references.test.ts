@@ -47,6 +47,8 @@ describe("base legislativa persistente", () => {
     expect(service).toContain("O inventário oficial não contém o texto deste dispositivo");
     expect(service).toContain("migration 20261019110000");
     expect(service).toContain("PGRST205");
+    expect(service).toContain("falha no inventário");
+    expect(service).toContain("hasDetails");
   });
 
   it("permite reiniciar a base da lei sem apagar questões ou LegisBots", () => {

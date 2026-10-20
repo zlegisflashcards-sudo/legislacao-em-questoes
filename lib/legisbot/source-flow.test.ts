@@ -118,6 +118,14 @@ describe("fonte canônica do LegisBot", () => {
     expect(template).not.toContain("data-aba=");
   });
 
+  it("usa a mesma cadeia hierárquica para gerar comentários e validar destaques", () => {
+    const generationRoute = readFileSync("app/api/legisbot/[slug]/[ordem]/generate/route.ts", "utf8");
+    const highlightsServer = readFileSync("lib/legisbot-highlights-server.ts", "utf8");
+    expect(generationRoute).toContain("findHierarchicalLegisBotSource");
+    expect(generationRoute).not.toContain("findLegisBotSource(supabase, identifiers)");
+    expect(highlightsServer).toContain("findHierarchicalLegisBotSource");
+  });
+
   it("mantém a revelação pedagógica do Legis Questões e respeita redução de movimento", () => {
     const client = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
     expect(client).toContain("👤 Clique aqui para perguntar sobre este artigo");

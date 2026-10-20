@@ -63,6 +63,8 @@ describe("destaques pessoais do LegisBot", () => {
     expect(legisBotPage).toContain("onPersonalHighlightsChange?.(items)");
     expect(overlay).toContain("onHighlightsChange?.(activeArticle.ordem");
     expect(overlay).toContain("const handleHighlightsChange = useCallback");
+    expect(legisBotPage).toContain("dadosIniciais.assunto");
+    expect(legisBotPage).toContain("statusMessage || TEMPORARY_UNAVAILABLE_MESSAGE");
   });
 
   it("valida novos destaques contra a fonte canônica da leitura contínua", () => {

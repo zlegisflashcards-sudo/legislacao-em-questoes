@@ -1,9 +1,10 @@
 import { getRequestUser } from "@/lib/legisbot-community-server";
 import { handleLegisBotGenerationPost } from "@/lib/legisbot/generation-api";
 import { createSupabaseGenerationRepository } from "@/lib/legisbot/generation-repository";
-import { findLegisBotSource } from "@/lib/legisbot/source";
+import { findHierarchicalLegisBotSource } from "@/lib/legisbot/source";
 import { enviarAlertaFaltaDeCreditosOpenAI } from "@/lib/legisbot/openai-quota-alert";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { registerLegisBotIncident } from "@/lib/legisbot/incident";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export async function POST(request: Request, context: RouteContext) {
   return handleLegisBotGenerationPost(request, await context.params, {
     authenticate: getRequestUser,
     getRepository: () => createSupabaseGenerationRepository(supabase),
-    resolveSource: (identifiers) => findLegisBotSource(supabase, identifiers),
+    resolveSource: (identifiers) => findHierarchicalLegisBotSource(supabase, identifiers),
+    reportIssue: ({ identifiers, type, userId }) => registerLegisBotIncident(supabase, { slug: identifiers.slug, ordem: identifiers.ordem, type, userId }),
     alertQuota: enviarAlertaFaltaDeCreditosOpenAI,
     logError: (message) => console.error(`[LegisBot] ${message}`),
   });

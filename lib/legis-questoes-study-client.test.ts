@@ -27,7 +27,7 @@ describe("player Legis Questões", () => {
   });
 
   it("separa explicitamente campanha, estudo livre e teste", () => {
-    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} recorteId={recorteId} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={recorteId} />'); expect(player).toContain('searchParams.get("teste") === "1"'); expect(player).toContain('<TestStudy slug={slug} recorteId={recorteId} initialFilter={searchParams.get("filtro") === "unanswered" ? "unanswered" : "all"} />');
+    expect(player).toContain('searchParams.get("livre") === "1"'); expect(player).toContain('<CampaignStudy slug={slug} recorteId={recorteId} />'); expect(player).toContain('<FreeStudy slug={slug} structureId={searchParams.get("structure_id")} recorteId={recorteId} order={searchParams.get("ordem")} />'); expect(player).toContain('searchParams.get("teste") === "1"'); expect(player).toContain('<TestStudy slug={slug} recorteId={recorteId} initialFilter={searchParams.get("filtro") === "unanswered" ? "unanswered" : "all"} />');
   });
 
   it("retorna do player para a central da lei atual em qualquer modo", () => {
@@ -94,9 +94,9 @@ describe("player Legis Questões", () => {
 
   it("abre o LegisBot sobre o jogador sem navegação e mantém as abas no mesmo painel", () => {
     expect(player).toContain('import { LegisBotOverlay } from "@/components/legisbot-overlay"');
-    expect(legisBotOverlay).toContain('<LegisBotPageClient slug={slug} ordem={question.ordem ?? ""}');
+    expect(legisBotOverlay).toContain('<LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""}');
     expect(legisBotOverlay).toContain('initialTab={initialTab} embedded');
-    expect(legisBotOverlay).toContain('showArticleQuestions={Boolean(question.ordem)}');
+    expect(legisBotOverlay).toContain('showArticleQuestions={Boolean(activeArticle.ordem)}');
     expect(legisBotOverlay).toContain('questionsRecorteId={recorteId}');
     expect(legisBotOverlay).toContain('document.body.style.overflow = "hidden"');
     expect(legisBotOverlay).toContain('event.key === "Escape"');
@@ -111,17 +111,16 @@ describe("player Legis Questões", () => {
   it("mantém a rota direta do LegisBot e apenas adiciona o modo embutido", () => {
     expect(legisBotPage).toContain('embedded?: boolean;');
     expect(legisBotPage).toContain('onClose?: () => void;');
-    expect(legisBotPage).toContain('embedded ? <div className="legisbot-topic-tools">');
-    expect(legisBotPage).toContain('className="legislation-back-link legisbot-overlay-back" onClick={onClose}');
+    expect(legisBotPage).toContain('embedded ? <div className="legisbot-topic-tools legisbot-overlay-tools">');
+    expect(legisBotPage).toContain('className="legisbot-overlay-close"');
+    expect(legisBotPage).toContain('onClick={onClose}');
   });
 
   it("abre a edição administrativa do LegisBot no próprio contexto do artigo", () => {
     expect(legisBotAdminShortcut).toContain('AdminEditCommentInlineShortcut');
     expect(legisBotAdminShortcut).not.toContain('href={`/admin/legisbot/${data.id}`}');
-    expect(legisBotInlineEditor).toContain('<LegisBotEditor record={record} />');
-    expect(legisBotInlineEditor).toContain('role="dialog" aria-modal="true"');
-    expect(legisBotInlineEditor).toContain('event.key === "Escape"');
-    expect(styles).toContain('.legisbot-inline-editor-backdrop{position:fixed;z-index:130');
+    expect(legisBotInlineEditor).toContain('href={`/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(ordem)}?aba=legisbot`}');
+    expect(legisBotInlineEditor).toContain('Editar na Central do Artigo');
   });
 
   it("usa a pergunta do LegisBot como a única ação para gerar comentários ausentes", () => {
@@ -206,7 +205,7 @@ describe("player Legis Questões", () => {
     expect(player).toContain('if (result.levelConcluded)');
     expect(player).toContain('const levelResult = result.levelResult; setLevelDone({ name: current.level?.nome ?? ""');
     expect(campaignServer).toContain('update({ concluida: true, concluida_em: new Date().toISOString(), score: finalScore })');
-    expect(campaignServer).toContain('update({ status_campanha: "concluida", questoes_finalizadas: true, campanha_ativa_id: null })');
+    expect(campaignServer).toContain('updateProgressFor(context, { status_campanha: "concluida", questoes_finalizadas: true, campanha_ativa_id: null })');
   });
 
   it("oculta a questão anterior enquanto confirma e busca a próxima campanha", () => {
@@ -252,7 +251,7 @@ describe("player Legis Questões", () => {
     expect(freeStudy).toContain('params.set("structure_id", structureId);');
     expect(freeStudy).toContain('const available = review ? revision.questions : result.questions;');
     expect(freeStudy).toContain('setQuestions(available); setStructure(Array.isArray(result.structure) ? result.structure : []);');
-    expect(freeStudy).toContain('setScopeName(review ? null : typeof result.recorte?.nome === "string" ? result.recorte.nome : null); setIndex(0); setAnswer(null);');
+    expect(freeStudy).toContain('setScopeName(review ? null : order ? "Questões deste artigo" : typeof result.recorte?.nome === "string" ? result.recorte.nome : null); setIndex(0); setAnswer(null);');
   });
 
   it("mantém o Estudo Livre visualmente concluído mesmo em sessão filtrada", () => {
@@ -274,12 +273,13 @@ describe("player Legis Questões", () => {
     expect(styles).toContain('overflow-wrap:anywhere');
   });
 
-  it("abre cada item estrutural em uma nova aba no ponto correspondente do sumário do LegisCast", () => {
-    expect(player).toContain('new URLSearchParams({ structure_id: String(structureId) })');
-    expect(player).toContain('`/estudar/lei/${encodeURIComponent(slug ?? "")}/legiscast?${query}`');
+  it("abre cada item estrutural em uma nova aba na Lei Interativa da lei corrente", () => {
+    expect(player).toContain('const interactiveLawHref = slug ? `/legisbot/${encodeURIComponent(slug)}` : "";');
+    expect(player).toContain('href={interactiveLawHref}');
     expect(player).toContain('target="_blank"');
     expect(player).toContain('rel="noopener noreferrer"');
-    expect(player).toContain('no sumário do LegisCast');
+    expect(player).toContain('na Lei Interativa');
+    expect(player).not.toContain('legiscastHref(node.id)');
   });
 
   it("renderiza somente a questão atual no estudo livre", () => {
