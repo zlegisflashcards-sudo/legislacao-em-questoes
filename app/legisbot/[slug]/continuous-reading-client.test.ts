@@ -107,6 +107,7 @@ describe("leitura contínua pública", () => {
     expect(styles).toContain("border-left: 4px solid #475569");
     expect(styles).toContain("border-left-color: #2563eb");
     expect(styles).toContain(".incidence_vermelho");
+    expect(client).toContain("focusedId === reference.id || activeId === reference.id");
     expect(styles).toContain("@keyframes scanDocument");
     expect(styles).toContain("prefers-reduced-motion: reduce");
   });

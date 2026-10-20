@@ -419,7 +419,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
               <article
               id={continuousBlockAnchor(reference.id)}
               data-load-page={block ? undefined : page}
-              className={`${styles.block} ${block ? styles.blockInteractive : ""} ${focusedId === reference.id ? styles.blockFocused : ""}`}
+              className={`${styles.block} ${block ? styles.blockInteractive : ""} ${focusedId === reference.id || activeId === reference.id ? styles.blockFocused : ""}`}
               tabIndex={block ? 0 : undefined}
               aria-label={block ? `${reference.identificacao}. Abrir aprofundamento.` : undefined}
               onClick={block ? (event) => {
