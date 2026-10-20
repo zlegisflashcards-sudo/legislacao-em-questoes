@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegisBotOverlay } from "@/components/legisbot-overlay";
 import { continuousBlockAnchor, referenceIdFromHash } from "@/lib/legisbot/continuous-reading-core";
+import { canLoadContinuousPage, completedContinuousPage } from "@/lib/legisbot/continuous-reading-pagination";
 import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
 import styles from "./continuous-reading.module.css";
 
@@ -214,6 +215,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
   const [loadingPages, setLoadingPages] = useState<Set<number>>(() => new Set());
+  const [loadedPages, setLoadedPages] = useState<Set<number>>(() => new Set(initialBlocks.length ? [0] : []));
   const [failedPages, setFailedPages] = useState<Set<number>>(() => new Set());
   const [selected, setSelected] = useState<Block | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -228,6 +230,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
   const ignoreHashRef = useRef(false);
 
   const loadPage = useCallback(async (page: number) => {
+    if (!canLoadContinuousPage({ page, preparedCount: prepared.length, pageSize: PAGE_SIZE, loadedPages, loadingPages })) return;
     if (requestedPagesRef.current.has(page)) return;
     const offset = page * PAGE_SIZE;
     if (offset >= prepared.length) return;
@@ -243,13 +246,18 @@ export default function ContinuousReadingClient({ slug, title, references, initi
         for (const block of result.blocks ?? []) next.set(block.id, block);
         return next;
       });
+      setLoadedPages((current) => completedContinuousPage(current, page));
     } catch {
       setFailedPages((current) => new Set(current).add(page));
     } finally {
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [prepared.length, slug]);
+  }, [loadedPages, loadingPages, prepared.length, slug]);
+
+  useEffect(() => {
+    setLoadedPages(new Set(initialBlocks.length ? [0] : []));
+  }, [initialBlocks, prepared]);
 
   const navigate = useCallback((reference: Reference) => {
     const index = prepared.findIndex((item) => item.id === reference.id);

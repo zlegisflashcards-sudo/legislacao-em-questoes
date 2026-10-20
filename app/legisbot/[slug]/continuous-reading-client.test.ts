@@ -26,6 +26,8 @@ describe("leitura contínua pública", () => {
     expect(client).toContain('first.ordem.localeCompare(second.ordem, "pt-BR", { numeric: true })');
     expect(client).not.toContain("PRIORITY_ORDER.indexOf(first.priority) - PRIORITY_ORDER.indexOf(second.priority)");
     expect(client).toContain("function incidenceBand(linkedQuestions: number)");
+    expect(client).toContain("canLoadContinuousPage");
+    expect(client).toContain("completedContinuousPage");
     expect(client).toContain('if (linkedQuestions >= 6) return "vermelho"');
     expect(client).toContain('if (linkedQuestions >= 4) return "laranja"');
     expect(client).toContain('if (linkedQuestions >= 2) return "amarelo"');
@@ -38,6 +40,8 @@ describe("leitura contínua pública", () => {
     expect(client).toContain('className={styles.cardRecentFlag}');
     expect(client).toContain('aria-label="Conteúdo recente"');
     expect(server).toContain("priority: publicPriority(linkedQuestions)");
+    expect(server).toContain("formatLegalReferenceFromOrder(reference.ordem, law.nome_curto)");
+    expect(server).toContain('select("id,slug,titulo,nome_curto,codigo")');
     expect(server).toContain('select("slug,ordem,artigo_recente")');
     expect(server).not.toContain("mapping?.incidencia");
     expect(page).toContain('title: "Lei Interativa | LegisFlashcards"');

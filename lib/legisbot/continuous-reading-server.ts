@@ -12,6 +12,7 @@ import {
 import { continuousLegisBotHref } from "./continuous-reading-core";
 import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
+import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
 
 const PAGE_SIZE = 500;
 
@@ -34,6 +35,8 @@ export type ContinuousReadingBlock = ContinuousReadingReference & { legislation:
 
 export type ContinuousReadingModel = {
   law: LawRow;
+  /** Server-only snapshot used by legacy-resolution callers in this request. */
+  questions: ContinuousQuestion[];
   references: ContinuousReadingReference[];
   integrity: ReadingIntegrity;
 };
@@ -93,9 +96,18 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
   ]);
   if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
-  const targets = await listManualQuestionReferenceTargets(questions.map((question) => question.id));
   const questionInput: ContinuousQuestion[] = questions.map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id }));
-  const referenceInput: ContinuousReferenceSummary[] = references.map((reference) => ({ id: reference.id, slug: reference.slug, ordem: reference.ordem, identificacao: reference.identificacao, sourceQuestionId: reference.source_question_id, prepared: Boolean(reference.preparado_em) }));
+  const targets = await listManualQuestionReferenceTargets(questionInput.map((question) => question.id));
+  const referenceInput: ContinuousReferenceSummary[] = references.map((reference) => ({
+    id: reference.id,
+    slug: reference.slug,
+    ordem: reference.ordem,
+    // A grade do Mapa e a leitura usam a mesma identidade das questões:
+    // Ordem canônica + nome curto já carregado da lei, sem consulta por cartão.
+    identificacao: formatLegalReferenceFromOrder(reference.ordem, law.nome_curto) ?? reference.identificacao,
+    sourceQuestionId: reference.source_question_id,
+    prepared: Boolean(reference.preparado_em),
+  }));
   const integrity: ReadingIntegrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
@@ -124,6 +136,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
 
   return {
     law,
+    questions: questionInput,
     integrity,
     references: referenceInput.map((reference) => {
       const linkedQuestions = questionCountByReference.get(reference.id) ?? 0;
@@ -158,7 +171,7 @@ export async function resolveContinuousReference(rawSlug: string, rawOrder: stri
   if (!model?.integrity.readingAvailable) return null;
   const referenceId = resolveLegacyReferenceId({
     rawOrder,
-    questions: (await allQuestions(model.law.id)).map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id })),
+    questions: model.questions,
     references: model.references,
     resolutions: model.integrity.resolutions,
   });

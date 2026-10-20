@@ -7,10 +7,33 @@ import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } 
 import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
 import { legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/legislative-document-import";
 import { planLegislativeReferenceIdentifierRepair, type LegislativeReferenceIdentifierRepair } from "@/lib/legislative-reference-identifiers";
+import { sanitizeLegalHtmlCore } from "@/lib/legisbot/sanitize-legal-html-core";
+import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
 
 export { referenceCandidatesFromQuestions, referencesNotYetStored, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 
 const PAGE_SIZE = 50;
+
+export class LegislativeDocumentImportError extends Error {
+  constructor(message: string, readonly technicalCode: string, readonly status = 400) {
+    super(message);
+    this.name = "LegislativeDocumentImportError";
+  }
+}
+
+function inventoryImportError(error: { code?: unknown } | null) {
+  const code = typeof error?.code === "string" && error.code ? error.code : "unknown";
+  if (["42P01", "PGRST205"].includes(code)) {
+    return new LegislativeDocumentImportError(`Inventário oficial indisponível neste ambiente (código ${code}): a tabela ainda não foi criada pela migration 20261019110000.`, code, 503);
+  }
+  if (code === "42501") {
+    return new LegislativeDocumentImportError(`Inventário oficial sem permissão de gravação neste ambiente (código ${code}).`, code, 503);
+  }
+  if (["23502", "23505", "23514"].includes(code)) {
+    return new LegislativeDocumentImportError(`Os dados do inventário foram recusados por uma restrição do banco (código ${code}).`, code, 409);
+  }
+  return new LegislativeDocumentImportError(`Não foi possível registrar o inventário oficial (código ${code}).`, code, 503);
+}
 
 export type LegislativeReference = {
   id: string;
@@ -27,13 +50,15 @@ export type LegislativeReference = {
 
 const text = (value: unknown, maximum = 20_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "";
 
-function mapReference(row: Record<string, unknown>): LegislativeReference {
+function mapReference(row: Record<string, unknown>, lawShortName?: string | null): LegislativeReference {
   return {
     id: String(row.id),
     leiId: Number(row.lei_id),
     slug: String(row.slug),
     ordem: String(row.ordem),
-    identification: String(row.identificacao),
+    // A identificação histórica pode ser apenas o parágrafo. A Central a
+    // recompõe da mesma chave canônica das questões, sem gravar nada no banco.
+    identification: formatLegalReferenceFromOrder(String(row.ordem), lawShortName) ?? String(row.identificacao),
     legislation: row.legislacao ? String(row.legislacao) : null,
     preparedAt: row.preparado_em ? String(row.preparado_em) : null,
     status: row.situacao === "revogada" ? "revogada" : row.situacao === "preparada" || Boolean(row.legislacao) ? "preparada" : "pendente",
@@ -57,7 +82,14 @@ export async function listLegislativeReferences(input: { lawSlug?: string; query
   if (query) request = request.or(`slug.ilike.%${query}%,ordem.ilike.%${query}%,identificacao.ilike.%${query}%`);
   const result = await request;
   if (result.error) throw new Error("Não foi possível carregar a base legislativa.");
-  const records = (result.data ?? []).map((row) => mapReference(row as Record<string, unknown>));
+  const rows = (result.data ?? []) as Record<string, unknown>[];
+  const lawIds = [...new Set(rows.map((row) => Number(row.lei_id)).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  const laws = lawIds.length
+    ? await db.from("leis").select("id,nome_curto").in("id", lawIds)
+    : { data: [], error: null };
+  if (laws.error) throw new Error("Não foi possível carregar os nomes curtos das legislações.");
+  const shortNameByLawId = new Map((laws.data ?? []).map((law) => [Number(law.id), law.nome_curto ? String(law.nome_curto) : null]));
+  const records = rows.map((row) => mapReference(row, shortNameByLawId.get(Number(row.lei_id))));
   return { records: records.slice(0, PAGE_SIZE), page, hasNextPage: records.length > PAGE_SIZE };
 }
 
@@ -182,7 +214,15 @@ async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8
 export async function previewLegislativeDocumentImport(input: { lawSlug: string; name: string; bytes: Uint8Array }) {
   await exigirAdministrador();
   const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes);
-  return { ...preview, sample: preview.references.slice(0, 20) };
+  // A amostra é apenas de leitura: o HTML vem do parser e é sanitizado no
+  // servidor antes de seguir para o componente administrativo.
+  return {
+    ...preview,
+    sample: preview.references.slice(0, 20).map((reference) => ({
+      ...reference,
+      displayLegislation: sanitizeLegalHtmlCore(reference.legislation),
+    })),
+  };
 }
 
 export async function importLegislativeDocument(input: { lawSlug: string; name: string; bytes: Uint8Array; expected: unknown }) {
@@ -201,7 +241,7 @@ export async function importLegislativeDocument(input: { lawSlug: string; name: 
     document_name: text(input.name, 500),
     imported_at: new Date().toISOString(),
   })), { onConflict: "lei_id,ordem" });
-  if (inventory.error) throw new Error("Não foi possível registrar o inventário oficial do documento.");
+  if (inventory.error) throw inventoryImportError(inventory.error);
   let created = 0; let filled = 0; let preserved = 0;
   for (const reference of preview.references) {
     if (reference.operation === "preservar") { preserved += 1; continue; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { articleOrderStructure } from "./article-order-structure";
+import { articleOrderStructure, formatLegalReferenceFromOrder } from "./article-order-structure";
 
 describe("estrutura da ordem do artigo", () => {
   it("reaproveita assunto para nomear parágrafos sem fixar posições da ordem", () => {
@@ -17,5 +17,15 @@ describe("estrutura da ordem do artigo", () => {
 
   it("mantém a ordem como fallback quando o assunto não detalha o subbloco", () => {
     expect(articleOrderStructure("0121.0.02.0.01", null)).toMatchObject({ block: "Art. 121", subblock: "Subbloco 0.02.0.01" });
+  });
+
+  it("compõe a referência exibida somente pela Ordem e pelo nome curto cadastrado", () => {
+    expect(formatLegalReferenceFromOrder("0005.0.01.0.02.a", "Lei nº 1/2026")).toBe('Art. 5º, § 1º, II, "a", Lei nº 1/2026');
+    expect(formatLegalReferenceFromOrder("0091.a.00.0.00.0", "CP")).toBe("Art. 91-A, CP");
+  });
+
+  it("não inventa referência quando faltam Ordem canônica ou nome curto", () => {
+    expect(formatLegalReferenceFromOrder("0005.0.01", "Lei nº 1/2026")).toBeNull();
+    expect(formatLegalReferenceFromOrder("0005.0.01.0.00.0", null)).toBeNull();
   });
 });

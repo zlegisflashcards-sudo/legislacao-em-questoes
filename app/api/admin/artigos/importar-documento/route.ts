@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { importLegislativeDocument, previewLegislativeDocumentImport } from "@/lib/admin-legislative-references";
+import { importLegislativeDocument, LegislativeDocumentImportError, previewLegislativeDocumentImport } from "@/lib/admin-legislative-references";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +20,9 @@ export async function POST(request: Request) {
     if (action === "apply") return NextResponse.json(await importLegislativeDocument({ ...input, expected: JSON.parse(String(form.get("expected") ?? "[]")) }), { headers });
     return NextResponse.json({ error: "Ação de importação inválida." }, { status: 400, headers });
   } catch (error) {
+    if (error instanceof LegislativeDocumentImportError) {
+      return NextResponse.json({ error: error.message, code: error.technicalCode }, { status: error.status, headers });
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível importar o documento." }, { status: 400, headers });
   }
 }

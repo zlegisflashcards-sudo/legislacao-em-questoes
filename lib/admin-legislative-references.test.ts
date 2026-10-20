@@ -30,6 +30,8 @@ describe("base legislativa persistente", () => {
     expect(migration).toContain("legislacao text");
     expect(migration).toContain("legislative_references_validate_law_slug");
     expect(service).toContain("range(offset, offset + PAGE_SIZE)");
+    expect(service).toContain('from("leis").select("id,nome_curto").in("id", lawIds)');
+    expect(service).toContain("formatLegalReferenceFromOrder");
   });
 
   it("importa apenas textos existentes e não escolhe legislação divergente", () => {
@@ -43,6 +45,8 @@ describe("base legislativa persistente", () => {
     expect(service).toContain('from("legislative_reference_inventory").upsert');
     expect(service).toContain("resolveLegislativeReferenceShadow");
     expect(service).toContain("O inventário oficial não contém o texto deste dispositivo");
+    expect(service).toContain("migration 20261019110000");
+    expect(service).toContain("PGRST205");
   });
 
   it("permite reiniciar a base da lei sem apagar questões ou LegisBots", () => {
