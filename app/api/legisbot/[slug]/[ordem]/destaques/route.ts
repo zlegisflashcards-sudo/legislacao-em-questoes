@@ -1,5 +1,5 @@
 import { CommunityApiError, requireRequestUser } from "@/lib/legisbot-community-server";
-import { getStoredLegislationText, highlightJsonError } from "@/lib/legisbot-highlights-server";
+import { getStoredLegislationSource, highlightJsonError } from "@/lib/legisbot-highlights-server";
 import {
   isHighlightColor,
   normalizeHighlightIdentifiers,
@@ -34,12 +34,12 @@ export async function GET(request: Request, context: RouteContext) {
     const route = await context.params;
     const { slug, ordem } = normalizeHighlightIdentifiers(route.slug, route.ordem);
     await requireRequestUser(request);
+    const source = await getStoredLegislationSource(slug, ordem);
     const token = accessToken(request);
     const { data, error } = await createSupabaseUserClient(token)
       .from("legisbot_destaques_usuario")
       .select("id,inicio,fim,trecho,cor,created_at,updated_at")
-      .eq("slug", slug)
-      .eq("ordem", ordem)
+      .eq("reference_id", source.referenceId)
       .order("inicio", { ascending: true });
 
     if (error) throw error;
@@ -60,9 +60,9 @@ export async function POST(request: Request, context: RouteContext) {
       throw new CommunityApiError(400, "Escolha uma cor válida para o destaque.");
     }
 
-    const legislationText = await getStoredLegislationText(slug, ordem);
+    const source = await getStoredLegislationSource(slug, ordem);
     const validation = validateHighlightSelection(
-      legislationText,
+      source.text,
       body.start,
       body.end,
       body.text,
@@ -73,8 +73,7 @@ export async function POST(request: Request, context: RouteContext) {
     const existingResult = await client
       .from("legisbot_destaques_usuario")
       .select("id,inicio,fim,trecho,cor,created_at,updated_at")
-      .eq("slug", slug)
-      .eq("ordem", ordem)
+      .eq("reference_id", source.referenceId)
       .order("inicio", { ascending: true });
     if (existingResult.error) throw existingResult.error;
 
@@ -108,6 +107,7 @@ export async function POST(request: Request, context: RouteContext) {
       .from("legisbot_destaques_usuario")
       .insert({
         user_id: user.id,
+        reference_id: source.referenceId,
         slug,
         ordem,
         inicio: validation.selection.start,

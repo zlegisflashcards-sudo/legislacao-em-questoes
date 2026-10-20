@@ -8,6 +8,7 @@ import { LegisBotSourceError } from "./source";
 const user = { id: "6c31d2cf-6a66-4c58-8ada-ab117caf0326" } as User;
 const item: LegisBotComentario = {
   id: 2,
+  reference_id: "22222222-2222-4222-8222-222222222222",
   slug: "L123",
   ordem: "1",
   titulo: "Lei",
@@ -34,7 +35,7 @@ function request(body: unknown = {}) {
   });
 }
 
-const source = { questionId: "q1", slug: "L123", ordem: "1", titulo: "Lei", assunto: "Art. 1º", legislacao: "<p>Texto legal</p>", promptLegislacao: "Texto legal", source_signature: "", signature: "a".repeat(64) };
+const source = { referenceId: "22222222-2222-4222-8222-222222222222", questionId: "q1", slug: "L123", ordem: "1", titulo: "Lei", assunto: "Art. 1º", legislacao: "<p>Texto legal</p>", promptLegislacao: "Texto legal", source_signature: "", signature: "a".repeat(64) };
 const sourceDependencies = { resolveSource: vi.fn().mockResolvedValue(source), reconcileSource: vi.fn().mockResolvedValue(null) };
 
 function repo(): LegisBotGenerationRepository {
@@ -76,7 +77,12 @@ describe("contrato do POST autenticado", () => {
       },
     );
     expect(response.status).toBe(200);
-    expect(repository.reserve).toHaveBeenCalledWith(user.id, { slug: "L123", ordem: "1" }, expect.objectContaining({ titulo: "Lei", assunto: "Art. 1º", legislacao: "<p>Texto legal</p>" }));
+    expect(repository.reserve).toHaveBeenCalledWith(user.id, { slug: "L123", ordem: "1" }, expect.objectContaining({
+      referenceId: source.referenceId,
+      titulo: "Lei",
+      assunto: "Art. 1º",
+      promptLegislacao: "Texto legal",
+    }));
   });
 
   it("rejeita Content-Type incorreto antes de criar o repositório", async () => {

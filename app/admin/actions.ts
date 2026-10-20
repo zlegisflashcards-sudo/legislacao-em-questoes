@@ -87,13 +87,20 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   const contextKind = formData.get("context_kind") === "shadow_question" ? "shadow_question" : "comment";
   const status = (intent === "draft" ? "pendente" : intent === "publish" ? "concluido" : selectedStatus) as LegisBotComentarioStatus;
   const fieldErrors: NonNullable<AdminActionState["fieldErrors"]> = {};
+  const supabase = getSupabaseServerClient();
+  let trustedSource: Awaited<ReturnType<typeof findLegisBotSource>> | null = null;
+  try {
+    trustedSource = await findLegisBotSource(supabase, { slug, ordem });
+  } catch {
+    // Registros legados continuam editáveis enquanto sua referência é preparada.
+  }
 
   if (id !== null && (!Number.isSafeInteger(id) || id < 1)) return { ok: false, message: "Registro inválido." };
   if (!SLUG_VALIDO.test(slug)) fieldErrors.slug = "Use de 1 a 50 letras, números, _ ou -.";
   if (!ORDEM_VALIDA.test(ordem)) fieldErrors.ordem = "Use de 1 a 20 letras, números, ponto, _ ou -.";
   if (!titulo) fieldErrors.titulo = "Informe o título.";
   if (!assunto) fieldErrors.assunto = "Informe o assunto.";
-  if (!possuiTextoLegislacao(legislacao)) fieldErrors.legislacao = "Informe o texto literal da legislação.";
+  if (!trustedSource && !possuiTextoLegislacao(legislacao)) fieldErrors.legislacao = "Informe o texto literal da legislação legada.";
   if (contextKind === "comment" && !comentario) fieldErrors.comentario = "Informe o HTML do comentário.";
   if (contextKind === "shadow_question" && (status !== "pendente" || comentario)) return { ok: false, message: "Artigo Sombra não pode ser publicado nem conter comentário editorial." };
   if (!LEGISBOT_COMENTARIO_STATUS.includes(status)) fieldErrors.status = "Status inválido.";
@@ -102,7 +109,6 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
   if (modeloIa.length > 50) return { ok: false, message: "O modelo de IA excede o limite de 50 caracteres." };
   if (Object.keys(fieldErrors).length) return { ok: false, message: "Revise os campos destacados.", fieldErrors };
 
-  const supabase = getSupabaseServerClient();
   if (id !== null) {
     const currentResult = await supabase.from("legisbot_comentarios").select("*").eq("id", id).maybeSingle();
     if (currentResult.error || !currentResult.data) return { ok: false, message: "Comentário não encontrado." };
@@ -133,19 +139,13 @@ export async function salvarComentario(_: AdminActionState, formData: FormData):
     };
   }
 
-  let trustedSource: Awaited<ReturnType<typeof findLegisBotSource>> | null = null;
-  try {
-    trustedSource = await findLegisBotSource(supabase, { slug, ordem });
-  } catch {
-    // Registros legados continuam editáveis mesmo se sua referência ainda não existir.
-  }
-
   const payload = {
+    reference_id: trustedSource?.referenceId ?? null,
     slug,
     ordem,
     titulo: trustedSource?.titulo ?? titulo,
     assunto: trustedSource?.assunto ?? assunto,
-    legislacao: trustedSource?.legislacao ?? legislacao,
+    legislacao: trustedSource ? null : legislacao,
     comentario,
     status,
     context_kind: contextKind,
@@ -194,11 +194,12 @@ export async function prepararContextoLegisBot(formData: FormData) {
   if (existing.error) redirect(`${articleUrl}&erro=preparo`);
 
   const prepared = await supabase.from("legisbot_comentarios").insert({
+    reference_id: source.referenceId,
     slug,
     ordem,
     titulo: source.titulo,
     assunto: source.assunto,
-    legislacao: source.legislacao,
+    legislacao: null,
     comentario: null,
     status: "pendente",
     modelo_ia: null,
@@ -262,9 +263,9 @@ export async function gerarComentarioLegisBotAdministrativo(formData: FormData) 
   if (existing.data?.comentario?.trim()) return;
   const source = await findLegisBotSource(db, { slug, ordem });
   const outcome = await requestLegisBotGeneration({ repository: createSupabaseGenerationRepository(db) }, user.id, { slug, ordem }, {
+    referenceId: source.referenceId!,
     titulo: source.titulo,
     assunto: source.assunto,
-    legislacao: source.legislacao,
     promptLegislacao: source.promptLegislacao,
     sourceSignature: source.signature,
   });

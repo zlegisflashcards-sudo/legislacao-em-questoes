@@ -13,7 +13,7 @@ const highlightsComponent = readFileSync("components/legisbot-personal-highlight
 const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
 const overlay = readFileSync("components/legisbot-overlay.tsx", "utf8");
 const canonicalValidationMigration = readFileSync(
-  "supabase/migrations/20261016120000_validate_highlights_against_legislative_references.sql",
+  "supabase/migrations/20261019150000_canonicalize_legisbot_interactions.sql",
   "utf8",
 );
 
@@ -67,9 +67,9 @@ describe("destaques pessoais do LegisBot", () => {
 
   it("valida novos destaques contra a fonte canônica da leitura contínua", () => {
     expect(canonicalValidationMigration).toContain("public.legislative_references");
-    expect(canonicalValidationMigration).toContain("lower(reference.slug) = lower(new.slug)");
-    expect(canonicalValidationMigration).toContain("reference.ordem = new.ordem");
-    expect(canonicalValidationMigration).toContain("public.legisbot_comentarios");
+    expect(canonicalValidationMigration).toContain("new.reference_id := reference.id");
+    expect(canonicalValidationMigration).toContain("legislation_text := public.legisbot_destaques_plain_legal(reference.legislacao)");
+    expect(canonicalValidationMigration).not.toContain("coalesce(");
   });
 
   it("desfaz todos os destaques do artigo pelas exclusões existentes", () => {

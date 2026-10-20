@@ -8,7 +8,7 @@ import { LegisBotSourceError, type LegisBotSource } from "./source";
 export async function handleLegisBotRead(
   params: { slug: string; ordem: string },
   dependencies: {
-    find: (identifiers: LegisBotIdentifiers) => Promise<LegisBotComentario | null>;
+    find: (identifiers: LegisBotIdentifiers, referenceId?: string) => Promise<LegisBotComentario | null>;
     resolveSource: (identifiers: LegisBotIdentifiers) => Promise<LegisBotSource>;
     reconcileSource?: (source: LegisBotSource) => Promise<LegisBotComentario | null>;
     reportIssue?: (input: { identifiers: LegisBotIdentifiers; type: "vinculacao" | "sem_conteudo" | "legislacao_ausente" | "falha_tecnica" }) => Promise<unknown>;
@@ -16,7 +16,8 @@ export async function handleLegisBotRead(
 ): Promise<Response> {
   try {
     const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
-    const outcome = await readLegisBotComment(() => dependencies.find(identifiers));
+    const source = await dependencies.resolveSource(identifiers);
+    const outcome = await readLegisBotComment(() => dependencies.find(identifiers, source.referenceId ?? undefined));
     if (outcome.kind === "completed") {
       const item = outcome.item;
       return json({
@@ -24,9 +25,9 @@ export async function handleLegisBotRead(
         source: "database",
         status: "gerado",
         comment: sanitizarComentarioHtml(item.comentario ?? ""),
-        titulo: item.titulo,
-        assunto: item.assunto,
-        legislacao: sanitizeLegalHtmlCore(item.legislacao),
+        titulo: source.titulo,
+        assunto: source.assunto,
+        legislacao: sanitizeLegalHtmlCore(source.legislacao),
         modelo_ia: item.modelo_ia,
         precisa_revisao: item.precisa_revisao,
       });
@@ -38,14 +39,13 @@ export async function handleLegisBotRead(
         source: "processing",
         status: "pendente",
         comment: null,
-        titulo: item.titulo,
-        assunto: item.assunto,
-        legislacao: sanitizeLegalHtmlCore(item.legislacao),
+        titulo: source.titulo,
+        assunto: source.assunto,
+        legislacao: sanitizeLegalHtmlCore(source.legislacao),
         modelo_ia: item.modelo_ia,
         precisa_revisao: item.precisa_revisao,
       }, 202);
     }
-    const source = await dependencies.resolveSource(identifiers);
     await dependencies.reportIssue?.({ identifiers, type: "sem_conteudo" });
     return json({ success: false, error: "Conteúdo indisponível no momento.", titulo: source.titulo, assunto: source.assunto, legislacao: sanitizeLegalHtmlCore(source.legislacao) }, 404);
   } catch (error) {

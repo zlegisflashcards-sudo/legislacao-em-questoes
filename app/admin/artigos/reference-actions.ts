@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { clearLegislativeReferences, createLegislativeReferenceFromPreview, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
+import { clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, resolveLegislativeReferenceShadow, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -63,10 +63,11 @@ export async function savePreparedLegislativeReference(formData: FormData) {
   redirect(`/admin/artigos/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}?aba=artigo&referencia=salva`);
 }
 
-export async function createPreviewLegislativeReference(formData: FormData) {
+export async function resolvePreparedLegislativeShadow(formData: FormData) {
   const slug = value(formData, "slug").toLowerCase();
   const ordem = value(formData, "ordem");
-  const result = await createLegislativeReferenceFromPreview({ lawSlug: slug, ordem, identification: formData.get("identification") });
-  revalidatePath(`/admin/artigos/legisbot-preview`);
-  redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&editar=${encodeURIComponent(result.id)}`);
+  const result = await resolveLegislativeReferenceShadow({ lawSlug: slug, ordem, resolution: value(formData, "resolution"), revokingLaw: formData.get("revoking_law") });
+  revalidatePath("/admin/artigos");
+  revalidatePath("/admin/artigos/legisbot-preview");
+  redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&filtro=sombra&sombra=${result.resolution === "revogada" ? "revogado" : "criado"}`);
 }

@@ -12,11 +12,13 @@ export type LegisBotContextKind = "comment" | "shadow_question";
 /** Representação da linha persistida em public.legisbot_comentarios. */
 export interface LegisBotComentario {
   id: number;
+  reference_id: string | null;
   slug: string;
   ordem: string;
   titulo: string;
   assunto: string;
-  legislacao: string;
+  /** Snapshot legado. A fonte pública e de geração é legislative_references. */
+  legislacao: string | null;
   comentario: string | null;
   status: LegisBotComentarioStatus;
   modelo_ia: string | null;

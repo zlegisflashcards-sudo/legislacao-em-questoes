@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { referenceCandidatesFromQuestions, referencesNotYetStored } from "./legislative-reference-candidates";
 
 describe("base legislativa persistente", () => {
-  it("identifica uma referência por slug + ordem sem carregar legislação da questão", () => {
+  it("mantém a identificação por slug + ordem como metadado da importação", () => {
     const candidates = referenceCandidatesFromQuestions([
       { id: "a", slug: "CF", ordem: "0005.0.02.0.01.0", assunto: "Art. 5º, § 2º, I, Constituição Federal" },
       { id: "b", slug: "cf", ordem: "0005.0.02.0.01.0", assunto: "Outro recorte da mesma referência" },
@@ -11,7 +11,7 @@ describe("base legislativa persistente", () => {
     expect(candidates).toEqual([{ sourceQuestionId: "a", slug: "cf", ordem: "0005.0.02.0.01.0", identification: "Art. 5º, § 2º, I, Constituição Federal" }]);
   });
 
-  it("não seleciona referências já persistidas para nova preparação", () => {
+  it("mantém o cálculo de referências já persistidas disponível para a importação", () => {
     const candidates = referenceCandidatesFromQuestions([
       { id: "a", slug: "cf", ordem: "0001.0.00.0.00.0", assunto: "Art. 1º, CF" },
       { id: "b", slug: "cf", ordem: "0002.0.00.0.00.0", assunto: "Art. 2º, CF" },
@@ -29,17 +29,20 @@ describe("base legislativa persistente", () => {
     expect(migration).toContain("unique (lei_id, ordem)");
     expect(migration).toContain("legislacao text");
     expect(migration).toContain("legislative_references_validate_law_slug");
-    expect(service).toContain("ignoreDuplicates: true");
     expect(service).toContain("range(offset, offset + PAGE_SIZE)");
   });
 
-  it("importa em lote apenas bases vazias e não escolhe legislação divergente", () => {
+  it("importa apenas textos existentes e não escolhe legislação divergente", () => {
     const service = readFileSync("lib/admin-legislative-references.ts", "utf8");
     const page = readFileSync("app/admin/artigos/page.tsx", "utf8");
     expect(service).toContain("importQuestionLegislationToReferences");
     expect(service).toContain("if (versions.size !== 1)");
     expect(service).toContain('.is("legislacao", null)');
-    expect(page).toContain("Importar recortes das questões");
+    expect(service).toContain("Não é permitido criar bloco legislativo vazio");
+    expect(page).toContain("Importar textos das questões");
+    expect(service).toContain('from("legislative_reference_inventory").upsert');
+    expect(service).toContain("resolveLegislativeReferenceShadow");
+    expect(service).toContain("O inventário oficial não contém o texto deste dispositivo");
   });
 
   it("permite reiniciar a base da lei sem apagar questões ou LegisBots", () => {

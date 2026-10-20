@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { buildAdministrativePreviewItems } from "./admin-legislative-preview-core";
+import { buildAdministrativePreviewItems, findAdministrativeShadowArticles } from "./admin-legislative-preview-core";
 
 describe("prévia administrativa da legislação", () => {
-  it("agrupa questões pela Ordem, preserva referência preparada e não inventa lacunas", () => {
+  it("agrupa questões pela Ordem, preserva referência preparada e não inventa blocos vazios", () => {
     const result = buildAdministrativePreviewItems("cf", [{ id: "ref-1", slug: "cf", ordem: "0001.0.00.0.00.0", identificacao: "Art. 1º, CF", legislacao: "Art. 1º", situacao: "preparada", lei_revogadora: null }], [
       { id: "q-1", ordem: "0001.0.00.0.00.0", assunto: "Art. 1º, CF" },
       { id: "q-2", ordem: "0001.0.00.0.00.0", assunto: "Art. 1º, CF" },
       { id: "q-3", ordem: "0003.0.00.0.00.0", assunto: "Art. 3º, CF" },
     ]);
-    expect(result.items.map((item) => item.ordem)).toEqual(["0001.0.00.0.00.0", "0003.0.00.0.00.0"]);
+    expect(result.items.map((item) => item.ordem)).toEqual(["0001.0.00.0.00.0"]);
     expect(result.items[0]).toMatchObject({ status: "prepared", questionCount: 2, pendingQuestionCount: 0 });
-    expect(result.items[1]).toMatchObject({ status: "pending", questionCount: 1, pendingQuestionCount: 1 });
+  });
+
+  it("identifica artigo sombra apenas ao comparar o inventário oficial com a base preparada", () => {
+    const result = findAdministrativeShadowArticles([
+      { ordem: "0001.0.00.0.00.0", identificacao: "Art. 1º", legislacao: "Art. 1º" },
+      { ordem: "0002.0.00.0.00.0", identificacao: "Art. 2º", legislacao: "Art. 2º" },
+    ], [{ id: "ref-1", slug: "lei", ordem: "0001.0.00.0.00.0", identificacao: "Art. 1º", legislacao: "texto", situacao: "preparada", lei_revogadora: null }]);
+    expect(result).toEqual([{ ordem: "0002.0.00.0.00.0", identification: "Art. 2º" }]);
   });
 
   it("preserva o estado revogado e separa questões sem Ordem canônica", () => {

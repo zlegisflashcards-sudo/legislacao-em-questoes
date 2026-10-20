@@ -14,10 +14,10 @@ import {
 import { legalHtmlToPlainText } from "@/lib/legisbot-community";
 import { prepararComentarioParaEditor } from "@/lib/legisbot/prepare-comment-html";
 
-type Fields = Pick<
+type Fields = Omit<Pick<
   LegisBotComentario,
   "slug" | "ordem" | "titulo" | "assunto" | "legislacao" | "comentario" | "status" | "modelo_ia" | "context_kind"
->;
+>, "legislacao"> & { legislacao: string };
 
 const initialAction: AdminActionState = { ok: false, message: "" };
 const emptyFields: Fields = {
@@ -43,7 +43,7 @@ const fromRecord = (record?: LegisBotComentario): Fields => record ? {
   ordem: record.ordem,
   titulo: record.titulo,
   assunto: record.assunto,
-  legislacao: legalHtmlToPlainText(record.legislacao),
+  legislacao: legalHtmlToPlainText(record.legislacao ?? ""),
   comentario: record.comentario ?? "",
   status: record.status,
   modelo_ia: record.modelo_ia,
@@ -224,12 +224,12 @@ export default function LegisBotEditor({ record, returnHref = "/admin/legisbot" 
 
       <section className="admin-card">
         <div className="admin-section-title">
-          <div><h2>Texto literal da legislação *</h2><p>Texto-base exibido ao aluno e usado pelo LegisBot.</p></div>
+          <div><h2>Snapshot legado da legislação</h2><p>A fonte atual pertence à Referência Legislativa. Este campo permanece apenas para registros antigos ainda não vinculados.</p></div>
           <button type="button" className="admin-button secondary small" onClick={() => copy(fields.legislacao, "legislacao")}>
             {copied === "legislacao" ? "Copiado!" : "Copiar legislação"}
           </button>
         </div>
-        <textarea className="admin-legislation" name="legislacao" value={fields.legislacao} required aria-invalid={Boolean(state.fieldErrors?.legislacao)} onChange={(e) => update("legislacao", e.target.value)} />
+        <textarea className="admin-legislation" name="legislacao" value={fields.legislacao} readOnly={Boolean(record?.reference_id)} required={!record?.reference_id} aria-invalid={Boolean(state.fieldErrors?.legislacao)} onChange={(e) => update("legislacao", e.target.value)} />
         {error("legislacao")}
       </section>
 

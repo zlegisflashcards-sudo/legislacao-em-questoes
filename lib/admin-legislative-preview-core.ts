@@ -1,18 +1,22 @@
-import { articleOrderStructure } from "@/lib/article-order-structure";
 import { legisBotOrderCandidates } from "@/lib/legisbot/order-candidates";
 import { parseQuestionOrder } from "@/lib/question-structure-consistency";
 
 export type PreviewReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; legislacao: string | null; situacao: "pendente" | "preparada" | "revogada"; lei_revogadora: string | null };
 export type PreviewQuestionRow = { id: string; ordem: string; assunto: string | null };
+export type PreviewInventoryRow = { ordem: string; identificacao: string; legislacao: string };
 export type AdministrativePreviewItem = { id: string | null; slug: string; ordem: string; identification: string; legislation: string | null; status: "prepared" | "pending" | "revoked"; revokingLaw: string | null; questionCount: number; pendingQuestionCount: number; questionIds: string[]; editable: boolean };
+export type AdministrativeShadowArticle = { ordem: string; identification: string };
 
 function key(slug: string, ordem: string) { return `${slug.trim().toLowerCase()}\u0000${ordem.trim()}`; }
 
 export function buildAdministrativePreviewItems(lawSlug: string, references: PreviewReferenceRow[], questions: PreviewQuestionRow[]) {
   const items = new Map<string, AdministrativePreviewItem>();
   for (const row of references) {
+    // Referência sem texto é apenas um vestígio de descoberta por questão, não
+    // um dispositivo legislativo que possa ser mostrado na leitura.
+    if (!row.legislacao?.trim()) continue;
     const ordem = row.ordem.trim();
-    const status = row.situacao === "revogada" ? "revoked" : row.situacao === "preparada" || Boolean(row.legislacao?.trim()) ? "prepared" : "pending";
+    const status = row.situacao === "revogada" ? "revoked" : "prepared";
     items.set(key(row.slug, ordem), { id: row.id, slug: row.slug.toLowerCase(), ordem, identification: row.identificacao, legislation: row.legislacao, status, revokingLaw: row.lei_revogadora?.trim() || null, questionCount: 0, pendingQuestionCount: 0, questionIds: [], editable: true });
   }
   // Incisos e alíneas pertencem à leitura do artigo/parágrafo superior já
@@ -42,13 +46,18 @@ export function buildAdministrativePreviewItems(lawSlug: string, references: Pre
         : undefined;
       if (parentKey) item = items.get(parentKey);
     }
-    if (!item) {
-      item = { id: null, slug: lawSlug.toLowerCase(), ordem, identification: articleOrderStructure(ordem, question.assunto).reference, legislation: null, status: "pending", revokingLaw: null, questionCount: 0, pendingQuestionCount: 0, questionIds: [], editable: true };
-      items.set(itemKey, item);
-    }
+    if (!item) continue;
     item.questionCount += 1;
     item.questionIds.push(question.id);
-    if (item.status === "pending") item.pendingQuestionCount += 1;
   }
   return { items: [...items.values()].sort((left, right) => left.ordem.localeCompare(right.ordem)), unresolvedQuestionCount, orphanQuestions };
+}
+
+/** Official inventory minus references that actually contain legal text. */
+export function findAdministrativeShadowArticles(inventory: PreviewInventoryRow[], references: PreviewReferenceRow[]): AdministrativeShadowArticle[] {
+  const preparedOrders = new Set(references.filter((reference) => Boolean(reference.legislacao?.trim())).map((reference) => reference.ordem.trim()));
+  return inventory
+    .filter((reference) => !preparedOrders.has(reference.ordem.trim()))
+    .map((reference) => ({ ordem: reference.ordem.trim(), identification: reference.identificacao }))
+    .sort((left, right) => left.ordem.localeCompare(right.ordem));
 }

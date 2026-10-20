@@ -38,10 +38,13 @@ export async function handleLegisBotGenerationPost(
     const identifiers = normalizeLegisBotIdentifiers(params.slug, params.ordem);
     await assertLegisBotIdentifiersOnlyBody(request);
     const source = await dependencies.resolveSource(identifiers);
+    if (!source.referenceId) {
+      throw new LegisBotSourceError("not_found", "A referência legislativa deste dispositivo não foi identificada.");
+    }
     const input = {
+      referenceId: source.referenceId,
       titulo: source.titulo,
       assunto: source.assunto,
-      legislacao: source.legislacao,
       promptLegislacao: source.promptLegislacao,
       sourceSignature: source.signature,
     };
@@ -52,7 +55,7 @@ export async function handleLegisBotGenerationPost(
         alertQuota: dependencies.alertQuota,
       },
       user.id,
-      identifiers,
+      { slug: source.slug, ordem: source.ordem },
       input,
     );
 

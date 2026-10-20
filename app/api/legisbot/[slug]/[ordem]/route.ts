@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: RouteContext) {
     handleLegisBotRead(
       params,
       {
-        find: (identifiers) => findHierarchicalLegisBotComment(supabase, identifiers),
+        find: (identifiers, referenceId) => findHierarchicalLegisBotComment(supabase, identifiers, referenceId),
         resolveSource: (identifiers) => findHierarchicalLegisBotSource(supabase, identifiers),
         reportIssue: ({ identifiers, type }) => registerLegisBotIncident(supabase, { slug: identifiers.slug, ordem: identifiers.ordem, type }),
       },

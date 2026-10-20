@@ -21,6 +21,25 @@ export async function getStoredLegislationText(slug: string, ordem: string) {
   }
 }
 
+export async function getStoredLegislationSource(slug: string, ordem: string) {
+  try {
+    const source = await findLegisBotSource(
+      getSupabaseServerClient(),
+      normalizeLegisBotIdentifiers(slug, ordem),
+    );
+    if (!source.referenceId) {
+      throw new CommunityApiError(404, "A referência legislativa deste dispositivo não foi identificada.");
+    }
+    return { referenceId: source.referenceId, text: normalizeLegalText(source.promptLegislacao) };
+  } catch (error) {
+    if (error instanceof CommunityApiError) throw error;
+    if (error instanceof LegisBotSourceError) {
+      throw new CommunityApiError(error.kind === "not_found" ? 404 : 409, error.publicMessage);
+    }
+    throw error;
+  }
+}
+
 export function highlightJsonError(error: unknown) {
   if (error instanceof CommunityApiError) {
     return Response.json({ success: false, message: error.publicMessage }, { status: error.status });

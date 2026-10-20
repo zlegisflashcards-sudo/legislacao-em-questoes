@@ -21,8 +21,14 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("reference.linkedQuestions > 0");
     expect(client).toContain('reference.priority !== "nao_mapeado"');
     expect(client).not.toContain('reference.hierarchy.at(-1)?.name');
-    expect(client).toContain("Incidência: cinza, amarelo (3+), laranja (5+) e vermelho (9+)");
+    expect(client).toContain("Prioridade de revisão");
+    expect(client).not.toContain("cinza, amarelo (3+), laranja (5+) e vermelho (9+)");
+    expect(client).toContain('first.ordem.localeCompare(second.ordem, "pt-BR", { numeric: true })');
+    expect(client).not.toContain("PRIORITY_ORDER.indexOf(first.priority) - PRIORITY_ORDER.indexOf(second.priority)");
     expect(client).toContain("function incidenceBand(linkedQuestions: number)");
+    expect(client).toContain('if (linkedQuestions >= 6) return "vermelho"');
+    expect(client).toContain('if (linkedQuestions >= 4) return "laranja"');
+    expect(client).toContain('if (linkedQuestions >= 2) return "amarelo"');
     expect(client).not.toContain("Calor {PRIORITY_LEVELS[reference.priority]}/4");
     expect(client).not.toContain("reference.linkedQuestions === 1 ? \"questão\" : \"questões\"");
     expect(styles).toContain(".incidence_cinza");

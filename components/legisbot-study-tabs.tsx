@@ -30,6 +30,9 @@ export default function LegisBotStudyTabs({
   const [activeTab, setActiveTab] = useState<LegisBotStudyTab>(initialTab);
   const [openedTabs, setOpenedTabs] = useState<Set<LegisBotStudyTab>>(() => new Set([initialTab]));
   const id = useId().replace(/:/g, "");
+  const interactiveLawHref = ordem.trim()
+    ? `/legisbot/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}`
+    : `/legisbot/${encodeURIComponent(slug)}`;
 
   const tabs: Array<{ key: LegisBotStudyTab; icon: string; label: string; content: ReactNode }> = [
     { key: "legisbot", icon: "🤖", label: "LegisBot", content: legisBotContent },
@@ -69,6 +72,15 @@ export default function LegisBotStudyTabs({
             ) : null}
           </button>
         ))}
+        <a
+          className="legisbot-interactive-law-link"
+          href={interactiveLawHref}
+          aria-label="Abrir Lei Interativa neste dispositivo"
+          title="Lei Interativa"
+        >
+          <span aria-hidden="true">📖</span>
+          <span className="legisbot-tab-label">Lei Interativa</span>
+        </a>
       </div>
 
       {tabs.map((tab) => openedTabs.has(tab.key) ? (

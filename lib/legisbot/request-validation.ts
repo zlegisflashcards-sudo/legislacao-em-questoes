@@ -16,9 +16,9 @@ export class LegisBotRequestError extends Error {
 
 export type LegisBotIdentifiers = { slug: string; ordem: string };
 export type LegisBotGenerationInput = {
+  referenceId: string;
   titulo: string;
   assunto: string;
-  legislacao: string;
   promptLegislacao: string;
   sourceSignature: string;
 };

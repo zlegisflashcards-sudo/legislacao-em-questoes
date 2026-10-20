@@ -41,7 +41,19 @@ export async function findLegisBotComment(
 export async function findHierarchicalLegisBotComment(
   supabase: SupabaseClient,
   identifiers: LegisBotIdentifiers,
+  referenceId?: string,
 ): Promise<LegisBotComentario | null> {
+  if (referenceId) {
+    const linked = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("reference_id", referenceId)
+      .order("id")
+      .limit(1)
+      .maybeSingle();
+    if (linked.error) throw new GenerationRepositoryError("Falha ao consultar o comentário vinculado.");
+    if (linked.data) return linked.data as LegisBotComentario;
+  }
   const candidates = legisBotOrderCandidates(identifiers.ordem);
   const { data, error } = await supabase
     .from(TABLE)
@@ -66,7 +78,9 @@ export async function reconcileLegisBotCommentSource(
   const storedSignature = current.source_signature || createLegisBotSourceSignature({
     titulo: current.titulo,
     assunto: current.assunto,
-    promptLegislacao: legalHtmlToStructuredText(current.legislacao),
+    promptLegislacao: current.legislacao
+      ? legalHtmlToStructuredText(current.legislacao)
+      : source.promptLegislacao,
   });
   const precisaRevisao = storedSignature !== source.signature;
   if (current.source_signature === storedSignature && current.precisa_revisao === precisaRevisao) return current;
@@ -89,9 +103,9 @@ export function createSupabaseGenerationRepository(
         p_user_id: userId,
         p_slug: identifiers.slug,
         p_ordem: identifiers.ordem,
+        p_reference_id: input.referenceId,
         p_titulo: input.titulo,
         p_assunto: input.assunto,
-        p_legislacao: input.legislacao,
       });
       if (error) {
         throw new GenerationRepositoryError(

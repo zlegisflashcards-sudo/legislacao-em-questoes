@@ -8,6 +8,7 @@ import { LegisBotSourceError } from "./source";
 
 const item: LegisBotComentario = {
   id: 1,
+  reference_id: "11111111-1111-4111-8111-111111111111",
   slug: "CF",
   ordem: "0001",
   titulo: "Constituição",
@@ -27,7 +28,7 @@ const item: LegisBotComentario = {
 };
 
 describe("contrato de leitura pública do LegisBot", () => {
-  const source = { questionId: "q1", slug: "CF", ordem: "0001", titulo: "Constituição", assunto: "Art. 1º", legislacao: "<p>Texto</p>", promptLegislacao: "Texto", signature: "a".repeat(64) };
+  const source = { referenceId: "11111111-1111-4111-8111-111111111111", questionId: "q1", slug: "CF", ordem: "0001", titulo: "Constituição", assunto: "Art. 1º", legislacao: "<p>Texto canônico</p>", promptLegislacao: "Texto canônico", signature: "a".repeat(64) };
   const dependencies = (value: LegisBotComentario | null) => ({ find: vi.fn().mockResolvedValue(value), resolveSource: vi.fn().mockResolvedValue(source), reconcileSource: vi.fn().mockResolvedValue(value) });
   it("retorna comentário concluído", async () => {
     const find = vi.fn().mockResolvedValue(item);
@@ -39,7 +40,30 @@ describe("contrato de leitura pública do LegisBot", () => {
     const response = await handleLegisBotRead({ slug: "cf", ordem: "0001" }, dependencies(item));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    await expect(response.json()).resolves.toMatchObject({ success: true, source: "database" });
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      source: "database",
+      legislacao: "<p>Texto canônico</p>",
+    });
+  });
+
+  it("nunca expõe a fotografia histórica do comentário como legislação atual", async () => {
+    const response = await handleLegisBotRead({ slug: "cf", ordem: "0001" }, dependencies({
+      ...item,
+      legislacao: "<p>Texto histórico</p>",
+    }));
+    const body = await response.json();
+    expect(body.legislacao).toBe("<p>Texto canônico</p>");
+    expect(body.legislacao).not.toContain("histórico");
+  });
+
+  it("procura o comentário pelo UUID da fonte canônica", async () => {
+    const find = vi.fn().mockResolvedValue(item);
+    await handleLegisBotRead({ slug: "cf", ordem: "0001" }, {
+      ...dependencies(item),
+      find,
+    });
+    expect(find).toHaveBeenCalledWith({ slug: "CF", ordem: "0001" }, source.referenceId);
   });
 
   it("retorna processing para item em geração", async () => {

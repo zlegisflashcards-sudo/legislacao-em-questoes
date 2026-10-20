@@ -8,11 +8,14 @@ import type {
 } from "./generation-repository";
 
 const identifiers = { slug: "L11340", ordem: "0004.0.00.00" };
-const input = { titulo: "Lei", assunto: "Art. 4º", legislacao: "<p>Texto legal</p>", promptLegislacao: "Texto legal", sourceSignature: "a".repeat(64) };
+const input = { referenceId: "33333333-3333-4333-8333-333333333333", titulo: "Lei", assunto: "Art. 4º", promptLegislacao: "Texto legal", sourceSignature: "a".repeat(64) };
 const item: LegisBotComentario = {
   id: 10,
+  reference_id: input.referenceId,
   ...identifiers,
-  ...input,
+  titulo: input.titulo,
+  assunto: input.assunto,
+  legislacao: null,
   comentario: null,
   status: "processando",
   modelo_ia: null,
