@@ -101,10 +101,12 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("personal-highlight ${highlight.color}");
   });
 
-  it("concentra o calor da leitura na barra lateral do dispositivo", () => {
-    expect(client).toContain('styles[`readingPriority_${reference.priority}`]');
-    expect(styles).toContain(".readingPriority_muito_alta");
-    expect(styles).toContain(".readingPriority_nao_mapeado");
+  it("mantém as cores de prioridade no mapa e usa barra neutra na leitura", () => {
+    expect(client).not.toContain('styles[`readingPriority_${reference.priority}`]');
+    expect(styles).not.toContain(".readingPriority_muito_alta");
+    expect(styles).toContain("border-left: 4px solid #475569");
+    expect(styles).toContain("border-left-color: #2563eb");
+    expect(styles).toContain(".incidence_vermelho");
     expect(styles).toContain("@keyframes scanDocument");
     expect(styles).toContain("prefers-reduced-motion: reduce");
   });

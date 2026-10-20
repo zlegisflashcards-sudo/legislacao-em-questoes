@@ -190,7 +190,7 @@ describe("interface das leis adquiridas", () => {
     expect(card).toContain("w-full");
     expect(card).toContain("sm:w-auto");
     expect(card).toContain("break-words text-xl font-black leading-6");
-    expect(card).toContain("grid gap-3 sm:flex sm:flex-wrap");
+    expect(card).toContain("grid grid-cols-2 gap-3 sm:flex sm:flex-wrap");
   });
 
   it("lista somente as leis liberadas, sem estado local de configuração do Anki", () => {
@@ -201,7 +201,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>", ">🤖 Lei Interativa</Link>", "interactiveLawHref"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>", '<ScannerIcon className="h-5 w-5" />', ">Lei Interativa</span>", "interactiveLawHref"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {

@@ -17,7 +17,7 @@ describe("navegação responsiva dos modos da lei", () => {
     expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}`');
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
     expect(source).toContain("grid-cols-4");
-    expect(source).toContain("<ScannerIcon mobile={mobile} />");
+    expect(source).toContain('<ScannerIcon className={mobile ? "h-6 w-6"');
   });
 
   it("mantém a barra inferior no mobile e unifica a pill lateral em tablet e desktop", () => {

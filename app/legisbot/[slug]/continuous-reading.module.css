@@ -403,16 +403,10 @@
 .block {
   scroll-margin-top: 104px;
   border-bottom: 1px solid #e5edf7;
-  border-left: 4px solid #dbe6f6;
+  border-left: 4px solid #475569;
   padding: 28px 32px;
   transition: background .2s, box-shadow .2s;
 }
-
-.readingPriority_muito_alta { border-left-color: #ef4444; }
-.readingPriority_alta { border-left-color: #fb7185; }
-.readingPriority_media { border-left-color: #fb923c; }
-.readingPriority_baixa { border-left-color: #facc15; }
-.readingPriority_nao_mapeado { border-left-color: #cbd5e1; }
 
 .block:last-child {
   border-bottom: 0;
@@ -435,6 +429,7 @@
 
 .block:target,
 .blockFocused {
+  border-left-color: #2563eb;
   background: #fafdff;
   box-shadow: inset 4px 0 #3b82f6;
 }
