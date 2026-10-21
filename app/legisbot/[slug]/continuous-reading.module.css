@@ -629,6 +629,23 @@
   font-size: .7rem;
 }
 
+.preparationLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24px;
+  border-radius: 11px;
+  background: #1d4ed8;
+  padding: 0 18px;
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.preparationLink:hover,
+.preparationLink:focus-visible { background: #1e40af; outline: none; }
+
 .previewStats {
   display: flex;
   flex-wrap: wrap;

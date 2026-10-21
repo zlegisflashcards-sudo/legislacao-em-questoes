@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LegisBotPageClient from "@/app/legisbot/legisbot-page-client";
 import type { LegisBotStudyTab } from "@/components/legisbot-study-tabs";
 import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
+import { PreparationNotice } from "@/app/legisbot/[slug]/preparation-notice";
 
 export type LegisBotOverlayArticle = {
   ordem?: string | null;
@@ -19,6 +20,7 @@ export type LegisBotOverlayArticle = {
 export function LegisBotOverlay({ slug, question, articles, initialTab, publicComment, recorteId, onHighlightsChange, onClose }: { slug: string; question: LegisBotOverlayArticle; /** Artigos disponíveis no contexto atual, em ordem de estudo. */ articles?: LegisBotOverlayArticle[]; initialTab: LegisBotStudyTab; publicComment?: string | null; recorteId?: string | null; onHighlightsChange?: (ordem: string, highlights: LegisBotHighlight[]) => void; onClose: () => void }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const [activeArticle, setActiveArticle] = useState(question);
+  const [availability, setAvailability] = useState<{ status: "loading" | "ready" | "preparing" | "technical_error"; lawName: string }>({ status: "loading", lawName: "" });
   const availableArticles = useMemo(() => {
     const seen = new Set<string>();
     const result: LegisBotOverlayArticle[] = [];
@@ -39,9 +41,21 @@ export function LegisBotOverlay({ slug, question, articles, initialTab, publicCo
   }, [question]);
 
   useEffect(() => {
+    let active = true;
+    void fetch(`/api/legisbot/${encodeURIComponent(slug)}/availability`)
+      .then(async (response) => ({ response, body: await response.json().catch(() => ({})) }))
+      .then(({ response, body }) => {
+        if (!active) return;
+        setAvailability({ status: response.ok && body.status === "preparing" ? "preparing" : response.ok && body.status === "ready" ? "ready" : "technical_error", lawName: typeof body.lawName === "string" ? body.lawName : "" });
+      })
+      .catch(() => { if (active) setAvailability((current) => ({ ...current, status: "technical_error" })); });
+    return () => { active = false; };
+  }, [slug]);
+
+  useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const focusTimer = window.setTimeout(() => panelRef.current?.querySelector<HTMLButtonElement>(".legisbot-overlay-back")?.focus(), 0);
+    const focusTimer = window.setTimeout(() => panelRef.current?.querySelector<HTMLButtonElement>(".legisbot-overlay-close, .legisbot-overlay-back")?.focus(), 0);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -54,7 +68,7 @@ export function LegisBotOverlay({ slug, question, articles, initialTab, publicCo
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
     };
-  }, [onClose]);
+  }, [availability.status, onClose]);
 
   function trapFocus(event: React.KeyboardEvent<HTMLElement>) {
     if (event.key !== "Tab" || !panelRef.current) return;
@@ -75,5 +89,5 @@ export function LegisBotOverlay({ slug, question, articles, initialTab, publicCo
     onHighlightsChange?.(activeArticle.ordem ?? "", items);
   }, [activeArticle.ordem, onHighlightsChange]);
 
-  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}><LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} articleRecent={activeArticle.artigo_recente === true} showArticleQuestions={Boolean(activeArticle.ordem)} questionsRecorteId={recorteId} onPersonalHighlightsChange={handleHighlightsChange} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} /></aside></div>;
+  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}>{availability.status === "preparing" ? <PreparationNotice lawName={availability.lawName || "Lei Interativa"} embedded onClose={onClose} /> : <LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} articleRecent={activeArticle.artigo_recente === true} showArticleQuestions={Boolean(activeArticle.ordem)} questionsRecorteId={recorteId} onPersonalHighlightsChange={handleHighlightsChange} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} />}</aside></div>;
 }

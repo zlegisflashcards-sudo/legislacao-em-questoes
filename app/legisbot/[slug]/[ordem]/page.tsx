@@ -7,7 +7,10 @@ import { findHierarchicalLegisBotSource } from "@/lib/legisbot/source";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import { continuousBlockAnchor } from "@/lib/legisbot/continuous-reading-core";
-import { resolveContinuousReference } from "@/lib/legisbot/continuous-reading-server";
+import { getContinuousReadingModel, resolveContinuousReference } from "@/lib/legisbot/continuous-reading-server";
+import { LawStudyBottomNav } from "@/components/law-study-bottom-nav";
+import styles from "../continuous-reading.module.css";
+import { PreparationNotice } from "../preparation-notice";
 
 type LegisBotPageProps = {
   params: Promise<{
@@ -39,6 +42,13 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
   // `aba` existia nos links antigos do Anki. Os dados de conteúdo presentes em
   // query strings legadas são deliberadamente ignorados, mas preservamos a aba.
   const initialTab = abaInicial(primeiroValor(query.tab) || primeiroValor(query.aba));
+  const continuousModel = await getContinuousReadingModel(slug).catch((error) => {
+    console.error("[LegisBot] Falha ao verificar a preparação da leitura contínua.", { slug, ordem, tipo: error instanceof Error ? error.name : "unknown" });
+    return null;
+  });
+  if (continuousModel && !continuousModel.integrity.readingAvailable) {
+    return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={continuousModel.law.nome_curto || continuousModel.law.titulo} /></main><LawStudyBottomNav slug={continuousModel.law.slug} recorteId={primeiroValor(query.recorte_id) || null} activeMode="lei_interativa" /></div>;
+  }
   const continuousReference = await resolveContinuousReference(slug, ordem).catch((error) => {
     console.error("[LegisBot] Falha ao verificar a leitura contínua; mantendo a página compatível.", {
       slug,
