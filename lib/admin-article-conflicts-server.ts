@@ -53,6 +53,14 @@ type ConflictOperationAction = "limpar_html_assunto" | "padronizar_nome_curto" |
 type CommentSummary = { id: number; status: string; precisa_revisao: boolean; source_signature: string | null };
 type DuplicateBatchCandidate = { id: string; slug: string; ordem: string; pergunta: string };
 type OrphanQuestion = { question: ConflictQuestion; reason: string; status: string };
+type OrphanReviewType = "sem_bloco_artigo" | "ordem_invalida" | "vinculo_manual_invalido" | "referencia_ambigua";
+
+function orphanReviewType(status: string): { code: OrphanReviewType; label: string; editorial: boolean } {
+  if (status === "missing") return { code: "sem_bloco_artigo", label: "Sem bloco de artigo", editorial: true };
+  if (status === "invalid_order") return { code: "ordem_invalida", label: "Ordem inválida", editorial: false };
+  if (status === "invalid_manual") return { code: "vinculo_manual_invalido", label: "Vínculo manual inválido", editorial: false };
+  return { code: "referencia_ambigua", label: "Referência ambígua", editorial: false };
+}
 
 async function requireAdmin() {
   const user = await obterAdministrador();
@@ -236,7 +244,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys()])];
   const laws = lawsForValidation;
-  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada", "sem_bloco_artigo"].includes(value)));
+  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada", "sem_bloco_artigo", "ordem_invalida", "vinculo_manual_invalido", "referencia_ambigua"].includes(value)));
   const hasTypeFilter = selectedTypes.size > 0;
   const typeMode = filters.typeMode === "all" ? "all" : "any";
   const filtered = contextKeys.filter((key) => {
@@ -256,11 +264,11 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const slug = group.questions[0]?.slug ?? "";
     return (!law || slug.toLocaleLowerCase("pt-BR") === law) && (!hasTypeFilter || (typeMode === "any" && selectedTypes.has("pergunta_duplicada")) || (typeMode === "all" && selectedTypes.size === 1 && selectedTypes.has("pergunta_duplicada")));
   });
-  const filteredOrphans = orphanQuestions.filter(({ question }) => {
+  const filteredOrphans = orphanQuestions.filter(({ question, status }) => {
     const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`;
     const structuralGroup = structural.get(key);
     const matchingTypes = new Set([
-      "sem_bloco_artigo",
+      orphanReviewType(status).code,
       structuralGroup?.validation.status === "conflict" ? "estrutural" : null,
       structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
       legalByKey.has(key) ? "legislacao" : null,
@@ -279,7 +287,9 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "possible_conflict").length,
     legislation: contextsForLaw.filter((key) => legalByKey.has(key)).length,
     duplicateStatements: duplicateStatements.filter((group) => !law || group.questions[0]?.slug.toLocaleLowerCase("pt-BR") === law).length,
-    orphanQuestions: orphanQuestions.filter(({ question }) => !law || question.slug.toLocaleLowerCase("pt-BR") === law).length,
+    orphanQuestions: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).editorial).length,
+    invalidOrders: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).code === "ordem_invalida").length,
+    invalidReferences: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && !orphanReviewType(status).editorial && orphanReviewType(status).code !== "ordem_invalida").length,
   };
   const entries = [
     ...filtered.map((key) => ({ kind: "context" as const, key })),
@@ -315,7 +325,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
         comment: null,
         structuralValidation: null,
         editorialGranularityPending: false,
-        reviewTypes: ["Sem bloco de artigo"],
+        reviewTypes: [orphanReviewType(status).label],
         duplicateQuestions: [],
         orphanQuestion: { id: question.id, pergunta: question.pergunta, reason, status },
         editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos&tipo=sem_bloco_artigo`)}`,

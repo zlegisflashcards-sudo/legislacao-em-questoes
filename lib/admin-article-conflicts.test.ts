@@ -176,19 +176,26 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Exigem revisão editorial");
     expect(list).toContain('tone="error" label="Conflitos estruturais"');
     expect(list).toContain('tone="error" label="Perguntas duplicadas"');
-    expect(list).toContain('tone="error" label="Sem bloco de artigo"');
+    expect(list).toContain('tone="error" label="Ordens inválidas"');
+    expect(list).toContain('tone="error" label="Vínculos ou referências inválidos"');
+    expect(list).not.toContain('tone="error" label="Sem bloco de artigo"');
+    expect(list).toContain('tone="warning" label="Bloco editorial pendente"');
     expect(list).toContain('tone="warning" label="Legislação divergente"');
   });
 
-  it("lista questões órfãs como erro e abre o editor para vinculá-las ao bloco correto", () => {
+  it("lista questões sem bloco como pendência editorial e abre o editor para vinculá-las ao bloco correto", () => {
     expect(server).toContain("const orphanQuestions = await articleBlockOrphans(activeRows)");
     expect(server).toContain("resolveContinuousReadingIntegrity");
     expect(server).toContain('"sem_bloco_artigo"');
-    expect(server).toContain('reviewTypes: ["Sem bloco de artigo"]');
+    expect(server).toContain('reviewTypes: [orphanReviewType(status).label]');
+    expect(server).toContain('if (status === "missing") return { code: "sem_bloco_artigo", label: "Sem bloco de artigo", editorial: true }');
+    expect(server).toContain('if (status === "invalid_order") return { code: "ordem_invalida", label: "Ordem inválida", editorial: false }');
+    expect(server).toContain('if (status === "invalid_manual") return { code: "vinculo_manual_invalido", label: "Vínculo manual inválido", editorial: false }');
     expect(server).toContain('question_id=${encodeURIComponent(question.id)}');
     expect(list).toContain('"Sem bloco de artigo"');
     expect(list).toContain("Vincular ao bloco");
-    expect(list).toContain("Ela fica fora da leitura contínua e dos destinos do LegisBot");
+    expect(list).toContain("Isso não impede a conferência ou o uso da questão.");
+    expect(list).toContain("A leitura contínua e os destinos do LegisBot aguardam");
   });
 
   it("sinaliza duplicidade de assertiva da edição sem bloquear o salvamento nem alterar os registros", () => {

@@ -50,6 +50,8 @@ describe("Central do Artigo administrativa", () => {
     const questionsPage = read("app/admin/leis/[slug]/questoes/page.tsx");
     expect(questionsPage).toContain('initialView === "conflitos" ? await listArticleSourceConflicts');
     expect(questionsPage).toContain('initialView={initialView} conflicts={conflicts}');
+    expect(questionsPage).toContain('const clientStateKey = [initialView, questionId, legisBotId, contextQuestionId].join(":")');
+    expect(questionsPage).toContain('key={clientStateKey}');
     expect(index).not.toContain("listArticleSourceConflicts");
     expect(index).not.toContain("const pendingSummary");
   });
