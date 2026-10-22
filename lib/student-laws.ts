@@ -29,10 +29,11 @@ export type StudentLawStudyContext = {
   questionCount: number;
 };
 
-export type StudentLawUpdateStatus = "atualizado" | "desatualizado";
+export type StudentLawUpdateStatus = "nao_verificado" | "atualizado" | "desatualizado";
 export type StudentLawReferenceType = "originaria" | "alteracao";
 
 const updateStatusLabels: Record<StudentLawUpdateStatus, string> = {
+  nao_verificado: "Atualização não verificada",
   atualizado: "Material atualizado",
   desatualizado: "Material desatualizado",
 };
@@ -77,7 +78,7 @@ const allowedRpcKeys = new Set([
   "houve_alteracao_legislativa", "referencia_normativa_atual", "tipo_referencia_normativa",
 ]);
 
-const updateStatuses = new Set<StudentLawUpdateStatus>(["atualizado", "desatualizado"]);
+const updateStatuses = new Set<StudentLawUpdateStatus>(["nao_verificado", "atualizado", "desatualizado"]);
 const referenceTypes = new Set<StudentLawReferenceType>(["originaria", "alteracao"]);
 
 function optionalText(value: unknown) {

@@ -54,7 +54,7 @@ describe("validação da administração comercial", () => {
     expect(() => optionalIsoDate("2026-02-30", "Data")).toThrow(CommercialValidationError);
     expect(optionalNonNegativeInteger(0, "Quantidade")).toBe(0);
     expect(() => optionalNonNegativeInteger(-1, "Quantidade")).toThrow(CommercialValidationError);
-    expect(LAW_UPDATE_STATUSES).toEqual(["atualizado", "desatualizado"]);
+    expect(LAW_UPDATE_STATUSES).toEqual(["nao_verificado", "atualizado", "desatualizado"]);
     expect(LAW_CONFERENCE_STATUSES).toEqual(["para_conferir", "conferido"]);
     expect(EDITORIAL_UPDATE_TYPES).toContain("alteracao_legislativa");
     expect(EDITORIAL_IMPORTANCE).toEqual(["informativa", "recomendada", "essencial"]);

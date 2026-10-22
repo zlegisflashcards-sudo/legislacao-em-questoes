@@ -30,11 +30,15 @@ describe("dados das leis adquiridas", () => {
     expect(parseStudentLawRows([{ ...rpcLaw, compra_id: "segredo" }])).toEqual([]);
     expect(parseStudentLawRows([{ ...rpcLaw, total_flashcards: -1 }])).toEqual([]);
     expect(parseStudentLawRows([{ ...rpcLaw, revisado_em: "2026-02-30" }])).toEqual([]);
+    expect(parseStudentLawRows([{ ...rpcLaw, situacao_atualizacao: "nao_verificado" }])).toEqual([
+      { id: 1, slug: "cf", titulo: "Constituição", nomeCurto: null, descricao: null, codigo: null, categoria: null, thumbnailUrl: null, ordem: 0, totalFlashcards: 845, versaoMaterial: "4.1", revisadoEm: "2026-08-06", publicadoEm: "2026-08-06", situacaoAtualizacao: "nao_verificado", houveAlteracaoLegislativa: true, referenciaNormativaAtual: "EC 138/2025", tipoReferenciaNormativa: "alteracao" },
+    ]);
     expect(parseStudentLawRows([{ ...rpcLaw, situacao_atualizacao: "inventado" }])).toEqual([]);
     expect(parseStudentLawRows([{ ...rpcLaw, houve_alteracao_legislativa: false }])).toEqual([]);
   });
 
   it("centraliza os rótulos editoriais sem distorcer os valores", () => {
+    expect(studentLawStatusLabel("nao_verificado")).toBe("Atualização não verificada");
     expect(studentLawStatusLabel("atualizado")).toBe("Material atualizado");
     expect(studentLawStatusLabel("desatualizado")).toBe("Material desatualizado");
     expect(studentLawReferenceLabel("originaria")).toBe("Norma originária");
