@@ -46,7 +46,7 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
         </div>
         <div className="law-data-status-grid">
           <label>Houve alteração legislativa?<select name="houve_alteracao_legislativa" value={hasChange ? "true" : "false"} onChange={(event) => setHasChange(event.target.value === "true")}><option value="false">Não</option><option value="true">Sim</option></select></label>
-          <label>Situação de atualização<select name="situacao_atualizacao" defaultValue={text(law?.situacao_atualizacao) === "desatualizado" ? "desatualizado" : "atualizado"}><option value="atualizado">Atualizado</option><option value="desatualizado">Desatualizado</option></select></label>
+          <label>Situação de atualização<select name="situacao_atualizacao" defaultValue={["nao_verificado", "atualizado", "desatualizado"].includes(text(law?.situacao_atualizacao)) ? text(law?.situacao_atualizacao) : "nao_verificado"}><option value="nao_verificado">Não verificado</option><option value="atualizado">Atualizado</option><option value="desatualizado">Desatualizado</option></select></label>
         </div>
         {hasChange ? <div className="law-data-reference-pair law-data-last-update">
           <label>Última alteração incorporada<input name="ultima_alteracao_referencia" defaultValue={text(law?.ultima_alteracao_referencia)} required /></label>

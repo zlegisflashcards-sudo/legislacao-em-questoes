@@ -69,6 +69,7 @@ describe("validação da administração comercial", () => {
   it("permite que a situação de conferência permaneça sem marcação", () => {
     const validation = server.slice(server.indexOf("function validateLawData"), server.indexOf("function validateMaterialData"));
     expect(validation).toContain('value == null || value === "" ? null');
+    expect(validation).toContain('data.situacao_atualizacao ?? "nao_verificado"');
     expect(lawConferenceNullableMigration).toContain("drop not null");
     expect(lawConferenceNullableMigration).toContain("drop default");
     expect(lawConferenceNullableMigration).toContain("situacao_conferencia is null or");

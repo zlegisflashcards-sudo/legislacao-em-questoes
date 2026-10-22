@@ -586,7 +586,7 @@ function validateLawData(raw: unknown, update = false) {
   if (!update || "houve_alteracao_legislativa" in data) result.houve_alteracao_legislativa = booleanValue(data.houve_alteracao_legislativa ?? false, "Alteração legislativa");
   if (!update || "ultima_alteracao_referencia" in data) result.ultima_alteracao_referencia = optionalString(data.ultima_alteracao_referencia, "Última alteração", 500) ?? null;
   if (!update || "ultima_alteracao_data" in data) result.ultima_alteracao_data = optionalIsoDate(data.ultima_alteracao_data, "Data da última alteração") ?? null;
-  if (!update || "situacao_atualizacao" in data) result.situacao_atualizacao = enumValue(data.situacao_atualizacao ?? "atualizado", LAW_UPDATE_STATUSES, "Situação de atualização");
+  if (!update || "situacao_atualizacao" in data) result.situacao_atualizacao = enumValue(data.situacao_atualizacao ?? "nao_verificado", LAW_UPDATE_STATUSES, "Situação de atualização");
   if (update && "situacao_conferencia" in data) {
     const value = data.situacao_conferencia;
     result.situacao_conferencia = value == null || value === "" ? null : enumValue(value, LAW_CONFERENCE_STATUSES, "Situação de conferência");
