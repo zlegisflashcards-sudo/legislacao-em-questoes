@@ -2,7 +2,7 @@ import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { parseQuestionDraft, questionDeckDefaults, type QuestionDraft } from "@/lib/admin-questoes";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
-import { parseBulkQuestionEdit, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
+import { parseBulkQuestionEdit, parseBulkQuestionTextReplacement, replaceCompleteQuestionText, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
@@ -538,6 +538,34 @@ export async function applyBulkQuestionEdit(body: Record<string, unknown>) {
   const expected = Array.isArray(body.expected) ? body.expected : [];
   if (JSON.stringify(expected) !== JSON.stringify(resolved.preview.expected)) throw new AdminQuestoesError(409, "As questões mudaram desde a prévia. Gere uma nova prévia.");
   const result = await db().rpc("admin_bulk_update_law_questions", { p_lei_id: resolved.current.id, p_question_ids: resolved.ids, p_field: resolved.parsed.field, p_value: resolved.parsed.value, p_expected: resolved.preview.expected, p_actor_user_id: resolved.user.id });
+  if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : result.error.code === "40001" ? 409 : 422, result.error.message);
+  return result.data;
+}
+
+type BulkQuestionTextReplacementPreview = { field: string; find: string; replace: string; selection_count: number; changed_count: number; unchanged_count: number; sample: Array<{ id: string; before: unknown; after: unknown }>; expected: Array<{ id: string; before: unknown }> };
+async function resolveBulkQuestionTextReplacement(body: Record<string, unknown>): Promise<{ current: Law; user: { id: string }; parsed: ReturnType<typeof parseBulkQuestionTextReplacement>; ids: string[]; preview: BulkQuestionTextReplacementPreview }> {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); let parsed: ReturnType<typeof parseBulkQuestionTextReplacement>;
+  try { parsed = parseBulkQuestionTextReplacement(body); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "Substituição em lote inválida."); }
+  const ids = await bulkQuestionEditIds(current, body, parsed.scope);
+  if (!ids.length) throw new AdminQuestoesError(422, "Não há questões nesta abrangência.");
+  const selected = await db().from("questions").select(`id,${parsed.field}`).eq("lei_id", current.id).eq("ativo", true).in("id", ids).order("id");
+  if (selected.error) fail("carregar_substituicao_lote", selected.error);
+  if ((selected.data?.length ?? 0) !== ids.length) throw new AdminQuestoesError(409, "A seleção mudou ou contém questão de outra lei. Gere uma nova prévia.");
+  const rows = (selected.data ?? []) as Array<Record<string, unknown> & { id: string }>;
+  const replacement = (before: unknown) => {
+    if (typeof before !== "string" || !before.includes(parsed.find)) return before;
+    return replaceCompleteQuestionText(before, parsed.find, parsed.replace) || null;
+  };
+  const changed = rows.map((row) => ({ id: String(row.id), before: row[parsed.field], after: replacement(row[parsed.field]) })).filter((row) => row.before !== row.after);
+  return { current, user, parsed, ids: rows.map((row) => String(row.id)), preview: { field: parsed.field, find: parsed.find, replace: parsed.replace, selection_count: rows.length, changed_count: changed.length, unchanged_count: rows.length - changed.length, sample: changed.slice(0, 8), expected: rows.map((row) => ({ id: String(row.id), before: row[parsed.field] })) } };
+}
+
+export async function previewBulkQuestionTextReplacement(body: Record<string, unknown>) { const resolved = await resolveBulkQuestionTextReplacement(body); return { law: { id: resolved.current.id, slug: resolved.current.slug, titulo: resolved.current.titulo }, ...resolved.preview }; }
+export async function applyBulkQuestionTextReplacement(body: Record<string, unknown>) {
+  const resolved = await resolveBulkQuestionTextReplacement(body);
+  const expected = Array.isArray(body.expected) ? body.expected : [];
+  if (JSON.stringify(expected) !== JSON.stringify(resolved.preview.expected)) throw new AdminQuestoesError(409, "As questões mudaram desde a prévia. Gere uma nova prévia.");
+  const result = await db().rpc("admin_bulk_replace_law_question_text", { p_lei_id: resolved.current.id, p_question_ids: resolved.ids, p_field: resolved.parsed.field, p_find: resolved.parsed.find, p_replace: resolved.parsed.replace, p_expected: resolved.preview.expected, p_actor_user_id: resolved.user.id });
   if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : result.error.code === "40001" ? 409 : 422, result.error.message);
   return result.data;
 }

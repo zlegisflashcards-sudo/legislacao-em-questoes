@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,9 +23,22 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "legislacao-em-questoes"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".next-verify-publish/types/**/*.ts",
+    ".next-verify-worker/types/**/*.ts",
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    ".next-legiscast-worker/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "legislacao-em-questoes"
+  ]
 }

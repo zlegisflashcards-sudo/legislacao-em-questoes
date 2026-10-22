@@ -13,6 +13,8 @@ import {
   deleteBulkAdminQuestions,
   previewBulkQuestionEdit,
   applyBulkQuestionEdit,
+  previewBulkQuestionTextReplacement,
+  applyBulkQuestionTextReplacement,
   moveAdminQuestion,
   reactivateAdminQuestion,
   listAdminQuestionLaws,
@@ -145,6 +147,8 @@ export async function POST(request: Request) {
     else if (body.action === "excluir_questoes") data = await deleteBulkAdminQuestions(body);
     else if (body.action === "previsualizar_edicao_lote") data = await previewBulkQuestionEdit(body);
     else if (body.action === "aplicar_edicao_lote") data = await applyBulkQuestionEdit(body);
+    else if (body.action === "previsualizar_substituicao_lote") data = await previewBulkQuestionTextReplacement(body);
+    else if (body.action === "aplicar_substituicao_lote") data = await applyBulkQuestionTextReplacement(body);
     else if (body.action === "previsualizar_padronizacao_contexto") data = await previewArticleContextStandardization(body);
     else if (body.action === "aplicar_padronizacao_contexto") data = await applyArticleContextStandardization(body);
     else if (body.action === "mover_questao") data = await moveAdminQuestion(body);

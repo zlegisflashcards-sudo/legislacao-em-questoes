@@ -50,6 +50,7 @@ describe("consultas principais de questoes", () => {
     const requested = [...state.questions].reverse().map((question) => String(question.id));
     const questions = await mainQuestionsByIds(42, requested);
     expect(state.idBatches.map((batch) => batch.length)).toEqual([500, 500, 500, 500, 24]);
+    expect(questions).toHaveLength(2024);
     expect(questions.map((question) => question.id)).toEqual(requested);
     expect(new Set(questions.map((question) => question.id)).size).toBe(2024);
   });
@@ -65,6 +66,7 @@ describe("consultas principais de questoes", () => {
     const questions = await mainQuestions(42);
     const entitledScope = questionsInScope(questions, [10]);
     const exported = await buildLawApkg({ slug: "lei-teste", titulo: "Lei de teste" }, questions, [{ id: 10, parent_id: null, nome: "Titulo I" }, { id: 20, parent_id: null, nome: "Titulo II" }]);
+    expect(questions).toHaveLength(2024);
     expect(exported.notes).toBe(questions.length);
     expect(entitledScope).toHaveLength(1000);
     expect(entitledScope.every((question) => question.structure_id === 10)).toBe(true);

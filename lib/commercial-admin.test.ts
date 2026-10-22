@@ -30,7 +30,9 @@ const productVideoMigration = readFileSync("supabase/migrations/20260807210000_a
 const productHighlightMigration = readFileSync("supabase/migrations/20260808010000_add_product_highlight.sql", "utf8");
 const postSaleFinalOutcomeMigration = readFileSync("supabase/migrations/20260815100000_add_purchase_post_sale_final_outcome.sql", "utf8");
 const lawConferenceNullableMigration = readFileSync("supabase/migrations/20261005124000_allow_unmarked_law_conference_status.sql", "utf8");
+const lawUnverifiedUpdateMigration = readFileSync("supabase/migrations/20261020120000_allow_unverified_law_update_status.sql", "utf8");
 const productPriceMigration = readFileSync("supabase/migrations/20261015120000_add_product_price.sql", "utf8");
+const lawDataFields = readFileSync("components/admin/law-data-fields.tsx", "utf8");
 
 describe("validação da administração comercial", () => {
   it("aceita slug normalizado e rejeita valores perigosos", () => {
@@ -73,6 +75,16 @@ describe("validação da administração comercial", () => {
     expect(lawConferenceNullableMigration).toContain("drop not null");
     expect(lawConferenceNullableMigration).toContain("drop default");
     expect(lawConferenceNullableMigration).toContain("situacao_conferencia is null or");
+  });
+
+  it("permite marcar uma nova lei como não verificada sem alterar a conferência", () => {
+    const validation = server.slice(server.indexOf("function validateLawData"), server.indexOf("function validateMaterialData"));
+    expect(validation).toContain('data.situacao_atualizacao ?? "nao_verificado"');
+    expect(lawUnverifiedUpdateMigration).toContain("'nao_verificado', 'atualizado', 'desatualizado'");
+    expect(lawUnverifiedUpdateMigration).toContain("set default 'nao_verificado'");
+    expect(lawUnverifiedUpdateMigration).not.toMatch(/update public\.leis/i);
+    expect(lawDataFields).toContain('option value="nao_verificado"');
+    expect(lawDataFields).toContain("Situação de conferência");
   });
 
   it("aceita URLs normais do YouTube e as normaliza para o player", () => {
