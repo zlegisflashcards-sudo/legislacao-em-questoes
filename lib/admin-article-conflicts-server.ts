@@ -247,6 +247,12 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada", "sem_bloco_artigo", "ordem_invalida", "vinculo_manual_invalido", "referencia_ambigua"].includes(value)));
   const hasTypeFilter = selectedTypes.size > 0;
   const typeMode = filters.typeMode === "all" ? "all" : "any";
+  const selectedType = selectedTypes.size === 1 ? [...selectedTypes][0] : null;
+  const matchesSelectedTypes = (matchingTypes: Set<string>) => !hasTypeFilter || (selectedType
+    ? matchingTypes.size === 1 && matchingTypes.has(selectedType)
+    : typeMode === "all"
+      ? [...selectedTypes].every((value) => matchingTypes.has(value))
+      : [...selectedTypes].some((value) => matchingTypes.has(value)));
   const filtered = contextKeys.filter((key) => {
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const slug = group?.slug ?? structuralGroup!.slug;
     if (law && slug.toLocaleLowerCase("pt-BR") !== law) return false;
@@ -255,14 +261,12 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
       group ? "legislacao" : null,
     ].filter((value): value is string => Boolean(value)));
-    if (hasTypeFilter && (typeMode === "all"
-      ? ![...selectedTypes].filter((value) => value !== "pergunta_duplicada").every((value) => matchingTypes.has(value)) || selectedTypes.has("pergunta_duplicada")
-      : ![...selectedTypes].some((value) => matchingTypes.has(value)))) return false;
+    if (!matchesSelectedTypes(matchingTypes)) return false;
     return true;
   });
   const filteredDuplicates = duplicateStatements.filter((group) => {
     const slug = group.questions[0]?.slug ?? "";
-    return (!law || slug.toLocaleLowerCase("pt-BR") === law) && (!hasTypeFilter || (typeMode === "any" && selectedTypes.has("pergunta_duplicada")) || (typeMode === "all" && selectedTypes.size === 1 && selectedTypes.has("pergunta_duplicada")));
+    return (!law || slug.toLocaleLowerCase("pt-BR") === law) && matchesSelectedTypes(new Set(["pergunta_duplicada"]));
   });
   const filteredOrphans = orphanQuestions.filter(({ question, status }) => {
     const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`;
@@ -273,7 +277,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
       legalByKey.has(key) ? "legislacao" : null,
     ].filter((value): value is string => Boolean(value)));
-    return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && (!hasTypeFilter || (typeMode === "all" ? [...selectedTypes].every((value) => matchingTypes.has(value)) : [...selectedTypes].some((value) => matchingTypes.has(value))));
+    return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && matchesSelectedTypes(matchingTypes);
   });
   // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
   // atualmente escolhido no filtro. Assim o quadro funciona como um placar

@@ -67,10 +67,12 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain('"possivel_estrutural"');
     expect(server).toContain('"legislacao"');
     expect(server).toContain('typeMode === "all"');
+    expect(server).toContain('matchingTypes.size === 1 && matchingTypes.has(selectedType)');
     expect(server).not.toContain('type === "comentario_sem_analise"');
     expect(list).toContain('name="tipo"');
     expect(list).toContain('type="checkbox"');
     expect(list).toContain("Todos os tipos marcados");
+    expect(list).toContain("mostra apenas ocorrências sem outra condição");
     expect(list).not.toContain("Comentário sem análise");
     expect(list).toContain("pagina");
   });
@@ -168,6 +170,8 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).not.toContain('"Comentário sem análise"');
     expect(list).toContain('aria-label="Tipos de revisão"');
     expect(list).toContain("item.reviewTypes.map");
+    expect(list).toContain("renderedItemKey(item)");
+    expect(list).toContain('item.orphanQuestion?.id ?? item.duplicateQuestions[0]?.id ?? "context"');
   });
 
   it("separa erros que exigem correção de avisos editoriais no resumo", () => {
