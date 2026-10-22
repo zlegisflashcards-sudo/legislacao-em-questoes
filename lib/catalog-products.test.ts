@@ -12,8 +12,10 @@ describe("cards comerciais do catálogo", () => {
     expect(loader).toContain('from("produto_leis")');
     expect(loader).toContain('leis(slug,status_publicacao)');
     expect(loader).toContain('select("lei_id,item")');
+    expect(loader).toContain('select("id,nome,slug,ordem,tipo_produto")');
     expect(loader).toContain('recorte_id');
     expect(loader).toContain('aggregateCatalogModuleAvailability');
+    expect(loader).toContain('product.tipo_produto === "lei_avulsa"');
     expect(loader).toContain("activeQuestionCountsBySlug");
     expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
     expect(loader).toContain('if (destaque) productsQuery = productsQuery.eq("destaque", true)');

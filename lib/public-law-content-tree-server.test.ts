@@ -2,16 +2,28 @@ import { describe, expect, it } from "vitest";
 import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLawContentTreeDatabase } from "./public-law-content-tree-server";
 
 type TableRows = Record<string, Record<string, unknown>[]>;
+type DatabaseOptions = { failPage?: { table: string; from: number } };
 
-function database(rows: TableRows): PublicLawContentTreeDatabase {
+function database(rows: TableRows, options: DatabaseOptions = {}): PublicLawContentTreeDatabase {
   return {
     from(table) {
-      const result: { data: Record<string, unknown>[]; error: null } = { data: rows[table] ?? [], error: null };
-      const promise = Promise.resolve(result);
-      const query = {
+      const result = (data: Record<string, unknown>[], error: { message: string } | null = null) => {
+        const promise = Promise.resolve({ data, error });
+        return promise;
+      };
+      const initial = result(rows[table] ?? []);
+      const query: any = {
         select: () => query,
         eq: () => query,
-        then: promise.then.bind(promise),
+        order: () => query,
+        range: (from: number, to: number) => {
+          const page = options.failPage?.table === table && options.failPage.from === from
+            ? result([], { message: "page failed" })
+            : result((rows[table] ?? []).slice(from, to + 1));
+          query.then = page.then.bind(page);
+          return query;
+        },
+        then: initial.then.bind(initial),
       };
       return query;
     },
@@ -89,5 +101,24 @@ describe("loader público da árvore de conteúdo", () => {
   it("falha fechada quando a lei ou o recorte não é elegível", async () => {
     expect(await loadPublicLawContentTree({ lawId: 1, db: database({ ...rows, leis: [] }) })).toBeNull();
     expect(await loadPublicLawContentTree({ lawId: 1, recorteId: "ausente", db: database({ ...rows, recortes_leis: [] }) })).toBeNull();
+  });
+
+  it("pagina todas as 2.024 questões e não omite títulos após a primeira página", async () => {
+    const structure = Array.from({ length: 9 }, (_, index) => ({
+      id: index + 1, parent_id: null, tipo: "titulo", nome: `Título ${index + 1}`, ordem: index + 1,
+    }));
+    const questions = Array.from({ length: 2024 }, (_, index) => ({
+      structure_id: index < 1000 ? (index % 4) + 1 : (index % 5) + 5,
+    }));
+    const tree = await loadPublicLawContentTree({ lawId: 1, db: database({ ...rows, law_structure: structure, questions, legiscast_audios: [] }) });
+    expect(tree?.reduce((total, node) => total + node.questionCount, 0)).toBe(2024);
+    expect(tree?.map((node) => node.questionCount)).toEqual([250, 250, 250, 250, 205, 205, 205, 205, 204]);
+  });
+
+  it("não retorna uma árvore parcial se uma página de questões falhar", async () => {
+    await expect(loadPublicLawContentTree({
+      lawId: 1,
+      db: database({ ...rows, questions: Array.from({ length: 1001 }, () => ({ structure_id: 2 })) }, { failPage: { table: "questions", from: 500 } }),
+    })).rejects.toThrow("page failed");
   });
 });

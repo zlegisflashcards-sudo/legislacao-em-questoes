@@ -1,19 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { aggregateCatalogModuleAvailability, unavailableCatalogModules } from "@/lib/catalog-module-availability";
+import { aggregateCatalogModuleAvailability } from "./catalog-module-availability";
 
 const complete = new Set(["questoes", "anki", "legiscast", "materiais"] as const);
+const withoutLegiscast = new Set(["questoes", "anki", "materiais"] as const);
 
-describe("disponibilidade dos módulos comerciais", () => {
-  it("usa os checks da lei em produto individual", () => {
-    expect(aggregateCatalogModuleAvailability([{ recorteId: null, completed: new Set(["questoes", "anki"] as const) }])).toEqual({ questoes: true, anki: true, legiscast: false, materiais: false });
+describe("disponibilidade de módulos no catálogo", () => {
+  it("permite que uma lei avulsa com recorte reflita os checks concluídos da lei", () => {
+    expect(aggregateCatalogModuleAvailability([
+      { recorteId: "recorte-cf", completed: withoutLegiscast },
+    ], true)).toEqual({ questoes: true, anki: true, legiscast: false, materiais: true });
   });
 
-  it("exige conclusão em todas as leis de um combo", () => {
-    expect(aggregateCatalogModuleAvailability([{ recorteId: null, completed: complete }, { recorteId: null, completed: new Set(["questoes", "anki", "materiais"] as const) }])).toEqual({ questoes: true, anki: true, legiscast: false, materiais: true });
+  it("mantém a agregação conservadora em produtos com mais de uma lei", () => {
+    expect(aggregateCatalogModuleAvailability([
+      { recorteId: null, completed: complete },
+      { recorteId: "recorte-outra-lei", completed: complete },
+    ])).toEqual({ questoes: false, anki: false, legiscast: false, materiais: false });
   });
 
-  it("mantém recortes e produtos sem vínculo em produção", () => {
-    expect(aggregateCatalogModuleAvailability([{ recorteId: "15", completed: complete }])).toEqual(unavailableCatalogModules());
-    expect(aggregateCatalogModuleAvailability([])).toEqual(unavailableCatalogModules());
+  it("não marca o módulo se qualquer lei inteira vinculada estiver pendente", () => {
+    expect(aggregateCatalogModuleAvailability([
+      { recorteId: null, completed: complete },
+      { recorteId: null, completed: withoutLegiscast },
+    ])).toEqual({ questoes: true, anki: true, legiscast: false, materiais: true });
   });
 });

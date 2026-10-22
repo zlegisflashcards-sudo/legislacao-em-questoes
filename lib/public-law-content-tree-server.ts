@@ -1,13 +1,17 @@
 import { buildPublicLawContentTree, type PublicLawContentTreeNode } from "@/lib/public-law-content-tree";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { collectPages } from "@/lib/law-question-pagination";
 
 type QueryError = { message: string } | null;
 type QueryResult = { data: Record<string, unknown>[] | null; error: QueryError };
 type PublicLawContentTreeQuery = {
   select: (columns: string) => PublicLawContentTreeQuery;
   eq: (column: string, value: string | number | boolean) => PublicLawContentTreeQuery;
+  order: (column: string) => PublicLawContentTreeQuery;
+  range: (from: number, to: number) => PublicLawContentTreeQuery;
   then: Promise<QueryResult>["then"];
 };
+const PUBLIC_TREE_PAGE_SIZE = 500;
 
 export type PublicLawContentTreeDatabase = {
   from: (table: string) => PublicLawContentTreeQuery;
@@ -105,18 +109,27 @@ export async function loadPublicLawContentTree({
   }
 
   const [structure, questions, audios] = await Promise.all([
-    db.from("law_structure").select("id,parent_id,tipo,nome,ordem,audio_not_applicable").eq("lei_id", lawId).eq("ativo", true),
-    db.from("questions").select("structure_id").eq("lei_id", lawId).eq("ativo", true),
-    db.from("legiscast_audios").select("structure_id").eq("lei_id", lawId).eq("ativo", true),
+    collectPages(async (from, to) => {
+      const result = await db.from("law_structure").select("id,parent_id,tipo,nome,ordem,audio_not_applicable").eq("lei_id", lawId).eq("ativo", true).order("ordem").order("id").range(from, to);
+      fail("Não foi possível carregar a estrutura da lei", result.error);
+      return result.data ?? [];
+    }, PUBLIC_TREE_PAGE_SIZE),
+    collectPages(async (from, to) => {
+      const result = await db.from("questions").select("structure_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      fail("Não foi possível carregar as questões da lei", result.error);
+      return result.data ?? [];
+    }, PUBLIC_TREE_PAGE_SIZE),
+    collectPages(async (from, to) => {
+      const result = await db.from("legiscast_audios").select("structure_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      fail("Não foi possível carregar os áudios da lei", result.error);
+      return result.data ?? [];
+    }, PUBLIC_TREE_PAGE_SIZE),
   ]);
-  fail("Não foi possível carregar a estrutura da lei", structure.error);
-  fail("Não foi possível carregar as questões da lei", questions.error);
-  fail("Não foi possível carregar os áudios da lei", audios.error);
 
   return buildPublicLawContentTree({
-    structure: structureRows(structure.data ?? []),
-    questions: (questions.data ?? []).map((row) => ({ structure_id: numericId(row.structure_id) })),
-    audios: (audios.data ?? []).map((row) => ({ structure_id: numericId(row.structure_id) })),
+    structure: structureRows(structure),
+    questions: questions.map((row) => ({ structure_id: numericId(row.structure_id) })),
+    audios: audios.map((row) => ({ structure_id: numericId(row.structure_id) })),
     scopeStructureIds,
   });
 }

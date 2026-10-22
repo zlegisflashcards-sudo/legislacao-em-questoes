@@ -8,7 +8,7 @@ export function unavailableCatalogModules(): CatalogModuleAvailability {
   return { questoes: false, anki: false, legiscast: false, materiais: false };
 }
 
-export function aggregateCatalogModuleAvailability(links: CatalogModuleLawLink[]): CatalogModuleAvailability {
+export function aggregateCatalogModuleAvailability(links: CatalogModuleLawLink[], scopedLinkCoversLaw = false): CatalogModuleAvailability {
   if (!links.length) return unavailableCatalogModules();
-  return Object.fromEntries(catalogModules.map((module) => [module, links.every((link) => !link.recorteId && link.completed.has(module))])) as CatalogModuleAvailability;
+  return Object.fromEntries(catalogModules.map((module) => [module, links.every((link) => (scopedLinkCoversLaw || !link.recorteId) && link.completed.has(module))])) as CatalogModuleAvailability;
 }

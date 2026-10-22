@@ -21,7 +21,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
     const supabase = getSupabaseServerClient();
     let productsQuery = supabase
       .from("produtos")
-      .select("id,nome,slug,ordem")
+      .select("id,nome,slug,ordem,tipo_produto")
       .eq("ativo", true)
       .not("slug", "is", null)
       .order("ordem", { ascending: true })
@@ -84,7 +84,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
           : aggregateCatalogModuleAvailability(productLinks.map((link) => ({
               recorteId: link.recorte_id == null ? null : String(link.recorte_id),
               completed: checksByLawId.get(String(link.lei_id)) ?? new Set(),
-            }))),
+            })), product.tipo_produto === "lei_avulsa"),
       };
     });
   } catch {
