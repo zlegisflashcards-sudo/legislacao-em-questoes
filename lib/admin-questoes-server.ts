@@ -17,6 +17,7 @@ import { validateQuestionStructure } from "@/lib/question-structure-consistency"
 import { collectPages } from "@/lib/law-question-pagination";
 import { findLawQuestionStructureGaps } from "@/lib/law-question-shadow-gaps";
 import { previewConferenceListUuids } from "@/lib/admin-question-conference-lists";
+import { structurePath, validateStructureReparenting, type ReparentStructureNode } from "@/lib/law-structure-reparent";
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
@@ -33,6 +34,14 @@ function qid(value: unknown) { if (typeof value !== "string" || !/^[0-9a-f-]{36}
 function text(value: unknown, label: string) { if (typeof value !== "string" || !value.trim() || value.trim().length > 500) throw new AdminQuestoesError(400, `${label} inválido.`); return value.trim(); }
 function type(value: unknown) { if (!types.includes(value as StructureType)) throw new AdminQuestoesError(400, "Tipo estrutural inválido."); return value as StructureType; }
 function optionalId(value: unknown) { return value === null || value === undefined || value === "" ? null : id(value); }
+function reparentExpected(value: unknown) {
+  if (!value || Array.isArray(value) || typeof value !== "object") throw new AdminQuestoesError(400, "A prévia da estrutura é obrigatória.");
+  const record = value as Record<string, unknown>;
+  const parentId = record.parent_id === null ? null : id(record.parent_id);
+  const order = structureOrder(record.ordem);
+  if (typeof record.updated_at !== "string" || !record.updated_at) throw new AdminQuestoesError(400, "A prévia da estrutura é inválida.");
+  return { parent_id: parentId, ordem: order, updated_at: record.updated_at };
+}
 function structureOrder(value: unknown) { if (!Number.isSafeInteger(Number(value)) || Number(value) < 0) throw new AdminQuestoesError(400, "Posição estrutural inválida."); return Number(value); }
 function draft(value: unknown) { try { return parseQuestionDraft(value as Record<string, unknown>); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "Dados da questão inválidos."); } }
 async function law(lawSlug: string): Promise<Law> { const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug(lawSlug)).eq("ativo", true).maybeSingle(); if (r.error) fail("carregar_lei", r.error); if (!r.data) throw new AdminQuestoesError(404, "Lei ativa não encontrada no banco principal."); return r.data as Law; }
@@ -748,3 +757,13 @@ async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: A
 }
 export async function importAnkiTxt(body: Record<string, unknown>) { await requireAdmin(); const parsed = parseAnkiTxt(String(body.text)); const mappings = structureMappings(body.structure_mappings); const data = await preview(slug(body.law_slug), parsed, mappings); return persist(slug(body.law_slug), parsed.rows, data, mappings); }
 export async function importApkg(body: { lawSlug: unknown; file: File; structureMappings?: unknown }) { await requireAdmin(); const parsed = await parseLegisApkg(new Uint8Array(await body.file.arrayBuffer())); const mappings = structureMappings(body.structureMappings); const data = await previewApkgImport(body.lawSlug, body.file, mappings); return persist(slug(body.lawSlug), parsed.rows, data, mappings, parsed.unrecognizedModels.reduce((sum, model) => sum + model.notes, 0)); }
+
+type ReparentPreview = { node: ReparentStructureNode; currentPath: string[]; newPath: string[]; expected: { parent_id: number | null; ordem: number; updated_at: string } };
+async function resolveStructureReparenting(body: Record<string, unknown>): Promise<{ current: Law; user: Awaited<ReturnType<typeof requireAdmin>>; preview: ReparentPreview; newParentId: number | null }> {
+  const user = await requireAdmin(); const current = await law(String(body.law_slug)); if (!("new_parent_id" in body)) throw new AdminQuestoesError(400, "Informe a estrutura superior de destino.");
+  const newParentId = body.new_parent_id === null ? null : id(body.new_parent_id); const nodes = await structure(current.id) as unknown as ReparentStructureNode[]; const nodeId = id(body.id);
+  try { const { node } = validateStructureReparenting(nodes, nodeId, newParentId); const expected = { parent_id: node.parent_id, ordem: node.ordem, updated_at: node.updated_at ?? "" }; if (!expected.updated_at) throw new AdminQuestoesError(409, "A estrutura não possui versão para conferência. Recarregue a página."); return { current, user, newParentId, preview: { node, currentPath: structurePath(nodeId, nodes), newPath: [...(newParentId === null ? [] : structurePath(newParentId, nodes)), node.nome], expected } }; }
+  catch (error) { if (error instanceof AdminQuestoesError) throw error; throw new AdminQuestoesError(422, error instanceof Error ? error.message : "Não foi possível validar a nova estrutura superior."); }
+}
+export async function previewStructureReparenting(body: Record<string, unknown>) { const resolved = await resolveStructureReparenting(body); return { id: resolved.preview.node.id, nome: resolved.preview.node.nome, current_path: resolved.preview.currentPath, new_path: resolved.preview.newPath, ordem: resolved.preview.node.ordem, expected: resolved.preview.expected }; }
+export async function reparentStructureNode(body: Record<string, unknown>) { const resolved = await resolveStructureReparenting(body); const expected = reparentExpected(body.expected); const currentExpected = resolved.preview.expected; if (expected.parent_id !== currentExpected.parent_id || expected.ordem !== currentExpected.ordem || expected.updated_at !== currentExpected.updated_at) throw new AdminQuestoesError(409, "A estrutura mudou desde a prévia. Gere uma nova prévia antes de confirmar."); const result = await db().rpc("admin_reparent_law_structure", { p_actor_user_id: resolved.user.id, p_lei_id: resolved.current.id, p_structure_id: resolved.preview.node.id, p_new_parent_id: resolved.newParentId, p_expected_parent_id: expected.parent_id, p_expected_ordem: expected.ordem, p_expected_updated_at: expected.updated_at }); if (result.error) { if (result.error.code === "PGRST202" || result.error.code === "42883") throw new AdminQuestoesError(503, "A movimentação segura de estrutura ainda não está disponível. Aplique a migration 20261022140000_add_admin_reparent_law_structure.sql."); throw new AdminQuestoesError(result.error.code === "40001" ? 409 : result.error.code === "42501" ? 403 : 422, result.error.message); } if (!result.data) throw new AdminQuestoesError(502, "A movimentação segura não retornou a estrutura atualizada."); return result.data; }

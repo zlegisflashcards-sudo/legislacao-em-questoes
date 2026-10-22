@@ -51,6 +51,8 @@ import {
   updateStructureNode,
   saveLawQuestionScope,
   previewStructureTxtImport,
+  previewStructureReparenting,
+  reparentStructureNode,
 } from "@/lib/admin-questoes-server";
 import { ArticleContextStandardizationError, applyArticleContextStandardization, previewArticleContextStandardization } from "@/lib/admin-article-context-standardization";
 
@@ -149,6 +151,8 @@ export async function POST(request: Request) {
     else if (body.action === "reativar") data = await reactivateAdminQuestion(body);
     else if (body.action === "criar_estrutura") data = await createStructureNode(body);
     else if (body.action === "atualizar_estrutura") data = await updateStructureNode(body);
+    else if (body.action === "previsualizar_mover_estrutura_superior") data = await previewStructureReparenting(body);
+    else if (body.action === "mover_estrutura_superior") data = await reparentStructureNode(body);
     else if (body.action === "reordenar_estruturas") data = await reorderStructureNodes(body);
     else if (body.action === "desativar_estrutura") data = await deactivateStructureNode(body);
     else if (body.action === "excluir_estrutura") data = await deleteStructureNode(body);
