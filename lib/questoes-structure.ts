@@ -90,6 +90,20 @@ export function allAnkiPathsForQuestionStructure(lawDeckName: string, nodes: Que
   return ordered.map((node) => ankiPathForQuestionStructure(node.id, lawDeckName, nodes));
 }
 
+/** Conta cada questão no seu bloco e em todos os decks ancestrais. */
+export function questionCountsByStructure(nodes: QuestionStructureNode[], questions: Array<{ structure_id: number | null }>) {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const counts = new Map<number, number>();
+  for (const question of questions) {
+    const visited = new Set<number>();
+    for (let current = question.structure_id === null ? undefined : byId.get(question.structure_id); current && !visited.has(current.id); current = current.parent_id === null ? undefined : byId.get(current.parent_id)) {
+      visited.add(current.id);
+      counts.set(current.id, (counts.get(current.id) ?? 0) + 1);
+    }
+  }
+  return Object.fromEntries(counts);
+}
+
 export function parseQuestionStructureTxt(value: string) {
   const rows: Array<{ line: number; deck: string[] }> = [];
   const issues: StructureTxtIssue[] = [];

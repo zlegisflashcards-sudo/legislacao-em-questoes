@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allAnkiPathsForQuestionStructure, ankiPathForQuestionStructure, compareQuestionStructureNames, inferQuestionStructureType, parseQuestionStructureTxt, planQuestionDeckStructure, validQuestionStructureParent } from "./questoes-structure";
+import { allAnkiPathsForQuestionStructure, ankiPathForQuestionStructure, compareQuestionStructureNames, inferQuestionStructureType, parseQuestionStructureTxt, planQuestionDeckStructure, questionCountsByStructure, validQuestionStructureParent } from "./questoes-structure";
 
 describe("estrutura dos decks de questões", () => {
   it("infere todos os níveis legislativos sem alterar a numeração oficial no nome", () => {
@@ -71,6 +71,11 @@ describe("estrutura dos decks de questões", () => {
     const nodes = [{ id: 1, parent_id: null, tipo: "parte" as const, nome: "Parte Geral", ordem: 2 }, { id: 2, parent_id: 1, tipo: "titulo" as const, nome: "Título I — Aplicação", ordem: 1 }, { id: 3, parent_id: null, tipo: "titulo" as const, nome: "Título II", ordem: 1 }];
     expect(ankiPathForQuestionStructure(2, "Código Penal", nodes)).toBe("Código Penal::Parte Geral::Título I — Aplicação");
     expect(allAnkiPathsForQuestionStructure("Código Penal", nodes)).toEqual(["Código Penal::Título II", "Código Penal::Parte Geral", "Código Penal::Parte Geral::Título I — Aplicação"]);
+  });
+
+  it("acumula as questões do subdeck nos decks ancestrais", () => {
+    const nodes = [{ id: 1, parent_id: null, tipo: "titulo" as const, nome: "Título I" }, { id: 2, parent_id: 1, tipo: "capitulo" as const, nome: "Capítulo I" }, { id: 3, parent_id: 2, tipo: "secao" as const, nome: "Seção I" }];
+    expect(questionCountsByStructure(nodes, [{ structure_id: 1 }, { structure_id: 3 }, { structure_id: 3 }, { structure_id: null }])).toEqual({ 1: 3, 2: 2, 3: 2 });
   });
 
   it("só sugere mapeamento manual para nome semelhante no mesmo pai e tipo", () => {

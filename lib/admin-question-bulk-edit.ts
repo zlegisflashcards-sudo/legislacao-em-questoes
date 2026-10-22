@@ -4,7 +4,7 @@ export const BULK_QUESTION_EDIT_SCOPES = ["selected", "results", "all"] as const
 export type BulkQuestionEditScope = (typeof BULK_QUESTION_EDIT_SCOPES)[number];
 
 export const QUESTION_BULK_FIELD_LABELS: Record<QuestionEditableField, string> = {
-  structure_id: "Estrutura",
+  structure_id: "Mover para estrutura",
   pergunta: "Pergunta",
   resposta: "Resposta",
   justificativa: "Justificativa",

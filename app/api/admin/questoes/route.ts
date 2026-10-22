@@ -16,6 +16,7 @@ import {
   moveAdminQuestion,
   reactivateAdminQuestion,
   listAdminQuestionLaws,
+  getAdminQuestionStructureCounts,
   listLawQuestionScopes,
   listAdminQuestions,
   listAdminQuestionConference,
@@ -84,6 +85,8 @@ export async function GET(request: Request) {
       ? await searchConferenceQuestionLinkReferences(lawSlug, searchParams.get("q"), searchParams.get("question_id"))
       : lawSlug && searchParams.get("mode") === "structure-reviews"
       ? await getAdminQuestionStructureReviews(lawSlug)
+      : lawSlug && searchParams.get("mode") === "structure-counts"
+      ? await getAdminQuestionStructureCounts(lawSlug)
       : lawSlug && searchParams.get("mode") === "conference-lists"
       ? await listAdminQuestionConferenceLists(lawSlug)
       : lawSlug && searchParams.get("mode") === "conference-list"

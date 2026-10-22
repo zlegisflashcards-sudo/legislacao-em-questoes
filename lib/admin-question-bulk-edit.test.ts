@@ -10,6 +10,7 @@ const migration = readFileSync("supabase/migrations/20260928120000_add_admin_bul
 describe("edição em lote de questões", () => {
   it("aceita somente os campos do editor individual e conserva os tipos", () => {
     expect(parseBulkQuestionEdit({ scope: "all", field: "total_artigos", value: 12 })).toEqual({ scope: "all", field: "total_artigos", value: 12 });
+    expect(parseBulkQuestionEdit({ scope: "selected", field: "structure_id", value: 42 })).toEqual({ scope: "selected", field: "structure_id", value: 42 });
     expect(parseBulkQuestionEdit({ scope: "selected", field: "justificativa", value: "" }).value).toBeNull();
     expect(parseBulkQuestionEdit({ scope: "results", field: "resposta", value: "Errado" }).value).toBe("Errado");
     expect(() => parseBulkQuestionEdit({ scope: "all", field: "id", value: "x" })).toThrow("Campo não permitido");
@@ -39,12 +40,14 @@ describe("edição em lote de questões", () => {
 
   it("mantém a interface responsiva com prévia, amostra e seleção explícita", () => {
     expect(client).toContain("Editar em lote");
+    expect(client).toContain("Mover em lote");
+    expect(client).toContain("Ver prévia da movimentação");
     expect(client).toContain('type="checkbox"');
     expect(client).toContain("Selecionar todas desta página");
     expect(client).toContain("Desmarcar todas desta página");
     expect(client).toContain("right-3 top-3");
     expect(client).toContain("Resultado atual dos filtros");
-    expect(client).toContain("Prévia da alteração");
+    expect(client).toContain('Prévia da {movingStructure ? "movimentação" : "alteração"}');
     expect(client).toContain("QuestionRichEditor");
     expect(client).toContain("Exemplos de alteração");
   });

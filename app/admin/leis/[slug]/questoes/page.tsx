@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AdminLawQuestions } from "@/components/admin/admin-law-questions";
 import type { AdminQuestionStructureNode } from "@/components/admin/admin-question-editor";
 import { getAdminLawBySlug, getAdminLawStructure } from "@/lib/admin-law-center-server";
-import { getAdminQuestion, getLegisBotQuestionDraft } from "@/lib/admin-questoes-server";
+import { getAdminQuestion, getAdminQuestionStructureCounts, getLegisBotQuestionDraft } from "@/lib/admin-questoes-server";
 import { listArticleSourceConflicts } from "@/lib/admin-article-conflicts-server";
 import type { QuestionDraft } from "@/lib/admin-questoes";
 
@@ -15,7 +15,7 @@ export default async function AdminLawQuestionsPage({ params, searchParams }: { 
   const law = await getAdminLawBySlug(slug);
   if (!law) notFound();
   if (!law.ativo) return <article className="commercial-card law-center-empty" data-law-area="questoes"><h2>Questões</h2><p>Esta lei está inativa. Ative-a em Dados da lei antes de gerenciar suas questões.</p><Link className="admin-button primary" href={`/admin/leis/${encodeURIComponent(law.slug)}/dados`}>Abrir Dados da lei</Link></article>;
-  const structure = await getAdminLawStructure(law.id);
+  const [structure, structureCounts] = await Promise.all([getAdminLawStructure(law.id), getAdminQuestionStructureCounts(law.slug)]);
   const questionId = one(query.question_id);
   const initialQuestion = questionId ? (await getAdminQuestion(law.slug, questionId)).question : null;
   const legisBotId = one(query.legisbot_id);
@@ -42,5 +42,5 @@ export default async function AdminLawQuestionsPage({ params, searchParams }: { 
   const initialView = one(query.visao) === "conflitos" ? "conflitos" as const : "ativas" as const;
   const conflictFilters: { law: string; type: string; typeMode: "any" | "all"; ordem_sort: "asc" | "desc" } = { law: law.slug, type: many(query.tipo), typeMode: one(query.tipo_modo) === "all" ? "all" : "any", ordem_sort: one(query.ordem_sort) === "desc" ? "desc" : "asc" };
   const conflicts = initialView === "conflitos" ? await listArticleSourceConflicts({ ...conflictFilters, orderDirection: conflictFilters.ordem_sort, page: Number(one(query.pagina)) || 1 }) : null;
-  return <div data-law-area="questoes"><AdminLawQuestions law={{ id: law.id, slug: law.slug, titulo: law.titulo }} initialStructure={structure as AdminQuestionStructureNode[]} initialQuestion={initialQuestion} initialDraft={initialDraft} sourceLegisBotId={legisBotId ? Number(legisBotId) : null} returnHref={returnHref} initialView={initialView} conflicts={conflicts} conflictFilters={conflictFilters} /></div>;
+  return <div data-law-area="questoes"><AdminLawQuestions law={{ id: law.id, slug: law.slug, titulo: law.titulo }} initialStructure={structure as AdminQuestionStructureNode[]} initialStructureCounts={structureCounts.counts} initialQuestion={initialQuestion} initialDraft={initialDraft} sourceLegisBotId={legisBotId ? Number(legisBotId) : null} returnHref={returnHref} initialView={initialView} conflicts={conflicts} conflictFilters={conflictFilters} /></div>;
 }
