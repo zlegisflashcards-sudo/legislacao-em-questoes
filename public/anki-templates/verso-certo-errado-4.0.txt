@@ -252,13 +252,21 @@ function alternarComentarioProfessor() {
 (function () {
   var botaoLegisbot = document.getElementById('lf_legisbot');
   if (!botaoLegisbot) return;
-
-  var stableTarget = '{{legisbotUrl}}'.trim();
-  if (!stableTarget || stableTarget.charAt(0) === '{' || stableTarget.indexOf('#bloco-') === -1) {
-    botaoLegisbot.hidden = true;
-    botaoLegisbot.removeAttribute('href');
+  var siteBase = 'https://www.legisflashcards.com.br';
+  var slug = '{{slug}}'.trim().replace(/^\/+|\/+$/g, '');
+  var questionId = '{{IDQuestao}}'.trim();
+  var ordem = '{{ordem}}'.trim();
+  var validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!slug || slug.charAt(0) === '{') {
+    botaoLegisbot.href = siteBase + '/legisbot';
     return;
   }
-  botaoLegisbot.href = stableTarget;
+  var target = siteBase + '/legisbot/' + encodeURIComponent(slug);
+  target += '?ordem=' + encodeURIComponent(ordem);
+  if (validUuid.test(questionId)) {
+    target = siteBase + '/legisbot/' + encodeURIComponent(slug)
+      + '?question_id=' + encodeURIComponent(questionId) + '&ordem=' + encodeURIComponent(ordem);
+  }
+  botaoLegisbot.href = target;
 })();
 </script>

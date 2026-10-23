@@ -44,7 +44,9 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
   for (const question of [...questions].sort((a, b) => String(a.ordem).localeCompare(String(b.ordem)) || String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || a.id.localeCompare(b.id))) {
     const pedagogicalFields = [question.pergunta, question.resposta, question.justificativa ?? "", question.assunto ?? "", question.legislacao ?? ""];
     if (pedagogicalFields.some((value) => /<img\b|\[sound:/i.test(value))) throw new Error(`A questão ${question.ordem ?? question.id} contém mídia. A exportação de mídia ainda não é suportada.`);
-    deckFor(structurePath(structure, question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, question.total_artigos?.toString() ?? "", question.ordem ?? "", question.slug ?? law.slug, lastLegislativeUpdate, question.id, options?.legisbotDestinations?.get(question.id) ?? ""] }));
+    // Campo 12 é mantido vazio para compatibilidade com o modelo 4.0 já
+    // importado. O template novo resolve pelo IDQuestao, slug e ordem.
+    deckFor(structurePath(structure, question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, question.total_artigos?.toString() ?? "", question.ordem ?? "", question.slug ?? law.slug, lastLegislativeUpdate, question.id, ""] }));
   }
 
   const packageFile = new Package();
@@ -62,8 +64,7 @@ export async function exportLawApkg(slug: string) {
   const { listAdminQuestions } = await import("./admin-questoes-server");
   const { law, questions, structure, questionCount } = await listAdminQuestions(slug);
   if (!questions.length) throw new Error("Esta lei ainda não possui questões disponíveis para exportação.");
-  const { getContinuousQuestionDestinations } = await import("./legisbot/continuous-reading-server");
-  const exported = await buildLawApkg(law, questions, structure, { legisbotDestinations: await getContinuousQuestionDestinations(slug) });
+  const exported = await buildLawApkg(law, questions, structure);
   return { ...exported, found: questionCount, exported: exported.notes };
 }
 
@@ -77,8 +78,7 @@ export async function exportLawContentApkg(slug: string) {
   const { listQuestionContent } = await import("./admin-questoes-server");
   const { law, questions, structure } = await listQuestionContent(slug);
   if (!questions.length) throw new Error("Esta lei ainda não possui questões disponíveis para exportação.");
-  const { getContinuousQuestionDestinations } = await import("./legisbot/continuous-reading-server");
-  return buildLawApkg(law, questions, structure, { legisbotDestinations: await getContinuousQuestionDestinations(slug) });
+  return buildLawApkg(law, questions, structure);
 }
 
 export { ankiApkgFileName as apkgFileName, stableAnkiGuid as stableGuid } from "./anki-apkg-identity";

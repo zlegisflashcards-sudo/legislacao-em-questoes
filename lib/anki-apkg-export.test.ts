@@ -14,19 +14,19 @@ describe("exportação APKG", () => {
     const back = readFileSync("public/anki-templates/verso-certo-errado-4.0.txt", "utf8");
     expect(back).toContain("Aprofundar neste trecho da lei");
     expect(back.match(/class=\"lf-legisbot-link lf-card-action\"/g)).toHaveLength(1);
-    expect(back).toContain("var stableTarget = '{{legisbotUrl}}'.trim()");
-    expect(back).toContain("stableTarget.indexOf('#bloco-') === -1");
-    expect(back).toContain("botaoLegisbot.hidden = true");
-    expect(back).toContain("botaoLegisbot.href = stableTarget");
+    expect(back).toContain("var questionId = '{{IDQuestao}}'.trim()");
+    expect(back).toContain("?question_id=");
+    expect(back).toContain("&ordem=");
+    expect(back).not.toContain("var stableTarget = '{{legisbotUrl}}'.trim()");
     expect(back).not.toContain("hrefBase");
     expect(back).not.toContain("data-aba=");
   });
 
-  it("grava no cartão o destino UUID resolvido no servidor", async () => {
-    const destination = "https://www.legisflashcards.com.br/legisbot/l14751#bloco-a0e5ad8d-e1f2-4f56-96e5-7017238daa49";
-    const exported = await buildLawApkg({ slug: "l14751", titulo: "Lei nº 14.751" }, [{ id: "questao-1", structure_id: null, pergunta: "Item", resposta: "Certo", ordem: "0002.0.00.00" }], [], { legisbotDestinations: new Map([["questao-1", destination]]) });
+  it("mantém o campo legado vazio e resolve o destino pelo ID da questão no site", async () => {
+    const exported = await buildLawApkg({ slug: "l14751", titulo: "Lei nº 14.751" }, [{ id: "questao-1", structure_id: null, pergunta: "Item", resposta: "Certo", ordem: "0002.0.00.00" }], []);
     expect(exported.notes).toBe(1);
     expect(readFileSync("lib/anki-apkg-export.ts", "utf8")).toContain('"legisbotUrl"');
+    expect(readFileSync("lib/anki-apkg-export.ts", "utf8")).toContain('question.id, ""');
   });
 
   it("preserva campos, GUID e subdeck no round-trip", async () => {

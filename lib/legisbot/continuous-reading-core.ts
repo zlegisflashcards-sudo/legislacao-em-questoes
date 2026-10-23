@@ -49,8 +49,25 @@ export function continuousBlockAnchor(referenceId: string) {
   return `bloco-${referenceId.toLowerCase()}`;
 }
 
+export function isContinuousQuestionId(value: string) {
+  return UUID.test(value);
+}
+
 export function continuousLegisBotHref(slug: string, referenceId: string) {
   return `/legisbot/${encodeURIComponent(slug.trim())}#${continuousBlockAnchor(referenceId)}`;
+}
+
+/**
+ * Endereço estável armazenado nos novos cartões Anki. A questão é a
+ * identidade autoritativa; a Ordem permanece no endereço para permitir
+ * auditoria e compatibilidade com cartões antigos, mas pode ficar defasada
+ * quando a estrutura editorial for corrigida.
+ */
+export function continuousLegisBotQuestionHref(slug: string, questionId: string, ordem: string) {
+  if (!UUID.test(questionId)) throw new Error("Identificador de questão inválido.");
+  const lawSlug = slug.trim();
+  if (!lawSlug) throw new Error("Slug da legislação inválido.");
+  return `/legisbot/${encodeURIComponent(lawSlug)}?question_id=${encodeURIComponent(questionId.toLowerCase())}&ordem=${encodeURIComponent(ordem.trim())}`;
 }
 
 export function referenceIdFromHash(hash: string) {
@@ -137,4 +154,25 @@ export function resolveLegacyReferenceId(input: {
     if (candidates.length === 1) return candidates[0].id;
   }
   return null;
+}
+
+/**
+ * Resolve o destino de um cartão pelo UUID da questão. Não usa a Ordem
+ * recebida para escolher um bloco: ela pode estar antiga, e escolher por ela
+ * em caso de divergência levaria o aluno a texto errado. A resolução já
+ * calculada preserva a prioridade editorial do vínculo manual.
+ */
+export function resolveQuestionReferenceId(input: {
+  questionId: string;
+  questions: ContinuousQuestion[];
+  references: ContinuousReferenceSummary[];
+  resolutions: QuestionReferenceResolution[];
+}) {
+  if (!UUID.test(input.questionId)) return null;
+  const question = input.questions.find((candidate) => candidate.id.toLowerCase() === input.questionId.toLowerCase());
+  if (!question) return null;
+  const resolution = input.resolutions.find((candidate) => candidate.questionId === question.id);
+  if (!resolution?.referenceId || (resolution.status !== "manual" && resolution.status !== "hierarchy")) return null;
+  const reference = input.references.find((candidate) => candidate.id === resolution.referenceId && candidate.prepared);
+  return reference?.id ?? null;
 }

@@ -5,11 +5,11 @@ import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import {
   resolveContinuousReadingIntegrity,
   resolveLegacyReferenceId,
+  resolveQuestionReferenceId,
   type ContinuousQuestion,
   type ContinuousReferenceSummary,
   type ReadingIntegrity,
 } from "./continuous-reading-core";
-import { continuousLegisBotHref } from "./continuous-reading-core";
 import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
@@ -187,6 +187,11 @@ export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawI
 
 export async function resolveContinuousReference(rawSlug: string, rawOrder: string) {
   const model = await getContinuousReadingModel(rawSlug);
+  return resolveContinuousReferenceFromModel(model, rawOrder);
+}
+
+/** Reutiliza o snapshot já carregado pela página, sem nova consulta integral. */
+export function resolveContinuousReferenceFromModel(model: ContinuousReadingModel | null, rawOrder: string) {
   if (!model?.integrity.readingAvailable) return null;
   const referenceId = resolveLegacyReferenceId({
     rawOrder,
@@ -197,12 +202,25 @@ export async function resolveContinuousReference(rawSlug: string, rawOrder: stri
   return referenceId ? model.references.find((reference) => reference.id === referenceId) ?? null : null;
 }
 
-/** Destinos canônicos para exportadores. Retorna vazio quando a lei não está liberada. */
-export async function getContinuousQuestionDestinations(rawSlug: string) {
+/** Resolve um link de Anki pela identidade da questão, sem escolher âncoras ambíguas. */
+export async function resolveContinuousQuestionReference(rawSlug: string, rawQuestionId: string) {
   const model = await getContinuousReadingModel(rawSlug);
-  if (!model?.integrity.readingAvailable) return new Map<string, string>();
-  const referenceIds = new Set(model.references.filter((reference) => reference.prepared).map((reference) => reference.id));
-  return new Map(model.integrity.resolutions.flatMap((resolution) => resolution.referenceId && referenceIds.has(resolution.referenceId)
-    ? [[resolution.questionId, `https://www.legisflashcards.com.br${continuousLegisBotHref(model.law.slug, resolution.referenceId)}`] as const]
-    : []));
+  return resolveContinuousQuestionReferenceFromModel(model, rawQuestionId);
+}
+
+/** Resolve pelo UUID no snapshot já carregado, preservando o vínculo manual. */
+export function resolveContinuousQuestionReferenceFromModel(model: ContinuousReadingModel | null, rawQuestionId: string) {
+  if (!model?.integrity.readingAvailable) return null;
+  const referenceId = resolveQuestionReferenceId({
+    questionId: rawQuestionId,
+    questions: model.questions,
+    references: model.references,
+    resolutions: model.integrity.resolutions,
+  });
+  return referenceId ? model.references.find((reference) => reference.id === referenceId) ?? null : null;
+}
+
+/** @deprecated Exportadores 4.0 resolvem por IDQuestao no site; mantido para chamadores legados. */
+export async function getContinuousQuestionDestinations(_rawSlug: string) {
+  return new Map<string, string>();
 }
