@@ -185,6 +185,13 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).not.toContain('tone="error" label="Sem bloco de artigo"');
     expect(list).toContain('tone="warning" label="Bloco editorial pendente"');
     expect(list).toContain('tone="warning" label="Legislação divergente"');
+    expect(server).toContain("findQuestionSubjectEditorialWarnings(question.assunto)");
+    expect(server).toContain("subjectWarnings");
+    expect(server).toContain("SUBJECT_WARNING_PREVIEW_LIMIT = 100");
+    expect(server).toContain("subjectWarningTotal");
+    expect(list).toContain("Conteúdo estranho no Assunto");
+    expect(list).toContain("Trecho detectado:");
+    expect(list).toContain("Aviso editorial sem correção automática");
   });
 
   it("lista questões sem bloco como pendência editorial e abre o editor para vinculá-las ao bloco correto", () => {

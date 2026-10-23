@@ -19,9 +19,11 @@ import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference"
 import { groupDuplicateQuestionStatements } from "@/lib/admin-question-management";
 import { resolveContinuousReadingIntegrity } from "@/lib/legisbot/continuous-reading-core";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
+import { findQuestionSubjectEditorialWarnings } from "@/lib/question-subject-editorial-warnings";
 
 const PAGE_SIZE = 20;
 const STRUCTURAL_BATCH_SIZE = 100;
+const SUBJECT_WARNING_PREVIEW_LIMIT = 100;
 const QUESTION_FIELDS = "id,lei_id,structure_id,slug,ordem,titulo,assunto,legislacao,pergunta,resposta,justificativa,ativo,updated_at";
 type ConflictQuestion = LegisBotConflictQuestion & { structure_id: number | null };
 
@@ -286,6 +288,16 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const slug = legalByKey.get(key)?.slug ?? structural.get(key)?.slug ?? "";
     return !law || slug.toLocaleLowerCase("pt-BR") === law;
   });
+  const allSubjectWarnings = activeRows.flatMap((question) => findQuestionSubjectEditorialWarnings(question.assunto).map((warning) => ({
+    ...warning,
+    id: question.id,
+    slug: question.slug.toUpperCase(),
+    ordem: question.ordem,
+    assunto: question.assunto ?? "",
+    editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos`)}`,
+  })).sort((left, right) => left.slug.localeCompare(right.slug) || left.ordem.localeCompare(right.ordem) || left.id.localeCompare(right.id)));
+  const subjectWarningTotal = allSubjectWarnings.length;
+  const subjectWarnings = allSubjectWarnings.slice(0, SUBJECT_WARNING_PREVIEW_LIMIT);
   const typeCounts = {
     structural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "conflict").length,
     possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "possible_conflict").length,
@@ -294,6 +306,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     orphanQuestions: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).editorial).length,
     invalidOrders: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).code === "ordem_invalida").length,
     invalidReferences: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && !orphanReviewType(status).editorial && orphanReviewType(status).code !== "ordem_invalida").length,
+    subjectWarnings: subjectWarningTotal,
   };
   const entries = [
     ...filtered.map((key) => ({ kind: "context" as const, key })),
@@ -404,6 +417,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   return {
     items,
     structuralSuggestions,
+    subjectWarnings,
+    subjectWarningTotal,
     page,
     pages,
     total: entries.length,
