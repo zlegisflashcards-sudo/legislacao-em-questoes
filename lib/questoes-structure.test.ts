@@ -67,6 +67,13 @@ describe("estrutura dos decks de questões", () => {
     expect(plan.nodes).toHaveLength(3);
   });
 
+  it("reutiliza o tipo interno para rótulos editoriais exatos já cadastrados", () => {
+    const existing = [{ id: 1, parent_id: null, tipo: "parte" as const, nome: "I. Regras de aplicação geral" }, { id: 2, parent_id: 1, tipo: "capitulo" as const, nome: "Princípios básicos" }];
+    const plan = planQuestionDeckStructure([{ line: 1, deck: ["Regras de Mandela", "I. Regras de aplicação geral", "Princípios básicos"] }], existing);
+    expect(plan.decks[0]).toEqual({ line: 1, structureKey: plan.nodes.at(-1)?.key, error: null });
+    expect(plan.nodes.map((node) => ({ tipo: node.tipo, nome: node.nome, existingId: node.existingId }))).toEqual([{ tipo: "parte", nome: "I. Regras de aplicação geral", existingId: 1 }, { tipo: "capitulo", nome: "Princípios básicos", existingId: 2 }]);
+  });
+
   it("gera caminhos Anki com o deck da lei, ancestrais e nomes cadastrados", () => {
     const nodes = [{ id: 1, parent_id: null, tipo: "parte" as const, nome: "Parte Geral", ordem: 2 }, { id: 2, parent_id: 1, tipo: "titulo" as const, nome: "Título I — Aplicação", ordem: 1 }, { id: 3, parent_id: null, tipo: "titulo" as const, nome: "Título II", ordem: 1 }];
     expect(ankiPathForQuestionStructure(2, "Código Penal", nodes)).toBe("Código Penal::Parte Geral::Título I — Aplicação");

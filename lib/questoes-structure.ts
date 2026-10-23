@@ -142,13 +142,21 @@ export function planQuestionDeckStructure(rows: Array<{ line: number; deck: stri
 
     for (const segment of segments) {
       const nome = segment.trim();
-      const tipo = inferQuestionStructureType(nome);
+      const siblings: QuestionStructureNode[] = parentKey !== null && parentId === null ? [] : children.get(parentId) ?? [];
+      // O deck pode carregar somente o rótulo editorial original. Quando ele
+      // coincide exatamente com um nó já existente no mesmo pai, a tipagem
+      // interna daquele nó é a única inferência segura. Nós novos continuam
+      // exigindo o prefixo de tipo, evitando criação ambígua.
+      let tipo = inferQuestionStructureType(nome);
+      if (!tipo) {
+        const exactByName = siblings.filter((item) => item.tipo !== "artigo" && normalizeQuestionStructureName(item.nome) === normalizeQuestionStructureName(nome));
+        tipo = exactByName.length === 1 ? exactByName[0].tipo as CreatableQuestionStructureType : null;
+      }
       if (!tipo) { error = `Tipo estrutural não reconhecido em “${nome}”.`; break; }
       if (!validQuestionStructureParent(tipo, parentType)) { error = `Hierarquia estrutural inválida em “${nome}”.`; break; }
       const key: string = `${parentKey ?? "raiz"}\u0000${tipo}\u0000${normalizeQuestionStructureName(nome)}`;
       let node = planned.get(key);
       if (!node) {
-        const siblings: QuestionStructureNode[] = parentKey !== null && parentId === null ? [] : children.get(parentId) ?? [];
         const exact: QuestionStructureNode | undefined = siblings.find((item) => item.tipo === tipo && normalizeQuestionStructureName(item.nome) === normalizeQuestionStructureName(nome));
         const candidates = exact ? [] : siblings.filter((item) => item.tipo === tipo && similarQuestionStructureName(item.nome, nome)).map((item) => ({ id: item.id, nome: item.nome }));
         const selection = mappings[key];
