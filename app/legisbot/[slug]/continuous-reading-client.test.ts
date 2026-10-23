@@ -104,6 +104,13 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("Este dispositivo não está disponível nesta versão da legislação");
   });
 
+  it("deixa o redirect de aprofundamento fora dos catches de consulta", () => {
+    expect(page).toContain("model = await getContinuousReadingModel(slug)");
+    expect(page).toContain("if (reference) redirect(");
+    expect(page).toContain("// `redirect` lança NEXT_REDIRECT; ele deve permanecer fora do catch de I/O.");
+    expect(page.indexOf("if (reference) redirect(")).toBeLessThan(page.indexOf("const initialBlocks = await getContinuousReadingBlocks"));
+  });
+
   it("mantém os destaques salvos no bloco da leitura contínua", () => {
     expect(client).toContain("blockHighlights");
     expect(client).toContain("ContinuousLegalHtml");
