@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalizeQuestionLawReference, expectedQuestionOrder, hasIncisoGranularityPending, parseQuestionOrder, parseQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
+import { canonicalizeQuestionLawReference, expectedQuestionOrder, hasIncisoGranularityPending, parseQuestionOrder, parseQuestionSubject, parseTreatyQuestionSubject, validateQuestionStructure } from "./question-structure-consistency";
 
 describe("validador estrutural Assunto × Ordem", () => {
   const validate = (assunto: string, ordem: string, lawShortName?: string) => validateQuestionStructure({ assunto, ordem, lawShortName });
@@ -71,5 +71,19 @@ describe("validador estrutural Assunto × Ordem", () => {
   it("sinaliza recorte por inciso como pendência editorial, sem conflito estrutural", () => {
     expect(hasIncisoGranularityPending({ assunto: "Art. 121, § 2º-B, inciso II, CP" })).toBe(true);
     expect(hasIncisoGranularityPending({ assunto: "Art. 121, § 2º-B, CP" })).toBe(false);
+  });
+  it("reconhece Regra e item de tratado sem reescrever o Assunto", () => {
+    expect(parseTreatyQuestionSubject("Regra 2, item 1, Regras de Mandela")).toMatchObject({ kind: "rule", unit: "2", item: "1" });
+    expect(validate("Regra 2, item 1, Regras de Mandela", "0002.0.01.0.00.0")).toMatchObject({ status: "valid" });
+  });
+  it("reconhece Artigo e item de tratado sem tratá-lo como inciso", () => {
+    expect(validate("Artigo 5, item 2", "0005.0.02.0.00.0")).toMatchObject({ status: "valid" });
+  });
+  it("mantém referência composta para revisão e não escolhe principal", () => {
+    expect(validate("Regras 111 e 112, item 1", "0112.0.01.0.00.0")).toMatchObject({ status: "possible_conflict" });
+    expect(validate("Regras 111 e 112, item 1", "0099.0.01.0.00.0")).toMatchObject({ status: "conflict" });
+  });
+  it("mantém namespaces de tratado fora de vínculo automático", () => {
+    expect(validate("Observação preliminar 2, item 1", "0002.0.01.0.00.0")).toMatchObject({ status: "possible_conflict" });
   });
 });

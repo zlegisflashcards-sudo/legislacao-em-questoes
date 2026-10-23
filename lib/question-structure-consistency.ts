@@ -69,9 +69,39 @@ export function parseQuestionOrder(value: string | null | undefined): DeviceRefe
 
 export function expectedQuestionOrder(reference: DeviceReference) { if (!reference.artigo || !/^\d+$/.test(reference.artigo)) return undefined; return [reference.artigo.padStart(4, "0"), reference.letraArtigo?.toLowerCase() ?? "0", (reference.paragrafo ?? "0").padStart(2, "0"), reference.letraParagrafo?.toLowerCase() ?? "0", (reference.inciso ?? "0").padStart(2, "0"), reference.letraInciso?.toLowerCase() ?? "0"].join("."); }
 
+type TreatySubject = { kind: "rule" | "article-item" | "namespace"; unit?: string; units?: string[]; item?: string; composite?: boolean; namespace?: string };
+/** Preserves treaty wording; Ordem remains only the existing internal association key. */
+export function parseTreatyQuestionSubject(value: string | null | undefined): TreatySubject | null {
+  const text = clean(value ?? "");
+  if (!text.trim()) return null;
+  const namespace = text.match(/^\s*(anexo|apendice|observacao(?:es)?\s+preliminares?)\b/i);
+  if (namespace) return { kind: "namespace", namespace: namespace[1] };
+  const rules = text.match(/\bregras?\s+(\d{1,3}(?:\s*(?:,|e|ou)\s*\d{1,3})*)/i)?.[1].match(/\d{1,3}/g) ?? [];
+  if (rules.length) {
+    const item = text.match(/\bregra\s+\d{1,3}\s*[.,]\s*(\d{1,2})\b|\bitem\s+(\d{1,2})\b/i);
+    return { kind: "rule", unit: rules.length === 1 ? rules[0] : undefined, units: rules, item: item?.[1] ?? item?.[2], composite: rules.length > 1 };
+  }
+  const articleItem = text.match(/\bart(?:igo)?\.?\s*(\d{1,4})(?:\s*[ºo])?\s*(?:,|-)\s*(?:item|n[ºo.]?)\s*(\d{1,2})\b/i);
+  return articleItem ? { kind: "article-item", unit: articleItem[1], item: articleItem[2] } : null;
+}
+function treatyExpectedOrder(subject: TreatySubject) { return subject.unit ? [subject.unit.padStart(4, "0"), "0", (subject.item ?? "0").padStart(2, "0"), "0", "00", "0"].join(".") : undefined; }
+
 const labels: Record<keyof DeviceReference, string> = { artigo: "artigo", letraArtigo: "letra do artigo", paragrafo: "parágrafo", letraParagrafo: "letra do parágrafo", inciso: "inciso", letraInciso: "letra do inciso" };
 export function validateQuestionStructure(input: { assunto?: string | null; ordem?: string | null; lawShortName?: string | null }): StructuralValidation {
   const currentOrder = input.ordem?.trim() ?? "";
+  const treaty = parseTreatyQuestionSubject(input.assunto);
+  if (treaty) {
+    const order = parseQuestionOrder(currentOrder);
+    if (treaty.kind === "namespace") return { status: "possible_conflict", currentOrder, orderReference: order ?? undefined, message: "Referência de tratado em namespace separado; revisão necessária antes de vincular a uma unidade." };
+    if (!order) return { status: "conflict", currentOrder, message: "Conflito estrutural: a Ordem não segue o padrão interno de associação." };
+    if (treaty.composite) {
+      if (!treaty.units?.includes(order.artigo ?? "")) return { status: "conflict", currentOrder, orderReference: order, message: "Conflito estrutural: a Ordem não corresponde a nenhuma unidade da referência composta." };
+      return { status: "possible_conflict", currentOrder, orderReference: order, message: "Referência composta de tratado preservada; a associação informada requer revisão." };
+    }
+    const expectedOrder = treatyExpectedOrder(treaty);
+    if (currentOrder !== expectedOrder) return { status: "conflict", currentOrder, expectedOrder, orderReference: order, message: "Conflito estrutural: Assunto e Ordem representam unidades de tratado diferentes." };
+    return { status: "valid", currentOrder, expectedOrder, orderReference: order };
+  }
   const subject = parseQuestionSubject(input.assunto);
   const order = parseQuestionOrder(currentOrder);
   const lawDifference = lawReferenceDifference(input.assunto, input.lawShortName);
