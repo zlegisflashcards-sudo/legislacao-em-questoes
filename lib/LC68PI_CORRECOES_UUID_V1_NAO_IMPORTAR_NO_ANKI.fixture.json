@@ -1,0 +1,812 @@
+{
+  "format": "legisflashcards.question-patch",
+  "version": 1,
+  "law_slug": "lc68pi",
+  "source": {
+    "kind": "exported_apkg",
+    "sha256": "6534435cf881a916a48a7966a6be0b8265bf8055d105d4768bd9174bb833e2d7",
+    "exported_question_count": 108
+  },
+  "updates": [
+    {
+      "uuid": "975e82b0-0b94-4ad0-b407-cb3bed17dc65",
+      "expected_before": {
+        "assunto": "Acesso hierárquico | Art. 1º, Lei Complementar nº 68/2006",
+        "ordem": "0001.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 1º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "e64c288e-e64d-4508-b201-1034d1b4c161",
+      "expected_before": {
+        "assunto": "Finalidade da promoção | Art. 2º, caput, Lei Complementar nº 68/2006",
+        "ordem": "0002.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 2º, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "d3b8da44-e293-4c88-a82a-8a61cd0c723b",
+      "expected_before": {
+        "assunto": "Limite do quadro | Art. 2º, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0002.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 2º, parágrafo único, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "ec3f06d3-3186-43b3-b735-84bdcaa78cee",
+      "expected_before": {
+        "assunto": "Planejamento da carreira | Art. 3º, caput, Lei Complementar nº 68/2006",
+        "ordem": "0003.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 3º, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "3f901081-6dd7-4952-a7c1-5b4167497c96",
+      "expected_before": {
+        "assunto": "Fluxo de carreira | Art. 3º, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0003.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 3º, parágrafo único, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "f172128e-d372-4ae3-ab05-0ffdedfa43f9",
+      "expected_before": {
+        "assunto": "Existência de vaga | Art. 4º, § 1º, Lei Complementar nº 68/2006",
+        "ordem": "0004.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 4º, § 1º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "bc162f01-ef94-46dc-b197-77cef7d781e6",
+      "expected_before": {
+        "assunto": "Promoção post mortem | Art. 4º, § 2º, Lei Complementar nº 68/2006",
+        "ordem": "0004.0.02.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 4º, § 2º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "15b88404-e2f4-4872-bb92-bfe1f5114eca",
+      "expected_before": {
+        "assunto": "Ressarcimento de preterição | Art. 4º, § 3º, Lei Complementar nº 68/2006",
+        "ordem": "0004.0.03.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 4º, § 3º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "e50cb4f3-d208-4fd1-b038-6a5a028ef153",
+      "expected_before": {
+        "assunto": "Critério de antiguidade | Art. 5º, Lei Complementar nº 68/2006",
+        "ordem": "0005.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 5º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "7e689faf-5ac9-49d8-a323-5f67dd2785c9",
+      "expected_before": {
+        "assunto": "Critério de merecimento | Art. 6º, caput, Lei Complementar nº 68/2006",
+        "ordem": "0006.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 6º, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "3b3215f4-1437-4270-811a-87550c03d0d4",
+      "expected_before": {
+        "assunto": "Ficha de conceito | Art. 6º, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0006.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 6º, parágrafo único, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "82c52861-70a9-4364-9a0e-040dc616142a",
+      "expected_before": {
+        "assunto": "Promoção a Cabo e 3º Sargento | Art. 9º, inciso I, Lei Complementar nº 68/2006; redação da Lei nº 8.047/2023",
+        "ordem": "0009.0.00.0.01.0"
+      },
+      "changes": {
+        "assunto": "Art. 9º, inciso I, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "0c8a18ce-7c09-4300-916c-cee8534df501",
+      "expected_before": {
+        "assunto": "Promoção a 2º Sargento | Art. 9º, inciso II, Lei Complementar nº 68/2006",
+        "ordem": "0009.0.00.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 9º, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "607b9a9a-205c-49d0-85e2-493107077278",
+      "expected_before": {
+        "assunto": "Distribuição dos critérios | Art. 9º, inciso III, Lei Complementar nº 68/2006",
+        "ordem": "0009.0.00.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 9º, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "06e6fa5f-38f7-4f90-a4a6-08c4b32d4046",
+      "expected_before": {
+        "assunto": "Uma vaga | Art. 9º, parágrafo único, inciso I, Lei Complementar nº 68/2006",
+        "ordem": "0009.0.01.0.01.0"
+      },
+      "changes": {
+        "assunto": "Art. 9º, parágrafo único, inciso I, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "21aa854c-04ae-4236-99fd-9027525e7f42",
+      "expected_before": {
+        "assunto": "Duas vagas | Art. 9º, parágrafo único, inciso II, Lei Complementar nº 68/2006",
+        "ordem": "0009.0.01.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 9º, parágrafo único, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "63911d90-1885-4448-a87f-b5514d7fe352",
+      "expected_before": {
+        "assunto": "Condições de promoção | Art. 11, Lei Complementar nº 68/2006",
+        "ordem": "0011.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 11, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "c73e9a62-dcf6-4033-9e2a-6fb7a9c81e5a",
+      "expected_before": {
+        "assunto": "Aptidão física | Lei Complementar nº 68/2006; redação da Lei nº 8.982/2026 | Art. 12, inciso I, alínea d",
+        "ordem": "0012.0.00.0.01.d"
+      },
+      "changes": {
+        "assunto": "Art. 12, inciso I, alínea d, Lei Complementar nº 68/2006",
+        "ordem": "0012.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "501a7093-0f07-42cd-a744-60a7bc80f4fe",
+      "expected_before": {
+        "assunto": "Exame toxicológico | Lei Complementar nº 68/2006; redação da Lei nº 8.982/2026 | Art. 12, inciso I, alínea e",
+        "ordem": "0012.0.00.0.01.e"
+      },
+      "changes": {
+        "assunto": "Art. 12, inciso I, alínea e, Lei Complementar nº 68/2006",
+        "ordem": "0012.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "2dba87b4-7dda-4c4b-86b0-262a67d03529",
+      "expected_before": {
+        "assunto": "Conceito moral | Art. 12, inciso II, Lei Complementar nº 68/2006",
+        "ordem": "0012.0.00.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 12, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "86bd91ed-0c22-4659-b3c3-8a4caf5cac7e",
+      "expected_before": {
+        "assunto": "Interstício de Soldado | Lei Complementar nº 68/2006 | Art. 13, inciso I, alínea a",
+        "ordem": "0013.0.00.0.01.a"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso I, alínea a, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "4c4a2d58-0cec-46b3-be92-23c07cb2dbce",
+      "expected_before": {
+        "assunto": "Interstício de Cabo | Lei Complementar nº 68/2006 | Art. 13, inciso I, alínea b",
+        "ordem": "0013.0.00.0.01.b"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso I, alínea b, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "19053735-9331-43b1-8e69-b9576bf1d08a",
+      "expected_before": {
+        "assunto": "Interstício de 3º Sargento | Lei Complementar nº 68/2006 | Art. 13, inciso I, alínea c",
+        "ordem": "0013.0.00.0.01.c"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso I, alínea c, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "82118d31-6c90-4fc4-98a7-45f42d8f5d4d",
+      "expected_before": {
+        "assunto": "Interstício de 2º Sargento | Lei Complementar nº 68/2006 | Art. 13, inciso I, alínea d",
+        "ordem": "0013.0.00.0.01.d"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso I, alínea d, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "72c9a246-20dd-4b71-b464-ff7fddfa1bf6",
+      "expected_before": {
+        "assunto": "Interstício de 1º Sargento | Lei Complementar nº 68/2006 | Art. 13, inciso I, alínea e",
+        "ordem": "0013.0.00.0.01.e"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso I, alínea e, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "1700953d-deb6-45e7-baf6-a7e99cb06940",
+      "expected_before": {
+        "assunto": "Curso de Aperfeiçoamento de Sargentos | Art. 13, inciso II, Lei Complementar nº 68/2006; redação da Lei nº 8.047/2023",
+        "ordem": "0013.0.00.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "92db3fe8-ac1d-4a66-aff3-5ec940b26807",
+      "expected_before": {
+        "assunto": "Comportamento | Art. 13, inciso III, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "d9364203-e870-4326-a912-fee2fbe079d0",
+      "expected_before": {
+        "assunto": "Pena e livramento condicional | Art. 13, inciso IV, Lei Complementar nº 68/2006",
+        "ordem": "0013.0.00.0.04.0"
+      },
+      "changes": {
+        "assunto": "Art. 13, inciso IV, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "50b7bf0d-281c-46a2-9108-8e9931af75ce",
+      "expected_before": {
+        "assunto": "Calendário de promoções | Art. 17, caput e § 3º, Lei Complementar nº 68/2006; caput com redação da Lei nº 6.821/2016",
+        "ordem": "0017.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 17, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "2109f918-62a0-4891-b127-3fc29ff841b2",
+      "expected_before": {
+        "assunto": "Datas de abertura de vagas | Art. 17, caput, Lei Complementar nº 68/2006; caput com redação da Lei nº 6.821/2016",
+        "ordem": "0017.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 17, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "9b0f8ace-e991-4592-8afc-0486dd39ecd7",
+      "expected_before": {
+        "assunto": "Quadro de Acesso por Antiguidade | Art. 18, caput, Lei Complementar nº 68/2006",
+        "ordem": "0018.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 18, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "e172fa23-1683-4d9c-9f03-72b8444f8b1d",
+      "expected_before": {
+        "assunto": "Quadro de Acesso por Merecimento | Art. 19, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0019.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 19, parágrafo único, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "192a3ce6-63d8-483c-8d23-c5e0d623338c",
+      "expected_before": {
+        "assunto": "Elaboração dos Quadros de Acesso | Art. 20, Lei Complementar nº 68/2006",
+        "ordem": "0020.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 20, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "e12f0197-cf7b-4681-a951-c80b047c4c6f",
+      "expected_before": {
+        "assunto": "Comissão de Promoção de Praças | Art. 21, caput, Lei Complementar nº 68/2006",
+        "ordem": "0021.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 21, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "b77d1cbe-882f-43e6-92a0-0a0bd0c03ab1",
+      "expected_before": {
+        "assunto": "Membros efetivos da comissão | Art. 21, § 2º, Lei Complementar nº 68/2006",
+        "ordem": "0021.0.02.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 21, § 2º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "a9adca9f-5173-4ca8-b3cf-3311cb0b3101",
+      "expected_before": {
+        "assunto": "Requisitos do Quadro de Acesso | Art. 23, Lei Complementar nº 68/2006",
+        "ordem": "0023.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 23, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "e4c84213-9a95-4899-b443-3da6b7b384f2",
+      "expected_before": {
+        "assunto": "Prazo recursal | Art. 26, § 1º, Lei Complementar nº 68/2006",
+        "ordem": "0026.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 26, § 1º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "24dfac5f-6816-4d9b-9bdd-92e2113830dc",
+      "expected_before": {
+        "assunto": "Solução do recurso | Art. 26, § 3º, Lei Complementar nº 68/2006",
+        "ordem": "0026.0.03.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 26, § 3º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "3b898495-0cf4-464c-860a-ed66b52eda1e",
+      "expected_before": {
+        "assunto": "Ficha de conceito | Art. 27, caput, Lei Complementar nº 68/2006",
+        "ordem": "0027.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 27, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "a4205e58-039f-45d1-b285-bf128ffb1626",
+      "expected_before": {
+        "assunto": "Critérios de pontuação | Art. 27, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0027.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 27, parágrafo único, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "28d1b422-9aee-40b1-b9ce-0f90fee6c6d2",
+      "expected_before": {
+        "assunto": "Incapacidade física temporária | Art. 15, Lei Complementar nº 68/2006",
+        "ordem": "0015.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 15, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "d214449b-c1c7-4001-979f-5686644a3bfa",
+      "expected_before": {
+        "assunto": "Abertura de vaga por óbito | Art. 16, § 1º, inciso II, Lei Complementar nº 68/2006",
+        "ordem": "0016.0.01.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 16, § 1º, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "9cb0a270-a2bb-42f6-bf35-8a5ef6aa97d1",
+      "expected_before": {
+        "assunto": "Abertura de vaga por aumento de efetivo | Art. 16, § 1º, inciso III, Lei Complementar nº 68/2006",
+        "ordem": "0016.0.01.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 16, § 1º, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "75d9de2b-cefc-4d6e-8c44-b5f90095ef10",
+      "expected_before": {
+        "assunto": "Abertura de vaga por promoção | Art. 16, § 1º, inciso I, Lei Complementar nº 68/2006",
+        "ordem": "0016.0.01.0.01.0"
+      },
+      "changes": {
+        "assunto": "Art. 16, § 1º, inciso I, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "04a15304-d927-4c3a-ac08-9aec9f1fb0cb",
+      "expected_before": {
+        "assunto": "Competência para promoção | Art. 17, §§ 1º e 2º, Lei Complementar nº 68/2006",
+        "ordem": "0017.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 17, § 1º, Lei Complementar nº 68/2006",
+        "ordem": "0017.0.01.0.00.0"
+      }
+    },
+    {
+      "uuid": "3e928452-d235-40c9-aea4-197b10ae5f6b",
+      "expected_before": {
+        "assunto": "Delegação da competência para promoção | Art. 17, § 2º, Lei Complementar nº 68/2006",
+        "ordem": "0017.0.02.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 17, § 2º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "1f50b233-64f0-44a7-a7e5-762cd4c8a9f9",
+      "expected_before": {
+        "assunto": "Antiguidade e cursos de formação | Art. 18, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0018.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 18, parágrafo único, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "b1956af7-6ed0-46ef-bc6e-16bbb6d01c95",
+      "expected_before": {
+        "assunto": "Definição dos Quadros de Acesso | Art. 22, caput, Lei Complementar nº 68/2006",
+        "ordem": "0022.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 22, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "d028130d-9f13-429d-b074-99dab9e690a0",
+      "expected_before": {
+        "assunto": "Ordenação do Quadro de Acesso por Antiguidade | Art. 22, § 1º, Lei Complementar nº 68/2006",
+        "ordem": "0022.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 22, § 1º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "2b5b350a-4adb-4690-8b7d-d8e7698a4fec",
+      "expected_before": {
+        "assunto": "Organização dos Quadros de Acesso | Art. 22, § 3º, Lei Complementar nº 68/2006",
+        "ordem": "0022.0.03.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 22, § 3º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "96a108ba-6aa1-4365-a169-4999fbe7b349",
+      "expected_before": {
+        "assunto": "Agregação por saúde de pessoa da família | Art. 25, inciso I, Lei Complementar nº 68/2006",
+        "ordem": "0025.0.00.0.01.0"
+      },
+      "changes": {
+        "assunto": "Art. 25, inciso I, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "2edf6e6c-9990-489c-a5c1-4222361b2b1a",
+      "expected_before": {
+        "assunto": "Agregação por cargo civil temporário | Art. 25, inciso II, Lei Complementar nº 68/2006",
+        "ordem": "0025.0.00.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 25, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "78c8630e-0685-44f0-af39-a5812fd79bcb",
+      "expected_before": {
+        "assunto": "Agregação por função civil | Art. 25, inciso III, Lei Complementar nº 68/2006",
+        "ordem": "0025.0.00.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 25, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "2b6df0b1-57ee-40ea-ad0f-ca6d9b130e60",
+      "expected_before": {
+        "assunto": "Reversão e acesso por merecimento | Art. 25, inciso II e parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0025.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 25, parágrafo único, Lei Complementar nº 68/2006",
+        "ordem": "0025.0.01.0.00.0"
+      }
+    },
+    {
+      "uuid": "d6558f19-39af-412e-afa7-de4ea04cde1d",
+      "expected_before": {
+        "assunto": "Destinatário e encaminhamento do recurso | Art. 26, caput, Lei Complementar nº 68/2006",
+        "ordem": "0026.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 26, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "584a25ad-6597-4be4-a228-1f41ab7cfbb6",
+      "expected_before": {
+        "assunto": "Instrução do recurso | Art. 26, § 2º, Lei Complementar nº 68/2006",
+        "ordem": "0026.0.02.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 26, § 2º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "89ac8eff-3c3e-4ce7-bbbe-4139fc8274e9",
+      "expected_before": {
+        "assunto": "Finalidade da promoção post mortem | Art. 7º, Lei Complementar nº 68/2006",
+        "ordem": "0007.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 7º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "9d69c2d8-fc40-4dc7-b447-cd1095c8a7b2",
+      "expected_before": {
+        "assunto": "Ingresso na carreira de praça | Art. 10, caput, Lei Complementar nº 68/2006",
+        "ordem": "0010.0.00.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 10, caput, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "87b880a5-bbe4-43a2-9f51-0c3cae84a06d",
+      "expected_before": {
+        "assunto": "Classificação nas graduações iniciais | Art. 10, § 1º, Lei Complementar nº 68/2006",
+        "ordem": "0010.0.01.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 10, § 1º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "63b5ed6a-011c-4858-aa2e-53e765d98105",
+      "expected_before": {
+        "assunto": "Licença para tratar de interesse particular | Art. 24, inciso III, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "aba8a223-c010-41ef-aef8-403fb4449981",
+      "expected_before": {
+        "assunto": "Suspensão do exercício de graduação, cargo ou função | Art. 24, inciso IV, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.04.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso IV, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "818ef302-4b97-4ce3-bb4e-f0fb7a6bf29a",
+      "expected_before": {
+        "assunto": "Desaparecimento, extravio e deserção | Art. 24, inciso V, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.05.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso V, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "066f9306-8ad5-4d46-b08b-8c82d4f0925f",
+      "expected_before": {
+        "assunto": "Idade limite e Quadro de Acesso | Art. 24, inciso VI, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.06.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso VI, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "8b9fe609-673b-4853-86d7-d944036f4722",
+      "expected_before": {
+        "assunto": "Incapacidade definitiva e Quadro de Acesso | Art. 24, inciso VIII, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.08.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso VIII, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "a4e8abca-6aeb-431e-b9e3-cf1103be9f98",
+      "expected_before": {
+        "assunto": "Exclusão por inclusão indevida | Art. 24, § 1º, inciso I, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.01.0.01.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 1º, inciso I, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "2ac4fed8-271b-443a-a805-893b7c1244ad",
+      "expected_before": {
+        "assunto": "Exclusão após promoção | Art. 24, § 1º, inciso II, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.01.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 1º, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "b4f8550d-fe76-4ada-8ff0-56d2b4e894a7",
+      "expected_before": {
+        "assunto": "Pedido formal de inatividade | Art. 24, § 2º, Lei Complementar nº 68/2006",
+        "ordem": "0024.0.02.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 2º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "e94b3d28-52ae-4066-957c-b0d67f578549",
+      "expected_before": {
+        "assunto": "Fracionamento de vagas | Art. 9º, parágrafo único, III | Lei Complementar nº 68/2006",
+        "ordem": "0009.0.01.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 9º, parágrafo único, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "622a155b-2c18-4c4d-9cbf-a64c93458d22",
+      "expected_before": {
+        "assunto": "Condições da graduação | redação da Lei nº 8.982/2026 | Lei Complementar nº 68/2006 | Art. 12, I, c",
+        "ordem": "0012.0.00.0.01.c"
+      },
+      "changes": {
+        "assunto": "Art. 12, inciso I, alínea c, Lei Complementar nº 68/2006",
+        "ordem": "0012.0.00.0.01.0"
+      }
+    },
+    {
+      "uuid": "9c807f27-c5bf-4799-9375-5fcf83ec9eb2",
+      "expected_before": {
+        "assunto": "Vaga por demissão | Art. 16, III | Lei Complementar nº 68/2006",
+        "ordem": "0016.0.00.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 16, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "0237a944-6201-4938-a629-881a77a2d4af",
+      "expected_before": {
+        "assunto": "Definição do QAM | Art. 22, § 2º | Lei Complementar nº 68/2006",
+        "ordem": "0022.0.02.0.00.0"
+      },
+      "changes": {
+        "assunto": "Art. 22, § 2º, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "3b5c100a-250e-473b-8ee9-27b3163b222f",
+      "expected_before": {
+        "assunto": "Condenação e suspensão condicional | Art. 24, II | Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "375aa86b-9e19-45ca-a6bd-867a3a72c810",
+      "expected_before": {
+        "assunto": "Conselho de Disciplina | Art. 24, VII | Lei Complementar nº 68/2006",
+        "ordem": "0024.0.00.0.07.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, inciso VII, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "78821dc1-ee97-4600-a133-4058950d4fac",
+      "expected_before": {
+        "assunto": "Tempo de licença particular | Art. 24, § 3º, I; inclusão pela Lei nº 8.387/2024 | Lei Complementar nº 68/2006",
+        "ordem": "0024.0.03.0.01.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 3º, inciso I, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "9049320e-bd21-4b13-9844-19f369d53d84",
+      "expected_before": {
+        "assunto": "Tempos não computáveis | Art. 24, § 3º, II; inclusão pela Lei nº 8.387/2024 | Lei Complementar nº 68/2006",
+        "ordem": "0024.0.03.0.02.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 3º, inciso II, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "0ca40437-8a1e-42d8-81ce-04b60ada843a",
+      "expected_before": {
+        "assunto": "Tempo de sentença penal | Art. 24, § 3º, III; inclusão pela Lei nº 8.387/2024 | Lei Complementar nº 68/2006",
+        "ordem": "0024.0.03.0.03.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 3º, inciso III, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "beac0664-ca7a-42e9-a872-162cbaf598c0",
+      "expected_before": {
+        "assunto": "Tempo de interdição judicial | Art. 24, § 3º, IV; inclusão pela Lei nº 8.387/2024 | Lei Complementar nº 68/2006",
+        "ordem": "0024.0.03.0.04.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 3º, inciso IV, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "4673352b-0603-4f87-afa2-139eedddc48b",
+      "expected_before": {
+        "assunto": "Art. 24, § 3º, inciso V, Lei Complementar nº 68/2006; inclusão pela Lei nº 8.387/2024",
+        "ordem": "0024.0.03.0.05.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 3º, inciso V, Lei Complementar nº 68/2006"
+      }
+    },
+    {
+      "uuid": "b5231dc4-67db-4852-b4a7-547df78738d5",
+      "expected_before": {
+        "assunto": "Art. 24, § 3º, inciso V, Lei Complementar nº 68/2006; inclusão pela Lei nº 8.387/2024",
+        "ordem": "0024.0.03.0.05.0"
+      },
+      "changes": {
+        "assunto": "Art. 24, § 3º, inciso V, Lei Complementar nº 68/2006"
+      }
+    }
+  ]
+}
