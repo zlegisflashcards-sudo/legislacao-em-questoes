@@ -27,7 +27,7 @@ export function parseAdminQuestionSearchFilter(value: unknown): AdminQuestionSea
 }
 
 export function parseAdminQuestionSearchSort(value: unknown): AdminQuestionSearchSort {
-  return value === "ordem_asc" || value === "ordem_desc" ? value : "recent";
+  return value === "recent" || value === "ordem_desc" ? value : "ordem_asc";
 }
 
 export function plainQuestionText(value: unknown, limit = 320) {

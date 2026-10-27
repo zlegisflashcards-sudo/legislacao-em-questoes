@@ -54,7 +54,8 @@ describe("Questões na Central da Lei", () => {
     expect(parseAdminQuestionSearchFilter("unstructured")).toBe("unstructured");
     expect(parseAdminQuestionSearchSort("ordem_asc")).toBe("ordem_asc");
     expect(parseAdminQuestionSearchSort("ordem_desc")).toBe("ordem_desc");
-    expect(parseAdminQuestionSearchSort("inválido")).toBe("recent");
+    expect(parseAdminQuestionSearchSort("inválido")).toBe("ordem_asc");
+    expect(parseAdminQuestionSearchSort(undefined)).toBe("ordem_asc");
     expect(server).toContain('request.eq("resposta", "Certo")');
     expect(server).toContain('request.eq("resposta", "Errado")');
     expect(server).toContain('request.is("structure_id", null)');
