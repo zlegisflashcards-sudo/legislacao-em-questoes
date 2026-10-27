@@ -122,7 +122,7 @@ export async function POST(request: Request) {
         try { structureMappings = JSON.parse(mappingValue); }
         catch { throw new AdminQuestoesError(400, "Mapeamento estrutural inválido."); }
       }
-      const data = action === "previsualizar_apkg" ? await previewApkgImport(form.get("law_slug"), file, structureMappings as Record<string, number | "new">) : await importApkg({ lawSlug: form.get("law_slug"), file, structureMappings });
+      const data = action === "previsualizar_apkg" ? await previewApkgImport(form.get("law_slug"), file, structureMappings as Record<string, number | "new">) : await importApkg({ lawSlug: form.get("law_slug"), file, structureMappings, previewToken: form.get("preview_token") });
       return NextResponse.json(data, { headers });
     }
     const body = await request.json() as Record<string, unknown>;

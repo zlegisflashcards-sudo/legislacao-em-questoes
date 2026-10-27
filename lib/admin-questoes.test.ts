@@ -218,7 +218,8 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain("withSlug(parsed.rows, current.slug)");
     expect(server).toContain("const key = importSourceKey(row)");
     expect(server).toContain("groupImportSourceWarnings(effectiveSources)");
-    expect(server).toContain('status: reason ? "erro" : matching ? sourceChanged ? "atualizada" : "duplicada" : "nova"');
+    expect(server).toContain("isApkgQuestionChanged(matching!, row)");
+    expect(server).toContain('status: reason ? "erro" : matching ? changed ? "atualizada" : "duplicada" : "nova"');
     expect(server).toContain("slug: row.slug");
     expect(server).toContain("assunto: normalizeQuestionLegalReference(row.assunto)");
   });
