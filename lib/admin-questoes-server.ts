@@ -6,7 +6,7 @@ import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference"
 import { parseBulkQuestionEdit, parseBulkQuestionTextReplacement, replaceCompleteQuestionText, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
-import { apkgQuestionProposal, classifyApkgQuestion, hasMixedApkgBatch } from "@/lib/apkg-question-update";
+import { apkgQuestionProposal, classifyApkgQuestion, hasMixedApkgBatch, validateApkgUuidUpdateProposal } from "@/lib/apkg-question-update";
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
 import { compareQuestionStructureNames, creatableQuestionStructureTypes, normalizeQuestionStructureName, parseQuestionStructureTxt, planQuestionDeckStructure, questionCountsByStructure, validQuestionStructureParent, type CreatableQuestionStructureType, type QuestionStructureNode, type QuestionStructureType, type StructureImportMapping } from "@/lib/questoes-structure";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
@@ -666,7 +666,7 @@ function structureMappings(value: unknown): StructureImportMapping {
   }
   return mappings;
 }
-function diagnostics(issues: ImportIssue[], items: Array<{ line: number; deck: string; ordem: string; pergunta: string; status: string; motivo: string | null }>) { return [...issues.map((issue) => ({ severity: "erro", line: issue.line, deck: issue.deck?.join("::") ?? "", ordem: issue.ordem ?? "", pergunta: issue.pergunta ?? "", field: issue.field ?? "arquivo", received: issue.received ?? "", expected: issue.expected ?? "", motivo: issue.message })), ...items.filter((item) => item.status === "erro").map((item) => ({ severity: "erro", line: item.line, deck: item.deck, ordem: item.ordem, pergunta: item.pergunta, field: "estrutura", received: item.deck, expected: "Deck/subdeck com níveis reconhecidos", motivo: item.motivo ?? "Estrutura inválida." }))]; }
+function diagnostics(issues: ImportIssue[], items: Array<{ line: number; deck: string; ordem: string; pergunta: string; status: string; motivo: string | null; erro_field?: string }>) { return [...issues.map((issue) => ({ severity: "erro", line: issue.line, deck: issue.deck?.join("::") ?? "", ordem: issue.ordem ?? "", pergunta: issue.pergunta ?? "", field: issue.field ?? "arquivo", received: issue.received ?? "", expected: issue.expected ?? "", motivo: issue.message })), ...items.filter((item) => item.status === "erro").map((item) => ({ severity: "erro", line: item.line, deck: item.deck, ordem: item.ordem, pergunta: item.pergunta, field: item.erro_field ?? "estrutura", received: item.deck, expected: item.erro_field === "ordem" ? "Segmentos alfanuméricos separados por ponto" : "Deck/subdeck com níveis reconhecidos", motivo: item.motivo ?? "Estrutura inválida." }))]; }
 export async function previewQuestionImport(lawSlug: string, parsed: { rows: ImportedQuestion[]; issues: ImportIssue[] }, mappings: StructureImportMapping = {}, apkg?: Record<string, unknown>) {
   const current = await law(lawSlug);
   const check = validateImportSlug(parsed.rows, current.slug);
@@ -714,8 +714,17 @@ export async function previewQuestionImport(lawSlug: string, parsed: { rows: Imp
     // UUID identity deliberately ignores the incoming order: Ordem is one of
     // the editable APKG fields.  Do not fall back to source matching when an
     // IDQuestao exists, otherwise a changed order becomes a silent insert.
-    const reason = deck?.error ?? invalid ?? uuidError;
-    const { matching, status } = classifyApkgQuestion(row, stored, existingById, reason);
+    // Mirror the RPC validation before offering confirmation.  In particular,
+    // the legacy source validator only checks that Ordem is nonempty, while a
+    // UUID update needs the stricter database-safe format.
+    const baseReason = deck?.error ?? invalid ?? uuidError;
+    const initial = classifyApkgQuestion(row, stored, existingById, baseReason);
+    const proposalError = apkg && hasUuid && !baseReason && initial.matching
+      ? validateApkgUuidUpdateProposal(row, initial.matching.ordem)
+      : null;
+    const reason = baseReason ?? proposalError;
+    const erroField = proposalError ? "ordem" : uuidError ? "id_questao" : invalid ? "fonte" : deck?.error ? "estrutura" : undefined;
+    const { matching, status } = proposalError ? classifyApkgQuestion(row, stored, existingById, reason) : initial;
     return {
       line: row.line,
       deck: row.deck.join("::"),
@@ -729,6 +738,7 @@ export async function previewQuestionImport(lawSlug: string, parsed: { rows: Imp
       proposed: apkgQuestionProposal(row),
       status,
       motivo: reason,
+      erro_field: erroField,
     };
   });
   const replacementById = new Map<string, ImportedQuestion>();

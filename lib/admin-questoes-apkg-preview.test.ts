@@ -92,6 +92,41 @@ describe("APKG preview identity against fetched questions", () => {
     expect(preview.errors).toEqual(expect.arrayContaining([expect.objectContaining({ field: "lote" })]));
   }, 30_000);
 
+  it("shows an invalid UUID-update Ordem in the preview instead of failing only on confirmation", async () => {
+    const current = stored(1);
+    state.rows = [current];
+    state.identified = [{ id: current.id, lei_id: 1, ativo: true }];
+    const preview = await previewQuestionImport(
+      "lai",
+      { rows: [row(current, { ordem: "0001.0.01-A" })], issues: [] },
+      {},
+      { rootDecks: [], subdecks: [], notes: 1, cards: 1, recognizedModels: [], unrecognizedModels: [], media: [], samples: [] },
+    );
+    expect(preview.summary.erros).toBe(1);
+    expect(preview.items[0]).toMatchObject({ status: "erro", motivo: expect.stringContaining("Ordem inválida") });
+    expect(preview.errors).toEqual(expect.arrayContaining([expect.objectContaining({ line: 1, field: "ordem" })]));
+  });
+
+  it("permite corrigir Assunto com Ordem legada imutavel, mas bloqueia sua troca invalida", async () => {
+    const legacy = stored(1, { id: "b636cb14-ba82-4fc3-9b6b-cd1910032803", ordem: "Lei de Acesso à Informação", assunto: "Art. 4º, V" });
+    state.rows = [legacy];
+    state.identified = [{ id: legacy.id, lei_id: 1, ativo: true }];
+    const metadata = { rootDecks: [], subdecks: [], notes: 1, cards: 1, recognizedModels: [], unrecognizedModels: [], media: [], samples: [] };
+    const safe = await previewQuestionImport("lai", { rows: [row(legacy, { assunto: "Art. 4º, inciso V" })], issues: [] }, {}, metadata);
+    expect(safe.summary).toMatchObject({ atualizadas: 1, erros: 0 });
+    expect(safe.items[0]).toMatchObject({ status: "atualizada", existing_id: legacy.id });
+    const exported = await buildLawApkg({ slug: "lai", titulo: "LAI" }, [{ ...legacy, structure_id: null, assunto: "Art. 4º, inciso V" }], [], { fileName: "apkg-legado-imutavel.apkg" });
+    const bytes = exported.bytes.buffer.slice(exported.bytes.byteOffset, exported.bytes.byteOffset + exported.bytes.byteLength) as ArrayBuffer;
+    const binaryPreview = await previewApkgImport("lai", new File([bytes], exported.filename, { type: "application/octet-stream" }));
+    expect(binaryPreview.summary).toMatchObject({ atualizadas: 1, erros: 0 });
+    expect(binaryPreview.items[0]).toMatchObject({ status: "atualizada", existing_id: legacy.id });
+    const repeated = await previewQuestionImport("lai", { rows: [row(legacy)], issues: [] }, {}, metadata);
+    expect(repeated.summary).toMatchObject({ atualizadas: 0, duplicadas: 1, erros: 0 });
+    const unsafe = await previewQuestionImport("lai", { rows: [row(legacy, { ordem: "Outra Ordem legada" })], issues: [] }, {}, metadata);
+    expect(unsafe.summary.erros).toBe(1);
+    expect(unsafe.errors).toEqual(expect.arrayContaining([expect.objectContaining({ field: "ordem" })]));
+  });
+
   it("reproduz 121 Ordens alteradas e 3 inalteradas como 124 atualizações UUID, nunca novas", async () => {
     state.rows = Array.from({ length: 124 }, (_, index) => stored(index + 1));
     state.identified = state.rows.map(({ id: questionId, lei_id, ativo }) => ({ id: questionId, lei_id, ativo }));

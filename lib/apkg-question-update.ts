@@ -69,6 +69,22 @@ export function apkgQuestionProposal(row: ImportedQuestion): ApkgStoredQuestion 
   };
 }
 
+/**
+ * Keep the APKG preview in lockstep with the database RPC contract.  The
+ * server must never offer confirmation for a row that the transactional RPC
+ * will reject as an invalid update payload.
+ */
+export function validateApkgUuidUpdateProposal(row: ImportedQuestion, expectedOrder?: string | null): string | null {
+  const proposed = apkgQuestionProposal(row);
+  if (!proposed.pergunta.trim()) return "Pergunta inválida para atualização segura por UUID.";
+  if (proposed.resposta !== "Certo" && proposed.resposta !== "Errado") return "Resposta inválida para atualização segura por UUID.";
+  // A base possui uma Ordem legada de cloze que não casa com o contrato
+  // atual. Ela pode ser preservada ao corrigir outro campo, mas jamais pode
+  // ser introduzida/trocada por um APKG novo.
+  if (!/^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*$/.test(proposed.ordem) && proposed.ordem !== expectedOrder) return "Ordem inválida para atualização segura por UUID. Use segmentos alfanuméricos separados por ponto.";
+  return null;
+}
+
 /** True only when at least one importable APKG field differs from the snapshot. */
 export function isApkgQuestionChanged(stored: ApkgStoredQuestion, row: ImportedQuestion): boolean {
   const proposed = apkgQuestionProposal(row);

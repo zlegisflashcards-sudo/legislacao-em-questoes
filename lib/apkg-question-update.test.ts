@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyApkgQuestion, findApkgExistingQuestion, hasMixedApkgBatch, isApkgQuestionChanged, type ApkgExistingQuestion, type ApkgStoredQuestion } from "@/lib/apkg-question-update";
+import { classifyApkgQuestion, findApkgExistingQuestion, hasMixedApkgBatch, isApkgQuestionChanged, validateApkgUuidUpdateProposal, type ApkgExistingQuestion, type ApkgStoredQuestion } from "@/lib/apkg-question-update";
 import type { ImportedQuestion } from "@/lib/imported-question";
 
 const stored: ApkgStoredQuestion = {
@@ -55,5 +55,14 @@ describe("findApkgExistingQuestion", () => {
     expect(update.status).toBe("atualizada");
     expect(newQuestion.status).toBe("nova");
     expect(hasMixedApkgBatch([update.status, newQuestion.status])).toBe(true);
+  });
+});
+
+describe("validateApkgUuidUpdateProposal", () => {
+  it("espelha o formato de Ordem exigido pela RPC antes da confirmação", () => {
+    expect(validateApkgUuidUpdateProposal(row({ ordem: "0001.0.01.0.01" }))).toBeNull();
+    expect(validateApkgUuidUpdateProposal(row({ ordem: "0001.0.01-A" }))).toContain("Ordem inválida");
+    expect(validateApkgUuidUpdateProposal(row({ ordem: "Lei de Acesso à Informação" }), "Lei de Acesso à Informação")).toBeNull();
+    expect(validateApkgUuidUpdateProposal(row({ ordem: "Lei de Acesso à Informação" }), "0001.0.00.01")).toContain("Ordem inválida");
   });
 });
