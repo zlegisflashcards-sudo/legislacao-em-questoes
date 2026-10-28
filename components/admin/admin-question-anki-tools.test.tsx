@@ -21,6 +21,8 @@ describe("APKG preview presentation", () => {
 
   it("mostra o conflito 409 e exige nova análise", () => {
     expect(component).toContain("if (preview && !result && error)");
+    expect(component).toContain("const stalePreview =");
+    expect(component).toContain("{stalePreview ?");
     expect(component).toContain('role="alert"');
     expect(component).toContain("A questão foi alterada após a prévia. Analise o APKG novamente antes de importar.");
   });

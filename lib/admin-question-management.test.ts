@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { descendantStructureIds, groupDuplicateQuestionStatements, normalizedQuestionStatement, questionResultNeighbor, sameImportIdentity, sameStructureQuestionStatement, wouldCreateStructureCycle } from "./admin-question-management";
+import { descendantStructureIds, groupDuplicateQuestionStatements, introducedDuplicateQuestionStatementIds, normalizedQuestionStatement, questionResultNeighbor, sameImportIdentity, sameStructureQuestionStatement, wouldCreateStructureCycle } from "./admin-question-management";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const server = read("lib/admin-questoes-server.ts");
@@ -32,6 +32,17 @@ describe("gestão definitiva de questões e estruturas", () => {
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].questions.map((question) => question.id)).toEqual(["a", "b"]);
+  });
+  it("não bloqueia atualização de justificativa em duplicata histórica, mas bloqueia nova duplicata", () => {
+    const historical = [
+      { id: "a", lei_id: 1, pergunta: "Assertiva já duplicada" },
+      { id: "b", lei_id: 1, pergunta: "Assertiva já duplicada" },
+    ];
+    expect(introducedDuplicateQuestionStatementIds(historical, historical, new Set(["a"]))).toEqual(new Set());
+    const changed = [...historical, { id: "import:3", lei_id: 1, pergunta: "Assertiva já duplicada" }];
+    expect(introducedDuplicateQuestionStatementIds(historical, changed, new Set(["import:3"]))).toEqual(new Set(["import:3"]));
+    const newlyChanged = [{ id: "a", lei_id: 1, pergunta: "Outra assertiva" }, { id: "b", lei_id: 1, pergunta: "Outra assertiva" }];
+    expect(introducedDuplicateQuestionStatementIds([{ id: "a", lei_id: 1, pergunta: "Original" }, { id: "b", lei_id: 1, pergunta: "Outra assertiva" }], newlyChanged, new Set(["a"]))).toEqual(new Set(["a"]));
   });
   it("protege o fluxo com autenticação administrativa server-side", () => { expect(server).toContain("const user = await obterAdministrador()"); expect(server).toContain("Autenticação administrativa obrigatória"); expect(route).toContain("deleteAdminQuestion"); });
   it("usa uma RPC transacional única e sem arquivamento", () => { expect(migration).toContain("admin_delete_law_content"); expect(migration).toContain("security definer"); expect(migration).toContain("set search_path = ''"); expect(migration).toContain("pg_advisory_xact_lock"); expect(migration).not.toMatch(/admin_archive|admin_restore|archive_batch/); });

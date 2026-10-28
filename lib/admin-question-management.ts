@@ -71,3 +71,24 @@ export function groupDuplicateQuestionStatements<T extends { id: string; lei_id:
     .filter(([, entries]) => entries.length > 1)
     .map(([key, entries]) => ({ normalizedStatement: key.slice(key.indexOf("\u0000") + 1), questions: [...entries].sort((left, right) => left.id.localeCompare(right.id)) }));
 }
+
+/**
+ * Returns only incoming IDs that introduce a duplicate.  Existing duplicate
+ * groups are historical data: touching a non-statement field (for example,
+ * justificativa) must not make that otherwise safe update impossible.
+ */
+export function introducedDuplicateQuestionStatementIds<T extends { id: string; lei_id: number; pergunta: string }>(before: T[], after: T[], incomingIds: ReadonlySet<string>) {
+  const beforeGroupById = new Map<string, string>();
+  for (const group of groupDuplicateQuestionStatements(before)) {
+    const key = `${group.questions[0].lei_id}\u0000${group.normalizedStatement}`;
+    for (const question of group.questions) beforeGroupById.set(question.id, key);
+  }
+  const introduced = new Set<string>();
+  for (const group of groupDuplicateQuestionStatements(after)) {
+    const key = `${group.questions[0].lei_id}\u0000${group.normalizedStatement}`;
+    for (const question of group.questions) {
+      if (incomingIds.has(question.id) && beforeGroupById.get(question.id) !== key) introduced.add(question.id);
+    }
+  }
+  return introduced;
+}

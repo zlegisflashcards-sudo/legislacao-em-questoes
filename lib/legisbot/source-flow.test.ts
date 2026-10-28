@@ -147,7 +147,7 @@ describe("fonte canônica do LegisBot", () => {
 
   it("faz reimportação idempotente, atualiza fonte alterada e não chama IA", () => {
     const importer = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    expect(importer).toContain("isApkgQuestionChanged(matching!, row)");
+    expect(importer).toContain("classifyApkgQuestion(row, stored, existingById, reason)");
     expect(importer).toContain("existing_id: matching?.id ?? null");
     expect(importer).toContain('update({ precisa_revisao: true })');
     expect(importer).toContain("groupImportSourceWarnings(effectiveSources)");

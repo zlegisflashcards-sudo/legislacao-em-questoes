@@ -6,13 +6,13 @@ import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference"
 import { parseBulkQuestionEdit, parseBulkQuestionTextReplacement, replaceCompleteQuestionText, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { effectiveAnkiSlug, parseAnkiTxt, validateImportSlug } from "@/lib/anki-txt-import";
 import { parseLegisApkg } from "@/lib/anki-apkg-import";
-import { apkgQuestionProposal, isApkgQuestionChanged } from "@/lib/apkg-question-update";
+import { apkgQuestionProposal, classifyApkgQuestion, hasMixedApkgBatch } from "@/lib/apkg-question-update";
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
 import { compareQuestionStructureNames, creatableQuestionStructureTypes, normalizeQuestionStructureName, parseQuestionStructureTxt, planQuestionDeckStructure, questionCountsByStructure, validQuestionStructureParent, type CreatableQuestionStructureType, type QuestionStructureNode, type QuestionStructureType, type StructureImportMapping } from "@/lib/questoes-structure";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, parseAdminQuestionSearchSort, plainQuestionText } from "@/lib/admin-question-search";
-import { descendantStructureIds, groupDuplicateQuestionStatements, sameStructureQuestionStatement } from "@/lib/admin-question-management";
+import { descendantStructureIds, introducedDuplicateQuestionStatementIds, sameStructureQuestionStatement } from "@/lib/admin-question-management";
 import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
 import { getArticleContext } from "@/lib/admin-article-center-server";
 import { validateQuestionStructure } from "@/lib/question-structure-consistency";
@@ -667,7 +667,7 @@ function structureMappings(value: unknown): StructureImportMapping {
   return mappings;
 }
 function diagnostics(issues: ImportIssue[], items: Array<{ line: number; deck: string; ordem: string; pergunta: string; status: string; motivo: string | null }>) { return [...issues.map((issue) => ({ severity: "erro", line: issue.line, deck: issue.deck?.join("::") ?? "", ordem: issue.ordem ?? "", pergunta: issue.pergunta ?? "", field: issue.field ?? "arquivo", received: issue.received ?? "", expected: issue.expected ?? "", motivo: issue.message })), ...items.filter((item) => item.status === "erro").map((item) => ({ severity: "erro", line: item.line, deck: item.deck, ordem: item.ordem, pergunta: item.pergunta, field: "estrutura", received: item.deck, expected: "Deck/subdeck com níveis reconhecidos", motivo: item.motivo ?? "Estrutura inválida." }))]; }
-async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issues: ImportIssue[] }, mappings: StructureImportMapping = {}, apkg?: Record<string, unknown>) {
+export async function previewQuestionImport(lawSlug: string, parsed: { rows: ImportedQuestion[]; issues: ImportIssue[] }, mappings: StructureImportMapping = {}, apkg?: Record<string, unknown>) {
   const current = await law(lawSlug);
   const check = validateImportSlug(parsed.rows, current.slug);
   if (!check.valid) throw new AdminQuestoesError(422, check.message ?? "O arquivo não corresponde à legislação selecionada.");
@@ -681,9 +681,11 @@ async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issu
   ]);
   if (existing.error) fail("previsualizar", existing.error);
   const existingByPair = new Map<string, typeof existing.data>();
+  const existingById = new Map<string, NonNullable<typeof existing.data>[number]>();
   for (const item of existing.data ?? []) {
     const key = importSourceKey(item as { slug: string; ordem: string });
     existingByPair.set(key, [...(existingByPair.get(key) ?? []), item]);
+    existingById.set(String(item.id), item);
   }
   const idsFromFile = [...new Set(rows.map((row) => row.id_questao).filter((value): value is string => Boolean(value && /^[0-9a-f-]{36}$/i.test(value))))];
   // Nunca use slug/ordem ou enunciado como plano B para um UUID que veio no
@@ -709,11 +711,11 @@ async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issu
       : hasUuid && (!identifiedQuestion || identifiedQuestion.lei_id !== current.id || !identifiedQuestion.ativo)
         ? !identifiedQuestion ? "IDQuestao não existe." : identifiedQuestion.lei_id !== current.id ? "IDQuestao pertence a outra lei." : "IDQuestao refere-se a uma questão inativa."
         : null;
-    const matching = hasUuid
-      ? stored.find((item) => item.id === row.id_questao)
-      : stored.find((item) => item.pergunta.trim() === row.pergunta.trim());
-    const changed = Boolean(matching) && isApkgQuestionChanged(matching!, row);
+    // UUID identity deliberately ignores the incoming order: Ordem is one of
+    // the editable APKG fields.  Do not fall back to source matching when an
+    // IDQuestao exists, otherwise a changed order becomes a silent insert.
     const reason = deck?.error ?? invalid ?? uuidError;
+    const { matching, status } = classifyApkgQuestion(row, stored, existingById, reason);
     return {
       line: row.line,
       deck: row.deck.join("::"),
@@ -725,7 +727,7 @@ async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issu
       // continuar iguais para impedir que uma edição concorrente seja perdida.
       expected: matching ? { pergunta: matching.pergunta, resposta: matching.resposta, justificativa: matching.justificativa ?? null, titulo: matching.titulo ?? null, assunto: matching.assunto ?? null, legislacao: matching.legislacao ?? null, ordem: matching.ordem, total_artigos: matching.total_artigos ?? null, ultima_alteracao_legislativa: matching.ultima_alteracao_legislativa ?? null } : null,
       proposed: apkgQuestionProposal(row),
-      status: reason ? "erro" : matching ? changed ? "atualizada" : "duplicada" : "nova",
+      status,
       motivo: reason,
     };
   });
@@ -748,12 +750,15 @@ async function preview(lawSlug: string, parsed: { rows: ImportedQuestion[]; issu
   const effectiveSources = (existing.data ?? []).map((stored) => asSource(replacementById.get(stored.id) ?? stored));
   effectiveSources.push(...incomingWithoutMatch.map(asSource));
   const warnings = groupImportSourceWarnings(effectiveSources);
-  const errors = [...diagnostics(parsed.issues, items), ...plan.nodes.filter((node) => node.mappingError).map((node) => ({ severity: "erro", line: 0, deck: node.path, ordem: "", pergunta: "", field: "mapeamento", received: node.path, expected: "Destino sugerido do mesmo caminho", motivo: node.mappingError! }))];
+  // TXT conserva seu fluxo histórico. A separação é obrigatória apenas para
+  // APKG, cuja atualização por IDQuestao passa pela RPC transacional.
+  const hasMixedUuidBatch = Boolean(apkg) && hasMixedApkgBatch(items.map((item) => item.status));
+  const errors = [...diagnostics(parsed.issues, items), ...plan.nodes.filter((node) => node.mappingError).map((node) => ({ severity: "erro", line: 0, deck: node.path, ordem: "", pergunta: "", field: "mapeamento", received: node.path, expected: "Destino sugerido do mesmo caminho", motivo: node.mappingError! })), ...(hasMixedUuidBatch ? [{ severity: "erro", line: 0, deck: "", ordem: "", pergunta: "", field: "lote", received: "Questões novas e atualizações por UUID", expected: "Importe primeiro as atualizações por UUID e depois as novas questões", motivo: "Lote misto bloqueado para preservar a atualização transacional por UUID." }] : [])];
   const structurePreview = plan.nodes.map((node) => ({ key: node.key, path: node.path, tipo: node.tipo, status: node.mappingError ? "erro" as const : node.requiresMapping ? "revisao" as const : node.existingId === null ? "nova" as const : "existente" as const, destination_id: node.existingId, candidates: node.candidates }));
   return { law: current, slug: check, total: rows.length, issues: parsed.issues, errors, warnings, items, structure: { items: structurePreview, existentes: structurePreview.filter((node) => node.status === "existente").length, novas: structurePreview.filter((node) => node.status === "nova").length, revisoes: structurePreview.filter((node) => node.status === "revisao").length }, summary: { novas: items.filter((item) => item.status === "nova").length, atualizadas: items.filter((item) => item.status === "atualizada").length, duplicadas: items.filter((item) => item.status === "duplicada").length, conflitos: warnings.filter((warning) => warning.kind === "legislacao" || warning.kind === "estrutural").length, avisos: warnings.length, erros: errors.length }, ...(apkg ? { apkg } : {}) };
 }
-export async function previewAnkiImport(body: Record<string, unknown>) { await requireAdmin(); if (typeof body.text !== "string" || body.text.length > 20_000_000) throw new AdminQuestoesError(400, "Arquivo TXT inválido ou grande demais."); try { return preview(slug(body.law_slug), parseAnkiTxt(body.text), structureMappings(body.structure_mappings)); } catch (error) { if (error instanceof AdminQuestoesError) throw error; throw new AdminQuestoesError(400, error instanceof Error ? error.message : "TXT inválido."); } }
-function apkgPreviewToken(data: Awaited<ReturnType<typeof preview>>, rows: ImportedQuestion[]) {
+export async function previewAnkiImport(body: Record<string, unknown>) { await requireAdmin(); if (typeof body.text !== "string" || body.text.length > 20_000_000) throw new AdminQuestoesError(400, "Arquivo TXT inválido ou grande demais."); try { return previewQuestionImport(slug(body.law_slug), parseAnkiTxt(body.text), structureMappings(body.structure_mappings)); } catch (error) { if (error instanceof AdminQuestoesError) throw error; throw new AdminQuestoesError(400, error instanceof Error ? error.message : "TXT inválido."); } }
+function apkgPreviewToken(data: Awaited<ReturnType<typeof previewQuestionImport>>, rows: ImportedQuestion[]) {
   // Vincula a confirmação tanto ao snapshot do banco quanto ao conteúdo
   // proposto. Assim, trocar o arquivo depois da prévia também a invalida.
   return createHash("sha256").update(JSON.stringify({
@@ -766,7 +771,7 @@ export async function previewApkgImport(lawSlug: unknown, file: File, mappings: 
   if (!file.name.toLowerCase().endsWith(".apkg") || !file.size || file.size > 100_000_000) throw new AdminQuestoesError(400, "Arquivo APKG inválido ou grande demais.");
   let parsed; try { parsed = await parseLegisApkg(new Uint8Array(await file.arrayBuffer())); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "APKG inválido."); }
   if (parsed.media.some((media) => media.referenced)) throw new AdminQuestoesError(422, "O APKG possui mídia referenciada. O suporte a mídia ainda não faz parte desta etapa.");
-  const data = await preview(slug(lawSlug), { rows: parsed.rows, issues: parsed.issues }, structureMappings(mappings), { rootDecks: parsed.rootDecks ?? [], subdecks: parsed.subdecks ?? [], notes: parsed.notes ?? 0, cards: parsed.cards ?? 0, recognizedModels: parsed.recognizedModels ?? [], unrecognizedModels: parsed.unrecognizedModels ?? [], media: parsed.media ?? [], samples: parsed.rows.slice(0, 5) });
+  const data = await previewQuestionImport(slug(lawSlug), { rows: parsed.rows, issues: parsed.issues }, structureMappings(mappings), { rootDecks: parsed.rootDecks ?? [], subdecks: parsed.subdecks ?? [], notes: parsed.notes ?? 0, cards: parsed.cards ?? 0, recognizedModels: parsed.recognizedModels ?? [], unrecognizedModels: parsed.unrecognizedModels ?? [], media: parsed.media ?? [], samples: parsed.rows.slice(0, 5) });
   return { ...data, preview_token: apkgPreviewToken(data, parsed.rows) };
 }
 async function markImportConflictsForReview(warnings: Array<{ kind: string; slug: string; ordem: string }>) {
@@ -787,12 +792,13 @@ async function rejectImportedDuplicateStatements(leiId: number, rows: ImportedQu
     ...(stored.data ?? []).map((question) => ({ id: String(question.id), lei_id: Number(question.lei_id), pergunta: replacements.get(String(question.id)) ?? String(question.pergunta) })),
     ...incoming.filter((row) => !previewByLine.get(row.line)?.existing_id).map((row) => ({ id: `import:${row.line}`, lei_id: leiId, pergunta: row.pergunta })),
   ];
-  const duplicatedIncoming = new Set(incoming.map((row) => previewByLine.get(row.line)?.existing_id ?? `import:${row.line}`));
-  if (groupDuplicateQuestionStatements(candidates).some((group) => group.questions.some((question) => duplicatedIncoming.has(question.id)))) {
+  const incomingIds = new Set(incoming.map((row) => previewByLine.get(row.line)?.existing_id ?? `import:${row.line}`));
+  const before = (stored.data ?? []).map((question) => ({ id: String(question.id), lei_id: Number(question.lei_id), pergunta: String(question.pergunta) }));
+  if (introducedDuplicateQuestionStatementIds(before, candidates, incomingIds).size) {
     throw new AdminQuestoesError(409, "A importação criaria uma questão ativa com o mesmo enunciado nesta lei.");
   }
 }
-async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: Awaited<ReturnType<typeof preview>>, mappings: StructureImportMapping, ignored = 0, secureUuidUpdates = false, expectedPreviewToken?: unknown) {
+async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: Awaited<ReturnType<typeof previewQuestionImport>>, mappings: StructureImportMapping, ignored = 0, secureUuidUpdates = false, expectedPreviewToken?: unknown) {
   if (!previewData.slug.valid || previewData.errors.length || previewData.structure.revisoes) throw new AdminQuestoesError(422, "A importação possui linhas inválidas ou destinos estruturais ainda não revisados.");
   const current = await law(lawSlug);
   const normalizedRows = withSlug(rows, current.slug);
@@ -843,7 +849,7 @@ async function persist(lawSlug: string, rows: ImportedQuestion[], previewData: A
   if (!secureUuidUpdates) await markImportConflictsForReview(previewData.warnings);
   return { lidas: rows.length, importadas: inserted.data?.length ?? 0, atualizadas: updatedRows.length, duplicadas: previewData.summary.duplicadas, ignoradas: ignored, conflitos: previewData.summary.conflitos, avisos: previewData.warnings, erros: 0, estruturas_criadas: plan.nodes.filter((node) => node.existingId === null).length, estruturas_reutilizadas: plan.nodes.filter((node) => node.existingId !== null).length };
 }
-export async function importAnkiTxt(body: Record<string, unknown>) { await requireAdmin(); const parsed = parseAnkiTxt(String(body.text)); const mappings = structureMappings(body.structure_mappings); const data = await preview(slug(body.law_slug), parsed, mappings); return persist(slug(body.law_slug), parsed.rows, data, mappings); }
+export async function importAnkiTxt(body: Record<string, unknown>) { await requireAdmin(); const parsed = parseAnkiTxt(String(body.text)); const mappings = structureMappings(body.structure_mappings); const data = await previewQuestionImport(slug(body.law_slug), parsed, mappings); return persist(slug(body.law_slug), parsed.rows, data, mappings); }
 export async function importApkg(body: { lawSlug: unknown; file: File; structureMappings?: unknown; previewToken?: unknown }) { await requireAdmin(); const parsed = await parseLegisApkg(new Uint8Array(await body.file.arrayBuffer())); const mappings = structureMappings(body.structureMappings); const data = await previewApkgImport(body.lawSlug, body.file, mappings); return persist(slug(body.lawSlug), parsed.rows, data, mappings, parsed.unrecognizedModels.reduce((sum, model) => sum + model.notes, 0), true, body.previewToken); }
 
 type ReparentPreview = { node: ReparentStructureNode; currentPath: string[]; newPath: string[]; expected: { parent_id: number | null; ordem: number; updated_at: string } };

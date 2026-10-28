@@ -209,7 +209,7 @@ describe("administração de Legis Questões", () => {
 
   it("bloqueia TXT de outra legislação antes de planejar ou persistir questões", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    const preview = server.slice(server.indexOf("async function preview("), server.indexOf("export async function previewAnkiImport"));
+    const preview = server.slice(server.indexOf("export async function previewQuestionImport("), server.indexOf("export async function previewAnkiImport"));
     expect(preview.indexOf("validateImportSlug(parsed.rows, current.slug)")).toBeLessThan(preview.indexOf("planQuestionDeckStructure(rows, nodes, mappings)"));
   });
 
@@ -218,8 +218,10 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain("withSlug(parsed.rows, current.slug)");
     expect(server).toContain("const key = importSourceKey(row)");
     expect(server).toContain("groupImportSourceWarnings(effectiveSources)");
-    expect(server).toContain("isApkgQuestionChanged(matching!, row)");
-    expect(server).toContain('status: reason ? "erro" : matching ? changed ? "atualizada" : "duplicada" : "nova"');
+    expect(server).toContain("classifyApkgQuestion(row, stored, existingById, reason)");
+    expect(server).toContain("Boolean(apkg) && hasMixedApkgBatch(items.map((item) => item.status))");
+    expect(server).toContain("Lote misto bloqueado para preservar a atualiza");
+    expect(server).toContain("status,");
     expect(server).toContain("slug: row.slug");
     expect(server).toContain("assunto: normalizeQuestionLegalReference(row.assunto)");
   });
@@ -270,7 +272,7 @@ describe("administração de Legis Questões", () => {
 
   it("mantém o importador Anki no mesmo planejador hierárquico", () => {
     const server = readFileSync("lib/admin-questoes-server.ts", "utf8");
-    const ankiPreview = server.slice(server.indexOf("async function preview("), server.indexOf("export async function previewAnkiImport"));
+    const ankiPreview = server.slice(server.indexOf("export async function previewQuestionImport("), server.indexOf("export async function previewAnkiImport"));
     const ankiPersist = server.slice(server.indexOf("async function persist("), server.indexOf("export async function importAnkiTxt"));
     expect(ankiPreview).toContain("planQuestionDeckStructure(rows, nodes, mappings)");
     expect(ankiPersist).toContain("planQuestionDeckStructure(newRows, before, mappings)");
