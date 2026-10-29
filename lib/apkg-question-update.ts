@@ -31,7 +31,7 @@ export function findApkgExistingQuestion(
   return atSource.find((item) => item.pergunta.trim() === row.pergunta.trim());
 }
 
-export type ApkgPreviewStatus = "nova" | "atualizada" | "duplicada" | "erro";
+export type ApkgPreviewStatus = "nova" | "atualizada" | "duplicada" | "nova_duplicada" | "erro";
 
 /** Classification shared by the preview and its local regression fixtures. */
 export function classifyApkgQuestion(

@@ -8,21 +8,22 @@ type Question = {
   justificativa: string | null; slug: string; ordem: string; titulo: string | null; assunto: string | null;
   legislacao: string | null; total_artigos: number | null; ultima_alteracao_legislativa: string | null;
 };
-const state = vi.hoisted(() => ({ rows: [] as Question[], identified: [] as Array<Pick<Question, "id" | "lei_id" | "ativo">> }));
+const state = vi.hoisted(() => ({ rows: [] as Question[], identified: [] as Array<Pick<Question, "id" | "lei_id" | "ativo">>, rpc: vi.fn(async () => ({ data: { updated_count: 1 }, error: null })) }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/admin-auth", () => ({ obterAdministrador: async () => ({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }) }));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServerClient: () => ({
+  rpc: state.rpc,
   from(table: string) {
-    let selected = ""; let ids: string[] | null = null;
+    let selected = ""; let ids: string[] | null = null; let rangeFrom = 0; let rangeTo = Infinity;
     const result = () => {
       if (table === "leis") return { data: { id: 1, slug: "lai", titulo: "LAI", nome_curto: null, codigo: null, ultima_alteracao_referencia: null, houve_alteracao_legislativa: false }, error: null };
       if (table === "law_structure") return { data: [], error: null };
       if (table === "questions" && selected === "id,lei_id,ativo") return { data: state.identified.filter((row) => ids?.includes(row.id)), error: null };
-      return { data: state.rows, error: null };
+      return { data: state.rows.slice(rangeFrom, rangeTo + 1), error: null };
     };
     const query: Record<string, unknown> = {
       select(value: string) { selected = value; return query; },
-      eq() { return query; }, order() { return query; },
+      eq() { return query; }, order() { return query; }, range(from: number, to: number) { rangeFrom = from; rangeTo = to; return query; },
       in(_column: string, values: string[]) { ids = values; return query; },
       maybeSingle: async () => result(),
       then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) { return Promise.resolve(result()).then(resolve, reject); },
@@ -31,7 +32,7 @@ vi.mock("@/lib/supabase-server", () => ({ getSupabaseServerClient: () => ({
   },
 }) }));
 
-import { previewApkgImport, previewQuestionImport } from "./admin-questoes-server";
+import { importApkg, previewApkgImport, previewQuestionImport } from "./admin-questoes-server";
 
 const id = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 const stored = (index: number, patch: Partial<Question> = {}): Question => ({
@@ -45,9 +46,77 @@ const row = (question: Question, patch: Partial<ImportedQuestion> = {}): Importe
   total_artigos: String(question.total_artigos ?? ""), ultima_alteracao_legislativa: question.ultima_alteracao_legislativa ?? "", id_questao: question.id, ...patch,
 });
 
-beforeEach(() => { state.rows = []; state.identified = []; });
+beforeEach(() => { state.rows = []; state.identified = []; state.rpc.mockClear(); });
 
 describe("APKG preview identity against fetched questions", () => {
+  it("analisa 524 atualizações com 70 colisões e pagina toda a lei", async () => {
+    state.rows = Array.from({ length: 524 }, (_, index) => stored(index + 1)); state.identified = state.rows;
+    const rows = state.rows.map((question, index) => row(question, { line: index + 1, justificativa: "Revisada", ...(index < 70 ? { pergunta: state.rows[454 + index].pergunta } : {}) }));
+    const preview = await previewQuestionImport("lai", { rows, issues: [] }, {}, {});
+    expect(preview.summary).toMatchObject({ atualizadas: 524, novas: 0, erros: 0 });
+    expect(preview.items.slice(0, 70).every((item) => item.duplicate_ids.length === 1)).toBe(true);
+    expect(preview.items[523].existing_id).toBe(id(524));
+  });
+
+  it("confirma APKG binário com colisão via RPC existente, sem inserir nem alterar vínculos", async () => {
+    state.rows = [stored(1), stored(2, { pergunta: "Texto final", resposta: "Errado" })]; state.identified = state.rows;
+    const exported = await buildLawApkg({ slug: "lai", titulo: "LAI" }, [
+      { ...state.rows[0], structure_id: null, pergunta: "Texto final" },
+      { ...state.rows[1], id: "", structure_id: null, ordem: "9" },
+    ], [], { fileName: "collision.apkg" });
+    const file = new File([new Uint8Array(exported.bytes)], exported.filename);
+    const preview = await previewApkgImport("lai", file);
+    expect(preview.summary).toMatchObject({ atualizadas: 1, novas: 0, erros: 0 });
+    const result = await importApkg({ lawSlug: "lai", file, previewToken: preview.preview_token });
+    expect(result).toMatchObject({ atualizadas: 1, importadas: 0 });
+    expect(state.rpc).toHaveBeenCalledTimes(1);
+    const call = state.rpc.mock.calls[0] as unknown as [string, { p_updates: Array<{ id: string; proposed: Record<string, unknown> }> }];
+    expect(call[0]).toBe("admin_apply_apkg_uuid_question_updates");
+    expect(call[1].p_updates).toHaveLength(1);
+    expect(call[1].p_updates[0].id).toBe(id(1));
+    expect(call[1].p_updates[0].proposed).not.toHaveProperty("structure_id");
+    await expect(importApkg({ lawSlug: "lai", file, previewToken: "stale" })).rejects.toThrow(/pr.via mudou/);
+    expect(state.rpc).toHaveBeenCalledTimes(1);
+  }, 30_000);
+
+  it("permite colisões por UUID e exclui novas repetidas sem comparar gabarito", async () => {
+    state.rows = [stored(1), stored(2, { pergunta: "Assertiva igual", resposta: "Errado" })];
+    state.identified = state.rows;
+    const preview = await previewQuestionImport("lai", { rows: [
+      row(state.rows[0], { pergunta: "<p>Assertiva igual</p>", deck: ["LAI", "Capítulo I"] }),
+      row(state.rows[1], { line: 2, id_questao: undefined, ordem: "9", resposta: "Certo", deck: ["LAI", "Capítulo II"] }),
+    ], issues: [] }, {}, {});
+    expect(preview.summary).toMatchObject({ atualizadas: 1, novas: 0, erros: 0 });
+    expect(preview.items[0]).toMatchObject({ existing_id: id(1), status: "atualizada", duplicate_ids: expect.arrayContaining([id(2)]) });
+    expect(preview.items[1]).toMatchObject({ existing_id: null, status: "nova_duplicada" });
+    expect(preview.structure).toMatchObject({ novas: 0, revisoes: 0, items: [] });
+  });
+
+  it("sinaliza colisões entre atualizações do lote e exclui todas as novas repetidas entre si", async () => {
+    state.rows = [stored(1), stored(2)]; state.identified = state.rows;
+    const preview = await previewQuestionImport("lai", { rows: [
+      row(state.rows[0], { pergunta: "Texto comum" }),
+      row(state.rows[1], { line: 2, pergunta: "Texto comum", resposta: "Errado" }),
+      row(state.rows[0], { line: 3, id_questao: undefined, pergunta: "Nova repetida", ordem: "3" }),
+      row(state.rows[0], { line: 4, id_questao: undefined, pergunta: "Nova repetida", ordem: "4" }),
+    ], issues: [] }, {}, {});
+    expect(preview.summary).toMatchObject({ atualizadas: 2, novas: 0, erros: 0 });
+    expect(preview.items.map((item) => item.status)).toEqual(["atualizada", "atualizada", "nova_duplicada", "nova_duplicada"]);
+    expect(preview.items[0].duplicate_ids).toEqual([id(2)]);
+  });
+
+  it("reimportação idêntica mantém UUID e aviso sem nova atualização", async () => {
+    state.rows = [stored(1, { pergunta: "Texto comum" }), stored(2, { pergunta: "Texto comum" })]; state.identified = state.rows;
+    const preview = await previewQuestionImport("lai", { rows: [row(state.rows[0])], issues: [] }, {}, {});
+    expect(preview.summary).toMatchObject({ atualizadas: 0, novas: 0, duplicadas: 1, erros: 0 });
+    expect(preview.items[0].duplicate_ids).toEqual([id(2)]);
+  });
+
+  it("rejeita UUID repetido antes da confirmação", async () => {
+    state.rows = [stored(1)]; state.identified = state.rows;
+    const preview = await previewQuestionImport("lai", { rows: [row(state.rows[0]), row(state.rows[0], { line: 2 })], issues: [] }, {}, {});
+    expect(preview.summary.erros).toBe(2);
+  });
   it("runs a synthetic binary APKG with 124 UUID updates through parser and preview", async () => {
     state.rows = Array.from({ length: 124 }, (_, index) => stored(index + 1));
     state.identified = state.rows.map(({ id: questionId, lei_id, ativo }) => ({ id: questionId, lei_id, ativo }));

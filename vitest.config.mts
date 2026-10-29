@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
 
 export default defineConfig({
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: { alias: { "@": resolve(import.meta.dirname, ".") } },
   test: {
     // A Central da Lei é um repositório Git independente, já publicado pelo
