@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LawDuplicateCleanup } from "@/components/admin/law-duplicate-cleanup";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -84,6 +85,7 @@ export function ArticleSourceConflicts({ data, filters, baseHref = "/admin/artig
   async function previewDuplicateBatch(questions: DuplicateQuestion[]) { if (!filters.law) { setBatchError("Escolha uma lei antes de preparar a inativação de duplicatas."); return; } setBatchBusy(true); setBatchError(""); setDiagnostic(null); try { setDuplicateBulkPreview(await requestStructuralBatch({ action: "previsualizar_inativacao_duplicadas", law: filters.law, question_ids: questions.map((question) => question.id) }) as DuplicateBulkPreview); } catch (error) { showFailure(error, "Não foi possível preparar a inativação das duplicatas."); } finally { setBatchBusy(false); } }
   async function applyDuplicateBatch() { if (!duplicateBulkPreview) return; setBatchBusy(true); setBatchError(""); setDiagnostic(null); try { const result = await requestStructuralBatch({ action: "aplicar_inativacao_duplicadas", law: duplicateBulkPreview.law, question_ids: duplicateBulkPreview.candidates.map((question) => question.id), confirmation: "INATIVAR DUPLICADAS" }) as { applied: string[]; failed: Array<{ id: string; reason: string }> }; setDuplicateBulkPreview(null); setBatchError(result.failed.length ? `${result.applied.length} duplicata(s) inativada(s); ${result.failed.length} não foram alteradas. Consulte os detalhes na lista.` : `${result.applied.length} duplicata(s) inativada(s). A questão principal foi preservada e pode ser reativada na gestão de questões.`); router.refresh(); } catch (error) { showFailure(error, "Não foi possível inativar as duplicatas."); } finally { setBatchBusy(false); } }
   return <section className="grid gap-5">
+    {filters.law && baseQuery.visao === "conflitos" ? <LawDuplicateCleanup law={filters.law} /> : null}
     <section className="grid gap-4 lg:grid-cols-2" aria-label="Resumo de erros e avisos">
       <section className="grid gap-3 rounded-2xl border border-red-200 bg-red-50/60 p-4" aria-labelledby="conflitos-erros-title">
         <header><p className="text-xs font-black uppercase tracking-[.08em] text-red-700">Erros</p><h2 id="conflitos-erros-title" className="mt-1 text-base font-black text-slate-900">Exigem correção</h2></header>
@@ -124,3 +126,4 @@ function Indicator({ label, value, tone }: { label: string; value: number; tone:
 }
 
 export const articleConflictSessionKey = SESSION_KEY;
+

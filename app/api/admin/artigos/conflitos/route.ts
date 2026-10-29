@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { previewLawDuplicateCleanup, applyLawDuplicateCleanup } from "@/lib/admin-law-duplicate-cleanup-server";
 import {
   AdminArticleConflictError,
   applyArticleSourceStandardization,
@@ -86,6 +87,12 @@ export async function POST(request: Request) {
     if (body.action === "aplicar_padronizacao_nome_curto") {
       return NextResponse.json(await applyArticleShortNameStandardization({ law: body.law, expected: body.expected, confirmation: String(body.confirmation ?? ""), operationId: body.operation_id }), { headers });
     }
+    if (body.action === "previsualizar_duplicatas_baralho") {
+      return NextResponse.json(await previewLawDuplicateCleanup(body.law), { headers });
+    }
+    if (body.action === "inativar_duplicatas_baralho") {
+      return NextResponse.json(await applyLawDuplicateCleanup({ law: body.law, token: body.token, confirmation: body.confirmation }), { headers });
+    }
     if (body.action === "previsualizar_inativacao_duplicadas") {
       return NextResponse.json(await previewArticleDuplicateDeactivation({ law: body.law, questionIds: body.question_ids }), { headers });
     }
@@ -97,3 +104,4 @@ export async function POST(request: Request) {
     return failure(error, action, operationId);
   }
 }
+
