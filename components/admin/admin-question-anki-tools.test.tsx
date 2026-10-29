@@ -11,7 +11,7 @@ describe("APKG preview presentation", () => {
     const guide = renderToStaticMarkup(createElement(AdminQuestionAnkiTools, { lawSlug: "lai", lawName: "LAI" }));
     expect(guide).toContain("Como importar e atualizar pelo APKG");
     expect(guide).toContain("Importar arquivo antigo pode sobrescrever");
-    const html = renderToStaticMarkup(createElement(ApkgPreviewDetails, { preview: {
+    const html = renderToStaticMarkup(createElement(ApkgPreviewDetails, { lawSlug: "lai", preview: {
       total: 2, preview_token: "test", errors: [], warnings: [],
       summary: { novas: 0, atualizadas: 1, duplicadas: 0, conflitos: 0, avisos: 0, erros: 0 },
       structure: { items: [], existentes: 0, novas: 0, revisoes: 0 },
@@ -25,7 +25,11 @@ describe("APKG preview presentation", () => {
     expect(html).toContain("Atualizações por UUID continuam permitidas");
     expect(html).toContain("Antes:");
     expect(html).toContain("Depois:");
-    expect(html).toContain("/admin/artigos?aba=conflitos");
+    expect(html).toContain("/admin/leis/lai/questoes?visao=conflitos&amp;tipo=pergunta_duplicada");
+    expect(guide).toContain("/admin/leis/lai/questoes?visao=conflitos&amp;tipo=pergunta_duplicada");
+    expect(guide).toContain("Revisar duplicatas em Conflitos de questões");
+    expect(guide).not.toContain("Revisar duplicatas na Central do Artigo");
+    expect(html).not.toContain("/admin/artigos?aba=conflitos");
   });
   it("separa contagens de questões novas, atualizações, idênticas e bloqueadas", () => {
     expect(component).toContain('<strong>Novas:</strong> {preview.summary.novas}');
@@ -55,5 +59,25 @@ describe("APKG preview presentation", () => {
     const confirmation = component.indexOf("Confirmar atualização de");
     expect(result).toBeGreaterThan(-1);
     expect(confirmation).toBeGreaterThan(result);
+  });
+});
+
+
+
+describe("destino de duplicatas por lei", () => {
+  it("preserva e codifica o slug da lei no link do guia", () => {
+    for (const slug of ["l8429", "lei/teste & revisão"]) {
+      const html = renderToStaticMarkup(createElement(AdminQuestionAnkiTools, { lawSlug: slug, lawName: "Lei" }));
+      const href = `/admin/leis/${encodeURIComponent(slug)}/questoes?visao=conflitos&amp;tipo=pergunta_duplicada`;
+      expect(html).toContain(`href="${href}"`);
+    }
+  });
+
+  it("usa o mesmo destino no guia, na prévia e no resultado sem mudar conflitos de artigo", () => {
+    expect(component.match(/href=\{duplicateConflictsHref\(lawSlug\)\}/g)).toHaveLength(3);
+    expect(component.match(/<ApkgPreviewDetails preview=\{preview\} lawSlug=\{lawSlug\} \/>/g)).toHaveLength(3);
+    expect(component).not.toMatch(/href="\/admin\/artigos\?aba=conflitos">Revisar duplicatas/);
+    expect(component).toContain('href="/admin/artigos?aba=conflitos">Ver conflitos na Central do Artigo');
+    expect(component).toContain('/admin/artigos/conflitos/${encodeURIComponent(item.slug.toLowerCase())}/${encodeURIComponent(item.ordem)}');
   });
 });
