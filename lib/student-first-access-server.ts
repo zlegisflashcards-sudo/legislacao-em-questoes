@@ -153,15 +153,17 @@ export async function sendManualStudentAccessEmail(supabase: SupabaseClient, stu
   const idempotencyKey = purchaseId ? `administrativo:${purchaseId}` : `administrativo-email-acesso:${randomUUID()}`;
   try {
     const delivery = await deliverStudentAccessEmail(supabase, { ...student, email: normalizeStudentAccessEmail(String(student.email)) }, { accessLabel: context?.accessLabel ?? "seus acessos", idempotencyKey, origin: "manual_admin", eventId: idempotencyKey });
+    const sentAt = new Date().toISOString();
     if (purchaseId) {
-      const saved = await supabase.from("alunos_notificacoes_acesso").upsert({ aluno_id: student.id, idempotency_key: idempotencyKey, tipo: "nova_aquisicao", origem: "administrativo", descricao: context?.accessLabel ?? "seus acessos", status: "enviado", enviado_em: new Date().toISOString(), erro: null }, { onConflict: "idempotency_key" });
+      const saved = await supabase.from("alunos_notificacoes_acesso").upsert({ aluno_id: student.id, idempotency_key: idempotencyKey, tipo: "nova_aquisicao", origem: "administrativo", descricao: context?.accessLabel ?? "seus acessos", status: "enviado", enviado_em: sentAt, erro: null }, { onConflict: "idempotency_key" });
       if (saved.error) throw new Error("Nao foi possivel registrar o e-mail enviado para esta compra.");
     }
-    await audit(supabase, "email_acesso_manual_enviado", student.id, { tipo: delivery.type, status_http: delivery.statusHttp, resend_code: delivery.resendCode, compra_id: purchaseId ?? null }, actorUserId);
-    return { sent: true, type: delivery.type };
+    await audit(supabase, "email_acesso_manual_enviado", student.id, { tipo: delivery.type, status_http: delivery.statusHttp, resend_code: delivery.resendCode, compra_id: purchaseId ?? null, enviado_em: sentAt }, actorUserId);
+    return { sent: true, type: delivery.type, sentAt };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Falha desconhecida";
     await audit(supabase, "email_acesso_manual_falhou", student.id, { motivo: message }, actorUserId);
     throw error;
   }
 }
+
