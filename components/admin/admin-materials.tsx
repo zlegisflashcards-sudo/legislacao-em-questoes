@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CommercialDataTable as DataTable, CommercialEditForm as EditForm } from "@/components/admin/commercial-admin-ui";
 import { LawSearchSelect } from "@/components/law-search-select";
+import { lawMaterialFormData } from "@/lib/law-material-form";
 
 type Row = Record<string, unknown>;
 type PageResult = { items: Row[]; page: number; pages: number; total: number };
@@ -11,6 +12,7 @@ type MaterialMutation = (resource: "materiais", payload: Row, success: string) =
 const text = (value: unknown) => value == null ? "" : String(value);
 const object = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 const relation = (row: Row, key: string) => object(row[key]);
+const materialUrl = (row: Row) => text(row.url_externa).trim();
 
 async function requestJson(url: string, init?: RequestInit) { const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Não foi possível concluir a operação."); return data; }
 
@@ -23,8 +25,9 @@ export function LawMaterialsAdmin({ law }: { law: { id: number; slug: string; ti
 }
 
 export function MaterialPanel({ rows, laws, fixedLaw, editing, setEditing, busy, mutate }: { rows: Row[]; laws: Row[]; fixedLaw?: Row; editing: Row | null; setEditing: (row: Row | null) => void; busy: boolean; mutate: MaterialMutation }) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); await mutate("materiais", { action: editing ? "atualizar" : "criar", id: editing?.id, data: { ...data, ...(editing ? {} : { lei_id: fixedLaw ? Number(fixedLaw.id) : Number(data.lei_id) }), ordem: Number(data.ordem), ativo: data.ativo === "true", quantidade_itens: data.quantidade_itens === "" ? null : Number(data.quantidade_itens) } }, "Material salvo com sucesso."); }
-  return <><EditForm key={text(editing?.id) || "new"} title={editing ? "Editar material" : "Cadastrar material"} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); const payload = fixedLaw ? lawMaterialFormData({ titulo: text(data.titulo), url_externa: text(data.url_externa) }, Number(fixedLaw.id), Boolean(editing)) : { ...data, ...(editing ? {} : { lei_id: Number(data.lei_id) }), ordem: Number(data.ordem), ativo: data.ativo === "true", quantidade_itens: data.quantidade_itens === "" ? null : Number(data.quantidade_itens) }; await mutate("materiais", { action: editing ? "atualizar" : "criar", id: editing?.id, data: payload }, "Material salvo com sucesso."); }
+  return <><EditForm key={text(editing?.id) || "new"} title={fixedLaw ? (editing ? "Editar legislação esquematizada" : "Legislação esquematizada") : (editing ? "Editar material" : "Cadastrar material")} onSubmit={submit} onCancel={() => setEditing(null)} busy={busy}>
+    {fixedLaw ? <><label>Título<input name="titulo" defaultValue={editing ? text(editing.titulo) : text(fixedLaw.titulo)} placeholder="Nome da lei" required /></label><label>URL do PDF<input name="url_externa" type="url" defaultValue={text(editing?.url_externa)} placeholder="https://..." /></label></> : <>
     {!editing && !fixedLaw ? <MaterialLawSelect laws={laws} /> : null}
     <input name="tipo" type="hidden" value="pdf" />
     <input name="titulo" defaultValue={text(editing?.titulo)} placeholder="Título" required /><textarea name="descricao" defaultValue={text(editing?.descricao)} placeholder="Descrição" />
@@ -33,8 +36,8 @@ export function MaterialPanel({ rows, laws, fixedLaw, editing, setEditing, busy,
     <label>Quantidade de itens<input name="quantidade_itens" type="number" min="0" defaultValue={text(editing?.quantidade_itens)} /></label>
     <label>Versão do material<input name="versao_material" defaultValue={text(editing?.versao_material)} /></label><label>Data de revisão<input name="revisado_em" type="date" defaultValue={text(editing?.revisado_em)} /></label><label>Data de publicação<input name="publicado_em" type="date" defaultValue={text(editing?.publicado_em)} /></label><label>Entrega prevista<input name="data_entrega_prevista" type="date" defaultValue={text(editing?.data_entrega_prevista)} /></label>
     <textarea name="observacao_interna" defaultValue={text(editing?.observacao_interna)} placeholder="Observação interna — nunca exibida ao aluno ou catálogo" />
-    <input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required /><select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
-  </EditForm><DataTable headers={["Material", "Lei", "Versão / quantidade", "Estado", "Ações"]}>{rows.map((row) => <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small><a href={text(row.url_externa)} target="_blank" rel="noreferrer">Abrir URL administrativa</a></small></td><td>{text(relation(row,"leis").titulo)}</td><td>{text(row.versao_material) || "—"}<small>{row.quantidade_itens == null ? "Quantidade não informada" : `${text(row.quantidade_itens)} ${row.tipo === "flashcards" ? "flashcards" : "itens"}`}</small></td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td><button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("materiais", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do material atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>)}</DataTable></>;
+    <input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required /><select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select></>}
+  </EditForm><DataTable headers={["Material", "Lei", "Versão / quantidade", "Estado", "Ações"]}>{rows.map((row) => { const url = materialUrl(row); return <tr key={text(row.id)}><td><strong>{text(row.titulo)}</strong><small>{url ? <a href={url} target="_blank" rel="noreferrer">Visualizar PDF</a> : "PDF sem URL cadastrada"}</small></td><td>{text(relation(row,"leis").titulo)}</td><td>{text(row.versao_material) || "—"}<small>{row.quantidade_itens == null ? "Quantidade não informada" : `${text(row.quantidade_itens)} ${row.tipo === "flashcards" ? "flashcards" : "itens"}`}</small></td><td>{row.ativo ? "Ativo" : "Inativo"}</td><td className="commercial-table-actions">{url ? <a className="admin-button secondary small" href={url} target="_blank" rel="noreferrer">Visualizar PDF</a> : null}<button onClick={() => setEditing(row)}>Editar</button><button disabled={busy} onClick={() => void mutate("materiais", { action: "atualizar", id: row.id, data: { ativo: !row.ativo } }, "Estado do material atualizado.")}>{row.ativo ? "Desativar" : "Ativar"}</button></td></tr>; })}</DataTable></>;
 }
 
 function MaterialLawSelect({ laws }: { laws: Row[] }) {

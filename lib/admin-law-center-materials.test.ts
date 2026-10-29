@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { lawMaterialFormData } from "./law-material-form";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const client = read("components/admin/admin-materials.tsx");
-const legacy = read("components/admin/commercial-admin.tsx");
 const server = read("lib/commercial-admin-server.ts");
 const contextRoute = read("app/api/admin/leis/[slug]/materiais/route.ts");
 
@@ -24,10 +24,18 @@ describe("Materiais na Central da Lei", () => {
   });
 
   it("cria material já vinculado à lei contextual sem seletor redundante", () => {
-    expect(client).toContain("fixedLaw ? Number(fixedLaw.id) : Number(data.lei_id)");
+    expect(client).toContain("Number(fixedLaw.id), Boolean(editing)");
     expect(client).toContain("!editing && !fixedLaw");
     expect(read("app/admin/leis/[slug]/materiais/page.tsx")).not.toContain("LawSearchSelect");
     expect(server).toContain("Number(data.lei_id) !== contextLawId");
+  });
+
+  it("simplifica o formulário contextual e preserva os demais dados na edição", () => {
+    expect(client).toContain('"Legislação esquematizada"');
+    expect(client).toContain('editing ? text(editing.titulo) : text(fixedLaw.titulo)');
+    expect(lawMaterialFormData({ titulo: "Lei exemplo", url_externa: "https://example.com/lei.pdf" }, 12, false)).toEqual({ titulo: "Lei exemplo", url_externa: "https://example.com/lei.pdf", lei_id: 12, tipo: "pdf", provedor: "externo", acao: "abrir", ordem: 0, ativo: true });
+    expect(lawMaterialFormData({ titulo: "Lei exemplo", url_externa: "https://drive.google.com/file/d/123/view" }, 12, false)).toMatchObject({ provedor: "google_drive" });
+    expect(lawMaterialFormData({ titulo: "Novo título", url_externa: "" }, 12, true)).toEqual({ titulo: "Novo título", url_externa: "" });
   });
 
   it("edita e ativa somente materiais pertencentes à lei contextual", () => {
@@ -35,6 +43,12 @@ describe("Materiais na Central da Lei", () => {
     expect(server).toContain('.eq("id", materialId).eq("lei_id", contextLawId)');
     expect(server).toContain("Material não encontrado para a lei selecionada.");
     expect(client).toContain('action: "atualizar", id: row.id, data: { ativo: !row.ativo }');
+  });
+
+  it("permite visualizar o PDF vinculado sem oferecer um link vazio", () => {
+    expect(client).toContain('const materialUrl = (row: Row) => text(row.url_externa).trim()');
+    expect(client).toContain('>Visualizar PDF</a>');
+    expect(client).toContain('"PDF sem URL cadastrada"');
   });
 
   it("envia a ação padrão única para materiais", () => {
@@ -46,9 +60,7 @@ describe("Materiais na Central da Lei", () => {
     expect(client).not.toContain('["abrir","baixar","assistir"].map');
   });
 
-  it("mantém Admin Comercial e Central no mesmo MaterialPanel", () => {
-    expect(legacy).toContain('tab === "materiais" ? <MaterialPanel');
-    expect(legacy).toContain('from "@/components/admin/admin-materials"');
+  it("mantém a Central da Lei no MaterialPanel compartilhado", () => {
     expect(client).toContain("<MaterialPanel rows={result.items} laws={[law]} fixedLaw={law}");
     expect(client.match(/function MaterialPanel/g)).toHaveLength(1);
     expect(client).toContain('import { LawSearchSelect } from "@/components/law-search-select"');
