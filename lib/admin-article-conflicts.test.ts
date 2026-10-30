@@ -179,6 +179,13 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Exigem correção");
     expect(list).toContain("Exigem revisão editorial");
     expect(list).toContain('tone="error" label="Conflitos estruturais"');
+    expect(list).toContain('href={hrefForType("estrutural")}');
+    expect(list).toContain('params.set("tipo", type)');
+    expect(list).toContain('params.set("tipo_exato", "0")');
+    expect(server).toContain('selectedType && filters.typeExact !== false');
+    expect(server).toContain("matchesOrphanSelectedType");
+    expect(server).toContain("selectedTypes.has(orphanType)");
+    expect(list).toContain('aria-label={`Filtrar por ${label}`}');
     expect(list).toContain('tone="error" label="Perguntas duplicadas"');
     expect(list).toContain('tone="error" label="Ordens inválidas"');
     expect(list).toContain('tone="error" label="Vínculos ou referências inválidos"');
@@ -192,6 +199,10 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Conteúdo estranho no Assunto");
     expect(list).toContain("Trecho detectado:");
     expect(list).toContain("Aviso editorial sem correção automática");
+    expect(list).toContain("Entenda o conflito");
+    expect(list).toContain("Assunto cadastrado");
+    expect(list).toContain("Ordem indicada pelo Assunto");
+    expect(list).toContain("Diferença identificada:");
   });
 
   it("lista questões sem bloco como pendência editorial e abre o editor para vinculá-las ao bloco correto", () => {

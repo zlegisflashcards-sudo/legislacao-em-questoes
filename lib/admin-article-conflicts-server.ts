@@ -40,6 +40,7 @@ export type ArticleConflictFilters = {
   law?: string;
   type?: string;
   typeMode?: "any" | "all";
+  typeExact?: boolean;
   page?: number;
   orderDirection?: "asc" | "desc";
 };
@@ -250,11 +251,17 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const hasTypeFilter = selectedTypes.size > 0;
   const typeMode = filters.typeMode === "all" ? "all" : "any";
   const selectedType = selectedTypes.size === 1 ? [...selectedTypes][0] : null;
-  const matchesSelectedTypes = (matchingTypes: Set<string>) => !hasTypeFilter || (selectedType
+  const matchesSelectedTypes = (matchingTypes: Set<string>) => !hasTypeFilter || (selectedType && filters.typeExact !== false
     ? matchingTypes.size === 1 && matchingTypes.has(selectedType)
     : typeMode === "all"
       ? [...selectedTypes].every((value) => matchingTypes.has(value))
       : [...selectedTypes].some((value) => matchingTypes.has(value)));
+  // Contextos estruturais/legislativos são agrupados por Ordem. Já os avisos de
+  // bloco são individuais por questão. Ao filtrar um cartão de contexto, não
+  // repetimos cada questão órfã daquele mesmo contexto na lista.
+  const matchesOrphanSelectedType = (matchingTypes: Set<string>, orphanType: string) => !hasTypeFilter
+    ? true
+    : selectedTypes.has(orphanType) && matchesSelectedTypes(matchingTypes);
   const filtered = contextKeys.filter((key) => {
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const slug = group?.slug ?? structuralGroup!.slug;
     if (law && slug.toLocaleLowerCase("pt-BR") !== law) return false;
@@ -279,7 +286,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
       legalByKey.has(key) ? "legislacao" : null,
     ].filter((value): value is string => Boolean(value)));
-    return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && matchesSelectedTypes(matchingTypes);
+    return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && matchesOrphanSelectedType(matchingTypes, orphanReviewType(status).code);
   });
   // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
   // atualmente escolhido no filtro. Assim o quadro funciona como um placar
@@ -642,8 +649,6 @@ async function shortNameStandardizationCandidates(rawLaw: unknown) {
   const rows = await loadQuestionsForLaw(true, law);
   const candidates = rows.flatMap((row): ShortNameStandardizationCandidate[] => {
     if (row.slug.toLocaleLowerCase("pt-BR") !== law) return [];
-    const validation = validateQuestionStructure({ ...row, lawShortName: shortName });
-    if (!validation.differences?.some((difference) => difference.startsWith("lei divergente"))) return [];
     const before = row.assunto ?? "";
     const after = canonicalizeQuestionLawReference(before, shortName);
     return after ? [{ id: row.id, slug: row.slug.toUpperCase(), ordem: row.ordem, before, after }] : [];
