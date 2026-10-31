@@ -21,6 +21,8 @@ import { resolveContinuousReadingIntegrity } from "@/lib/legisbot/continuous-rea
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 import { findQuestionSubjectEditorialWarnings } from "@/lib/question-subject-editorial-warnings";
 
+import { questionConflictProvenance } from "@/lib/question-conflict-provenance";
+
 const PAGE_SIZE = 20;
 const STRUCTURAL_BATCH_SIZE = 100;
 const SUBJECT_WARNING_PREVIEW_LIMIT = 100;
@@ -239,11 +241,15 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const groups = groupLegisBotSourceConflicts(activeRows);
   const duplicateStatements = groupDuplicateQuestionStatements(activeRows);
   const orphanQuestions = await articleBlockOrphans(activeRows);
-  const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; validation: StructuralValidation }>();
+  const structural = new Map<string, { slug: string; ordem: string; questions: LegisBotConflictQuestion[]; provenance: ReturnType<typeof questionConflictProvenance> }>();
   const byContext = new Map<string, LegisBotConflictQuestion[]>();
   for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
   const lawsForValidation = await lawMap();
-  for (const [key, questions] of byContext) { const lawShortName = lawsForValidation.get(questions[0].slug.toUpperCase())?.shortName; const validation = questions.map((question) => validateQuestionStructure({ ...question, lawShortName })).find((item) => item.status !== "valid"); if (validation) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, validation }); }
+  for (const [key, questions] of byContext) {
+    const lawShortName = lawsForValidation.get(questions[0].slug.toUpperCase())?.shortName;
+    const provenance = questionConflictProvenance(questions, lawShortName);
+    if (provenance.affected.length) structural.set(key, { slug: questions[0].slug.toUpperCase(), ordem: questions[0].ordem, questions, provenance });
+  }
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys()])];
   const laws = lawsForValidation;
@@ -266,8 +272,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const slug = group?.slug ?? structuralGroup!.slug;
     if (law && slug.toLocaleLowerCase("pt-BR") !== law) return false;
     const matchingTypes = new Set([
-      structuralGroup?.validation.status === "conflict" ? "estrutural" : null,
-      structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
+      structuralGroup?.provenance.hasConflict ? "estrutural" : null,
+      structuralGroup?.provenance.hasPossibleConflict ? "possivel_estrutural" : null,
       group ? "legislacao" : null,
     ].filter((value): value is string => Boolean(value)));
     if (!matchesSelectedTypes(matchingTypes)) return false;
@@ -282,8 +288,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const structuralGroup = structural.get(key);
     const matchingTypes = new Set([
       orphanReviewType(status).code,
-      structuralGroup?.validation.status === "conflict" ? "estrutural" : null,
-      structuralGroup?.validation.status === "possible_conflict" ? "possivel_estrutural" : null,
+      structuralGroup?.provenance.hasConflict ? "estrutural" : null,
+      structuralGroup?.provenance.hasPossibleConflict ? "possivel_estrutural" : null,
       legalByKey.has(key) ? "legislacao" : null,
     ].filter((value): value is string => Boolean(value)));
     return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && matchesOrphanSelectedType(matchingTypes, orphanReviewType(status).code);
@@ -306,8 +312,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const subjectWarningTotal = allSubjectWarnings.length;
   const subjectWarnings = allSubjectWarnings.slice(0, SUBJECT_WARNING_PREVIEW_LIMIT);
   const typeCounts = {
-    structural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "conflict").length,
-    possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.validation.status === "possible_conflict").length,
+    structural: contextsForLaw.filter((key) => structural.get(key)?.provenance.hasConflict).length,
+    possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.provenance.hasPossibleConflict).length,
     legislation: contextsForLaw.filter((key) => legalByKey.has(key)).length,
     duplicateStatements: duplicateStatements.filter((group) => !law || group.questions[0]?.slug.toLocaleLowerCase("pt-BR") === law).length,
     orphanQuestions: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).editorial).length,
@@ -348,6 +354,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
         versions: 1,
         comment: null,
         structuralValidation: null,
+        structuralQuestions: [], structuralTotal: 0, structuralBatchEligible: false,
         editorialGranularityPending: false,
         reviewTypes: [orphanReviewType(status).label],
         duplicateQuestions: [],
@@ -370,6 +377,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
         versions: 1,
         comment: null,
         structuralValidation: null,
+        structuralQuestions: [], structuralTotal: 0, structuralBatchEligible: false,
         editorialGranularityPending: false,
         reviewTypes: ["Pergunta duplicada"],
         editorUrl: null,
@@ -388,7 +396,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     const group = legalByKey.get(key); const structuralGroup = structural.get(key); const questions = group?.questions ?? structuralGroup!.questions; const slug = group?.slug ?? structuralGroup!.slug; const currentOrder = group?.ordem ?? structuralGroup!.ordem;
     const metadata = laws.get(slug);
     const reviewTypes = [
-      structuralGroup?.validation.status === "conflict" ? "Conflito estrutural" : structuralGroup?.validation.status === "possible_conflict" ? "Possível conflito estrutural" : null,
+      structuralGroup?.provenance.hasConflict ? "Conflito estrutural" : null,
+      structuralGroup?.provenance.hasPossibleConflict ? "Possível conflito estrutural" : null,
       group ? "Legislação divergente" : null,
     ].filter((value): value is string => Boolean(value));
     return {
@@ -397,16 +406,19 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
       lawTitle: metadata?.title ?? questions[0]?.titulo ?? slug,
       lawCode: metadata?.code ?? null,
       titulo: questions.find((item) => item.titulo?.trim())?.titulo ?? null,
-      assunto: questions.find((item) => item.assunto?.trim())?.assunto ?? null,
+      assunto: structuralGroup ? null : questions.find((item) => item.assunto?.trim())?.assunto ?? null,
       flashcards: questions.length,
       versions: group?.versions.size ?? 1,
       comment: null,
-      structuralValidation: structuralGroup?.validation ?? null,
+      structuralValidation: structuralGroup?.provenance.affected[0]?.validation ?? null,
+      structuralQuestions: structuralGroup?.provenance.affected ?? [],
+      structuralTotal: structuralGroup?.provenance.total ?? questions.length,
+      structuralBatchEligible: structuralGroup?.provenance.batchEligible ?? false,
       editorialGranularityPending: false,
       reviewTypes,
       duplicateQuestions: [],
       orphanQuestion: null,
-      editorUrl: `/admin/leis/${encodeURIComponent(slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(questions[0]!.id)}&retorno=${encodeURIComponent(`/admin/leis/${slug.toLowerCase()}/questoes?visao=conflitos`)}`,
+      editorUrl: `/admin/leis/${encodeURIComponent(slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(structuralGroup?.provenance.affected[0]?.id ?? questions[0]!.id)}&retorno=${encodeURIComponent(`/admin/leis/${slug.toLowerCase()}/questoes?visao=conflitos`)}`,
     };
   });
   // Os indicadores precisam refletir exatamente o mesmo universo da lista.
@@ -419,7 +431,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   }));
   const structuralSuggestions = filtered.flatMap((key) => {
     const item = structural.get(key);
-    return item?.validation.status === "conflict" && item.validation.expectedOrder ? [{ slug: item.slug, ordem: item.ordem }] : [];
+    return item?.provenance.batchEligible ? [{ slug: item.slug, ordem: item.ordem }] : [];
   }).slice(0, STRUCTURAL_BATCH_SIZE);
   return {
     items,

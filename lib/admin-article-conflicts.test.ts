@@ -53,6 +53,7 @@ describe("Central do Artigo — administração de conflitos", () => {
   const server = readFileSync("lib/admin-article-conflicts-server.ts", "utf8");
   const api = readFileSync("app/api/admin/artigos/conflitos/route.ts", "utf8");
   const list = readFileSync("components/admin/article-source-conflicts.tsx", "utf8");
+  const evidence = readFileSync("components/admin/question-conflict-evidence.tsx", "utf8");
   const detail = readFileSync("components/admin/article-source-conflict-detail.tsx", "utf8");
   const panel = readFileSync("components/admin/question-standardization-panel.tsx", "utf8");
   const questionPage = readFileSync("app/admin/leis/[slug]/questoes/page.tsx", "utf8");
@@ -199,10 +200,10 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Conteúdo estranho no Assunto");
     expect(list).toContain("Trecho detectado:");
     expect(list).toContain("Aviso editorial sem correção automática");
-    expect(list).toContain("Entenda o conflito");
-    expect(list).toContain("Assunto cadastrado");
-    expect(list).toContain("Ordem indicada pelo Assunto");
-    expect(list).toContain("Diferença identificada:");
+    expect(evidence).toContain("Entenda o conflito");
+    expect(evidence).toContain("Assunto cadastrado");
+    expect(evidence).toContain("Ordem indicada pelo Assunto");
+    expect(evidence).toContain("Diferença identificada:");
   });
 
   it("lista questões sem bloco como pendência editorial e abre o editor para vinculá-las ao bloco correto", () => {
