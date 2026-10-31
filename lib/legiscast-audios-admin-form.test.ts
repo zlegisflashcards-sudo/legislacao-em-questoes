@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { filterLegiscastAdminLaws, normalizeLegiscastPdfPage } from "@/lib/legiscast-audios-admin-form";
+import { filterLegiscastAdminLaws } from "@/lib/legiscast-audios-admin-form";
 
 const client = readFileSync("components/admin/legiscast-audios-admin.tsx", "utf8");
+const lawSearchSelect = readFileSync("components/law-search-select.tsx", "utf8");
 const server = readFileSync("lib/admin-legiscast-audios-server.ts", "utf8");
 
 const laws = [
@@ -18,33 +19,24 @@ describe("formulário Admin LegisCast", () => {
   });
 
   it("implementa seleção pesquisável e acessível por teclado", () => {
-    for (const expected of ['role="combobox"', 'role="listbox"', 'event.key === "Enter"', 'event.key === "Escape"', 'event.key === "ArrowDown"', 'aria-label="Limpar lei selecionada"']) expect(client).toContain(expected);
-    expect(client).toContain("filterLegiscastAdminLaws(laws, query)");
+    for (const expected of ['role="combobox"', 'role="listbox"', 'aria-expanded={open}', 'aria-label="Limpar lei selecionada"']) expect(lawSearchSelect).toContain(expected);
+    expect(client).toContain("<LawSearchSelect");
   });
 
-  it("filtra estruturas pela lei e carrega a página existente", () => {
+  it("filtra estruturas pela lei sem exigir página de PDF", () => {
     expect(client).toContain("structureOptions(structures, Number(uploadLawId))");
-    expect(client).toContain("selectedStructure?.pdf_page");
     expect(client).toContain("setUploadStructureId(\"\")");
-  });
-
-  it("normaliza página vazia e aceita somente inteiro positivo", () => {
-    expect(normalizeLegiscastPdfPage("")).toBeNull();
-    expect(normalizeLegiscastPdfPage(" 7 ")).toBe(7);
-    for (const invalid of ["0", "-1", "1.5", "texto"]) expect(() => normalizeLegiscastPdfPage(invalid)).toThrow("número inteiro maior ou igual a 1");
-  });
-
-  it("salva pdf_page na estrutura oficial antes de processar o áudio", () => {
-    expect(client).toContain('operation: "update-structure-pdf-page"');
-    expect(client.indexOf('operation: "update-structure-pdf-page"')).toBeLessThan(client.indexOf('operation: "authorize-original"'));
-    expect(server).toContain('.from("law_structure").update({ pdf_page: pdfPage');
+    expect(client).not.toContain('name="pdf_page"');
+    expect(client).not.toContain("Página no PDF");
+    expect(client).not.toContain('operation: "update-structure-pdf-page"');
     expect(client).not.toContain("legiscast_audios.pdf_page");
+    expect(server).toContain('.from("law_structure").update({ pdf_page: pdfPage');
   });
 
   it("mantém título opcional e layout responsivo sem overflow horizontal", () => {
-    expect(client).toContain("Opcional. Se ficar vazio, será usado o nome da estrutura vinculada.");
+    expect(client).toContain("Opcional. Usa o nome do trecho se ficar vazio.");
     expect(client).not.toContain('name="titulo" required');
-    expect(client).toContain("grid-cols-1 gap-4 lg:grid-cols-2");
+    expect(client).toContain("grid gap-4 rounded-xl");
     expect(client).toContain("min-w-0");
   });
 });

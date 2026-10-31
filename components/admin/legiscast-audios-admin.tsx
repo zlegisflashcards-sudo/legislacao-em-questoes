@@ -7,10 +7,10 @@ import {
   isAcceptedLegiscastOriginal,
 } from "@/lib/legiscast-audio-processing";
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
-import { filterLegiscastAdminLaws, normalizeLegiscastPdfPage } from "@/lib/legiscast-audios-admin-form";
+import { filterLegiscastAdminLaws } from "@/lib/legiscast-audios-admin-form";
 import { LawSearchSelect } from "@/components/law-search-select";
 
-export type LegiscastAdminLaw = { id: number; slug: string; titulo: string };
+export type LegiscastAdminLaw = { id: number; slug: string; titulo: string; houve_alteracao_legislativa?: boolean; ultima_alteracao_data?: string | null };
 type Law = LegiscastAdminLaw;
 type Structure = {
   id: number;
@@ -19,7 +19,6 @@ type Structure = {
   tipo: string;
   nome: string;
   ordem: number;
-  pdf_page: number | null;
   audio_not_applicable: boolean;
 };
 type Audio = {
@@ -49,6 +48,13 @@ type Job = {
   erro_mensagem?: string | null;
   tentativas: number;
   leis?: { titulo?: string } | null;
+};
+type LegiscastCoverage = {
+  total: number;
+  withAudio: number;
+  notApplicable: number;
+  missing: number;
+  outdated: number;
 };
 type AuthorizeResponse = {
   jobId: string;
@@ -149,6 +155,34 @@ function structuresForLaw(structures: Structure[], lawId: number) {
         first.ordem - second.ordem || first.nome.localeCompare(second.nome),
     );
 }
+function legislativeChangeDate(law: Law) {
+  return law.houve_alteracao_legislativa === true && /^\d{4}-\d{2}-\d{2}$/.test(String(law.ultima_alteracao_data ?? ""))
+    ? String(law.ultima_alteracao_data)
+    : null;
+}
+function audioStatusForTracks(tracks: Audio[], law: Law) {
+  if (!tracks.length) return "none" as const;
+  const changeDate = legislativeChangeDate(law);
+  if (!changeDate || tracks.some((audio) => typeof audio.publicado_em === "string" && audio.publicado_em >= changeDate)) return "current" as const;
+  return "outdated" as const;
+}
+function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], law: Law): LegiscastCoverage {
+  const lawStructures = structuresForLaw(structures, law.id);
+  const lawTracks = tracksForLaw(audios, law.id);
+  let withAudio = 0;
+  let notApplicable = 0;
+  let outdated = 0;
+  lawStructures.forEach((structure) => {
+    const status = audioStatusForTracks(lawTracks.filter((audio) => audio.structure_id === structure.id), law);
+    if (status === "current") withAudio += 1;
+    else if (status === "outdated") outdated += 1;
+    else if (structure.audio_not_applicable) notApplicable += 1;
+  });
+  return { total: lawStructures.length, withAudio, notApplicable, outdated, missing: lawStructures.length - withAudio - notApplicable - outdated };
+}
+function CoverageBar({ value, total, tone }: { value: number; total: number; tone: "emerald" | "amber" | "red" }) {
+  return <span className={`h-full ${tone === "emerald" ? "bg-emerald-500" : tone === "red" ? "bg-red-500" : "bg-amber-400"}`} style={{ width: `${total ? (value / total) * 100 : 0}%` }} />;
+}
 function structureOptions(structures: Structure[], lawId: number) {
   const lawStructures = structuresForLaw(structures, lawId);
   const byParent = new Map<number | null, Structure[]>();
@@ -223,7 +257,6 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const [error, setError] = useState("");
   const [uploadLawId, setUploadLawId] = useState(lawContext ? String(lawContext.id) : "");
   const [uploadStructureId, setUploadStructureId] = useState("");
-  const [uploadPdfPage, setUploadPdfPage] = useState("");
   const [lawSearch, setLawSearch] = useState("");
   const [selectedLawId, setSelectedLawId] = useState<number | null>(lawContext?.id ?? null);
   const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
@@ -286,7 +319,6 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
         throw new Error(
           `O original possui ${formatLegiscastAudioSize(file.size)} e ultrapassa o limite de 500 MB.`,
         );
-      const pdfPage = normalizeLegiscastPdfPage(uploadPdfPage);
       if (uploadStructureId) {
         const currentStructure = structures.find(
           (structure) =>
@@ -295,26 +327,6 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
         );
         if (!currentStructure)
           throw new Error("Selecione uma estrutura válida para esta lei.");
-        if (currentStructure.pdf_page !== pdfPage) {
-          const pageResponse = await fetch("/api/admin/legiscast-audios", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              operation: "update-structure-pdf-page",
-              structureId: currentStructure.id,
-              lawId: uploadLawId,
-              pdfPage,
-            }),
-          });
-          const pageBody = await readResponse(pageResponse);
-          if (!pageResponse.ok)
-            throw new Error(
-              apiError(
-                pageBody,
-                "Não foi possível atualizar a página da estrutura.",
-              ),
-            );
-        }
       }
       const authorizeResponse = await fetch("/api/admin/legiscast-audios", {
         method: "POST",
@@ -370,7 +382,6 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       form.reset();
       setUploadLawId(lawContext ? String(lawContext.id) : "");
       setUploadStructureId("");
-      setUploadPdfPage("");
       setMessage("Áudio na fila de processamento.");
       await load();
     } catch (caught) {
@@ -458,46 +469,6 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       setActionId(null);
     }
   }
-  async function saveStructurePdfPage(
-    event: FormEvent<HTMLFormElement>,
-    structureId: number,
-  ) {
-    event.preventDefault();
-    const actionKey = `structure:${structureId}`;
-    const values = new FormData(event.currentTarget);
-    const rawPage = String(values.get("pdf_page") ?? "").trim();
-    setActionId(actionKey);
-    setError("");
-    setMessage("");
-    try {
-      const pdfPage = normalizeLegiscastPdfPage(rawPage);
-      const response = await fetch("/api/admin/legiscast-audios", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "update-structure-pdf-page",
-          structureId,
-          lawId: structures.find((structure) => structure.id === structureId)?.lei_id,
-          pdfPage,
-        }),
-      });
-      const body = await readResponse(response);
-      if (!response.ok)
-        throw new Error(
-          apiError(body, "Não foi possível atualizar a página da estrutura."),
-        );
-      setMessage("Página da estrutura atualizada.");
-      await load();
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Não foi possível atualizar a página da estrutura.",
-      );
-    } finally {
-      setActionId(null);
-    }
-  }
   async function setStructureAudioNotApplicable(structure: Structure, audioNotApplicable: boolean) {
     const actionKey = `structure-audio:${structure.id}`;
     setActionId(actionKey);
@@ -540,6 +511,10 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const selectedTracks = selectedLaw
     ? tracksForLaw(audios, selectedLaw.id)
     : [];
+  const selectedCoverage = useMemo(
+    () => selectedLaw ? legiscastCoverageForLaw(structures, audios, selectedLaw) : null,
+    [audios, selectedLaw, structures],
+  );
   const uploadStructure = structures.find(
     (structure) => String(structure.id) === uploadStructureId,
   );
@@ -563,23 +538,18 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       >
         <fieldset className="grid gap-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4 lg:grid-cols-2">
           <legend className="px-1 text-sm font-black text-[#062a5f]">1. Vincular ao trecho da lei</legend>
-          {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <label className="grid min-w-0 gap-1 font-bold">Lei<LawSearchSelect name="lei_id" options={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); setUploadPdfPage(""); }} emptyLabel="Selecionar lei do áudio" placeholder="Pesquisar lei por título ou slug…" /></label>}
+          {lawContext ? <label className="grid min-w-0 gap-1 font-bold">Lei<input value={lawContext.titulo} readOnly aria-readonly="true" /><input type="hidden" name="lei_id" value={uploadLawId} /></label> : <label className="grid min-w-0 gap-1 font-bold">Lei<LawSearchSelect name="lei_id" options={laws} value={uploadLawId} onChange={(lawId) => { setUploadLawId(lawId); setUploadStructureId(""); }} emptyLabel="Selecionar lei do áudio" placeholder="Pesquisar lei por título ou slug…" /></label>}
           <label className="grid min-w-0 gap-1 font-bold">
             Trecho da estrutura
-            <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => { const structureId = event.target.value; setUploadStructureId(structureId); const selectedStructure = structures.find((structure) => String(structure.id) === structureId); setUploadPdfPage(selectedStructure?.pdf_page ? String(selectedStructure.pdf_page) : ""); }}>
+            <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => setUploadStructureId(event.target.value)}>
               <option value="">{uploadLawId ? "Sem estrutura" : "Selecione uma lei primeiro"}</option>
               {uploadLawId ? structureOptions(structures, Number(uploadLawId)).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>) : null}
             </select>
           </label>
-          <label className="grid min-w-0 gap-1 font-bold">
-            Página inicial no PDF
-            <input name="pdf_page" type="number" min="1" step="1" inputMode="numeric" value={uploadPdfPage} disabled={!uploadStructureId} onChange={(event) => setUploadPdfPage(event.target.value)} aria-describedby="upload-pdf-page-help" />
-            <small id="upload-pdf-page-help" className="font-normal text-slate-500">Página onde o trecho começa no PDF.</small>
-          </label>
           <aside className="rounded-lg border border-blue-200 bg-white px-3 py-3 text-sm" aria-live="polite">
             <p className="font-black text-[#062a5f]">Destino do áudio</p>
             <p className="mt-1 font-semibold text-slate-700">{uploadStructure ? `${uploadStructure.tipo}: ${uploadStructure.nome}` : "Sem trecho vinculado"}</p>
-            <p className="mt-1 text-slate-500">{uploadPdfPage ? `PDF · página ${uploadPdfPage}` : "Informe a página inicial para facilitar a localização."}</p>
+            <p className="mt-1 text-slate-500">O áudio será vinculado somente ao trecho selecionado.</p>
           </aside>
         </fieldset>
         <fieldset className="grid gap-4 rounded-xl border border-slate-200 p-4 lg:grid-cols-2">
@@ -672,11 +642,17 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                 {selectedTracks.length} faixas
               </p>
             </div>
+            {selectedCoverage ? <section className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Cobertura do LegisCast">
+              <div className="flex flex-wrap items-baseline justify-between gap-2"><div><h5 className="font-black text-slate-800">Cobertura do LegisCast · {selectedCoverage.total ? Math.round(((selectedCoverage.withAudio + selectedCoverage.notApplicable) / selectedCoverage.total) * 100) : 0}%</h5><p className="text-sm text-slate-600">{selectedCoverage.withAudio + selectedCoverage.notApplicable} de {selectedCoverage.total} blocos cobertos por áudio ou dispensa.</p></div><strong className="text-sm text-slate-600">{selectedCoverage.withAudio} com áudio · {selectedCoverage.notApplicable} não se aplica</strong></div>
+              <div className="flex h-3 overflow-hidden rounded-full bg-slate-200" aria-label={`${selectedCoverage.withAudio + selectedCoverage.notApplicable} cobertos, ${selectedCoverage.missing} sem áudio e ${selectedCoverage.outdated} desatualizados`}><CoverageBar value={selectedCoverage.withAudio + selectedCoverage.notApplicable} total={selectedCoverage.total} tone="emerald" /><CoverageBar value={selectedCoverage.missing} total={selectedCoverage.total} tone="amber" /><CoverageBar value={selectedCoverage.outdated} total={selectedCoverage.total} tone="red" /></div>
+              <div className="grid gap-2 text-sm sm:grid-cols-3"><span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">Cobertura · {selectedCoverage.total ? Math.round(((selectedCoverage.withAudio + selectedCoverage.notApplicable) / selectedCoverage.total) * 100) : 0}% · {selectedCoverage.withAudio + selectedCoverage.notApplicable}</span><span className="rounded-lg bg-amber-100 px-3 py-2 font-bold text-amber-800">Faltam · {selectedCoverage.total ? Math.round((selectedCoverage.missing / selectedCoverage.total) * 100) : 0}% · {selectedCoverage.missing}</span><span className="rounded-lg bg-red-100 px-3 py-2 font-bold text-red-800">Desatualizados · {selectedCoverage.total ? Math.round((selectedCoverage.outdated / selectedCoverage.total) * 100) : 0}% · {selectedCoverage.outdated}</span></div>
+            </section> : null}
             {structureOptions(structures, selectedLaw.id).map(
               ({ structure, depth }) => {
                 const tracks = selectedTracks.filter(
                   (audio) => audio.structure_id === structure.id,
                 );
+                const audioStatus = audioStatusForTracks(tracks, selectedLaw);
                 return (
                   <div
                     key={structure.id}
@@ -689,49 +665,12 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           {structure.tipo}: {structure.nome}
                         </h5>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-                          <span className={tracks.length ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : structure.audio_not_applicable ? "rounded-full bg-slate-200 px-2 py-1 text-slate-600" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
-                            {tracks.length ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"}` : structure.audio_not_applicable ? "Áudio não se aplica" : "Sem áudio"}
-                          </span>
-                          <span className={structure.pdf_page ? "rounded-full bg-blue-100 px-2 py-1 text-blue-800" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
-                            {structure.pdf_page ? `PDF · página ${structure.pdf_page}` : "Página do PDF não informada"}
+                          <span className={audioStatus === "current" ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : audioStatus === "outdated" ? "rounded-full bg-red-100 px-2 py-1 text-red-800" : structure.audio_not_applicable ? "rounded-full bg-slate-200 px-2 py-1 text-slate-600" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
+                            {audioStatus === "current" ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Com áudio` : audioStatus === "outdated" ? `⚠ ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Desatualizado` : structure.audio_not_applicable ? "Áudio não se aplica" : "Sem áudio"}
                           </span>
                         </div>
                       </div>
-                      <form
-                        className="flex flex-wrap items-end gap-2"
-                        onSubmit={(event) =>
-                          void saveStructurePdfPage(event, structure.id)
-                        }
-                      >
-                        <label className="grid gap-1 text-xs font-bold text-slate-600">
-                          Página no PDF
-                          <input
-                            name="pdf_page"
-                            type="number"
-                            min="1"
-                            step="1"
-                            defaultValue={structure.pdf_page ?? ""}
-                            className="min-h-10 w-28 rounded border border-slate-300 px-2"
-                            aria-describedby={`pdf-page-help-${structure.id}`}
-                          />
-                        </label>
-                        <span
-                          id={`pdf-page-help-${structure.id}`}
-                          className="max-w-48 text-xs text-slate-500"
-                        >
-                          Página onde esta estrutura começa no PDF.
-                        </span>
-                        <button
-                          type="submit"
-                          className="admin-button"
-                          disabled={actionId === `structure:${structure.id}`}
-                        >
-                          {actionId === `structure:${structure.id}`
-                            ? "Salvando…"
-                            : "Salvar página"}
-                        </button>
-                      </form>
-                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                      {audioStatus === "current" ? <span className="flex items-center gap-2 text-xs font-bold text-emerald-800" role="status"><span aria-hidden="true">✓</span> Com áudio</span> : audioStatus === "outdated" ? <span className="flex items-center gap-2 text-xs font-bold text-red-800" role="status"><span aria-hidden="true">⚠</span> Áudio desatualizado</span> : <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
                         <input
                           type="checkbox"
                           checked={structure.audio_not_applicable}
@@ -739,7 +678,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           onChange={(event) => void setStructureAudioNotApplicable(structure, event.target.checked)}
                         />
                         Áudio não se aplica
-                      </label>
+                      </label>}
                     </div>
                     {tracks.map((audio) => (
                       <article
@@ -750,7 +689,6 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-blue-700 px-2 py-1 text-xs font-black text-white">Áudio {audio.ordem}</span>
                             <strong>{audioDisplayTitle(audio, structures)}</strong>
-                            {structure.pdf_page ? <span className="text-xs font-bold text-blue-800">PDF · página {structure.pdf_page}</span> : null}
                           </div>
                           <p className="text-sm text-slate-600">
                             {audio.descricao || "Sem descrição"}

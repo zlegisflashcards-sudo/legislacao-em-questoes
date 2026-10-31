@@ -46,6 +46,8 @@ describe("colagem de questões em lote", () => {
     expect(server).toContain("previewBulkQuestionCreation");
     expect(server).toContain("createBulkAdminQuestions");
     expect(server).toContain("Selecione o bloco estrutural que receberá as questões.");
+    expect(server).toContain("total_artigos: defaults.total_artigos");
+    expect(server).not.toContain("const suppliedTotal");
     expect(server).toContain("já existe uma questão ativa com o mesmo enunciado nesta lei");
     expect(server).toContain("insert(prepared.drafts.map");
     expect(route).toContain('body.action === "previsualizar_criacao_lote"');
@@ -55,5 +57,9 @@ describe("colagem de questões em lote", () => {
     expect(client).toContain("Formato da tabela");
     expect(client).toContain("Referência Legal");
     expect(client).toContain("tabela Markdown");
+    expect(client).toContain("Será usado automaticamente o mesmo total das demais questões desta lei.");
+    expect(client).not.toContain('placeholder="Ex.: 19"');
+    expect(client).toContain("error={error}");
+    expect(client).toContain('{error ? <p className="admin-alert error" role="alert">{error}</p> : null}');
   });
 });

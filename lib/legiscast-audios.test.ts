@@ -176,6 +176,24 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).toContain("Áudio não se aplica");
     expect(adminClient).toContain("structure.audio_not_applicable");
     expect(adminClient).toContain("Sem áudio");
+    expect(adminClient).toContain("Com áudio");
+    expect(adminClient).toContain('audioStatus === "current" ? <span');
+  });
+
+  it("resume a cobertura por áudio, não aplicável e pendência em cada lei", () => {
+    expect(adminClient).toContain("function legiscastCoverageForLaw");
+    expect(adminClient).toContain("Cobertura do LegisCast");
+    expect(adminClient).toContain("blocos cobertos por áudio ou dispensa");
+    expect(adminClient).toContain("Faltam · {selectedCoverage.total");
+    expect(adminClient).toContain("CoverageBar");
+  });
+
+  it("separa cobertura, falta e áudio desatualizado pela alteração legislativa da lei", () => {
+    expect(admin).toContain("houve_alteracao_legislativa,ultima_alteracao_data");
+    expect(adminClient).toContain("function legislativeChangeDate");
+    expect(adminClient).toContain("function audioStatusForTracks");
+    expect(adminClient).toContain("Desatualizados");
+    expect(adminClient).toContain("Áudio desatualizado");
   });
 
   it("persiste a data da primeira postagem por faixa, sem confundi-la com edição", () => {
@@ -207,7 +225,7 @@ describe("LegisCast em áudio", () => {
     expect(player).toContain("Sumário da lei");
   });
 
-  it("adiciona e administra a página inicial opcional de cada estrutura", () => {
+  it("preserva páginas legadas fora do fluxo administrativo do LegisCast", () => {
     expect(pdfPageMigration).toContain("add column if not exists pdf_page integer");
     expect(pdfPageMigration).toContain("pdf_page is null or pdf_page >= 1");
     expect(admin).toContain("function positivePdfPage");
@@ -216,9 +234,9 @@ describe("LegisCast em áudio", () => {
     expect(admin).toContain("pdfPage = positivePdfPage(input.pdfPage)");
     expect(admin).toContain("update({ pdf_page: pdfPage");
     expect(adminRoute).toContain('body.operation === "update-structure-pdf-page"');
-    expect(adminClient).toContain('name="pdf_page" type="number" min="1" step="1"');
-    expect(adminClient).toContain("normalizeLegiscastPdfPage(rawPage)");
-    expect(adminClient).toContain("Página onde esta estrutura começa no PDF.");
+    expect(adminClient).not.toContain('name="pdf_page"');
+    expect(adminClient).not.toContain("Página onde esta estrutura começa no PDF.");
+    expect(adminClient).not.toContain('operation: "update-structure-pdf-page"');
     expect(adminClient).toContain("Sem faixas vinculadas.");
   });
 

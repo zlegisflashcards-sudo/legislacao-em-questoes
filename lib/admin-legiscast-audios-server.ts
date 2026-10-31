@@ -78,7 +78,7 @@ function statusLabel(status: string) { return ({ pendente: "Na fila", processand
 export async function listAdminLegiscastAudios(lawSlug?: string | null) {
   await requireAdmin(); const db = getSupabaseServerClient(); const normalizedSlug = String(lawSlug ?? "").trim();
   if (normalizedSlug && !/^[a-z0-9-]{1,160}$/.test(normalizedSlug)) throw new AdminLegiscastAudioError(400, "Lei inválida.");
-  let lawsRequest = db.from("leis").select("id,slug,titulo").eq("ativo", true).order("titulo");
+  let lawsRequest = db.from("leis").select("id,slug,titulo,houve_alteracao_legislativa,ultima_alteracao_data").eq("ativo", true).order("titulo");
   if (normalizedSlug) lawsRequest = lawsRequest.eq("slug", normalizedSlug);
   const laws = await lawsRequest;
   if (laws.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar os áudios do LegisCast.");

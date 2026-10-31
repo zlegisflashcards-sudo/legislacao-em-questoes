@@ -508,15 +508,14 @@ async function prepareBulkQuestionCreation(body: Record<string, unknown>) {
     return result.data ?? [];
   }, questionExportPageSize);
   const defaults = questionDeckDefaults(existing);
-  const suppliedTotal = body.total_artigos === undefined || body.total_artigos === null || body.total_artigos === "" ? defaults.total_artigos : body.total_artigos;
   let drafts: QuestionDraft[];
   try {
-    drafts = parseBulkQuestionPasteDrafts(body.table, { structure_id: structureId, titulo: defaults.titulo ?? current.titulo, total_artigos: suppliedTotal });
+    drafts = parseBulkQuestionPasteDrafts(body.table, { structure_id: structureId, titulo: defaults.titulo ?? current.titulo, total_artigos: defaults.total_artigos });
   } catch (error) {
     throw new AdminQuestoesError(400, error instanceof Error ? error.message : "A tabela de questões é inválida.");
   }
   if (!drafts.length) throw new AdminQuestoesError(400, "Informe ao menos uma questão para criar.");
-  if (drafts.some((item) => item.total_artigos === null || item.total_artigos < 1)) throw new AdminQuestoesError(400, "Informe o Total de artigos para exportação Anki ou cadastre uma questão de referência nesta lei.");
+  if (drafts.some((item) => item.total_artigos === null || item.total_artigos < 1)) throw new AdminQuestoesError(400, "Esta lei ainda não possui um Total de artigos para Anki. Cadastre uma questão de referência antes de criar o lote.");
   for (let index = 0; index < drafts.length; index += 1) {
     if (existing.some((question) => sameStructureQuestionStatement(question, drafts[index]))) throw new AdminQuestoesError(409, `Linha ${index + 2}: já existe uma questão ativa com o mesmo enunciado nesta lei.`);
     if (drafts.slice(0, index).some((question) => sameStructureQuestionStatement(question, drafts[index]))) throw new AdminQuestoesError(409, `Linha ${index + 2}: o enunciado está repetido dentro do próprio lote.`);
