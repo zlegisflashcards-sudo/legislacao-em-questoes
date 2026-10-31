@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import {
   AdminQuestoesError,
   createAdminQuestion,
+  createBulkAdminQuestions,
+  previewBulkQuestionCreation,
   createStructureNode,
   deactivateStructureNode,
   deleteStructureNode,
@@ -128,6 +130,8 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     let data: unknown;
     if (body.action === "criar") data = await createAdminQuestion(body);
+    else if (body.action === "previsualizar_criacao_lote") data = await previewBulkQuestionCreation(body);
+    else if (body.action === "criar_lote") data = await createBulkAdminQuestions(body);
     else if (body.action === "previsualizar_lista_conferencia") data = await previewAdminQuestionConferenceListImport(body);
     else if (body.action === "criar_lista_conferencia") data = await createAdminQuestionConferenceList(body);
     else if (body.action === "adicionar_lista_conferencia") data = await appendAdminQuestionConferenceList(body);
