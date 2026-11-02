@@ -14,22 +14,37 @@ export type CatalogProduct = {
   modules: CatalogModuleAvailability;
 };
 
-async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> {
+type LoadedCatalogProduct = CatalogProduct & { destaque: boolean };
+type CatalogProductLoad = { products: LoadedCatalogProduct[]; incomplete: boolean };
+
+function withoutHighlight({ destaque: _destaque, ...product }: LoadedCatalogProduct): CatalogProduct {
+  return product;
+}
+
+export function splitHomeCatalogProducts(loaded: ReadonlyArray<LoadedCatalogProduct>): { products: CatalogProduct[]; highlightedProducts: CatalogProduct[] } {
+  return {
+    products: loaded.map(withoutHighlight),
+    highlightedProducts: loaded.filter((product) => product.destaque).map(withoutHighlight),
+  };
+}
+
+async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad> {
   // A home é pré-renderizada. No build offline não há catálogo remoto disponível.
-  if (isOfflineBuild()) return [];
+  if (isOfflineBuild()) return { products: [], incomplete: false };
   try {
     const supabase = getSupabaseServerClient();
     let productsQuery = supabase
       .from("produtos")
-      .select("id,nome,slug,ordem,tipo_produto")
+      .select("id,nome,slug,ordem,tipo_produto,destaque", { count: "exact" })
       .eq("ativo", true)
       .not("slug", "is", null)
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true });
     if (destaque) productsQuery = productsQuery.eq("destaque", true);
-    const { data: products, error: productsError } = await productsQuery;
+    const { data: products, error: productsError, count: productCount } = await productsQuery;
 
-    if (productsError || !products?.length) return [];
+    if (productsError) return { products: [], incomplete: true };
+    if (!products?.length) return { products: [], incomplete: productCount === null };
 
     const productIds = products.map((product) => product.id);
     const { data: links, error: linksError } = await supabase
@@ -37,7 +52,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
       .select("produto_id,lei_id,recorte_id,leis(slug,status_publicacao)")
       .in("produto_id", productIds);
 
-    if (linksError) return [];
+    if (linksError) return { products: [], incomplete: true };
 
     const lawSlugById = new Map<string, string>();
     for (const link of links ?? []) {
@@ -60,7 +75,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
       checksByLawId.set(lawId, completed);
     }
 
-    return products.map((product) => {
+    return { products: products.map((product) => {
       const productLinks = (links ?? [])
         .filter((link) => link.produto_id === product.id)
         .filter((link) => lawSlugById.has(String(link.lei_id)));
@@ -72,6 +87,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
         id: product.id,
         nome: product.nome,
         slug: product.slug,
+        destaque: product.destaque === true,
         leisIncluidas: productLawIds.length,
         totalFlashcards: productLawIds.length
           ? productLawIds.reduce(
@@ -86,16 +102,24 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProduct[]> 
               completed: checksByLawId.get(String(link.lei_id)) ?? new Set(),
             })), product.tipo_produto === "lei_avulsa"),
       };
-    });
+    }), incomplete: productCount === null || productCount > products.length };
   } catch {
-    return [];
+    return { products: [], incomplete: true };
   }
 }
 
 export function getCatalogProducts(): Promise<CatalogProduct[]> {
-  return loadCatalogProducts();
+  return loadCatalogProducts().then(({ products }) => products.map(withoutHighlight));
 }
 
 export function getHighlightedCatalogProducts(): Promise<CatalogProduct[]> {
-  return loadCatalogProducts(true);
+  return loadCatalogProducts(true).then(({ products }) => products.map(withoutHighlight));
+}
+
+/** Carrega a lista e a vitrine da home a partir da mesma consulta, por requisição. */
+export async function getHomeCatalogProducts(): Promise<{ products: CatalogProduct[]; highlightedProducts: CatalogProduct[] }> {
+  const loaded = await loadCatalogProducts();
+  if (!loaded.incomplete) return splitHomeCatalogProducts(loaded.products);
+  const highlighted = await loadCatalogProducts(true);
+  return { products: loaded.products.map(withoutHighlight), highlightedProducts: highlighted.products.map(withoutHighlight) };
 }

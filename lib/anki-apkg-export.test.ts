@@ -71,6 +71,38 @@ describe("exportação APKG", () => {
     expect(exported.decks).toEqual(["Lei nº 9.455 - Crimes de Tortura"]);
   });
 
+  it("preserva caminhos de subdecks compartilhados em uma estrutura grande", async () => {
+    const structure = [
+      { id: 1, parent_id: null, nome: "Título" },
+      { id: 2, parent_id: 1, nome: "Capítulo" },
+      { id: 3, parent_id: 2, nome: "Seção A" },
+      { id: 4, parent_id: 2, nome: "Seção B" },
+    ];
+    const questions = Array.from({ length: 200 }, (_, index) => ({
+      id: `questao-${index}`,
+      structure_id: index % 2 === 0 ? 3 : 4,
+      pergunta: `Questão ${index}`,
+      resposta: "Certo",
+      ordem: String(index).padStart(4, "0"),
+    }));
+    const exported = await buildLawApkg({ slug: "lei-teste", titulo: "Lei teste" }, questions, structure);
+    expect(exported.notes).toBe(200);
+    expect(exported.decks).toEqual([
+      "Lei teste::Título::Capítulo::Seção A",
+      "Lei teste::Título::Capítulo::Seção B",
+    ]);
+  });
+
+  it("mantém exports simultâneos isolados e preserva os campos de cada arquivo", async () => {
+    const [first, second] = await Promise.all([
+      buildLawApkg({ slug: "lei-a", titulo: "Lei A" }, [{ id: "a-1", structure_id: null, pergunta: "Pergunta A", resposta: "Certo", ordem: "0001" }], []),
+      buildLawApkg({ slug: "lei-b", titulo: "Lei B" }, [{ id: "b-1", structure_id: null, pergunta: "Pergunta B", resposta: "Errado", ordem: "0002" }], []),
+    ]);
+    const [parsedFirst, parsedSecond] = await Promise.all([parseLegisApkg(Buffer.from(first.bytes)), parseLegisApkg(Buffer.from(second.bytes))]);
+    expect(parsedFirst.rows).toMatchObject([{ id_questao: "a-1", slug: "lei-a", ordem: "0001", pergunta: "Pergunta A", resposta: "Certo" }]);
+    expect(parsedSecond.rows).toMatchObject([{ id_questao: "b-1", slug: "lei-b", ordem: "0002", pergunta: "Pergunta B", resposta: "Errado" }]);
+  });
+
   it("preserva a ordem canônica quando a ordem pedagógica se repete", async () => {
     const exported = await buildLawApkg(
       { slug: "l9455", titulo: "Lei nº 9.455" },

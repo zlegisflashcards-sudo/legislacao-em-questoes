@@ -6,12 +6,14 @@ import { StudentAreaTabs } from "@/components/student-area-tabs";
 import { LawSearchSelect } from "@/components/law-search-select";
 import type { StudentExam } from "@/lib/student-exams";
 import { uniqueStudentLawsById, type StudentLaw } from "@/lib/student-laws";
-import { supabase } from "@/lib/supabase";
 
-async function api(init?: RequestInit) {
-  const { data } = await supabase.auth.getSession();
-  return fetch("/api/aluno/editais", { ...init, headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}`, "Content-Type": "application/json", ...init?.headers } });
-}
+type EditorResponse = Pick<Response, "ok" | "status" | "json">;
+type EditorRequester = (path: string, init?: RequestInit) => Promise<EditorResponse>;
+type StudentExamClientProps = {
+  embedded?: boolean;
+  requester?: EditorRequester;
+  onStudyLawSelect?: (law: StudentExam["leis"][number]) => void;
+};
 
 function preferredExamId(editais: StudentExam[]) {
   const personalized = editais.find((exam) => exam.tipo === "personalizado");
@@ -19,7 +21,7 @@ function preferredExamId(editais: StudentExam[]) {
   return personalized && personalized.id !== "0" && personalized.leis.length > 0 ? personalized.id : product?.id ?? personalized?.id ?? "";
 }
 
-export function StudentExamClient() {
+export function StudentExamClient({ embedded = false, requester, onStudyLawSelect }: StudentExamClientProps) {
   const [editais, setEditais] = useState<StudentExam[]>([]);
   const [availableLaws, setAvailableLaws] = useState<StudentLaw[]>([]);
   const [selected, setSelected] = useState("");
@@ -29,12 +31,17 @@ export function StudentExamClient() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const request = useCallback<EditorRequester>(async (path, init) => {
+    if (requester) return requester(path, init);
+    const { supabase } = await import("@/lib/supabase");
+    const { data } = await supabase.auth.getSession();
+    return fetch(path, { ...init, headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}`, "Content-Type": "application/json", ...init?.headers } });
+  }, [requester]);
+
   const load = useCallback(async (preferCustom = false) => {
     setLoading(true); setError("");
     try {
-      const { data } = await supabase.auth.getSession();
-      const headers = { Authorization: `Bearer ${data.session?.access_token ?? ""}` };
-      const [editaisResponse, lawsResponse] = await Promise.all([api(), fetch("/api/aluno/minhas-leis", { cache: "no-store", headers })]);
+      const [editaisResponse, lawsResponse] = await Promise.all([request("/api/aluno/editais"), request("/api/aluno/minhas-leis", { cache: "no-store" })]);
       if (editaisResponse.status === 401 || lawsResponse.status === 401) { window.location.replace("/conta?modo=login&retorno=%2Fmeu-edital"); return; }
       const [body, lawsBody] = await Promise.all([editaisResponse.json(), lawsResponse.json()]);
       if (!editaisResponse.ok || !Array.isArray(body.editais)) throw new Error(body.message);
@@ -47,7 +54,7 @@ export function StudentExamClient() {
       });
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar seus editais."); }
     finally { setLoading(false); }
-  }, []);
+  }, [request]);
 
   useEffect(() => { void load(); }, [load]);
   const current = editais.find((exam) => exam.id === selected) ?? null;
@@ -59,7 +66,7 @@ export function StudentExamClient() {
 
   async function change(action: string, payload: Record<string, unknown>) {
     setSaving(true); setError("");
-    try { const response = await api({ method: "PATCH", body: JSON.stringify({ action, ...payload }) }); if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.message || "Não foi possível atualizar o edital."); } await load(action === "rename"); }
+    try { const response = await request("/api/aluno/editais", { method: "PATCH", body: JSON.stringify({ action, ...payload }) }); if (!response.ok) { const body = await response.json().catch(() => null) as { message?: string } | null; throw new Error(body?.message || "Não foi possível atualizar o edital."); } await load(action === "rename"); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível atualizar o edital."); }
     finally { setSaving(false); }
   }
@@ -67,9 +74,10 @@ export function StudentExamClient() {
   async function addLaw(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const lawId = Number(lawToAdd); if (Number.isSafeInteger(lawId) && lawId > 0) await change("add", { leiId: lawId }); }
   async function move(index: number, direction: number) { if (!current || !isPersonalized) return; const ids = current.leis.map((law) => law.id); const target = index + direction; if (target < 0 || target >= ids.length) return; [ids[index], ids[target]] = [ids[target], ids[index]]; await change("reorder", { leiIds: ids }); }
 
-  return <main className="mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10">
-    <header><h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus Editais</h1></header>
-    <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital" />
+  const Container = embedded ? "section" : "main";
+  return <Container aria-label={embedded ? "Edital personalizado" : undefined} className={embedded ? "mt-6 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6" : "mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10"}>
+    <header>{embedded ? <h2 className="text-2xl font-black tracking-tight text-[#062a5f]">Edital personalizado</h2> : <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus Editais</h1>}</header>
+    {!embedded ? <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital" /> : null}
     {loading ? <p className="border-b border-slate-200 py-5 text-slate-600">Carregando seus editais…</p> : null}
     {error ? <p role="alert" className="mt-5 border-b border-red-200 py-4 text-red-700">{error}</p> : null}
     {!loading && !error ? <>
@@ -88,12 +96,12 @@ export function StudentExamClient() {
           const studyHref = law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}` : `/estudar/lei/${encodeURIComponent(law.slug)}`;
           return <li key={law.id} className={`grid min-w-0 ${isPersonalized ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"} items-start gap-2 border-b border-slate-200 py-4 sm:gap-3`}>
             {isPersonalized ? <span className="flex shrink-0 items-center gap-1" aria-label="Reordenar lei"><button type="button" disabled={saving || index === 0} onClick={() => void move(index, -1)} aria-label={`Mover ${label} para cima`} className="grid h-9 w-9 place-items-center rounded text-base font-black text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent">↑</button><button type="button" disabled={saving || index === current.leis.length - 1} onClick={() => void move(index, 1)} aria-label={`Mover ${label} para baixo`} className="grid h-9 w-9 place-items-center rounded text-base font-black text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent">↓</button></span> : null}
-            <span className="min-w-0"><Link href={studyHref} className="block min-w-0 break-words text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</Link><ExamProgressBar progress={law.progress} />{isPersonalized ? <span className="mt-2 flex flex-wrap items-center gap-2"><button type="button" disabled={saving} onClick={() => void change("remove", { leiId: law.id })} aria-label={`Remover ${label} do edital`} className="min-h-8 text-xs font-bold text-slate-500 underline underline-offset-2 hover:text-red-700 disabled:text-slate-300">Remover do edital</button></span> : null}</span>
+            <span className="min-w-0">{onStudyLawSelect ? <button type="button" onClick={() => onStudyLawSelect(law)} className="block min-w-0 break-words text-left text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</button> : <Link href={studyHref} className="block min-w-0 break-words text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</Link>}<ExamProgressBar progress={law.progress} />{isPersonalized ? <span className="mt-2 flex flex-wrap items-center gap-2"><button type="button" disabled={saving} onClick={() => void change("remove", { leiId: law.id })} aria-label={`Remover ${label} do edital`} className="min-h-8 text-xs font-bold text-slate-500 underline underline-offset-2 hover:text-red-700 disabled:text-slate-300">Remover do edital</button></span> : null}</span>
           </li>;
         })}</ol></>}
       </section> : null}
     </> : null}
-  </main>;
+  </Container>;
 }
 
 function ExamProgressBar({ progress }: { progress: StudentExam["leis"][number]["progress"] }) {

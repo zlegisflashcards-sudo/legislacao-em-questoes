@@ -1,5 +1,5 @@
 import { HomeCategoriasVadeMecum } from "@/components/home-categorias-vade-mecum";
-import { getCatalogProducts, getHighlightedCatalogProducts } from "@/lib/catalog-products-server";
+import { getHomeCatalogProducts } from "@/lib/catalog-products-server";
 import { filtrarLegislacoesAtivas, getLegislacoes } from "@/lib/legislacoes";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 
@@ -7,9 +7,8 @@ import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-serv
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [produtos, produtosEmDestaque, catalogo] = await Promise.all([
-    getCatalogProducts(),
-    getHighlightedCatalogProducts(),
+  const [catalogProducts, catalogo] = await Promise.all([
+    getHomeCatalogProducts(),
     getLegislacoes(),
   ]);
   const legislacoes = await withActiveQuestionCounts(catalogo);
@@ -17,7 +16,7 @@ export default async function Home() {
   return (
     <div className="bg-[#070b12]">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-6 sm:px-6 sm:py-9">
-        <HomeCategoriasVadeMecum legislacoes={filtrarLegislacoesAtivas(legislacoes)} produtos={produtos} produtosEmDestaque={produtosEmDestaque} />
+        <HomeCategoriasVadeMecum legislacoes={filtrarLegislacoesAtivas(legislacoes)} produtos={catalogProducts.products} produtosEmDestaque={catalogProducts.highlightedProducts} />
       </div>
     </div>
   );

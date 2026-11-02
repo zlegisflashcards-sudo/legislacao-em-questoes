@@ -11,7 +11,6 @@ import { LAW_STUDY_PLATFORMS, type LawStudyData, type LawStudyMaterial } from "@
 import { compareQuestionStructureNames } from "@/lib/questoes-structure";
 import { competitiveCampaignPerformance } from "@/lib/law-campaign-attempt-performance";
 import { selectLawStudyContext, shouldShowLawStudyContextSelector } from "@/lib/law-study-context-selection";
-import { supabase } from "@/lib/supabase";
 
 type CampaignLevel = { chave: string; concluido: boolean };
 type Campaign = { status: "nao_iniciada" | "em_andamento" | "concluida"; progress: number; lawProgress?: { total: number; answered: number; unanswered: number; progress: number; completed: boolean }; bestScore?: number | null; record?: { score: number; correct: number; errors: number } | null; result?: { position?: number | null }; levels?: CampaignLevel[] };
@@ -20,9 +19,13 @@ type StructureNode = { id: number; parent_id: number | null; nome: string; ordem
 type QuestionSourceLaw = { slug: string; questions: StructureQuestion[]; structure?: StructureNode[] };
 type StudyContext = { recorteId: string | null; nome: string; questionCount: number; structureIds: number[] | null };
 type ReviewCounts = { errors: number; favorites: number; unanswered: number };
+// Mantém o componente renderizável com o requester de fixture, sem inicializar
+// credenciais do cliente até que um fluxo autenticado realmente as solicite.
+const supabase = { auth: { getSession: async () => (await import("@/lib/supabase")).supabase.auth.getSession() } };
 
-export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null; publicStudy?: LawStudyData }) {
+export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy, embedded = false, compact = false, recorteId: embeddedRecorteId, requester }: { slug: string; ankiTutorialSettings: AnkiTutorialSettings | null; publicStudy?: LawStudyData; embedded?: boolean; compact?: boolean; recorteId?: string | null; requester?: (path: string, method?: string) => Promise<unknown> }) {
   const searchParams = useSearchParams();
+  const recorteId = embedded ? embeddedRecorteId ?? null : searchParams.get("recorte_id");
   const [study, setStudy] = useState<LawStudyData | null>(publicStudy ?? null);
   const [campaign, setCampaign] = useState<Campaign | null>(publicStudy ? { status: "nao_iniciada", progress: 0 } : null);
   const [sourceLaw, setSourceLaw] = useState<QuestionSourceLaw | null>(null);
@@ -35,6 +38,8 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
   const [reviewCounts, setReviewCounts] = useState<ReviewCounts | null>(null);
 
   async function request(path: string, method = "GET") {
+    if (requester) return requester(path, method) as Promise<Record<string, unknown>>;
+    const { supabase } = await import("@/lib/supabase");
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (!token) { window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(`/estudar/lei/${slug}`)}`); return null; }
@@ -48,7 +53,6 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
     if (publicStudy) return;
     void (async () => {
       try {
-        const recorteId = searchParams.get("recorte_id");
         const scopeQuery = recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : "";
         const [law, state, structure, availableContexts, newQuestions, reviews] = await Promise.all([
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}${scopeQuery}`),
@@ -69,25 +73,25 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
         setContextsLoaded(true);
       } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta lei."); }
     })();
-  }, [slug, publicStudy, searchParams]);
+  }, [slug, publicStudy, recorteId]);
 
   async function reset() {
     setResetting(true);
-    try { const recorteId = searchParams.get("recorte_id"); await request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`, "DELETE"); setCampaign((current) => ({ status: "nao_iniciada", progress: 0, levels: [], bestScore: current?.bestScore, record: current?.record })); setResetOpen(false); }
+    try { await request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`, "DELETE"); setCampaign((current) => ({ status: "nao_iniciada", progress: 0, levels: [], bestScore: current?.bestScore, record: current?.record })); setResetOpen(false); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível resetar o Estudo Ativo da Lei."); }
     finally { setResetting(false); }
   }
 
-  if (error) return <Frame publicMode={Boolean(publicStudy)}><p className="rounded-2xl border border-red-200 bg-white p-6 text-red-700">{error}</p></Frame>;
-  if (!study || !campaign || (!publicStudy && (!sourceLaw || !contextsLoaded))) return <Frame publicMode={Boolean(publicStudy)}><p className="rounded-2xl border bg-white p-6 text-slate-600">Carregando sua lei…</p></Frame>;
-  if (!publicStudy && contexts.length === 0) return <Frame publicMode={false}><p className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">O conteúdo liberado para esta lei está indisponível no momento.</p></Frame>;
+  if (error) return <Frame publicMode={Boolean(publicStudy)} embedded={embedded}><p className="rounded-2xl border border-red-200 bg-white p-6 text-red-700">{error}</p></Frame>;
+  if (!study || !campaign || (!publicStudy && (!sourceLaw || !contextsLoaded))) return <Frame publicMode={Boolean(publicStudy)} embedded={embedded}><p className="rounded-2xl border bg-white p-6 text-slate-600">Carregando sua lei…</p></Frame>;
+  if (!publicStudy && contexts.length === 0) return <Frame publicMode={false} embedded={embedded}><p className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">O conteúdo liberado para esta lei está indisponível no momento.</p></Frame>;
   const completed = campaign.lawProgress?.completed ?? campaign.status === "concluida";
   const activeCampaign = !publicStudy && campaign.status === "em_andamento";
   const hasCampaignSummary = completed || activeCampaign || Boolean(campaign.record);
   const statusLabel = completed ? "Concluída" : campaign.status === "em_andamento" ? "Em andamento" : campaign.lawProgress?.answered ? "Em andamento" : "Não iniciada";
   const modeLabel = "Estudo Livre";
   const progress = campaign.lawProgress?.progress ?? (completed ? 100 : campaign.progress);
-  const requestedScopeId = searchParams.get("recorte_id");
+  const requestedScopeId = recorteId;
   const requestedFullContext = searchParams.get("contexto") === "completo";
   const openAnki = searchParams.get("anki") === "1";
   const selectedContext = selectLawStudyContext(contexts, requestedScopeId, requestedFullContext);
@@ -96,12 +100,13 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
   const visibleQuestions = sourceLaw && selectedContext?.structureIds ? sourceLaw.questions.filter((question) => question.structure_id !== null && selectedContext.structureIds!.includes(question.structure_id)) : sourceLaw?.questions ?? [];
   const visibleStructure = sourceLaw ? structureForStudyScope(sourceLaw.structure ?? [], selectedContext?.structureIds ?? null) : [];
   const tree = sourceLaw ? buildTree(visibleStructure, visibleQuestions, newQuestionsByStructure) : [];
-  return <Frame publicMode={Boolean(publicStudy)}><div className="law-study-layout grid min-w-0 gap-5 sm:gap-6">
+  if (compact) return <CompactStudyCard study={study} campaign={campaign} slug={slug} recorteId={selectedContext?.recorteId ?? recorteId} />;
+  return <Frame publicMode={Boolean(publicStudy)} embedded={embedded}><div className="law-study-layout grid min-w-0 gap-5 sm:gap-6">
     <header className="min-w-0 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-7 law-study-hero">
       {study.law.code ? <p className="text-xs font-black uppercase tracking-wide text-blue-700">{study.law.code}</p> : null}
       <h1 className="mt-2 break-words text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{study.law.title}</h1>
       {study.law.shortName ? <p className="mt-2 text-slate-500">{study.law.shortName}</p> : null}
-      <section className="law-study-toolbar mt-5 grid min-w-0 gap-4 rounded-2xl bg-blue-50 p-4 sm:mt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5" aria-label="Estudo ativo"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]">Estudo ativo</p>{selectedContext ? <p className="mt-1 text-sm font-semibold text-slate-600">{selectedContext.recorteId ? `Estudo: ${selectedContext.nome}` : "Modo campanha com ranking e desempenho"}</p> : null}<p className="mt-1 text-sm text-slate-600">Status: {statusLabel}</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-blue-100"><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-bold text-slate-700">{progress}% concluído</p>{completed ? <p className="mt-3 text-xs text-slate-600">Novas questões podem ser adicionadas a esta lei ao longo do tempo. Se quiser estudar apenas o conteúdo que ainda não respondeu, use o filtro {`"Não respondidas"`} no modo Teste.</p> : null}{selectedContext?.recorteId ? <p className="mt-3 text-xs font-semibold text-slate-600">A campanha, o score e o progresso deste recorte são independentes da lei completa.</p> : null}</div>{!completed ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar${selectedContext?.recorteId ? `?recorte_id=${encodeURIComponent(selectedContext.recorteId)}` : ""}`} className="law-study-button-primary inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white hover:bg-blue-600 sm:w-auto">{campaign.status === "em_andamento" ? "Continuar estudo" : "Começar estudo"}</Link> : null}</section>
+      <section className="law-study-toolbar mt-5 grid min-w-0 gap-4 rounded-2xl bg-blue-50 p-4 sm:mt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5" aria-label="Estudo ativo"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]">Estudo ativo</p>{selectedContext ? <p className="mt-1 text-sm font-semibold text-slate-600">{selectedContext.recorteId ? `Estudo: ${selectedContext.nome}` : "Modo campanha com ranking e desempenho"}</p> : null}<p className="mt-1 text-sm text-slate-600">Status: {statusLabel}</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-blue-100"><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-bold text-slate-700">{progress}% concluído</p>{completed ? <p className="mt-3 text-xs text-slate-600">Novas questões podem ser adicionadas a esta lei ao longo do tempo. Se quiser estudar apenas o conteúdo que ainda não respondeu, use o filtro {`"Não respondidas"`} no modo Teste.</p> : null}{selectedContext?.recorteId ? <p className="mt-3 text-xs font-semibold text-slate-600">Este recorte delimita o conteúdo e o contexto do edital; campanha, score e progresso pertencem à lei.</p> : null}</div>{!completed ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar${selectedContext?.recorteId ? `?recorte_id=${encodeURIComponent(selectedContext.recorteId)}` : ""}`} className="law-study-button-primary inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white hover:bg-blue-600 sm:w-auto">{campaign.status === "em_andamento" ? "Continuar estudo" : "Começar estudo"}</Link> : null}</section>
       {hasCampaignSummary ? <section className="mt-5 border-t border-slate-200 pt-5"><div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]">Desempenho</p><p className="mt-1 text-sm text-slate-600">{completed ? "Seu Estudo Ativo da Lei foi concluído. O estudo livre não altera score, ranking ou progresso histórico." : campaign.record ? "Seu recorde permanece disponível durante novas tentativas e após o reset." : "O score é exibido somente ao concluir a lei."}</p>{campaign.record ? <div className="mt-3 grid gap-1 text-sm font-black text-[#062a5f]"><p>Melhor score: {campaign.record.score.toLocaleString("pt-BR")}</p>{completed ? <p>Posição no ranking: {typeof campaign.result?.position === "number" ? `${campaign.result.position}º lugar` : "Ainda sem posição no ranking"}</p> : null}</div> : null}</div>{campaign.record ? <CampaignPerformanceDonut compact {...competitiveCampaignPerformance(campaign.record.correct, campaign.record.errors)} /> : null}</div></section> : null}
       {!publicStudy ? <ReviewHub slug={slug} counts={reviewCounts} /> : null}
       {!publicStudy && hasCampaignSummary ? <footer className="mt-5 border-t border-slate-200 pt-4"><button type="button" onClick={() => setResetOpen(true)} className="text-sm font-bold text-blue-700 underline underline-offset-4">Resetar Estudo Ativo da Lei</button></footer> : null}
@@ -111,7 +116,21 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy }: 
   </div>{resetOpen ? <ResetModal saving={resetting} onCancel={() => setResetOpen(false)} onConfirm={() => void reset()} /> : null}</Frame>;
 }
 
-function Frame({ children, publicMode }: { children: React.ReactNode; publicMode: boolean }) { return <main className="law-study-page mx-auto w-full max-w-6xl overflow-x-hidden px-3 py-5 sm:px-6 sm:py-8">{!publicMode ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}{children}</main>; }
+function CompactStudyCard({ study, campaign, slug, recorteId }: { study: LawStudyData; campaign: Campaign; slug: string; recorteId: string | null }) {
+  const contextQuery = recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : "?contexto=completo";
+  const continueHref = `/questoes/${encodeURIComponent(slug)}/estudar${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`;
+  const record = campaign.record ?? null;
+  const totalAnswered = record ? record.correct + record.errors : 0;
+  const accuracy = record && totalAnswered > 0 ? Math.round((record.correct / totalAnswered) * 100) : null;
+  return <section className="rounded-3xl border border-blue-200 bg-white p-4 shadow-sm sm:p-6" aria-label="Estudo ativo">
+    <div className="flex items-start justify-between gap-4"><h2 className="min-w-0 break-words text-2xl font-black text-[#062a5f] sm:text-3xl">{study.law.title}</h2><Link href={`/estudar/lei/${encodeURIComponent(slug)}${contextQuery}`} className="shrink-0 text-sm font-black text-blue-700 underline underline-offset-4 hover:text-blue-800">Expandir</Link></div>
+    <section className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4"><h3 className="font-black text-[#062a5f]">Desempenho</h3>{record && accuracy !== null ? <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="Taxa de acerto" value={`${accuracy}%`} /><Metric label="Acertos" value={String(record.correct)} /><Metric label="Erros" value={String(record.errors)} /></div> : <p className="mt-2 text-sm text-slate-600">Seu desempenho aparecerá quando houver respostas registradas.</p>}<Link href={continueHref} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-700 px-4 py-2 font-black text-white hover:bg-blue-600">Continuar estudando</Link></section>
+  </section>;
+}
+
+function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-blue-50 px-2 py-3"><p className="text-lg font-black text-[#062a5f]">{value}</p><p className="mt-1 text-[11px] font-bold leading-4 text-slate-600">{label}</p></div>; }
+
+function Frame({ children, publicMode, embedded = false }: { children: React.ReactNode; publicMode: boolean; embedded?: boolean }) { return <main className={embedded ? "law-study-page w-full overflow-x-hidden" : "law-study-page mx-auto w-full max-w-6xl overflow-x-hidden px-3 py-5 sm:px-6 sm:py-8"}>{!publicMode && !embedded ? <StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" /> : null}{children}</main>; }
 function ReviewHub({ slug, counts }: { slug: string; counts: ReviewCounts | null }) {
   const router = useRouter();
   const reviews = [
