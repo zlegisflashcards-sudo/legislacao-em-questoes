@@ -34,12 +34,24 @@ describe("central Meus estudos", () => {
     expect(source).toContain('Sala de Records');
   });
 
-  it("mantém o dashboard compacto sem detalhes de recordes", () => {
-    const compact = lawStudySource.slice(lawStudySource.indexOf("function CompactStudyCard"), lawStudySource.indexOf("function Metric"));
+  it("mantém o dashboard em um bloco, com orientação vazia e expansão por ícone", () => {
+    const compact = lawStudySource.slice(lawStudySource.indexOf("function CompactStudyCard"), lawStudySource.indexOf("function Frame"));
     expect(compact).toContain("Continuar estudando");
-    expect(compact).toContain('>Expandir</Link>');
+    expect(compact).toContain('aria-label="Expandir estudo em página completa"');
+    expect(compact).toContain('title="Expandir estudo"');
+    expect(compact).toContain('conic-gradient');
+    expect(compact).toContain('Você ainda não respondeu questões desta lei.');
     expect(compact).not.toContain("Seu recorde");
     expect(compact).not.toContain("Melhor pontuação");
     expect(compact).not.toContain("Progresso da campanha");
+    expect(source).toContain('Selecione uma lei do edital para começar.');
+    expect(source).toContain('<StudentExamClient embedded contained');
+  });
+
+  it("mantém o indicador Melhor somente no resumo da página completa", () => {
+    expect(lawStudySource).toContain('>Melhor</p>');
+    expect(lawStudySource).toContain('Melhor pontuação');
+    expect(lawStudySource).toContain('Salvo mesmo ao reiniciar o estudo.');
+    expect(lawStudySource).toContain('campaign.record ? campaign.record.score.toLocaleString("pt-BR") : "—"');
   });
 });

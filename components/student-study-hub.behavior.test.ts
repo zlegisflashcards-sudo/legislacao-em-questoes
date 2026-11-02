@@ -17,8 +17,8 @@ describe("seleção comportamental do hub", () => {
     expect(resolveActiveStudyKey(laws, "1:completa", "2:recorte-a")).toBe("1:completa");
   });
 
-  it("ignora uma última seleção que não está mais elegível e inicia na primeira lei", () => {
-    expect(resolveActiveStudyKey(laws, null, "999:completa")).toBe("1:completa");
+  it("não seleciona uma lei automaticamente quando a seleção anterior não está mais elegível", () => {
+    expect(resolveActiveStudyKey(laws, null, "999:completa")).toBeNull();
   });
 
   it("mantém o estado vazio honesto sem lei elegível", () => {

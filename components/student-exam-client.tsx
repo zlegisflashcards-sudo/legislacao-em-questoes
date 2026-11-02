@@ -11,6 +11,7 @@ type EditorResponse = Pick<Response, "ok" | "status" | "json">;
 type EditorRequester = (path: string, init?: RequestInit) => Promise<EditorResponse>;
 type StudentExamClientProps = {
   embedded?: boolean;
+  contained?: boolean;
   requester?: EditorRequester;
   onStudyLawSelect?: (law: StudentExam["leis"][number]) => void;
 };
@@ -21,7 +22,7 @@ function preferredExamId(editais: StudentExam[]) {
   return personalized && personalized.id !== "0" && personalized.leis.length > 0 ? personalized.id : product?.id ?? personalized?.id ?? "";
 }
 
-export function StudentExamClient({ embedded = false, requester, onStudyLawSelect }: StudentExamClientProps) {
+export function StudentExamClient({ embedded = false, contained = false, requester, onStudyLawSelect }: StudentExamClientProps) {
   const [editais, setEditais] = useState<StudentExam[]>([]);
   const [availableLaws, setAvailableLaws] = useState<StudentLaw[]>([]);
   const [selected, setSelected] = useState("");
@@ -75,7 +76,7 @@ export function StudentExamClient({ embedded = false, requester, onStudyLawSelec
   async function move(index: number, direction: number) { if (!current || !isPersonalized) return; const ids = current.leis.map((law) => law.id); const target = index + direction; if (target < 0 || target >= ids.length) return; [ids[index], ids[target]] = [ids[target], ids[index]]; await change("reorder", { leiIds: ids }); }
 
   const Container = embedded ? "section" : "main";
-  return <Container aria-label={embedded ? "Edital personalizado" : undefined} className={embedded ? "mt-6 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6" : "mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10"}>
+  return <Container aria-label={embedded ? "Edital personalizado" : undefined} className={embedded ? (contained ? "" : "mt-6 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6") : "mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10"}>
     <header>{embedded ? <h2 className="text-2xl font-black tracking-tight text-[#062a5f]">Edital personalizado</h2> : <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus Editais</h1>}</header>
     {!embedded ? <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital" /> : null}
     {loading ? <p className="border-b border-slate-200 py-5 text-slate-600">Carregando seus editais…</p> : null}
