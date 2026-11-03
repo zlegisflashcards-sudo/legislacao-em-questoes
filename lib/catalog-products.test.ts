@@ -75,7 +75,7 @@ describe("cards comerciais do catálogo", () => {
     expect(loader).toContain('select("id,nome,slug,ordem,tipo_produto,destaque", { count: "exact" })');
     expect(loader).toContain('recorte_id');
     expect(loader).toContain('aggregateCatalogModuleAvailability');
-    expect(loader).toContain('product.tipo_produto === "lei_avulsa"');
+    expect(loader).not.toContain('product.tipo_produto === "lei_avulsa"');
     expect(loader).toContain("activeQuestionCountsBySlug");
     expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
     expect(loader).toContain('export async function getHomeCatalogProducts()');

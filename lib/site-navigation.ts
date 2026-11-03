@@ -6,12 +6,11 @@ export type SiteNavigationItem = {
 
 const publicNavigation: readonly SiteNavigationItem[] = [
   { label: "Catálogo", href: "/" },
-  { label: "LegisCast TV", href: "/legiscast" },
   { label: "Records", href: "/recordes" },
 ] as const;
 
 const profileNavigation: SiteNavigationItem = { label: "Meu perfil", href: "/conta" };
-const examNavigation: SiteNavigationItem = { label: "Meu Edital", href: "/meu-edital" };
+const examNavigation: SiteNavigationItem = { label: "Edital personalizado", href: "/meu-edital" };
 
 export function legisQuestionsNavigation(authenticated: boolean | null): SiteNavigationItem {
   return authenticated === true

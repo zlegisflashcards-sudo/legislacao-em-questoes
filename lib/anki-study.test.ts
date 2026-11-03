@@ -106,10 +106,10 @@ describe("página autenticada do Anki", () => {
     for (const forbidden of ["public.leis", "liberacoes_leis", "lei_id", "service_role", "/api/"]) expect(client.toLowerCase()).not.toContain(forbidden);
   });
 
-  it("reutiliza as abas sem botão Voltar e direciona para Meu edital", () => {
+  it("reutiliza as abas padronizadas sem botão Voltar", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
-    expect(tabs).toContain("Avulsas");
-    expect(tabs).toContain("Por edital");
+    expect(tabs).toContain('primaryLabel="Edital personalizado"');
+    expect(tabs).toContain('secondaryLabel="Minhas Leis"');
     expect(tabs).toContain('href="/meu-edital"');
     expect(client).not.toContain("Voltar");
   });

@@ -49,26 +49,31 @@ async function hydrateEntries(rows: RankingRow[], studentId: string | null) {
 
 type ResolvedLaw = { lawId: number; slug: string; name: string; score: number; recorteId: string | null; status: "ativa" | "em_breve" };
 
-async function lawsWithProducts(rows: unknown): Promise<{ laws: ResolvedLaw[]; purchaseHrefByLaw: Map<number, string> }> {
+async function lawsWithProducts(rows: unknown, recordProductId: string, recordProductName: string): Promise<{ laws: ResolvedLaw[]; purchaseHrefByLaw: Map<number, string> }> {
   if (!Array.isArray(rows)) return { laws: [], purchaseHrefByLaw: new Map() };
-  const laws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); const status: ResolvedLaw["status"] = value.status_publicacao === "em_breve" ? "em_breve" : "ativa"; const recorteId = typeof value.recorte_id === "string" && /^[0-9a-f-]{36}$/i.test(value.recorte_id) ? value.recorte_id : null; return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score, recorteId, status }] : []; });
-  const lawIds = laws.map((law) => law.lawId); const supabase = getSupabaseServerClient(); const { data: products, error } = lawIds.length ? await supabase.from("produto_leis").select("lei_id,produtos(slug,tipo_produto,ativo)").in("lei_id", lawIds) : { data: [], error: null };
+  const rawLaws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); const status: ResolvedLaw["status"] = value.status_publicacao === "em_breve" ? "em_breve" : "ativa"; const recorteId = typeof value.recorte_id === "string" && /^[0-9a-f-]{36}$/i.test(value.recorte_id) ? value.recorte_id : null; return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score, recorteId, status }] : []; });
+  const lawIds = rawLaws.map((law) => law.lawId); const supabase = getSupabaseServerClient(); const { data: products, error } = lawIds.length ? await supabase.from("produto_leis").select("produto_id,lei_id,recorte_id,produtos(slug,tipo_produto,ativo)").in("lei_id", lawIds) : { data: [], error: null };
   if (error) throw new Error(`Não foi possível localizar os produtos das leis: ${error.message}`);
   const purchaseHrefByLaw = new Map<number, string>();
-  for (const link of products ?? []) { const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos; if (product?.ativo && product.tipo_produto === "lei_avulsa" && typeof product.slug === "string" && !purchaseHrefByLaw.has(Number(link.lei_id))) purchaseHrefByLaw.set(Number(link.lei_id), `/leisflashcards/${encodeURIComponent(product.slug)}`); }
+  const scopeIdByLaw = new Map<number, string>();
+  for (const link of products ?? []) { const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos; if (String(link.produto_id) === recordProductId && typeof link.recorte_id === "string") scopeIdByLaw.set(Number(link.lei_id), link.recorte_id); if (product?.ativo && product.tipo_produto === "lei_avulsa" && typeof product.slug === "string" && !purchaseHrefByLaw.has(Number(link.lei_id))) purchaseHrefByLaw.set(Number(link.lei_id), `/leisflashcards/${encodeURIComponent(product.slug)}`); }
+  const scopeIds = [...new Set(scopeIdByLaw.values())]; const { data: scopes, error: scopesError } = scopeIds.length ? await supabase.from("recortes_leis").select("id,nome").in("id", scopeIds) : { data: [], error: null };
+  if (scopesError) throw new Error(`Não foi possível localizar os recortes das leis: ${scopesError.message}`);
+  const scopeNameById = new Map((scopes ?? []).map((scope) => [String(scope.id), String(scope.nome ?? "").trim()]));
+  const laws = rawLaws.map((law) => { const scopeName = scopeNameById.get(scopeIdByLaw.get(law.lawId) ?? ""); const suffix = scopeName ? ` — ${scopeName}` : ""; return { ...law, recorteId: scopeIdByLaw.get(law.lawId) ?? law.recorteId, name: suffix && law.name.endsWith(suffix) ? `${law.name.slice(0, -suffix.length)} — ${recordProductName}` : law.name }; });
   return { laws, purchaseHrefByLaw };
 }
 
-async function recordsLaws(rows: unknown, fallbackHref: string): Promise<RecordsPublicLaw[]> {
-  const resolved = await lawsWithProducts(rows);
+async function recordsLaws(rows: unknown, fallbackHref: string, recordProductId: string, recordProductName: string): Promise<RecordsPublicLaw[]> {
+  const resolved = await lawsWithProducts(rows, recordProductId, recordProductName);
   return resolved.laws.map((law) => {
     const purchaseHref = resolved.purchaseHrefByLaw.get(law.lawId);
     return { slug: law.slug, name: law.name, status: law.status, href: law.status === "ativa" ? purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "ativa" ? purchaseHref ? "Adquirir" : "Ver pacote do concurso" : "Em breve" };
   });
 }
 
-async function personalizedRecordsLaws(rows: unknown, studentId: string, fallbackHref: string): Promise<RecordsLaw[]> {
-  const resolved = await lawsWithProducts(rows);
+async function personalizedRecordsLaws(rows: unknown, studentId: string, fallbackHref: string, recordProductId: string, recordProductName: string): Promise<RecordsLaw[]> {
+  const resolved = await lawsWithProducts(rows, recordProductId, recordProductName);
   const contexts = await listLawStudyContextsByLaw(studentId, resolved.laws.filter((law) => law.status === "ativa").map((law) => law.lawId));
   return resolved.laws.map((law) => {
     const studyHref = law.status === "ativa" ? recordsStudyHref(law.slug, contexts.get(law.lawId) ?? [], law.recorteId) : null;
@@ -87,9 +92,9 @@ export async function loadRecordsRanking(slug: string, studentId: string | null 
   const typedProduct = product as ProductRow; const { data, error: detailsError } = await supabase.rpc("obter_detalhes_records_produto", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId });
   if (detailsError) throw new Error(`Não foi possível carregar o ranking do produto: ${detailsError.message}`);
   const details = (data ?? {}) as DetailsPayload; const topRows = asRows(details.top10); const contest = recordsContestForProduct(typedProduct);
-  if (!studentId) { const [ranking, laws] = await Promise.all([hydrateEntries(topRows, null), recordsLaws(details.laws, contest.productHref)]); return { contest, ranking, laws }; }
+  if (!studentId) { const [ranking, laws] = await Promise.all([hydrateEntries(topRows, null), recordsLaws(details.laws, contest.productHref, typedProduct.id, typedProduct.nome)]); return { contest, ranking, laws }; }
   const currentRow = details.current_user && typeof details.current_user === "object" ? [details.current_user] : [];
-  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedRecordsLaws(details.laws, studentId, contest.productHref)]);
+  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedRecordsLaws(details.laws, studentId, contest.productHref, typedProduct.id, typedProduct.nome)]);
   return { contest, ranking, personal: current[0] ?? null, nearby, laws };
 }
 

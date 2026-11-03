@@ -29,6 +29,9 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain("resolveRecordsContestImage");
     expect(loader).toContain("productHref: `/leisflashcards/");
     expect(loader).toContain("async function recordsLaws");
+    expect(loader).toContain('select("produto_id,lei_id,recorte_id,produtos(slug,tipo_produto,ativo)")');
+    expect(loader).toContain('from("recortes_leis").select("id,nome")');
+    expect(loader).toContain(' — ${recordProductName}');
     expect(loader).not.toContain("if (!studentId || !Array.isArray(rows)) return []");
     expect(loader).not.toContain('from("ligas")');
     expect(loader).not.toContain("legacyLeagueForProduct");

@@ -5,23 +5,23 @@ const complete = new Set(["questoes", "anki", "legiscast", "materiais"] as const
 const withoutLegiscast = new Set(["questoes", "anki", "materiais"] as const);
 
 describe("disponibilidade de módulos no catálogo", () => {
-  it("permite que uma lei avulsa com recorte reflita os checks concluídos da lei", () => {
+  it("permite que um recorte reflita os checks concluídos da lei", () => {
     expect(aggregateCatalogModuleAvailability([
-      { recorteId: "recorte-cf", completed: withoutLegiscast },
-    ], true)).toEqual({ questoes: true, anki: true, legiscast: false, materiais: true });
+      { completed: withoutLegiscast },
+    ])).toEqual({ questoes: true, anki: true, legiscast: false, materiais: true });
   });
 
-  it("mantém a agregação conservadora em produtos com mais de uma lei", () => {
+  it("não torna todos os módulos pendentes apenas porque o produto usa recortes", () => {
     expect(aggregateCatalogModuleAvailability([
-      { recorteId: null, completed: complete },
-      { recorteId: "recorte-outra-lei", completed: complete },
-    ])).toEqual({ questoes: false, anki: false, legiscast: false, materiais: false });
+      { completed: complete },
+      { completed: complete },
+    ])).toEqual({ questoes: true, anki: true, legiscast: true, materiais: true });
   });
 
   it("não marca o módulo se qualquer lei inteira vinculada estiver pendente", () => {
     expect(aggregateCatalogModuleAvailability([
-      { recorteId: null, completed: complete },
-      { recorteId: null, completed: withoutLegiscast },
+      { completed: complete },
+      { completed: withoutLegiscast },
     ])).toEqual({ questoes: true, anki: true, legiscast: false, materiais: true });
   });
 });

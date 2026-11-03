@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
+import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
 import { parseStudentLawRows, projectStudentLawContexts, type StudentLaw } from "@/lib/student-laws";
 
 export class StudentLawsApiError extends Error {
@@ -46,9 +47,10 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   const laws = parseStudentLawRows(data);
   if (!student?.id || !laws.length) return laws;
   const lawIds = laws.map((law) => law.id);
-  const [progressResult, campaignsResult] = await Promise.all([
+  const [progressResult, campaignsResult, questionCounts] = await Promise.all([
     db.from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", lawIds),
     db.from("campanhas_leis_alunos").select("id,lei_id,concluida,concluida_em").eq("aluno_id", student.id).in("lei_id", lawIds).eq("abandonada", false).order("concluida_em", { ascending: false }),
+    activeQuestionCountsBySlug(laws.map((law) => law.slug)),
   ]);
   const { data: progress, error: progressError } = progressResult;
   if (progressError) throw new StudentLawsApiError(503, `Não foi possível carregar o status dos Estudos Ativos da Lei: ${progressError.message}`);
@@ -63,11 +65,11 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   if (answersError) throw new StudentLawsApiError(503, "Não foi possível carregar as respostas dos Estudos Ativos da Lei.");
   const answeredByCampaign = new Map<string, Set<string>>();
   for (const answer of answers ?? []) if (typeof answer.questao_id === "string") answeredByCampaign.set(answer.campanha_id, new Set([...(answeredByCampaign.get(answer.campanha_id) ?? []), answer.questao_id]));
-  // A biblioteca precisa responder rápido mesmo para leis com milhares de
-  // questões. A contagem integral já vem da RPC autorizada; o universo exato
-  // de cada recorte continua sendo carregado somente ao abrir a página da lei.
-  const contextsByLaw = new Map(laws.map((law) => [law.id, [{ recorteId: null, nome: "Lei completa", questionCount: law.totalFlashcards, availability: "ready" as const }]]));
-  const lawsWithCampaign = laws.map((law) => ({ ...law, campaignStatus: (map.get(law.id)?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: 0 }));
+  // A biblioteca usa contagens exatas sem carregar o universo de questões.
+  // A resolução detalhada de cada recorte continua somente na página da lei.
+  const lawsWithQuestionCounts = laws.map((law) => ({ ...law, totalFlashcards: questionCounts.get(law.slug) ?? law.totalFlashcards }));
+  const contextsByLaw = new Map(lawsWithQuestionCounts.map((law) => [law.id, [{ recorteId: null, nome: "Lei completa", questionCount: law.totalFlashcards, availability: "ready" as const }]]));
+  const lawsWithCampaign = lawsWithQuestionCounts.map((law) => ({ ...law, campaignStatus: (map.get(law.id)?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: 0 }));
   return projectStudentLawContexts(lawsWithCampaign, contextsByLaw).map((law) => {
     const campaignId = referenceCampaignByLaw.get(law.id);
     const answered = campaignId ? answeredByCampaign.get(campaignId) ?? new Set<string>() : new Set<string>();

@@ -3,20 +3,19 @@ import { describe, expect, it } from "vitest";
 import { headerNavigation, legisQuestionsNavigation } from "./site-navigation";
 
 describe("cabeçalho único", () => {
-  const publicLabels = ["Catálogo", "LegisCast TV", "Records"];
+  const publicLabels = ["Catálogo", "Records"];
 
   it("mantém os links públicos e oculta o perfil sem autenticação", () => {
     expect(headerNavigation(null).map((item) => item.label)).toEqual(publicLabels);
     expect(headerNavigation(false).map((item) => item.label)).toEqual(publicLabels);
     expect(headerNavigation(false).map((item) => item.href)).toEqual([
       "/",
-      "/legiscast",
       "/recordes",
     ]);
   });
 
   it("preserva os acessos secundários do aluno sem expor Dashboard", () => {
-    expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Meu Edital", "Meu perfil"]);
+    expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Edital personalizado", "Meu perfil"]);
     expect(legisQuestionsNavigation(true)).toEqual({ label: "Fazer questões", href: "/minhas-leis" });
     expect(legisQuestionsNavigation(false)).toEqual({ label: "Fazer questões", href: "/conta?modo=login&retorno=%2Fminhas-leis" });
     expect(headerNavigation(true).at(-1)).toEqual({ label: "Meu perfil", href: "/conta" });
@@ -25,7 +24,7 @@ describe("cabeçalho único", () => {
 
   it("deixa o CTA Fazer questões responsável pelo login do visitante", () => {
     expect(headerNavigation(false).some((item) => item.label === "Meu perfil")).toBe(false);
-    expect(headerNavigation(false).some((item) => item.label === "Meu Edital")).toBe(false);
+    expect(headerNavigation(false).some((item) => item.label === "Edital personalizado")).toBe(false);
   });
 
   it("renderiza desktop e mobile a partir das mesmas fontes", () => {
@@ -36,7 +35,7 @@ describe("cabeçalho único", () => {
     expect(source).toContain('event.key === "Escape"');
     expect(source).toContain("const legisQuestions = legisQuestionsNavigation(authenticated)");
     expect(source).toContain('href={legisQuestions.href}');
-    expect(source).toContain(">Minhas leis</Link>");
+    expect(source).toContain(">Meus Estudos</Link>");
     expect(source).toContain('<WhatsAppIcon /><span className="hidden xl:inline">WhatsApp</span>');
   });
 
