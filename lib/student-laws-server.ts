@@ -2,6 +2,7 @@ import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
+import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
 import { parseStudentLawRows, projectStudentLawContexts, type StudentLaw } from "@/lib/student-laws";
 
 export class StudentLawsApiError extends Error {
@@ -34,6 +35,7 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   // library wait for two network round trips before it could even begin to
   // assemble the student's cards.
   const db = getSupabaseServerClient();
+  const includeStudyContexts = url.searchParams.get("include_contexts") === "1";
   const [studentResult, lawsResult] = await Promise.all([
     db.from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle(),
     createSupabaseUserClient(token).rpc("obter_minhas_leis"),
@@ -47,10 +49,11 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   const laws = parseStudentLawRows(data);
   if (!student?.id || !laws.length) return laws;
   const lawIds = laws.map((law) => law.id);
-  const [progressResult, campaignsResult, questionCounts] = await Promise.all([
+  const [progressResult, campaignsResult, questionCounts, detailedContexts] = await Promise.all([
     db.from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", lawIds),
     db.from("campanhas_leis_alunos").select("id,lei_id,concluida,concluida_em").eq("aluno_id", student.id).in("lei_id", lawIds).eq("abandonada", false).order("concluida_em", { ascending: false }),
     activeQuestionCountsBySlug(laws.map((law) => law.slug)),
+    includeStudyContexts ? listLawStudyContextsByLaw(student.id, lawIds) : Promise.resolve(null),
   ]);
   const { data: progress, error: progressError } = progressResult;
   if (progressError) throw new StudentLawsApiError(503, `Não foi possível carregar o status dos Estudos Ativos da Lei: ${progressError.message}`);
@@ -68,7 +71,7 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   // A biblioteca usa contagens exatas sem carregar o universo de questões.
   // A resolução detalhada de cada recorte continua somente na página da lei.
   const lawsWithQuestionCounts = laws.map((law) => ({ ...law, totalFlashcards: questionCounts.get(law.slug) ?? law.totalFlashcards }));
-  const contextsByLaw = new Map(lawsWithQuestionCounts.map((law) => [law.id, [{ recorteId: null, nome: "Lei completa", questionCount: law.totalFlashcards, availability: "ready" as const }]]));
+  const contextsByLaw = detailedContexts ?? new Map(lawsWithQuestionCounts.map((law) => [law.id, [{ recorteId: null, nome: "Lei completa", questionCount: law.totalFlashcards, availability: "ready" as const }]]));
   const lawsWithCampaign = lawsWithQuestionCounts.map((law) => ({ ...law, campaignStatus: (map.get(law.id)?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: 0 }));
   return projectStudentLawContexts(lawsWithCampaign, contextsByLaw).map((law) => {
     const campaignId = referenceCampaignByLaw.get(law.id);

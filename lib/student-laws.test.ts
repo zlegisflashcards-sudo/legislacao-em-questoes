@@ -152,8 +152,9 @@ describe("fronteira autenticada das leis adquiridas", () => {
     expect(client).toContain("/conta?modo=login&retorno=%2Fminhas-leis");
   });
 
-  it("mantém a biblioteca leve e usa a contagem real de questões da lei", () => {
-    expect(server).not.toContain("listLawStudyContextsByLaw(student.id, laws.map((law) => law.id))");
+  it("mantém a biblioteca leve e carrega recortes somente quando o seletor do edital pedir", () => {
+    expect(server).toContain('const includeStudyContexts = url.searchParams.get("include_contexts") === "1"');
+    expect(server).toContain("includeStudyContexts ? listLawStudyContextsByLaw(student.id, lawIds)");
     expect(server).toContain("activeQuestionCountsBySlug(laws.map((law) => law.slug))");
     expect(server).toContain("totalFlashcards: questionCounts.get(law.slug) ?? law.totalFlashcards");
     expect(server).toContain("projectStudentLawContexts(lawsWithCampaign, contextsByLaw)");
@@ -162,7 +163,7 @@ describe("fronteira autenticada das leis adquiridas", () => {
 
   it("faz em paralelo as leituras independentes da biblioteca", () => {
     expect(server).toContain("const [studentResult, lawsResult] = await Promise.all");
-    expect(server).toContain("const [progressResult, campaignsResult, questionCounts] = await Promise.all");
+    expect(server).toContain("const [progressResult, campaignsResult, questionCounts, detailedContexts] = await Promise.all");
   });
 
   it("expõe apenas GET saneado e desabilita cache privado", () => {

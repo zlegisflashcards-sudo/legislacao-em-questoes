@@ -97,8 +97,9 @@ describe("progresso compartilhado no Meu Edital", () => {
 
   it("mantém a edição da composição somente no personalizado", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('availableLaws.filter((law) => !current?.leis.some');
-    expect(client).toContain('await change("add", { leiId: lawId })');
+    expect(client).toContain("const selectableLaws = useMemo<ExamLawOption[]>");
+    expect(client).toContain("item.id === option.lawId && item.recorteId === option.recorteId");
+    expect(client).toContain('await change("add", { leiId: selectedLaw.lawId, recorteId: selectedLaw.recorteId, confirmReplace: Boolean(existing) })');
     expect(client).toContain('change("remove", { leiId: law.id })');
     expect(client).toContain('aria-label={`Mover ${label} para cima`}');
     expect(client).toContain('current && customExists ? <section');
@@ -118,7 +119,7 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain('const completedLaws = current?.leis.filter((law) => law.progress.unanswered === 0');
     expect(client).toContain('{completedLaws}/{current.leis.length}');
     expect(client).not.toContain('⚙ Organizar edital');
-    expect(client).toContain('＋ Adicionar lei');
+    expect(client).toContain('＋ Adicionar ao edital');
     expect(client).toContain('Clique na seta');
     expect(client).toContain('para acessar todos os recursos da lei e no nome da lei para colocá-la em foco.');
     expect(client).toContain('aria-label={`Abrir ${label} completo em página própria`}');
@@ -161,6 +162,9 @@ describe("contextos autorizados no Meu Edital", () => {
     expect(laws).toContain('}/anki${scopeId ?');
     expect(server).toContain('fn: "definir_contexto_lei_meu_edital"');
     expect(exam).toContain("law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}`");
+    expect(exam).toContain("/api/aluno/minhas-leis?include_contexts=1");
+    expect(exam).toContain("Adicionar lei ou recorte");
+    expect(exam).toContain("recorteId: selectedLaw.recorteId");
   });
 });
 

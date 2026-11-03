@@ -4,12 +4,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
-import { LawSearchSelect } from "@/components/law-search-select";
+import { LawSearchSelect, type LawSearchOption } from "@/components/law-search-select";
 import type { StudentExam } from "@/lib/student-exams";
 import { uniqueStudentLawsById, type StudentLaw } from "@/lib/student-laws";
 
 type EditorResponse = Pick<Response, "ok" | "status" | "json">;
 type EditorRequester = (path: string, init?: RequestInit) => Promise<EditorResponse>;
+type ExamLawOption = LawSearchOption & { lawId: number; recorteId: string | null };
 type StudentExamClientProps = {
   embedded?: boolean;
   contained?: boolean;
@@ -61,11 +62,11 @@ export function StudentExamClient({ embedded = false, contained = false, request
     if (availableLaws.length || availableLawsLoading) return;
     setAvailableLawsLoading(true);
     try {
-      const response = await request("/api/aluno/minhas-leis", { cache: "no-store" });
+      const response = await request("/api/aluno/minhas-leis?include_contexts=1", { cache: "no-store" });
       if (response.status === 401) { window.location.replace("/conta?modo=login&retorno=%2Fmeu-edital"); return; }
       const body = await response.json();
       if (!response.ok || !Array.isArray(body.leis)) throw new Error(body.message);
-       setAvailableLaws(uniqueStudentLawsById(body.leis).filter((law) => !law.studyContexts || law.studyContexts.some((context) => context.recorteId === null && context.availability !== "coming_soon")));
+      setAvailableLaws(uniqueStudentLawsById(body.leis));
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar as leis disponíveis."); }
     finally { setAvailableLawsLoading(false); }
   }, [availableLaws.length, availableLawsLoading, request]);
@@ -75,7 +76,13 @@ export function StudentExamClient({ embedded = false, contained = false, request
   const isPersonalized = current?.tipo === "personalizado";
   const customExists = isPersonalized && current.id !== "0";
   const completedLaws = current?.leis.filter((law) => law.progress.unanswered === 0 && law.progress.correct + law.progress.errors > 0).length ?? 0;
-  const selectableLaws = useMemo(() => availableLaws.filter((law) => !current?.leis.some((item) => item.id === law.id)), [availableLaws, current]);
+  const selectableLaws = useMemo<ExamLawOption[]>(() => availableLaws.flatMap((law) => (law.studyContexts ?? []).filter((context) => context.availability !== "coming_soon").map((context) => ({
+    id: `${law.id}:${context.recorteId ?? "completa"}`,
+    lawId: law.id,
+    recorteId: context.recorteId,
+    titulo: context.recorteId ? `${law.titulo} — ${context.nome}` : law.titulo,
+    slug: law.slug,
+  }))).filter((option) => !current?.leis.some((item) => item.id === option.lawId && item.recorteId === option.recorteId)), [availableLaws, current]);
 
   useEffect(() => { setName(isPersonalized ? current?.nome ?? "" : ""); setLawToAdd(""); }, [current?.id, current?.nome, isPersonalized]);
 
@@ -86,7 +93,14 @@ export function StudentExamClient({ embedded = false, contained = false, request
     finally { setSaving(false); }
   }
   async function saveName(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const normalized = name.trim(); if (!normalized) { setError("Informe um nome para o edital."); return; } await change("rename", { nome: normalized }); }
-  async function addLaw(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const lawId = Number(lawToAdd); if (Number.isSafeInteger(lawId) && lawId > 0) await change("add", { leiId: lawId }); }
+  async function addLaw(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const selectedLaw = selectableLaws.find((law) => String(law.id) === lawToAdd);
+    if (!selectedLaw) return;
+    const existing = current?.leis.find((law) => law.id === selectedLaw.lawId);
+    if (existing && !window.confirm("Esta lei já está no edital. Deseja substituir o contexto atual pelo contexto selecionado?")) return;
+    await change("add", { leiId: selectedLaw.lawId, recorteId: selectedLaw.recorteId, confirmReplace: Boolean(existing) });
+  }
   async function move(index: number, direction: number) { if (!current || !isPersonalized) return; const ids = current.leis.map((law) => law.id); const target = index + direction; if (target < 0 || target >= ids.length) return; [ids[index], ids[target]] = [ids[target], ids[index]]; await change("reorder", { leiIds: ids }); }
 
   const Container = embedded ? "section" : "main";
@@ -101,7 +115,7 @@ export function StudentExamClient({ embedded = false, contained = false, request
       {current && customExists ? <section className="mt-6 min-w-0" aria-labelledby="exam-laws-title">
         <header className="flex min-w-0 items-center gap-4 border-b border-blue-100 pb-5"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-blue-100 sm:h-16 sm:w-16"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 object-contain sm:h-11 sm:w-11" /></span><div className="min-w-0"><p className="text-xs font-black uppercase tracking-[.12em] text-blue-700">Edital personalizado</p><h2 id="exam-laws-title" className="truncate text-2xl font-black tracking-tight text-[#062a5f] sm:text-3xl">{current.nome}</h2><p className="mt-1 text-sm font-semibold text-slate-600">{current.leis.length} {current.leis.length === 1 ? "lei no seu plano de estudo" : "leis no seu plano de estudo"}</p></div></header>
         <div className="pt-5"><div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><h3 className="text-xl font-black text-[#062a5f]">Leis do edital</h3><span aria-label={`${completedLaws} de ${current.leis.length} leis finalizadas`} className="grid h-7 min-w-10 place-items-center rounded-lg bg-blue-100 px-2 text-sm font-black text-blue-800">{completedLaws}/{current.leis.length}</span></div><form onSubmit={(event) => void saveName(event)} className="flex min-w-0 items-center gap-2"><label className="sr-only" htmlFor="exam-name">Nome do edital</label><input id="exam-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm sm:w-52" /><button disabled={saving || name.trim() === current.nome} className="min-h-10 shrink-0 text-sm font-bold text-blue-700 disabled:text-slate-400">Salvar</button></form></div>
-          <form onSubmit={(event) => void addLaw(event)} onFocusCapture={() => void loadAvailableLaws()} className="mt-4 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch"><label className="sr-only" htmlFor="exam-law">Adicionar lei ao edital</label><LawSearchSelect name="exam-law" value={lawToAdd} onChange={setLawToAdd} options={selectableLaws} emptyLabel={availableLawsLoading ? "Carregando leis disponíveis…" : "Adicionar lei ao edital"} placeholder="Pesquisar lei para adicionar…" className="min-w-0" /><button disabled={saving || !lawToAdd} className="min-h-11 whitespace-nowrap rounded-xl border border-blue-700 px-4 font-black text-blue-700 hover:bg-blue-50 disabled:border-slate-300 disabled:text-slate-400">＋ Adicionar lei</button></form>
+          <form onSubmit={(event) => void addLaw(event)} onFocusCapture={() => void loadAvailableLaws()} className="mt-4 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch"><label className="sr-only" htmlFor="exam-law">Adicionar lei ou recorte ao edital</label><LawSearchSelect name="exam-law" value={lawToAdd} onChange={setLawToAdd} options={selectableLaws} emptyLabel={availableLawsLoading ? "Carregando leis e recortes disponíveis…" : "Adicionar lei ou recorte"} placeholder="Pesquisar lei ou recorte para adicionar…" className="min-w-0" /><button disabled={saving || !lawToAdd} className="min-h-11 whitespace-nowrap rounded-xl border border-blue-700 px-4 font-black text-blue-700 hover:bg-blue-50 disabled:border-slate-300 disabled:text-slate-400">＋ Adicionar ao edital</button></form>
           {current.leis.length === 0 ? <p className="py-7 text-sm text-slate-600">Adicione leis liberadas para montar seu edital.</p> : <><div className="mt-5 hidden grid-cols-[minmax(0,1fr)_minmax(220px,300px)_auto] gap-5 rounded-xl bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500 md:grid"><span>Lei</span><span>Progresso</span><span>Estudo</span></div><ol className="divide-y divide-slate-200">{current.leis.map((law, index) => {
           const label = `${law.titulo.trim() || `Lei ${law.id}`}${law.recorteNome ? ` — ${law.recorteNome}` : ""}`;
           const studyHref = law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}` : `/estudar/lei/${encodeURIComponent(law.slug)}`;
