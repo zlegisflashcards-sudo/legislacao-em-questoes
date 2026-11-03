@@ -59,4 +59,14 @@ describe("base legislativa persistente", () => {
     expect(source).not.toContain('from("questions").delete()');
     expect(source).not.toContain('from("legisbot_comentarios").delete()');
   });
+
+  it("mantém o cadastro manual isolado, com prévia e bloqueio de duplicidade", () => {
+    const source = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    expect(source).toContain("previewManualLegislativeReference");
+    expect(source).toContain("createManualLegislativeReference");
+    expect(source).toContain('eq("lei_id", law.data.id).eq("ordem", ordem).maybeSingle()');
+    expect(source).toContain("Já existe um bloco nesta lei e Ordem");
+    expect(source).toContain("O texto ou os dados do bloco mudaram desde a prévia");
+    expect(source).toContain('from("legislative_references").insert');
+  });
 });

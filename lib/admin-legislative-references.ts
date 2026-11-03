@@ -1,7 +1,7 @@
 import "server-only";
 
 import { exigirAdministrador } from "@/lib/admin-auth";
-import { sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
+import { possuiTextoLegislacao, sanitizarHtmlLegislacao } from "@/lib/legisbot/sanitize-legal-html";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
@@ -9,6 +9,7 @@ import { legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/l
 import { planLegislativeReferenceIdentifierRepair, type LegislativeReferenceIdentifierRepair } from "@/lib/legislative-reference-identifiers";
 import { sanitizeLegalHtmlCore } from "@/lib/legisbot/sanitize-legal-html-core";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
+import { detectManualLegislativeReference, isCanonicalManualReferenceOrder } from "@/lib/manual-legislative-reference";
 
 export { referenceCandidatesFromQuestions, referencesNotYetStored, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 
@@ -64,7 +65,91 @@ export type LegislativeReference = {
   updatedAt: string;
 };
 
+export type ManualLegislativeReferencePreview = {
+  lawId: number;
+  slug: string;
+  identification: string;
+  ordem: string;
+  legislation: string;
+  detectionWarning: string | null;
+  validationError: string | null;
+  existing: { id: string; identification: string; legislation: string | null } | null;
+};
+
 const text = (value: unknown, maximum = 20_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "";
+
+function stableManualPreview(preview: ManualLegislativeReferencePreview) {
+  return {
+    lawId: preview.lawId,
+    slug: preview.slug,
+    identification: preview.identification,
+    ordem: preview.ordem,
+    legislation: preview.legislation,
+  };
+}
+
+/**
+ * Read-only analysis for the unitary “Adicionar bloco” flow.  It is kept
+ * separate from document import because a pasted study excerpt is not a
+ * reliable multi-device source document.
+ */
+export async function previewManualLegislativeReference(input: { lawSlug: unknown; legislation: unknown; identification?: unknown; ordem?: unknown }): Promise<ManualLegislativeReferencePreview> {
+  await exigirAdministrador();
+  const slug = text(input.lawSlug, 160).toLowerCase();
+  if (!slug) throw new Error("Escolha uma legislação antes de adicionar o bloco.");
+  const rawLegislation = text(input.legislation, 40_000);
+  const legislation = sanitizarHtmlLegislacao(rawLegislation);
+  if (!possuiTextoLegislacao(legislation)) throw new Error("Cole o texto legislativo do dispositivo.");
+  const db = getSupabaseServerClient();
+  const law = await db.from("leis").select("id,slug,nome_curto").eq("slug", slug).maybeSingle();
+  if (law.error || !law.data) throw new Error("Legislação não encontrada.");
+  const detected = detectManualLegislativeReference(rawLegislation, law.data.nome_curto ? String(law.data.nome_curto) : null);
+  const identification = text(input.identification, 500) || detected.suggestion?.identification || "";
+  const ordem = text(input.ordem, 100) || detected.suggestion?.ordem || "";
+  const validationError = !identification || !ordem
+    ? "Revise e informe Assunto e Ordem antes de salvar."
+    : !isCanonicalManualReferenceOrder(ordem)
+      ? "A Ordem deve seguir o padrão artigo.letra.parágrafo.letra.inciso.letra."
+      : null;
+  const existing = validationError
+    ? { data: null, error: null }
+    : await db.from("legislative_references").select("id,identificacao,legislacao").eq("lei_id", law.data.id).eq("ordem", ordem).maybeSingle();
+  if (existing.error) throw new Error("Não foi possível verificar se já existe um bloco nessa Ordem.");
+  return {
+    lawId: Number(law.data.id), slug, identification, ordem, legislation,
+    detectionWarning: detected.warning,
+    validationError,
+    existing: existing.data ? {
+      id: String(existing.data.id), identification: String(existing.data.identificacao),
+      legislation: existing.data.legislacao ? String(existing.data.legislacao) : null,
+    } : null,
+  };
+}
+
+/** Creates exactly one new canonical legislative block and never overwrites one. */
+export async function createManualLegislativeReference(input: { lawSlug: unknown; legislation: unknown; identification: unknown; ordem: unknown; expected: unknown }) {
+  await exigirAdministrador();
+  const preview = await previewManualLegislativeReference(input);
+  if (preview.validationError) throw new Error(preview.validationError);
+  const expected = input.expected && typeof input.expected === "object" ? input.expected : null;
+  if (JSON.stringify(expected) !== JSON.stringify(stableManualPreview(preview))) {
+    throw new Error("O texto ou os dados do bloco mudaram desde a prévia. Revise e gere uma nova prévia.");
+  }
+  if (preview.existing) throw new Error("Já existe um bloco nesta lei e Ordem. Abra o bloco atual para compará-lo; ele não foi alterado.");
+  const db = getSupabaseServerClient();
+  const inserted = await db.from("legislative_references").insert({
+    lei_id: preview.lawId,
+    slug: preview.slug,
+    ordem: preview.ordem,
+    identificacao: preview.identification,
+    legislacao: preview.legislation,
+    preparado_em: new Date().toISOString(),
+    situacao: "preparada",
+  }).select("id").maybeSingle();
+  if (inserted.error?.code === "23505") throw new Error("Já existe um bloco nesta lei e Ordem. Abra o bloco atual para compará-lo; ele não foi alterado.");
+  if (inserted.error || !inserted.data) throw new Error("Não foi possível criar o bloco legislativo.");
+  return { id: String(inserted.data.id), slug: preview.slug, ordem: preview.ordem };
+}
 
 function mapReference(row: Record<string, unknown>, lawShortName?: string | null): LegislativeReference {
   return {
