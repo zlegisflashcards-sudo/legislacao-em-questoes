@@ -152,10 +152,16 @@ describe("fronteira autenticada das leis adquiridas", () => {
     expect(client).toContain("/conta?modo=login&retorno=%2Fminhas-leis");
   });
 
-  it("projeta cada contexto com a contagem central de questões ativas", () => {
-    expect(server).toContain("listLawStudyContextsByLaw(student.id, laws.map((law) => law.id))");
+  it("mantém a biblioteca leve e usa a contagem já autorizada da lei", () => {
+    expect(server).not.toContain("listLawStudyContextsByLaw(student.id, laws.map((law) => law.id))");
+    expect(server).toContain("questionCount: law.totalFlashcards");
     expect(server).toContain("projectStudentLawContexts(lawsWithCampaign, contextsByLaw)");
     expect(server).not.toContain("quantidade_itens");
+  });
+
+  it("faz em paralelo as leituras independentes da biblioteca", () => {
+    expect(server).toContain("const [studentResult, lawsResult] = await Promise.all");
+    expect(server).toContain("const [progressResult, campaignsResult] = await Promise.all");
   });
 
   it("expõe apenas GET saneado e desabilita cache privado", () => {

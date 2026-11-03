@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { nextExamLawProgress, selectExamReferenceCampaign, summarizeExamLawProgress } from "./student-exams";
+import { nextExamLawProgress, selectExamReferenceCampaign, summarizeExamLawProgress, summarizeExamLawProgressByTotal } from "./student-exams";
 
 const migration = readFileSync("supabase/migrations/20260811150000_create_student_exam_notices.sql", "utf8");
 const scopedContextMigration = readFileSync("supabase/migrations/20260831130000_add_scoped_student_exam_context.sql", "utf8");
@@ -177,6 +177,10 @@ describe("barra diagnóstica do Meu Edital", () => {
     expect(summarizeExamLawProgress(["a", "b"], [{ questionId: "a", correct: false }, { questionId: "b", correct: false }])).toEqual({ correct: 0, errors: 2, unanswered: 0 });
   });
 
+  it("resume a lei completa sem receber todos os IDs das questões", () => {
+    expect(summarizeExamLawProgressByTotal(5, [{ questionId: "a", correct: true }, { questionId: "a", correct: false }, { questionId: "b", correct: false }])).toEqual({ correct: 1, errors: 1, unanswered: 3 });
+  });
+
   it("respeita o universo do recorte, questões novas e a resposta final de cada questão", () => {
     expect(summarizeExamLawProgress(["a", "c"], [{ questionId: "b", correct: true }, { questionId: "a", correct: false }, { questionId: "a", correct: true }])).toEqual({ correct: 0, errors: 1, unanswered: 1 });
     const progress = summarizeExamLawProgress(universe, [{ questionId: "a", correct: true }, { questionId: "b", correct: false }]);
@@ -189,7 +193,8 @@ describe("barra diagnóstica do Meu Edital", () => {
     expect(server).toContain('state?.status_campanha === "concluida"');
     expect(server).toContain('campanha_ativa_id');
     expect(server).toContain('order("respondido_em", { ascending: false }).order("id", { ascending: false })');
-    expect(server).toContain('listLawStudyContextsByLaw(studentId, lawIds)');
+    expect(server).toContain('listLawStudyContextsByLaw(studentId, scopedLawIds)');
+    expect(server).toContain('select("id", { count: "exact", head: true })');
     expect(selectExamReferenceCampaign({ status: "em_andamento", campaignId: "active" }, [{ id: "active", concluded: false }, { id: "old", concluded: true }])).toBe("active");
     expect(selectExamReferenceCampaign({ status: "concluida", campaignId: null }, [{ id: "latest", concluded: true }, { id: "old", concluded: true }])).toBe("latest");
     expect(selectExamReferenceCampaign({ status: "nao_iniciada", campaignId: null }, [{ id: "old", concluded: true }])).toBeNull();

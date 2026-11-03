@@ -17,6 +17,15 @@ export function summarizeExamLawProgress(questionIds: string[], answers: Array<{
   return { correct, errors, unanswered: Math.max(0, universe.size - finalAnswers.size) };
 }
 
+/** Resumo leve para a lei completa: não exige baixar os IDs das questões. */
+export function summarizeExamLawProgressByTotal(total: number, answers: Array<{ questionId: string; correct: boolean }>): ExamLawProgress {
+  const finalAnswers = new Map<string, boolean>();
+  for (const answer of answers) if (!finalAnswers.has(answer.questionId)) finalAnswers.set(answer.questionId, answer.correct);
+  const correct = [...finalAnswers.values()].filter(Boolean).length;
+  const errors = finalAnswers.size - correct;
+  return { correct, errors, unanswered: Math.max(0, total - finalAnswers.size) };
+}
+
 export function selectExamReferenceCampaign(state: { status: "nao_iniciada" | "em_andamento" | "concluida"; campaignId: string | null } | undefined, campaigns: Array<{ id: string; concluded: boolean }>) {
   if (state?.campaignId && campaigns.some((campaign) => campaign.id === state.campaignId)) return state.campaignId;
   return state?.status === "concluida" ? campaigns.find((campaign) => campaign.concluded)?.id ?? null : null;

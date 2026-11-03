@@ -2,7 +2,6 @@ import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
 import { parseStudentLawRows, projectStudentLawContexts, type StudentLaw } from "@/lib/student-laws";
-import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
 
 export class StudentLawsApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -30,19 +29,31 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
     throw new StudentLawsApiError(401, "Sua sessão expirou. Entre novamente.");
   }
 
-  const { data: student, error: studentError } = await getSupabaseServerClient().from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle();
+  // These reads do not depend on one another.  Keeping them serial made the
+  // library wait for two network round trips before it could even begin to
+  // assemble the student's cards.
+  const db = getSupabaseServerClient();
+  const [studentResult, lawsResult] = await Promise.all([
+    db.from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle(),
+    createSupabaseUserClient(token).rpc("obter_minhas_leis"),
+  ]);
+  const { data: student, error: studentError } = studentResult;
   if (studentError) throw new StudentLawsApiError(503, "Não foi possível verificar seu acesso agora.");
   if (student?.deve_trocar_senha === true) throw new StudentLawsApiError(403, "Crie sua nova senha antes de acessar suas leis.");
 
-  const { data, error } = await createSupabaseUserClient(token).rpc("obter_minhas_leis");
+  const { data, error } = lawsResult;
   if (error) throw new StudentLawsApiError(503, "Não foi possível carregar suas leis agora.");
   const laws = parseStudentLawRows(data);
   if (!student?.id || !laws.length) return laws;
-  const contextsByLaw = await listLawStudyContextsByLaw(student.id, laws.map((law) => law.id));
-  const { data: progress, error: progressError } = await getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", laws.map((law) => law.id));
+  const lawIds = laws.map((law) => law.id);
+  const [progressResult, campaignsResult] = await Promise.all([
+    db.from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", student.id).in("lei_id", lawIds),
+    db.from("campanhas_leis_alunos").select("id,lei_id,concluida,concluida_em").eq("aluno_id", student.id).in("lei_id", lawIds).eq("abandonada", false).order("concluida_em", { ascending: false }),
+  ]);
+  const { data: progress, error: progressError } = progressResult;
   if (progressError) throw new StudentLawsApiError(503, `Não foi possível carregar o status dos Estudos Ativos da Lei: ${progressError.message}`);
   const map = new Map((progress ?? []).map((item) => [item.lei_id, item]));
-  const { data: campaigns, error: campaignsError } = await getSupabaseServerClient().from("campanhas_leis_alunos").select("id,lei_id,concluida,concluida_em").eq("aluno_id", student.id).in("lei_id", laws.map((law) => law.id)).eq("abandonada", false).order("concluida_em", { ascending: false });
+  const { data: campaigns, error: campaignsError } = campaignsResult;
   if (campaignsError) throw new StudentLawsApiError(503, "Não foi possível carregar as respostas dos Estudos Ativos da Lei.");
   const campaignsById = new Map((campaigns ?? []).map((campaign) => [campaign.id, campaign]));
   const referenceCampaignByLaw = new Map<number, string>();
@@ -52,8 +63,18 @@ export async function loadStudentLaws(request: Request): Promise<StudentLaw[]> {
   if (answersError) throw new StudentLawsApiError(503, "Não foi possível carregar as respostas dos Estudos Ativos da Lei.");
   const answeredByCampaign = new Map<string, Set<string>>();
   for (const answer of answers ?? []) if (typeof answer.questao_id === "string") answeredByCampaign.set(answer.campanha_id, new Set([...(answeredByCampaign.get(answer.campanha_id) ?? []), answer.questao_id]));
+  // A biblioteca precisa responder rápido mesmo para leis com milhares de
+  // questões. A contagem integral já vem da RPC autorizada; o universo exato
+  // de cada recorte continua sendo carregado somente ao abrir a página da lei.
+  const contextsByLaw = new Map(laws.map((law) => [law.id, [{ recorteId: null, nome: "Lei completa", questionCount: law.totalFlashcards, availability: "ready" as const }]]));
   const lawsWithCampaign = laws.map((law) => ({ ...law, campaignStatus: (map.get(law.id)?.status_campanha as StudentLaw["campaignStatus"]) ?? "nao_iniciada", campaignProgress: 0 }));
-  return projectStudentLawContexts(lawsWithCampaign, contextsByLaw).map((law) => { const campaignId = referenceCampaignByLaw.get(law.id); const answered = campaignId ? answeredByCampaign.get(campaignId) ?? new Set<string>() : new Set<string>(); const questionIds = contextsByLaw.get(law.id)?.find((context) => context.recorteId === law.studyContextId)?.questionIds ?? []; const total = questionIds.length; const done = questionIds.filter((id) => answered.has(id)).length; return { ...law, campaignProgress: total ? Math.round(done / total * 100) : 0, campaignStatus: total > 0 && done === total ? "concluida" : law.campaignStatus }; });
+  return projectStudentLawContexts(lawsWithCampaign, contextsByLaw).map((law) => {
+    const campaignId = referenceCampaignByLaw.get(law.id);
+    const answered = campaignId ? answeredByCampaign.get(campaignId) ?? new Set<string>() : new Set<string>();
+    const total = law.totalFlashcards;
+    const campaignStatus = law.campaignStatus === "concluida" || (total > 0 && answered.size >= total) ? "concluida" : law.campaignStatus;
+    return { ...law, campaignStatus, campaignProgress: campaignStatus === "concluida" ? 100 : total ? Math.round(answered.size / total * 100) : 0 };
+  });
 }
 
 export function studentLawsErrorResponse(error: unknown) {

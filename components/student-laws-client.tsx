@@ -50,8 +50,9 @@ export function StudentLawsClient() {
         const result = await response.json() as StudentLawsResponse;
         if (!response.ok || !Array.isArray(result.leis)) throw new Error(result.message);
         if (active) setLaws(result.leis);
-      } catch {
-        if (active) setError("Não foi possível carregar suas leis. Tente novamente em instantes.");
+      } catch (caught) {
+        const message = caught instanceof Error && caught.message.trim() ? caught.message : "Não foi possível carregar suas leis. Tente novamente em instantes.";
+        if (active) setError(message);
       } finally {
         if (active) setLoading(false);
       }

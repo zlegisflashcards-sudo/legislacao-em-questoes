@@ -48,7 +48,7 @@ export function StudentStudyHub({ laws, loading, error, onRetry, library, studyR
 
   return <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
     <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><p className="text-xs font-black uppercase tracking-[.16em] text-blue-700">Biblioteca de estudo</p><h1 className="mt-1 text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus estudos</h1><p className="mt-2 max-w-2xl text-sm text-slate-600 sm:text-base">Organize seu estudo da lei seca no seu edital personalizado e escolha uma lei para continuar sua preparação.</p></div>
+      <div><p className="text-xs font-black uppercase tracking-[.16em] text-blue-700">Biblioteca de Flashcards</p><p className="mt-2 max-w-2xl text-sm text-slate-600 sm:text-base">Organize seu estudo da lei seca no seu edital personalizado e escolha uma lei para continuar sua preparação.</p></div>
       <Link href="/recordes" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 font-black text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"><span aria-hidden="true">🏆</span>Sala de Records</Link>
     </header>
 

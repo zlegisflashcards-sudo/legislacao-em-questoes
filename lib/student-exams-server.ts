@@ -1,8 +1,8 @@
 import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
-import { parseStudentExams, selectExamReferenceCampaign, summarizeExamLawProgress, type StudentExam } from "@/lib/student-exams";
-import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
+import { parseStudentExams, selectExamReferenceCampaign, summarizeExamLawProgress, summarizeExamLawProgressByTotal, type StudentExam } from "@/lib/student-exams";
+import { listLawStudyContextsByLaw, type LawStudyContext } from "@/lib/law-question-scope-access";
 
 export class StudentExamError extends Error { constructor(public status: number, public publicMessage: string) { super(publicMessage); } }
 const isUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -26,14 +26,19 @@ export async function loadStudentExams(request: Request): Promise<StudentExam[]>
   const lawIds = [...new Set(exams.flatMap((exam) => exam.leis.map((law) => law.id)))];
   if (!lawIds.length) return exams;
   const scopeIds = [...new Set(exams.flatMap((exam) => exam.leis.flatMap((law) => law.recorteId ? [law.recorteId] : [])))];
-  const [progressResult, scopesResult, contextsByLaw] = await Promise.all([
+  const scopedLawIds = [...new Set(exams.flatMap((exam) => exam.leis.flatMap((law) => law.recorteId ? [law.id] : [])))];
+  const fullLawIds = [...new Set(exams.flatMap((exam) => exam.leis.flatMap((law) => law.recorteId ? [] : [law.id])))];
+  const [progressResult, scopesResult, contextsByLaw, fullLawCounts] = await Promise.all([
     getSupabaseServerClient().from("progresso_leis_alunos").select("lei_id,status_campanha,campanha_ativa_id").eq("aluno_id", studentId).in("lei_id", lawIds),
     scopeIds.length ? getSupabaseServerClient().from("recortes_leis").select("id,nome").in("id", scopeIds) : Promise.resolve({ data: [], error: null }),
-    listLawStudyContextsByLaw(studentId, lawIds),
+    scopedLawIds.length ? listLawStudyContextsByLaw(studentId, scopedLawIds) : Promise.resolve(new Map<number, LawStudyContext[]>()),
+    Promise.all(fullLawIds.map(async (lawId) => ({ lawId, ...(await getSupabaseServerClient().from("questions").select("id", { count: "exact", head: true }).eq("lei_id", lawId).eq("ativo", true)) }))),
   ]);
   const { data: progress, error: progressError } = progressResult;
   if (progressError) throw new StudentExamError(503, "Não foi possível carregar o progresso do edital agora.");
   if (scopesResult.error) throw new StudentExamError(503, "Não foi possível carregar os contextos do edital agora.");
+  if (fullLawCounts.some((result) => result.error)) throw new StudentExamError(503, "Não foi possível contar as questões do edital agora.");
+  const totalByFullLaw = new Map(fullLawCounts.map((result) => [result.lawId, result.count ?? 0]));
   const states = new Map((progress ?? []).map((item) => [item.lei_id, item]));
   const scopeNames = new Map((scopesResult.data ?? []).map((scope) => [scope.id, scope.nome]));
   const { data: campaigns, error: campaignsError } = await getSupabaseServerClient().from("campanhas_leis_alunos").select("id,lei_id,concluida,concluida_em").eq("aluno_id", studentId).eq("score_version", 2).eq("abandonada", false).in("lei_id", lawIds).order("concluida_em", { ascending: false });
@@ -56,7 +61,9 @@ export async function loadStudentExams(request: Request): Promise<StudentExam[]>
     const state = states.get(law.id);
     const context = (contextsByLaw.get(law.id) ?? []).find((item) => item.recorteId === law.recorteId);
     const campaignId = referenceByLaw.get(law.id);
-    return { ...law, recorteNome: law.recorteId ? scopeNames.get(law.recorteId) ?? null : null, campaignStatus: state?.status_campanha === "concluida" || state?.status_campanha === "em_andamento" ? state.status_campanha : "nao_iniciada", progress: summarizeExamLawProgress(context?.questionIds ?? [], campaignId ? answersByCampaign.get(campaignId) ?? [] : []) };
+    const answers = campaignId ? answersByCampaign.get(campaignId) ?? [] : [];
+    const progress = law.recorteId ? summarizeExamLawProgress(context?.questionIds ?? [], answers) : summarizeExamLawProgressByTotal(totalByFullLaw.get(law.id) ?? 0, answers);
+    return { ...law, recorteNome: law.recorteId ? scopeNames.get(law.recorteId) ?? null : null, campaignStatus: state?.status_campanha === "concluida" || state?.status_campanha === "em_andamento" ? state.status_campanha : "nao_iniciada", progress };
   }) }));
 }
 
