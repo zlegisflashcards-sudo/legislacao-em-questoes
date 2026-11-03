@@ -13,6 +13,13 @@ export async function mainLawBySlug(slug: string) {
   return result.data;
 }
 
+/** Falha fechada enquanto a migration de tipo de conteúdo não estiver aplicada. */
+export async function mainDoctrineBySlug(slug: string) {
+  const result = await getSupabaseServerClient().from("leis").select("id,slug,titulo,nome_curto,codigo,ativo,tipo_conteudo").eq("slug", slug).eq("tipo_conteudo", "doutrina").eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();
+  if (result.error) throw new Error(`Não foi possível localizar a doutrina: ${result.error.message}`);
+  return result.data;
+}
+
 export async function mainQuestions(leiId: number, filters: { structureIds?: number[]; values?: Record<string, string> } = {}) {
   // `ordem` é pedagógica e pode se repetir. created_at preserva a ordem de
   // cadastro; id fecha qualquer empate remanescente de forma determinística.

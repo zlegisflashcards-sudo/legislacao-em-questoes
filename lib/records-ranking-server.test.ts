@@ -64,6 +64,7 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain("async function recordsLaws");
     expect(loader).toContain("if (!studentId)");
     expect(loader).toContain('actionLabel: "Adquirir"');
+    expect(loader).toContain('"Ver pacote do concurso"');
     expect(recordsPage).toContain('"score" in law');
     expect(recordsApi).toContain('"Cache-Control": "private, no-store"');
   });

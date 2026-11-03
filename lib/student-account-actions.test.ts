@@ -32,7 +32,7 @@ describe("ações da conta autenticada", () => {
 
   it("preserva o fluxo público de recuperação de senha", () => {
     expect(source).toContain("supabase.auth.resetPasswordForEmail");
-    expect(source).toContain('redirectTo: `${window.location.origin}/conta?recuperar=1`');
+    expect(source).toContain('accountStepPath("recuperar", returnPath)');
   });
 
   it("vincula o aluno comercial após cadastro ou login sem tocar no perfil público", () => {

@@ -32,12 +32,14 @@ const siteUrl = new URL(
 );
 
 type ProdutoCatalogo = {
+  slug: string;
   tipoProduto: string;
   nome: string;
   descricao: string | null;
   hotmartUrl: string | null;
   preco: number | null;
   videoDemoUrl: string | null;
+  recordsEnabled: boolean;
   leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null }>;
   totalFlashcards: number | null;
 };
@@ -47,14 +49,14 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const supabase = getSupabaseServerClient();
     const produtoComVideo = await supabase
       .from("produtos")
-      .select("id,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto")
+      .select("id,slug,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto,records_enabled")
       .eq("slug", slug)
       .eq("ativo", true)
       .maybeSingle();
     const produtoComPreco = produtoComVideo.error
       ? await supabase
           .from("produtos")
-          .select("id,nome,descricao,hotmart_url,preco,tipo_produto")
+          .select("id,slug,nome,descricao,hotmart_url,preco,tipo_produto,records_enabled")
           .eq("slug", slug)
           .eq("ativo", true)
           .maybeSingle()
@@ -62,7 +64,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const produto = produtoComPreco.error
       ? await supabase
           .from("produtos")
-          .select("id,nome,descricao,hotmart_url,tipo_produto")
+          .select("id,slug,nome,descricao,hotmart_url,tipo_produto")
           .eq("slug", slug)
           .eq("ativo", true)
           .maybeSingle()
@@ -87,7 +89,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       return {
         id: leiId,
         slug: typeof lei?.slug === "string" ? lei.slug : null,
-        titulo: lei?.nome_curto || lei?.titulo || "Lei não identificada",
+        titulo: lei?.titulo || lei?.nome_curto || "Lei não identificada",
         flashcards: countsBySlug.get(lawSlugById.get(leiId) ?? "") ?? 0,
         recorteId: vinculo.recorte_id == null ? null : String(vinculo.recorte_id),
       };
@@ -101,7 +103,19 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
         : null;
     const rawPrice = "preco" in produto.data ? produto.data.preco : null;
     const preco = typeof rawPrice === "number" && Number.isFinite(rawPrice) && rawPrice >= 0 ? rawPrice : typeof rawPrice === "string" && /^\d+(?:\.\d{1,2})?$/.test(rawPrice) ? Number(rawPrice) : null;
-    return { tipoProduto: produto.data.tipo_produto, nome: produto.data.nome, descricao: produto.data.descricao, hotmartUrl: produto.data.hotmart_url, preco, videoDemoUrl, leis, totalFlashcards };
+    const recordsEnabled = "records_enabled" in produto.data && produto.data.records_enabled === true;
+    return {
+      slug: typeof produto.data.slug === "string" ? produto.data.slug : slug,
+      tipoProduto: produto.data.tipo_produto,
+      nome: produto.data.nome,
+      descricao: produto.data.descricao,
+      hotmartUrl: produto.data.hotmart_url,
+      preco,
+      videoDemoUrl,
+      recordsEnabled,
+      leis,
+      totalFlashcards,
+    };
   } catch {
     return null;
   }
@@ -445,7 +459,16 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
       <a href="/" className="text-sm font-semibold text-slate-300 hover:text-blue-300">← Voltar para a Home</a>
       <section className="space-y-5">
         <div className="space-y-5">
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Legis Flashcards</p>
+          {produto.recordsEnabled ? (
+            <a
+              href={`/recordes/${encodeURIComponent(produto.slug)}`}
+              className="inline-flex text-sm font-semibold uppercase tracking-wide text-blue-300 transition hover:text-blue-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+            >
+              🏆 Sala de Records →
+            </a>
+          ) : (
+            <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Legis Flashcards</p>
+          )}
           <h1 className="text-4xl font-bold leading-tight sm:text-5xl">{produto.nome}</h1>
           {avulsa && commercialSummary ? <LegislationState summary={commercialSummary} /> : null}
           {produto.descricao ? <p className="max-w-2xl text-lg leading-8 text-slate-200">{produto.descricao}</p> : null}

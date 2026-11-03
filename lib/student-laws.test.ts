@@ -68,26 +68,25 @@ describe("dados das leis adquiridas", () => {
 });
 
 describe("projeção de contextos em Minhas Leis", () => {
-  it("cria um card por contexto único sem duplicar a lei canônica", () => {
+  it("cria uma única lei canônica e preserva seus contextos disponíveis", () => {
     const projected = projectStudentLawContexts([laws[0]], new Map([[1, [
       { recorteId: null, nome: "Lei completa", questionCount: 845 },
       { recorteId: "pmerj", nome: "PMERJ", questionCount: 120 },
       { recorteId: "pmesp", nome: "PMESP", questionCount: 90 },
     ]]]));
-    expect(projected).toHaveLength(3);
-    expect(projected.map((law) => law.id)).toEqual([1, 1, 1]);
-    expect(projected.map((law) => law.studyContextId)).toEqual([null, "pmerj", "pmesp"]);
-    expect(projected.map((law) => law.totalFlashcards)).toEqual([845, 120, 90]);
-    expect(projected.every((law) => law.studyContextKind === "completa" || law.studyContextKind === "recorte")).toBe(true);
+    expect(projected).toHaveLength(1);
+    expect(projected[0].studyContextId).toBeNull();
+    expect(projected[0].totalFlashcards).toBe(845);
+    expect(projected[0].studyContexts?.map((context) => context.recorteId)).toEqual([null, "pmerj", "pmesp"]);
   });
 
-  it("mantém somente um card para vínculos completos ou recortes já deduplicados pelo resolvedor", () => {
+  it("não duplica o card quando uma lei possui recortes", () => {
     const projected = projectStudentLawContexts([laws[0]], new Map([[1, [
       { recorteId: null, nome: "Lei completa", questionCount: 845 },
       { recorteId: "pmerj", nome: "PMERJ", questionCount: 120 },
     ]]]));
-    expect(projected.filter((law) => law.studyContextId === null)).toHaveLength(1);
-    expect(projected.filter((law) => law.studyContextId === "pmerj")).toHaveLength(1);
+    expect(projected).toHaveLength(1);
+    expect(projected[0].studyContexts).toHaveLength(2);
   });
 
   it("mantém uma só lei para consumidores que operam por lei, como Meu Edital e a árvore", () => {
@@ -181,7 +180,7 @@ describe("interface das leis adquiridas", () => {
   it("cria a rota oficial e as duas abas", () => {
     expect(page).toContain("<StudentLawsClient />");
     expect(client).toContain("Legis Questões");
-    expect(client).toContain('<StudentAreaTabs activeTab={activeTab} onTabChange={setActiveTab} meuEditalHref="/meu-edital" />');
+    expect(client).toContain("<StudentStudyHub");
   });
 
   it("não exibe onboarding obrigatório do Anki em Legis Questões", () => {
@@ -234,7 +233,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("oferece carregamento, erro, vazio, resultado e busca sem resultado", () => {
-    for (const text of ["Carregando suas leis", "Não foi possível carregar suas leis", "Você ainda não possui leis liberadas", "Nenhuma lei encontrada", "contexto de estudo disponível"]) {
+    for (const text of ["Carregando suas leis", "Não foi possível carregar suas leis", "Você ainda não possui leis liberadas", "Nenhuma lei encontrada", "lei disponível"]) {
       expect(client).toContain(text);
     }
   });

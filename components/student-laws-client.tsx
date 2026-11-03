@@ -62,13 +62,13 @@ function StudentLawsLibrary({ laws, filteredLaws, loading, error, search, onSear
       {!loading && !error && laws.length > 0 ? <div className="student-laws-search rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <label htmlFor="student-laws-search" className="text-sm font-black text-slate-800">Buscar uma lei</label>
         <div className="relative mt-2"><span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">⌕</span><input id="student-laws-search" type="search" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Título, código ou contexto" className="min-h-12 w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100" /></div>
-        <p className="mt-3 text-sm font-semibold text-slate-500" aria-live="polite">{laws.length} {laws.length === 1 ? "contexto de estudo disponível" : "contextos de estudo disponíveis"}</p>
+        <p className="mt-3 text-sm font-semibold text-slate-500" aria-live="polite">{laws.length} {laws.length === 1 ? "lei disponível" : "leis disponíveis"}</p>
       </div> : null}
       {loading ? <div role="status" className="rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Carregando suas leis…</div> : null}
       {!loading && error ? <ErrorState message={error} /> : null}
       {!loading && !error && laws.length === 0 ? <EmptyState /> : null}
       {!loading && !error && laws.length > 0 && filteredLaws.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-xl font-black text-[#062a5f]">Nenhuma lei encontrada</h2><p className="mt-2 text-slate-600">Tente pesquisar por outro título, código ou nome curto.</p></div> : null}
-      {!loading && !error && filteredLaws.length > 0 ? <div className="student-laws-list grid gap-3" aria-label="Contextos de estudo liberados">{filteredLaws.map((law) => <StudentLawCard key={`${law.id}:${law.studyContextId ?? "completa"}`} law={law} />)}</div> : null}
+      {!loading && !error && filteredLaws.length > 0 ? <div className="student-laws-list grid gap-3" aria-label="Leis liberadas">{filteredLaws.map((law) => <StudentLawCard key={`${law.id}:${law.studyContextId ?? "completa"}`} law={law} />)}</div> : null}
     </section>;
 }
 

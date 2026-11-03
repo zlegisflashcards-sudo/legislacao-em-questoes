@@ -34,10 +34,10 @@ describe("senha provisória de primeiro acesso", () => {
   it("exige a troca após o login e limpa o marcador somente depois da senha Auth", () => {
     expect(account).toContain('"firstAccess"');
     expect(account).toContain("needsProvisionalPasswordChange");
-    expect(account).toContain('window.location.assign("/conta?primeiro-acesso=1")');
+    expect(account).toContain('accountStepPath("primeiro-acesso", returnPath)');
     expect(account).toContain('title="Crie sua nova senha"');
     expect(account).toContain("supabase.auth.updateUser({ password })");
-    expect(account).toContain('window.location.assign("/minhas-leis")');
+    expect(account).toContain('window.location.assign(returnPath)');
     expect(provisionalRoute).toContain("deve_trocar_senha: false");
   });
 

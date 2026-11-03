@@ -56,7 +56,9 @@ describe("autorização e exposição segura", () => {
   it("autentica, resolve o aluno e verifica a liberação ativa antes dos materiais", () => {
     expect(server).toContain("auth.getUser(token)");
     expect(server).toContain('.from("alunos").select("id").eq("user_id", userData.user.id)');
-    expect(server).toContain('.from("liberacoes_leis").select("id")');
+    expect(server).toContain('.from("liberacoes_leis").select("produto_id")');
+    expect(server).toContain("Recortes só definem o contexto de estudo");
+    expect(server).toContain("hasStudyEntitlement(hasActiveRelease");
     expect(server).toContain('.eq("status", "ativo")');
     expect(server.indexOf('.from("liberacoes_leis")')).toBeLessThan(server.indexOf('.from("materiais_leis")'));
     expect(server).toContain("Lei não encontrada ou não liberada para sua conta.");
@@ -66,7 +68,8 @@ describe("autorização e exposição segura", () => {
     expect(server).toContain('select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista")');
     expect(server).toContain('select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at")');
     expect(server).toContain('.eq("visivel_aluno", true)');
-    for (const forbidden of ["observacao_interna", "criado_por", "compra_id", "produto_id", "email"]) expect(server).not.toContain(forbidden);
+    const materialSelection = server.match(/\.from\("materiais_leis"\)\.select\("([^"]+)"\)/)?.[1] ?? "";
+    for (const forbidden of ["observacao_interna", "criado_por", "compra_id", "produto_id", "email"]) expect(materialSelection.split(",")).not.toContain(forbidden);
   });
 
   it("obtém o total de flashcards a partir das questões ativas, não dos materiais", () => {
@@ -122,19 +125,20 @@ describe("interface de estudo", () => {
     expect(client).toContain('campaign.status === "concluida"');
   });
 
-  it("mostra a posição atual do ranking da própria lei abaixo do melhor score", () => {
+  it("mantém o cálculo interno de ranking, mas não exibe ranking por lei", () => {
     expect(campaignServer).toContain('supabase.rpc("obter_resultado_campanha_lei", { p_aluno_id: studentId, p_lei_id: lawId })');
     expect(campaignServer).toContain("const rankingPosition = Number.isSafeInteger(position) && position > 0 ? position : null");
     expect(campaignServer).toContain("position: rankingPosition ?? undefined");
-    expect(client).toContain('Posição no ranking: {typeof campaign.result?.position === "number" ? `${campaign.result.position}º lugar` : "Ainda sem posição no ranking"}');
+    expect(client).not.toContain("Posição no ranking:");
   });
 
-  it("mostra o gráfico do recorde histórico, inclusive após reset, sem usar a campanha ativa", () => {
+  it("separa o desempenho da tentativa atual do recorde histórico", () => {
     expect(campaignServer).toContain("bestCompletedCampaignForRecord(history)");
     expect(campaignServer).toContain('score_competitivo_acertos,score_competitivo_erros');
     expect(campaignServer).toContain('eq("score_version", 2)');
-    expect(client).toContain("campaign.record ?");
-    expect(client).toContain("<CampaignPerformanceDonut compact {...competitiveCampaignPerformance(campaign.record.correct, campaign.record.errors)} />");
+    expect(client).toContain("const currentAttempt = completed");
+    expect(client).toContain("<CampaignPerformanceDonut compact {...competitiveCampaignPerformance(currentAttempt.correct, currentAttempt.errors)} />");
+    expect(client).toContain("Maior pontuação entre campanhas concluídas");
     expect(client).toContain('const hasCampaignSummary = completed || activeCampaign || Boolean(campaign.record)');
     expect(donut).toContain("lf-attempt-donut");
     expect(donut).toContain("is-compact");
@@ -143,7 +147,7 @@ describe("interface de estudo", () => {
   it("reúne progresso, desempenho e reset no card principal da lei", () => {
     const card = client.slice(client.indexOf('<header className="min-w-0 rounded-3xl'), client.indexOf('</header>') + '</header>'.length);
     expect(card).toContain('aria-label="Estudo ativo"');
-    expect(card).toContain('>Desempenho<');
+    expect(card).toContain('>Desempenho desta tentativa<');
     expect(card).toContain('<CampaignPerformanceDonut compact');
     expect(card).toContain('Resetar Estudo Ativo da Lei');
     expect(card).not.toContain('<h2 className="text-xl font-black text-[#062a5f]">Estudo Ativo da Lei</h2>');

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { safeReturnPath } from "@/lib/safe-return-path";
+import { accountStepPath, safeReturnPath } from "@/lib/safe-return-path";
 import { normalizeStudentPhone } from "@/lib/student-phone";
 import { StudentLawUpdateNotices } from "@/components/student-law-update-notices";
 
@@ -46,6 +46,10 @@ export function StudentAccount() {
           setLoading(false);
           return;
         }
+        if (initialMode !== "recover" && params.has("retorno")) {
+          window.location.assign(returnPath);
+          return;
+        }
         const result = await supabase.from("perfis_publicos").select("id,nome_publico").eq("id", data.user.id).maybeSingle();
         setProfile(result.data as PublicProfile | null);
         if (initialMode !== "recover") setMode("profile");
@@ -55,7 +59,7 @@ export function StudentAccount() {
       setLoading(false);
     }
     void load();
-  }, [initialMode]);
+  }, [initialMode, params, returnPath]);
 
   async function vincularAluno() {
     const { data } = await supabase.auth.getSession();
@@ -91,7 +95,7 @@ export function StudentAccount() {
         await vincularAluno();
         await registrarAcesso(data.session?.access_token);
         if (await needsProvisionalPasswordChange()) {
-          window.location.assign("/conta?primeiro-acesso=1");
+          window.location.assign(accountStepPath("primeiro-acesso", returnPath));
           return;
         }
         window.location.assign(returnPath);
@@ -133,6 +137,14 @@ export function StudentAccount() {
       if (data.session && data.user) {
         await vincularAluno();
         await registrarAcesso(data.session.access_token);
+        if (params.has("retorno")) {
+          if (await needsProvisionalPasswordChange()) {
+            window.location.assign(accountStepPath("primeiro-acesso", returnPath));
+          } else {
+            window.location.assign(returnPath);
+          }
+          return;
+        }
         const profileResult = await supabase
           .from("perfis_publicos")
           .select("id,nome_publico")
@@ -155,7 +167,7 @@ export function StudentAccount() {
     setPending(true); setMessage("");
     const authEmail = String(formData.get("email") ?? "").trim().toLowerCase();
     const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
-      redirectTo: `${window.location.origin}/conta?recuperar=1`,
+      redirectTo: `${window.location.origin}${accountStepPath("recuperar", returnPath)}`,
     });
     setMessage(error ? "Não foi possível enviar o link agora." : "Se o e-mail estiver cadastrado, você receberá um link de recuperação.");
     setPending(false);
@@ -169,6 +181,10 @@ export function StudentAccount() {
       setMessage("As senhas devem coincidir e ter pelo menos 8 caracteres."); setPending(false); return;
     }
     const { error } = await supabase.auth.updateUser({ password });
+    if (!error && params.has("retorno")) {
+      window.location.assign(returnPath);
+      return;
+    }
     setMessage(error ? "O link expirou ou não foi possível alterar a senha." : "Senha alterada. Você já pode continuar.");
     setPending(false);
   }
@@ -209,7 +225,7 @@ export function StudentAccount() {
     if (!response.ok) {
       setMessage("A senha foi alterada, mas não foi possível concluir o primeiro acesso. Tente novamente."); setPending(false); return;
     }
-    window.location.assign("/minhas-leis");
+    window.location.assign(returnPath);
   }
 
   async function signOut() {

@@ -4,6 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isValidLawSlug, lawStudyShortName, type LawStudyData, type LawStudyHistoryItem, type LawStudyMaterial } from "@/lib/law-study";
 import { materialAccessReference } from "@/lib/law-material-download";
 import { activeQuestionCountBySlug } from "@/lib/question-counts-server";
+import { hasStudyEntitlement, type StudyAccessOptions } from "@/lib/study-access-policy";
 
 export class LawStudyApiError extends Error {
   constructor(public status: number, public publicMessage: string) {
@@ -114,11 +115,20 @@ export async function authenticateLawStudent(request: Request, slug: string) {
   return { supabase, lawId, title, law, studentId };
 }
 
-export async function authorizeLawStudy(request: Request, slug: string) {
+export async function authorizeLawStudy(
+  request: Request,
+  slug: string,
+  options: StudyAccessOptions = {},
+) {
   const context = await authenticateLawStudent(request, slug);
-  const { data: accessData, error: accessError } = await context.supabase.from("liberacoes_leis").select("id").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("status", "ativo").limit(1);
+  const { data: accessData, error: accessError } = await context.supabase.from("liberacoes_leis").select("produto_id").eq("aluno_id", context.studentId).eq("lei_id", context.lawId).eq("status", "ativo");
   if (accessError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
-  if ((!Array.isArray(accessData) || accessData.length === 0) && context.law?.acesso_gratuito !== true) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
+  const hasActiveRelease = Array.isArray(accessData) && accessData.length > 0;
+  // A liberação pertence à lei. Recortes só definem o contexto de estudo e
+  // jamais limitam uma compra válida a uma parte da lei.
+  if (!hasStudyEntitlement(hasActiveRelease, context.law?.acesso_gratuito === true, options)) {
+    throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
+  }
   return context;
 }
 

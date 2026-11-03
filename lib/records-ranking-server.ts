@@ -3,14 +3,16 @@ import "server-only";
 import { resolveRecordsContestImage } from "@/lib/contest-image";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { publicStudentName } from "@/lib/public-student-name";
+import { listLawStudyContextsByLaw } from "@/lib/law-question-scope-access";
+import { recordsStudyHref } from "@/lib/records-law-access";
 
 type RankingRow = { posicao: number | string; aluno_id: string; score_total: number | string };
 type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: string; descricao: string | null; tipo_produto: string };
-type RawLawScore = { lei_id: number | string; slug: string; titulo: string; score: number | string; status_publicacao?: "ativa" | "em_breve" };
+type RawLawScore = { lei_id: number | string; slug: string; titulo: string; score: number | string; recorte_id?: string | null; status_publicacao?: "ativa" | "em_breve" };
 type DetailsPayload = { top10?: RankingRow[]; current_user?: RankingRow | null; nearby?: RankingRow[]; laws?: RawLawScore[] };
 export type RecordsEntry = { position: number; publicName: string; score: number; isCurrentUser: boolean };
-export type RecordsPublicLaw = { slug: string; name: string; href: string; status: "ativa" | "em_breve"; actionLabel: "Adquirir" | "Em breve" };
-export type RecordsLaw = Omit<RecordsPublicLaw, "actionLabel"> & { score: number; hasAccess: boolean; actionLabel: "Estudar" | "Adquirir" | "Em breve" };
+export type RecordsPublicLaw = { slug: string; name: string; href: string; status: "ativa" | "em_breve"; actionLabel: "Adquirir" | "Ver pacote do concurso" | "Em breve" };
+export type RecordsLaw = Omit<RecordsPublicLaw, "actionLabel"> & { score: number; hasAccess: boolean; actionLabel: "Estudar" | "Adquirir" | "Ver pacote do concurso" | "Em breve" };
 type RecordsRankingBase = {
   contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string; productHref: string };
   ranking: RecordsEntry[];
@@ -45,11 +47,11 @@ async function hydrateEntries(rows: RankingRow[], studentId: string | null) {
   return parsed.map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(String(studentById.get(entry.studentId)?.user_id ?? "")), nome: studentById.get(entry.studentId)?.nome }), score: entry.score, isCurrentUser: entry.studentId === studentId }));
 }
 
-type ResolvedLaw = { lawId: number; slug: string; name: string; score: number; status: "ativa" | "em_breve" };
+type ResolvedLaw = { lawId: number; slug: string; name: string; score: number; recorteId: string | null; status: "ativa" | "em_breve" };
 
 async function lawsWithProducts(rows: unknown): Promise<{ laws: ResolvedLaw[]; purchaseHrefByLaw: Map<number, string> }> {
   if (!Array.isArray(rows)) return { laws: [], purchaseHrefByLaw: new Map() };
-  const laws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); const status: ResolvedLaw["status"] = value.status_publicacao === "em_breve" ? "em_breve" : "ativa"; return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score, status }] : []; });
+  const laws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); const status: ResolvedLaw["status"] = value.status_publicacao === "em_breve" ? "em_breve" : "ativa"; const recorteId = typeof value.recorte_id === "string" && /^[0-9a-f-]{36}$/i.test(value.recorte_id) ? value.recorte_id : null; return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score, recorteId, status }] : []; });
   const lawIds = laws.map((law) => law.lawId); const supabase = getSupabaseServerClient(); const { data: products, error } = lawIds.length ? await supabase.from("produto_leis").select("lei_id,produtos(slug,tipo_produto,ativo)").in("lei_id", lawIds) : { data: [], error: null };
   if (error) throw new Error(`Não foi possível localizar os produtos das leis: ${error.message}`);
   const purchaseHrefByLaw = new Map<number, string>();
@@ -57,16 +59,23 @@ async function lawsWithProducts(rows: unknown): Promise<{ laws: ResolvedLaw[]; p
   return { laws, purchaseHrefByLaw };
 }
 
-async function recordsLaws(rows: unknown): Promise<RecordsPublicLaw[]> {
+async function recordsLaws(rows: unknown, fallbackHref: string): Promise<RecordsPublicLaw[]> {
   const resolved = await lawsWithProducts(rows);
-  return resolved.laws.map((law) => ({ slug: law.slug, name: law.name, status: law.status, href: law.status === "ativa" ? resolved.purchaseHrefByLaw.get(law.lawId) ?? "/" : "#", actionLabel: law.status === "ativa" ? "Adquirir" : "Em breve" }));
+  return resolved.laws.map((law) => {
+    const purchaseHref = resolved.purchaseHrefByLaw.get(law.lawId);
+    return { slug: law.slug, name: law.name, status: law.status, href: law.status === "ativa" ? purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "ativa" ? purchaseHref ? "Adquirir" : "Ver pacote do concurso" : "Em breve" };
+  });
 }
 
-async function personalizedRecordsLaws(rows: unknown, studentId: string): Promise<RecordsLaw[]> {
-  const resolved = await lawsWithProducts(rows); const lawIds = resolved.laws.map((law) => law.lawId); const releasesResult = lawIds.length ? await getSupabaseServerClient().from("liberacoes_leis").select("lei_id").eq("aluno_id", studentId).eq("status", "ativo").in("lei_id", lawIds) : { data: [], error: null };
-  if (releasesResult.error) throw new Error(`Não foi possível verificar os acessos: ${releasesResult.error.message}`);
-  const accessible = new Set((releasesResult.data ?? []).map((release) => Number(release.lei_id)));
-  return resolved.laws.map((law) => { const hasAccess = law.status === "ativa" && accessible.has(law.lawId); return { slug: law.slug, name: law.name, score: law.score, status: law.status, hasAccess, href: law.status === "ativa" ? (hasAccess ? `/estudar/lei/${encodeURIComponent(law.slug)}` : resolved.purchaseHrefByLaw.get(law.lawId) ?? "/") : "#", actionLabel: law.status === "em_breve" ? "Em breve" : hasAccess ? "Estudar" : "Adquirir" }; });
+async function personalizedRecordsLaws(rows: unknown, studentId: string, fallbackHref: string): Promise<RecordsLaw[]> {
+  const resolved = await lawsWithProducts(rows);
+  const contexts = await listLawStudyContextsByLaw(studentId, resolved.laws.filter((law) => law.status === "ativa").map((law) => law.lawId));
+  return resolved.laws.map((law) => {
+    const studyHref = law.status === "ativa" ? recordsStudyHref(law.slug, contexts.get(law.lawId) ?? [], law.recorteId) : null;
+    const hasAccess = studyHref !== null;
+    const purchaseHref = resolved.purchaseHrefByLaw.get(law.lawId);
+    return { slug: law.slug, name: law.name, score: law.score, status: law.status, hasAccess, href: law.status === "ativa" ? studyHref ?? purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "em_breve" ? "Em breve" : hasAccess ? "Estudar" : purchaseHref ? "Adquirir" : "Ver pacote do concurso" };
+  });
 }
 
 export function loadRecordsRanking(slug: string): Promise<RecordsPublicRankingData | null>;
@@ -78,9 +87,9 @@ export async function loadRecordsRanking(slug: string, studentId: string | null 
   const typedProduct = product as ProductRow; const { data, error: detailsError } = await supabase.rpc("obter_detalhes_records_produto", { p_produto_slug: typedProduct.slug, p_aluno_id: studentId });
   if (detailsError) throw new Error(`Não foi possível carregar o ranking do produto: ${detailsError.message}`);
   const details = (data ?? {}) as DetailsPayload; const topRows = asRows(details.top10); const contest = recordsContestForProduct(typedProduct);
-  if (!studentId) { const [ranking, laws] = await Promise.all([hydrateEntries(topRows, null), recordsLaws(details.laws)]); return { contest, ranking, laws }; }
+  if (!studentId) { const [ranking, laws] = await Promise.all([hydrateEntries(topRows, null), recordsLaws(details.laws, contest.productHref)]); return { contest, ranking, laws }; }
   const currentRow = details.current_user && typeof details.current_user === "object" ? [details.current_user] : [];
-  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedRecordsLaws(details.laws, studentId)]);
+  const [ranking, current, nearby, laws] = await Promise.all([hydrateEntries(topRows, studentId), hydrateEntries(currentRow, studentId), hydrateEntries(asRows(details.nearby), studentId), personalizedRecordsLaws(details.laws, studentId, contest.productHref)]);
   return { contest, ranking, personal: current[0] ?? null, nearby, laws };
 }
 

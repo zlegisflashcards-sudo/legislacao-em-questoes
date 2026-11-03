@@ -111,7 +111,7 @@ describe("progresso compartilhado no Meu Edital", () => {
 
   it("mantém a lista vertical e os controles de ordem sem adicionar indicadores competitivos", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('md:grid-cols-[minmax(0,1fr)_minmax(170px,300px)_auto]');
+    expect(client).toContain('md:grid-cols-[minmax(0,1fr)_minmax(220px,300px)_auto]');
     expect(client).toContain('aria-label={`Mover ${label} para cima`}');
     expect(client).toContain('aria-label={`Mover ${label} para baixo`}');
     expect(client).toContain('Leis do edital');
@@ -121,10 +121,18 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain('＋ Adicionar lei');
     expect(client).toContain('Clique na seta');
     expect(client).toContain('para acessar todos os recursos da lei e no nome da lei para colocá-la em foco.');
-    expect(client).toContain('aria-label={`Abrir ${label} em página completa`}');
+    expect(client).toContain('aria-label={`Abrir ${label} completo em página própria`}');
     expect(client).toContain('overflow-x-hidden');
     expect(client).toContain('<ExamProgressBar progress={law.progress} />');
     expect(client).not.toContain('Lei ainda não concluída');
+  });
+
+  it("leva uma campanha concluída à página de desempenho sem iniciar outra tentativa", () => {
+    const client = readFileSync("components/student-exam-client.tsx", "utf8");
+    expect(client).toContain('const completed = law.campaignStatus === "concluida"');
+    expect(client).toContain('const campaignHref = `/questoes/${encodeURIComponent(law.slug)}/estudar${law.recorteId ? `?recorte_id=${encodeURIComponent(law.recorteId)}` : ""}`');
+    expect(client).toContain('const actionLabel = completed ? "Ver desempenho final"');
+    expect(client).toContain('href={campaignHref}');
   });
 });
 

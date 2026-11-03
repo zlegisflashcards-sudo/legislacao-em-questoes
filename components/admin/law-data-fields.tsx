@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { PUBLICATION_STATUSES, publicationStatusFromActive } from "@/lib/publication-status";
 
 export type AdminLawData = Record<string, unknown>;
@@ -10,6 +11,7 @@ const text = (value: unknown) => value == null ? "" : String(value);
 /** Campos canônicos do cadastro de lei, compartilhados pelos dois painéis administrativos. */
 export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawData | null; showFreeAccess?: boolean }) {
   const [hasChange, setHasChange] = useState(law?.houve_alteracao_legislativa === true);
+  const [contentType, setContentType] = useState(law?.tipo_conteudo === "doutrina" ? "doutrina" : "legislacao");
 
   useEffect(() => setHasChange(law?.houve_alteracao_legislativa === true), [law]);
 
@@ -17,6 +19,8 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
     <section className="law-data-section" aria-labelledby="law-data-identification">
       <header><div><h3 id="law-data-identification">Dados básicos</h3><p>Identificação e informações de exibição.</p></div></header>
       <div className="law-data-fields-grid">
+        <label>Tipo de conteúdo<select name="tipo_conteudo" value={contentType} onChange={(event) => setContentType(event.target.value)}><option value="legislacao">Legislação</option><option value="doutrina">Doutrina</option></select></label>
+        {contentType === "doutrina" ? <p className="admin-alert law-data-wide">Doutrina é cadastrada por importação estruturada para preservar UUIDs e tópicos. <Link href="/admin/doutrina/importar">Abrir importação de doutrina</Link>.</p> : null}
         <label>Slug<input name="slug" defaultValue={text(law?.slug)} placeholder="slug-da-lei" required /></label>
         <label>Título<input name="titulo" defaultValue={text(law?.titulo)} placeholder="Título" required /></label>
         <label>Nome curto<input name="nome_curto" defaultValue={text(law?.nome_curto)} placeholder="Nome curto" /></label>
@@ -37,7 +41,7 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
       </div>
     </section>
 
-    <section className="law-data-section" aria-labelledby="law-data-update">
+    {contentType === "legislacao" ? <section className="law-data-section" aria-labelledby="law-data-update">
       <header><div><h3 id="law-data-update">Atualização legislativa</h3><p>Referências e datas da norma originária e de suas alterações.</p></div></header>
       <div className="law-data-update-grid">
         <div className="law-data-reference-pair">
@@ -56,6 +60,6 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
           <input type="hidden" name="ultima_alteracao_data" value="" />
         </>}
       </div>
-    </section>
+    </section> : <><input type="hidden" name="norma_originaria_referencia" value="" /><input type="hidden" name="norma_originaria_data" value="" /><input type="hidden" name="houve_alteracao_legislativa" value="false" /><input type="hidden" name="ultima_alteracao_referencia" value="" /><input type="hidden" name="ultima_alteracao_data" value="" /><input type="hidden" name="situacao_atualizacao" value="nao_verificado" /><section className="law-data-section"><p>Doutrina usa tópicos e hierarquia do baralho; não cria artigos ou alterações legislativas fictícias.</p></section></>}
   </>;
 }

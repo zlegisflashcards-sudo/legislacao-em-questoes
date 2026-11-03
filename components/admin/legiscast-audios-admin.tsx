@@ -581,46 +581,48 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
           {message}
         </p>
       ) : null}
-      <div className="mt-6 grid gap-2">
-        <h3 className="font-black">Processamentos recentes</h3>
-        {jobs.map((job) => (
+      {jobs[0] ? (
+        <div className="mt-6 grid gap-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="font-black">Último processamento</h3>
+            {jobs.length > 1 ? <span className="text-xs text-slate-500">O histórico completo fica no acervo abaixo.</span> : null}
+          </div>
           <article
-            key={job.id}
             className="rounded-lg border border-slate-200 px-3 py-3"
           >
-            <strong>{audioDisplayTitle(job, structures)}</strong> ·{" "}
-            {job.leis?.titulo ?? "Lei"}
+            <strong>{audioDisplayTitle(jobs[0], structures)}</strong> ·{" "}
+            {jobs[0].leis?.titulo ?? "Lei"}
             <p className="text-sm">
-              {job.statusLabel} · original{" "}
-              {formatLegiscastAudioSize(job.original_size_bytes)}
-              {job.final_size_bytes ? (
+              {jobs[0].statusLabel} · original{" "}
+              {formatLegiscastAudioSize(jobs[0].original_size_bytes)}
+              {jobs[0].final_size_bytes ? (
                 <>
                   {" "}
-                  · final {formatLegiscastAudioSize(job.final_size_bytes)} ·
-                  redução {reduction(job)}%
-                  {job.duracao_segundos ? ` · ${job.duracao_segundos}s` : ""}
+                  · final {formatLegiscastAudioSize(jobs[0].final_size_bytes)} ·
+                  redução {reduction(jobs[0])}%
+                  {jobs[0].duracao_segundos ? ` · ${jobs[0].duracao_segundos}s` : ""}
                 </>
               ) : null}
             </p>
-            {job.status === "erro" ? (
+            {jobs[0].status === "erro" ? (
               <>
                 <p className="text-sm text-red-700">
-                  {job.erro_mensagem || "Não foi possível processar este arquivo."}
+                  {jobs[0].erro_mensagem || "Não foi possível processar este arquivo."}
                 </p>
-                {job.tentativas < 3 ? (
+                {jobs[0].tentativas < 3 ? (
                   <button
                     type="button"
                     className="admin-button"
-                    onClick={() => void retry(job.id)}
+                    onClick={() => void retry(jobs[0].id)}
                   >
-                    Tentar novamente ({3 - job.tentativas})
+                    Tentar novamente ({3 - jobs[0].tentativas})
                   </button>
                 ) : null}
               </>
             ) : null}
           </article>
-        ))}
-      </div>
+        </div>
+      ) : null}
       <div className="mt-8 grid gap-4">
         <h3 className="font-black">Acervo do LegisCast</h3>
         {selectedLaw ? (

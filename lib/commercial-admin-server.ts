@@ -559,7 +559,7 @@ function allowedUpdate(data: unknown, allowed: readonly string[]): JsonObject {
 
 function validateLawData(raw: unknown, update = false) {
   const commonAllowed = [
-    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "ativo", "status_publicacao", "ordem", "thumbnail_url",
+    "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "tipo_conteudo", "ativo", "status_publicacao", "ordem", "thumbnail_url",
     "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa",
     "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao", "situacao_conferencia",
   ] as const;
@@ -569,6 +569,7 @@ function validateLawData(raw: unknown, update = false) {
   const result: JsonObject = {};
   if (!update || "slug" in data) result.slug = slug(data.slug);
   if (!update || "titulo" in data) result.titulo = requiredString(data.titulo, "Título", 300);
+  if (!update || "tipo_conteudo" in data) result.tipo_conteudo = enumValue(data.tipo_conteudo ?? "legislacao", ["legislacao", "doutrina"], "Tipo de conteúdo");
   for (const key of ["nome_curto", "descricao", "codigo", "categoria", "thumbnail_url"] as const) {
     if (!update || key in data) {
       const value = optionalString(data[key], key, key === "descricao" ? 4000 : 500);
@@ -1274,9 +1275,11 @@ export async function mutateCommercialResource(resource: CommercialResource, req
   if (resource === "leis") {
     if (action === "criar") {
       const data = validateLawData(body.data);
+      if (data.tipo_conteudo === "doutrina") throw new CommercialHttpError(409, "Use a prévia de importação de doutrina para preservar UUIDs e estruturas.");
+      delete data.tipo_conteudo;
       return rpc("admin_criar_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
-    if (action === "atualizar") { const lawId=positiveIntegerId(body.id,"Lei"); const data=validateLawData(body.data,true); return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: lawId, p_dados: data }); }
+    if (action === "atualizar") { const lawId=positiveIntegerId(body.id,"Lei"); const data=validateLawData(body.data,true); if (data.tipo_conteudo) throw new CommercialHttpError(409, "O tipo de conteúdo é definido somente na importação de doutrina aprovada."); return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: lawId, p_dados: data }); }
     if (action === "resumo_exclusao") { const lawId=positiveIntegerId(body.id,"Lei"); return rpc("admin_delete_law_definitively", { p_lei_id: lawId, p_actor_user_id: actor, p_confirmation: null, p_execute: false }); }
     if (action === "excluir_definitivamente") { const lawId=positiveIntegerId(body.id,"Lei"); const data=asObject(body.data); if (data.confirmacao !== "EXCLUIR") throw new CommercialHttpError(400, "Digite EXCLUIR para confirmar a exclusão definitiva da lei."); return rpc("admin_delete_law_definitively", { p_lei_id: lawId, p_actor_user_id: actor, p_confirmation: "EXCLUIR", p_execute: true }); }
   }

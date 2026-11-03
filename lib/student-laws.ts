@@ -21,12 +21,14 @@ export type StudentLaw = {
   studyContextId?: string | null;
   studyContextName?: string;
   studyContextKind?: "completa" | "recorte";
+  studyContexts?: StudentLawStudyContext[];
 };
 
 export type StudentLawStudyContext = {
   recorteId: string | null;
   nome: string;
   questionCount: number;
+  availability?: "ready" | "coming_soon";
 };
 
 export type StudentLawUpdateStatus = "nao_verificado" | "atualizado" | "desatualizado";
@@ -152,6 +154,7 @@ export function filterStudentLaws(laws: StudentLaw[], search: string) {
     law.referenciaNormativaAtual,
     law.versaoMaterial,
     law.studyContextName,
+    ...(law.studyContexts ?? []).map((context) => context.nome),
   ].filter(Boolean).join(" ")).includes(query));
 }
 
@@ -163,13 +166,8 @@ export function filterStudentLaws(laws: StudentLaw[], search: string) {
 export function projectStudentLawContexts(laws: StudentLaw[], contextsByLaw: Map<number, StudentLawStudyContext[]>) {
   return laws.flatMap((law) => {
     const contexts = contextsByLaw.get(law.id) ?? [];
-    return contexts.map((context) => ({
-      ...law,
-      totalFlashcards: context.questionCount,
-      studyContextId: context.recorteId,
-      studyContextName: context.nome,
-      studyContextKind: context.recorteId ? "recorte" as const : "completa" as const,
-    }));
+    const full = contexts.find((context) => context.recorteId === null);
+    return [{ ...law, totalFlashcards: full?.questionCount ?? law.totalFlashcards, studyContextId: null, studyContextName: full?.nome ?? "Lei completa", studyContextKind: "completa" as const, studyContexts: contexts }];
   });
 }
 

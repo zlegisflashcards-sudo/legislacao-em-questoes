@@ -11,6 +11,7 @@ describe("página comercial de produto", () => {
     expect(source).toContain("activeQuestionCountsBySlug");
     expect(source).not.toContain('from("materiais_leis")');
     expect(source).toContain('export const dynamic = "force-dynamic"');
+    expect(source).toContain('titulo: lei?.titulo || lei?.nome_curto || "Lei não identificada"');
   });
 
   it("inclui slugs de produtos ativos na rota comercial sem depender do Sheets", () => {
@@ -39,7 +40,7 @@ describe("página comercial de produto", () => {
     expect(productPage).not.toContain("Adquirir (garantia Hotmart)");
     expect(source).toContain("Vídeo do produto:");
     expect(source).toContain('const isLeiAvulsa = produto.tipoProduto === "lei_avulsa"');
-    expect(source).toContain('select("id,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto")');
+    expect(source).toContain('select("id,slug,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto,records_enabled")');
   });
 
   it("mostra a projeção estrutural somente para vínculo avulso consistente", () => {
@@ -68,10 +69,16 @@ describe("página comercial de produto", () => {
     expect(source).toContain("isProdutoComposto && lawHref");
   });
 
+  it("exibe a sala de Records apenas quando o produto a mantém habilitada", () => {
+    expect(source).toContain('const recordsEnabled = "records_enabled" in produto.data && produto.data.records_enabled === true');
+    expect(source).toContain('href={`/recordes/${encodeURIComponent(produto.slug)}`}');
+    expect(source).toContain("🏆 Sala de Records →");
+  });
+
   it("mantém a rota comercial disponível enquanto a coluna de vídeo não foi aplicada", () => {
     expect(source).toContain("const produtoComPreco = produtoComVideo.error");
     expect(source).toContain("const produto = produtoComPreco.error");
-    expect(source).toContain('select("id,nome,descricao,hotmart_url,tipo_produto")');
+    expect(source).toContain('select("id,slug,nome,descricao,hotmart_url,tipo_produto")');
   });
 
   it("resolve produtos do banco antes do fallback de legislação", () => {

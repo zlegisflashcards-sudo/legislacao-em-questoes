@@ -5,7 +5,8 @@ const source = readFileSync("components/student-study-hub.tsx", "utf8");
 
 describe("central Meus estudos", () => {
   it("carrega o estudo acima somente após o aluno escolher uma lei do edital", () => {
-    expect(source).toContain('<ActiveStudy law={selected} requester={studyRequester} />');
+    expect(source).toContain('<ActiveStudy law={selected} recorteId={selectedScopeId} requester={studyRequester} />');
+    expect(source).toContain('setSelectedScopeId(examLaw.recorteId);');
     expect(source).toContain('onStudyLawSelect={selectExamLaw}');
     expect(source).toContain('function ActiveStudy');
     expect(source).toContain('if (!law) return null;');
@@ -16,6 +17,10 @@ describe("central Meus estudos", () => {
   it("preserva o recorte ao abrir uma lei da biblioteca", () => {
     expect(source).toContain('recorte_id=${encodeURIComponent(law.studyContextId)}');
     expect(source).toContain('/estudar/lei/${encodeURIComponent(law.slug)}?contexto=completo');
+  });
+
+  it("mantém o recorte escolhido no estudo embutido e deixa a expansão abrir a lei completa", () => {
+    expect(source).toContain('recorteId={recorteId}');
   });
 
   it("expõe abas acessíveis, carregamento e erro", () => {
