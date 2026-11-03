@@ -11,18 +11,25 @@ import { supabase } from "@/lib/supabase";
 type StudentLawsResponse = { leis?: StudentLaw[]; total?: number; message?: string };
 
 async function studentRequest() {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  const userId = data.session?.user.id ?? null;
-  if (!token || !userId) return { response: new Response(null, { status: 401 }), userId: null, token: null };
-  return {
-    response: await fetch("/api/aluno/minhas-leis", {
-      cache: "no-store",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
-    userId,
-    token,
-  };
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 20_000);
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    const userId = data.session?.user.id ?? null;
+    if (!token || !userId) return { response: new Response(null, { status: 401 }), userId: null, token: null };
+    return {
+      response: await fetch("/api/aluno/minhas-leis", {
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      userId,
+      token,
+    };
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export function StudentLawsClient() {
