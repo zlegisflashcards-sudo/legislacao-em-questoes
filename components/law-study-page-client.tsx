@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import { CampaignPerformanceDonut } from "@/components/campaign-performance-donut";
@@ -37,7 +37,7 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy, em
   const [resetting, setResetting] = useState(false);
   const [reviewCounts, setReviewCounts] = useState<ReviewCounts | null>(null);
 
-  async function request(path: string, method = "GET") {
+  const request = useCallback(async (path: string, method = "GET") => {
     if (requester) return requester(path, method) as Promise<Record<string, unknown>>;
     const { supabase } = await import("@/lib/supabase");
     const { data } = await supabase.auth.getSession();
@@ -47,33 +47,46 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy, em
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.message || "Não foi possível carregar esta lei.");
     return result;
-  }
+  }, [requester, slug]);
 
   useEffect(() => {
     if (publicStudy) return;
+    let active = true;
     void (async () => {
       try {
         const scopeQuery = recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : "";
-        const [law, state, structure, availableContexts, newQuestions, reviews] = await Promise.all([
+        // The law, campaign and structure are required to open the page. The
+        // badge counts below are supplementary, so they must not keep the
+        // whole study surface in a loading state when their requests are slow.
+        const [law, state, structure, availableContexts] = await Promise.all([
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}${scopeQuery}`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/campanha?resumo=1${recorteId ? `&recorte_id=${encodeURIComponent(recorteId)}` : ""}`),
           request(`/api/questoes/estrutura?slug=${encodeURIComponent(slug)}`),
           request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/contextos`),
-          recorteId ? Promise.resolve({ counts: {} }) : request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/novas-por-bloco`),
-          recorteId ? Promise.resolve({ counts: { errors: 0, favorites: 0, unanswered: 0 } }) : request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/revisao`),
         ]);
+        if (!active) return;
         if (law?.study) setStudy(law.study);
         if (state) setCampaign(state);
         const found = Array.isArray(structure?.laws) ? structure.laws.find((item: QuestionSourceLaw) => item.slug === slug) : null;
         if (!found) throw new Error("Não foi possível carregar a estrutura desta lei.");
         setSourceLaw(found);
         setContexts(Array.isArray(availableContexts?.contexts) ? availableContexts.contexts : []);
-        setNewQuestionsByStructure(newQuestions?.counts && typeof newQuestions.counts === "object" ? newQuestions.counts : {});
-        if (reviews?.counts) setReviewCounts(reviews.counts);
         setContextsLoaded(true);
-      } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta lei."); }
+        if (!recorteId) void Promise.all([
+          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/novas-por-bloco`),
+          request(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/revisao`),
+        ]).then(([newQuestions, reviews]) => {
+          if (!active) return;
+          setNewQuestionsByStructure(newQuestions?.counts && typeof newQuestions.counts === "object" ? newQuestions.counts : {});
+          if (reviews?.counts) setReviewCounts(reviews.counts);
+        }).catch(() => {
+          // The core study page is already available. Counts can remain in
+          // their neutral state and be refreshed on the next visit.
+        });
+      } catch (caught) { if (active) setError(caught instanceof Error ? caught.message : "Não foi possível carregar esta lei."); }
     })();
-  }, [slug, publicStudy, recorteId]);
+    return () => { active = false; };
+  }, [slug, publicStudy, recorteId, request]);
 
   async function reset() {
     setResetting(true);

@@ -96,22 +96,23 @@ export async function authenticateLawStudent(request: Request, slug: string) {
   if (userError || !userData.user) throw new LawStudyApiError(401, "Sua sessão expirou. Entre novamente.");
 
   const [{ data: studentData, error: studentError }, { data: lawData, error: lawError }] = await Promise.all([
-    supabase.from("alunos").select("id").eq("user_id", userData.user.id).maybeSingle(),
+    // Keep the password status in the same lookup as the student id. Every
+    // study surface authenticates through this function, so a second serial
+    // query here delayed the law page, Anki and LegisCast alike.
+    supabase.from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle(),
     supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
   ]);
   if (studentError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
   const student = record(studentData);
   const studentId = text(student?.id);
   if (!studentId) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
+  if (student?.deve_trocar_senha === true) throw new LawStudyApiError(403, "Crie sua nova senha antes de acessar suas leis.");
   if (lawError) throw new LawStudyApiError(503, "Não foi possível carregar esta lei agora.");
   const law = record(lawData);
   const lawId = positiveInteger(law?.id);
   const title = text(law?.titulo);
   if (lawId === null || !title) throw new LawStudyApiError(404, "Lei não encontrada ou não liberada para sua conta.");
 
-  const { data: passwordStatus, error: passwordStatusError } = await supabase.from("alunos").select("deve_trocar_senha").eq("id", studentId).single();
-  if (passwordStatusError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
-  if (passwordStatus?.deve_trocar_senha === true) throw new LawStudyApiError(403, "Crie sua nova senha antes de acessar suas leis.");
   return { supabase, lawId, title, law, studentId };
 }
 

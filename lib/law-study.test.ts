@@ -55,7 +55,8 @@ describe("contrato da página de estudo da lei", () => {
 describe("autorização e exposição segura", () => {
   it("autentica, resolve o aluno e verifica a liberação ativa antes dos materiais", () => {
     expect(server).toContain("auth.getUser(token)");
-    expect(server).toContain('.from("alunos").select("id").eq("user_id", userData.user.id)');
+    expect(server).toContain('.from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id)');
+    expect(server).not.toContain('.from("alunos").select("deve_trocar_senha").eq("id", studentId)');
     expect(server).toContain('.from("liberacoes_leis").select("produto_id")');
     expect(server).toContain("Recortes só definem o contexto de estudo");
     expect(server).toContain("hasStudyEntitlement(hasActiveRelease");
@@ -97,6 +98,13 @@ describe("interface de estudo", () => {
     expect(cards).toContain('?recorte_id=');
     expect(cards).toContain("href={lawHref}");
     expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Legis Questões</Link>');
+  });
+
+  it("não bloqueia a abertura do estudo pelas contagens suplementares", () => {
+    expect(client).toContain("const [law, state, structure, availableContexts] = await Promise.all");
+    expect(client).toContain("if (!recorteId) void Promise.all");
+    expect(client).toContain("/novas-por-bloco");
+    expect(client).toContain("/revisao");
   });
 
   it("exige escolha explícita quando a lei possui mais de um contexto", () => {
