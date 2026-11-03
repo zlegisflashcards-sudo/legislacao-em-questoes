@@ -58,11 +58,12 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(nextExamLawProgress({ emEstudo: true, revisao: true }, "study")).toBeNull();
   });
 
-  it("exibe somente a barra diagnóstica, sem métricas competitivas por lei", () => {
+  it("exibe somente uma barra azul de progresso, sem percentual ou status visível por lei", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
     expect(client).toContain('function ExamProgressBar');
-    expect(client).toContain('Verde = acerto · Vermelho = erro · Cinza = não respondido');
-    expect(client).toContain('bg-emerald-500'); expect(client).toContain('bg-red-500'); expect(client).toContain('bg-slate-200');
+    expect(client).not.toContain('Significado da barra:');
+    expect(client).toContain('bg-blue-400'); expect(client).toContain('h-3'); expect(client).toContain('role="progressbar"');
+    expect(client).not.toContain('% concluído'); expect(client).not.toContain('Não iniciada');
     for (const forbidden of ['{percent}%', 'Progresso geral', 'Melhor score', 'Posição no ranking', 'ProgressControl']) expect(client).not.toContain(forbidden);
   });
 
@@ -81,12 +82,16 @@ describe("progresso compartilhado no Meu Edital", () => {
     for (const old of ['Estudando', 'Revisão', 'Anki', 'streak', 'ProgressControl']) expect(client).not.toContain(old);
   });
 
-  it("prioriza o personalizado composto, permite alternar editais e oferece a criacao unica", () => {
+  it("mostra apenas o edital personalizado e oferece a criacao unica", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
     expect(client).toContain('function preferredExamId(editais: StudentExam[])');
-    expect(client).toContain('personalized && personalized.id !== "0" && personalized.leis.length > 0');
-    expect(client).toContain('aria-label="Selecionar edital"');
-    expect(client).toContain('Criar meu edital');
+    expect(client).toContain('const personalizedEditais: StudentExam[] = body.editais.filter((exam: StudentExam) => exam.tipo === "personalizado")');
+    expect(client).not.toContain('aria-label="Selecionar edital"');
+    expect(client).toContain('const editaisResponse = await request("/api/aluno/editais")');
+    expect(client).toContain('const loadAvailableLaws = useCallback(async () =>');
+    expect(client).toContain('onFocusCapture={() => void loadAvailableLaws()}');
+    expect(client).not.toContain('onClick={() => setSelected(exam.id)}');
+    expect(client).toContain('Seu edital personalizado não está disponível agora.');
     expect(client).toContain('await load(action === "rename")');
   });
 
@@ -95,8 +100,8 @@ describe("progresso compartilhado no Meu Edital", () => {
     expect(client).toContain('availableLaws.filter((law) => !current?.leis.some');
     expect(client).toContain('await change("add", { leiId: lawId })');
     expect(client).toContain('change("remove", { leiId: law.id })');
-    expect(client).toContain('isPersonalized ? <span className="flex shrink-0 items-center gap-1"');
-    expect(client).toContain('current.tipo === "produto" || customExists');
+    expect(client).toContain('aria-label={`Mover ${label} para cima`}');
+    expect(client).toContain('current && customExists ? <section');
   });
 
   it("não cria recomendação de próximo estudo na interface minimalista", () => {
@@ -106,12 +111,17 @@ describe("progresso compartilhado no Meu Edital", () => {
 
   it("mantém a lista vertical e os controles de ordem sem adicionar indicadores competitivos", () => {
     const client = readFileSync("components/student-exam-client.tsx", "utf8");
-    expect(client).toContain('grid-cols-[auto_minmax(0,1fr)_auto]');
+    expect(client).toContain('md:grid-cols-[minmax(0,1fr)_minmax(170px,300px)_auto]');
     expect(client).toContain('aria-label={`Mover ${label} para cima`}');
     expect(client).toContain('aria-label={`Mover ${label} para baixo`}');
-    expect(client).toContain('flex shrink-0 items-center gap-1');
-    expect(client).toContain('items-start gap-2 border-b');
-    expect(client).toContain('py-4 sm:gap-3');
+    expect(client).toContain('Leis do edital');
+    expect(client).toContain('const completedLaws = current?.leis.filter((law) => law.progress.unanswered === 0');
+    expect(client).toContain('{completedLaws}/{current.leis.length}');
+    expect(client).not.toContain('⚙ Organizar edital');
+    expect(client).toContain('＋ Adicionar lei');
+    expect(client).toContain('Clique na seta');
+    expect(client).toContain('para acessar todos os recursos da lei e no nome da lei para colocá-la em foco.');
+    expect(client).toContain('aria-label={`Abrir ${label} em página completa`}');
     expect(client).toContain('overflow-x-hidden');
     expect(client).toContain('<ExamProgressBar progress={law.progress} />');
     expect(client).not.toContain('Lei ainda não concluída');

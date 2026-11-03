@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { StudentAreaTabs } from "@/components/student-area-tabs";
 import { LawSearchSelect } from "@/components/law-search-select";
@@ -17,14 +18,18 @@ type StudentExamClientProps = {
 };
 
 function preferredExamId(editais: StudentExam[]) {
-  const personalized = editais.find((exam) => exam.tipo === "personalizado");
-  const product = editais.find((exam) => exam.tipo === "produto");
-  return personalized && personalized.id !== "0" && personalized.leis.length > 0 ? personalized.id : product?.id ?? personalized?.id ?? "";
+  return editais.find((exam) => exam.tipo === "personalizado")?.id ?? "";
+}
+
+function examLawProgress(progress: StudentExam["leis"][number]["progress"]) {
+  const total = progress.correct + progress.errors + progress.unanswered;
+  return total ? Math.round((progress.correct + progress.errors) / total * 100) : 0;
 }
 
 export function StudentExamClient({ embedded = false, contained = false, requester, onStudyLawSelect }: StudentExamClientProps) {
   const [editais, setEditais] = useState<StudentExam[]>([]);
   const [availableLaws, setAvailableLaws] = useState<StudentLaw[]>([]);
+  const [availableLawsLoading, setAvailableLawsLoading] = useState(false);
   const [selected, setSelected] = useState("");
   const [name, setName] = useState("");
   const [lawToAdd, setLawToAdd] = useState("");
@@ -42,25 +47,39 @@ export function StudentExamClient({ embedded = false, contained = false, request
   const load = useCallback(async (preferCustom = false) => {
     setLoading(true); setError("");
     try {
-      const [editaisResponse, lawsResponse] = await Promise.all([request("/api/aluno/editais"), request("/api/aluno/minhas-leis", { cache: "no-store" })]);
-      if (editaisResponse.status === 401 || lawsResponse.status === 401) { window.location.replace("/conta?modo=login&retorno=%2Fmeu-edital"); return; }
-      const [body, lawsBody] = await Promise.all([editaisResponse.json(), lawsResponse.json()]);
+      const editaisResponse = await request("/api/aluno/editais");
+      if (editaisResponse.status === 401) { window.location.replace("/conta?modo=login&retorno=%2Fmeu-edital"); return; }
+      const body = await editaisResponse.json();
       if (!editaisResponse.ok || !Array.isArray(body.editais)) throw new Error(body.message);
-      if (!lawsResponse.ok || !Array.isArray(lawsBody.leis)) throw new Error(lawsBody.message);
-      setEditais(body.editais); setAvailableLaws(uniqueStudentLawsById(lawsBody.leis));
+      const personalizedEditais: StudentExam[] = body.editais.filter((exam: StudentExam) => exam.tipo === "personalizado");
+      setEditais(personalizedEditais);
       setSelected((current) => {
-        if (body.editais.some((exam: StudentExam) => exam.id === current)) return current;
-        if (preferCustom) return body.editais.find((exam: StudentExam) => exam.tipo === "personalizado" && exam.id !== "0")?.id ?? preferredExamId(body.editais);
-        return preferredExamId(body.editais);
+        if (personalizedEditais.some((exam: StudentExam) => exam.id === current)) return current;
+        if (preferCustom) return personalizedEditais.find((exam: StudentExam) => exam.id !== "0")?.id ?? preferredExamId(personalizedEditais);
+        return preferredExamId(personalizedEditais);
       });
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar seus editais."); }
     finally { setLoading(false); }
   }, [request]);
 
+  const loadAvailableLaws = useCallback(async () => {
+    if (availableLaws.length || availableLawsLoading) return;
+    setAvailableLawsLoading(true);
+    try {
+      const response = await request("/api/aluno/minhas-leis", { cache: "no-store" });
+      if (response.status === 401) { window.location.replace("/conta?modo=login&retorno=%2Fmeu-edital"); return; }
+      const body = await response.json();
+      if (!response.ok || !Array.isArray(body.leis)) throw new Error(body.message);
+      setAvailableLaws(uniqueStudentLawsById(body.leis));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível carregar as leis disponíveis."); }
+    finally { setAvailableLawsLoading(false); }
+  }, [availableLaws.length, availableLawsLoading, request]);
+
   useEffect(() => { void load(); }, [load]);
   const current = editais.find((exam) => exam.id === selected) ?? null;
   const isPersonalized = current?.tipo === "personalizado";
   const customExists = isPersonalized && current.id !== "0";
+  const completedLaws = current?.leis.filter((law) => law.progress.unanswered === 0 && law.progress.correct + law.progress.errors > 0).length ?? 0;
   const selectableLaws = useMemo(() => availableLaws.filter((law) => !current?.leis.some((item) => item.id === law.id)), [availableLaws, current]);
 
   useEffect(() => { setName(isPersonalized ? current?.nome ?? "" : ""); setLawToAdd(""); }, [current?.id, current?.nome, isPersonalized]);
@@ -77,29 +96,25 @@ export function StudentExamClient({ embedded = false, contained = false, request
 
   const Container = embedded ? "section" : "main";
   return <Container aria-label={embedded ? "Edital personalizado" : undefined} className={embedded ? (contained ? "" : "mt-6 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6") : "mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10"}>
-    <header>{embedded ? <h2 className="text-2xl font-black tracking-tight text-[#062a5f]">Edital personalizado</h2> : <h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus Editais</h1>}</header>
+    {!embedded ? <header><h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus Editais</h1></header> : null}
     {!embedded ? <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital" /> : null}
     {loading ? <p className="border-b border-slate-200 py-5 text-slate-600">Carregando seus editais…</p> : null}
     {error ? <p role="alert" className="mt-5 border-b border-red-200 py-4 text-red-700">{error}</p> : null}
     {!loading && !error ? <>
-      <nav aria-label="Selecionar edital" className="mt-6 flex max-w-full gap-2 overflow-x-auto border-b border-slate-200 pb-3">
-        {editais.filter((exam) => exam.tipo === "produto" || exam.id !== "0").map((exam) => <button key={`${exam.tipo}-${exam.id}`} type="button" onClick={() => setSelected(exam.id)} aria-pressed={selected === exam.id} className={selected === exam.id ? "min-h-10 shrink-0 rounded-full bg-blue-700 px-4 text-sm font-black text-white" : "min-h-10 shrink-0 rounded-full border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700"}>{exam.nome}</button>)}
-        {editais.some((exam) => exam.tipo === "personalizado" && exam.id === "0") ? <button type="button" onClick={() => setSelected("0")} aria-pressed={selected === "0"} className={selected === "0" ? "min-h-10 shrink-0 rounded-full bg-blue-700 px-4 text-sm font-black text-white" : "min-h-10 shrink-0 rounded-full border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700"}>Criar meu edital</button> : null}
-      </nav>
-      {!current ? <p className="mt-6 border-b border-slate-200 pb-7 text-slate-600">Você ainda não possui editais disponíveis.</p> : null}
+      {!current ? <p className="mt-6 border-b border-slate-200 pb-7 text-slate-600">Seu edital personalizado não está disponível agora.</p> : null}
       {current && isPersonalized && !customExists ? <section className="mt-6 max-w-lg border-b border-slate-200 pb-6"><h2 className="text-xl font-black text-[#062a5f]">Criar meu edital</h2><p className="mt-2 text-sm text-slate-600">Escolha um nome para organizar as leis que você já possui.</p><form onSubmit={(event) => void saveName(event)} className="mt-4 flex flex-col gap-3 sm:flex-row"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required placeholder="Ex.: PRF 2026" className="min-h-11 min-w-0 flex-1 rounded-lg border border-slate-300 px-3" /><button disabled={saving} className="min-h-11 rounded-lg bg-blue-700 px-4 font-black text-white disabled:opacity-50">Criar meu edital</button></form></section> : null}
-      {current && (current.tipo === "produto" || customExists) ? <section className="mt-6 min-w-0" aria-labelledby="exam-laws-title">
-        <div className="border-b border-slate-200 pb-5"><div className="flex min-w-0 items-center gap-3"><h2 id="exam-laws-title" className="min-w-0 flex-1 truncate text-lg font-black text-[#062a5f]">{current.nome}</h2>{isPersonalized ? <form onSubmit={(event) => void saveName(event)} className="flex min-w-0 shrink items-center gap-2"><label className="sr-only" htmlFor="exam-name">Nome do edital</label><input id="exam-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required className="min-h-9 min-w-0 w-28 rounded border border-slate-300 px-2 text-sm sm:w-44" /><button disabled={saving || name.trim() === current.nome} className="min-h-9 shrink-0 text-sm font-bold text-blue-700 disabled:text-slate-400">Salvar</button></form> : null}</div>
-          {isPersonalized ? <form onSubmit={(event) => void addLaw(event)} className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"><label className="sr-only" htmlFor="exam-law">Adicionar lei ao edital</label><LawSearchSelect name="exam-law" value={lawToAdd} onChange={setLawToAdd} options={selectableLaws} emptyLabel="Adicionar lei ao edital" placeholder="Pesquisar lei para adicionar…" className="flex-1" /><button disabled={saving || !lawToAdd} className="min-h-11 rounded-lg border border-blue-700 px-4 font-black text-blue-700 disabled:border-slate-300 disabled:text-slate-400">+ Adicionar ao edital</button></form> : null}
-        </div>
-        {current.leis.length === 0 ? <p className="border-b border-slate-200 py-5 text-sm text-slate-600">{isPersonalized ? "Adicione leis liberadas para montar seu edital." : "Este edital ainda não possui leis."}</p> : <><p className="mt-5 text-xs font-semibold text-slate-500">Verde = acerto · Vermelho = erro · Cinza = não respondido</p><ol className="mt-3 border-t border-slate-200">{current.leis.map((law, index) => {
+      {current && customExists ? <section className="mt-6 min-w-0" aria-labelledby="exam-laws-title">
+        <header className="flex min-w-0 items-center gap-4 border-b border-blue-100 pb-5"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-blue-100 sm:h-16 sm:w-16"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 object-contain sm:h-11 sm:w-11" /></span><div className="min-w-0"><p className="text-xs font-black uppercase tracking-[.12em] text-blue-700">Edital personalizado</p><h2 id="exam-laws-title" className="truncate text-2xl font-black tracking-tight text-[#062a5f] sm:text-3xl">{current.nome}</h2><p className="mt-1 text-sm font-semibold text-slate-600">{current.leis.length} {current.leis.length === 1 ? "lei no seu plano de estudo" : "leis no seu plano de estudo"}</p></div></header>
+        <div className="pt-5"><div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><h3 className="text-xl font-black text-[#062a5f]">Leis do edital</h3><span aria-label={`${completedLaws} de ${current.leis.length} leis finalizadas`} className="grid h-7 min-w-10 place-items-center rounded-lg bg-blue-100 px-2 text-sm font-black text-blue-800">{completedLaws}/{current.leis.length}</span></div><form onSubmit={(event) => void saveName(event)} className="flex min-w-0 items-center gap-2"><label className="sr-only" htmlFor="exam-name">Nome do edital</label><input id="exam-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm sm:w-52" /><button disabled={saving || name.trim() === current.nome} className="min-h-10 shrink-0 text-sm font-bold text-blue-700 disabled:text-slate-400">Salvar</button></form></div>
+          <form onSubmit={(event) => void addLaw(event)} onFocusCapture={() => void loadAvailableLaws()} className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"><label className="sr-only" htmlFor="exam-law">Adicionar lei ao edital</label><LawSearchSelect name="exam-law" value={lawToAdd} onChange={setLawToAdd} options={selectableLaws} emptyLabel={availableLawsLoading ? "Carregando leis disponíveis…" : "Adicionar lei ao edital"} placeholder="Pesquisar lei para adicionar…" className="flex-1" /><button disabled={saving || !lawToAdd} className="min-h-11 rounded-xl border border-blue-700 px-4 font-black text-blue-700 hover:bg-blue-50 disabled:border-slate-300 disabled:text-slate-400">＋ Adicionar lei</button></form>
+          {current.leis.length === 0 ? <p className="py-7 text-sm text-slate-600">Adicione leis liberadas para montar seu edital.</p> : <><div className="mt-5 hidden grid-cols-[minmax(0,1fr)_minmax(170px,300px)_auto] gap-5 rounded-xl bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500 md:grid"><span>Lei</span><span>Progresso</span><span>Estudo</span></div><ol className="divide-y divide-slate-200">{current.leis.map((law, index) => {
           const label = `${law.titulo.trim() || `Lei ${law.id}`}${law.recorteNome ? ` — ${law.recorteNome}` : ""}`;
           const studyHref = law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}` : `/estudar/lei/${encodeURIComponent(law.slug)}`;
-          return <li key={law.id} className={`grid min-w-0 ${isPersonalized ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"} items-start gap-2 border-b border-slate-200 py-4 sm:gap-3`}>
-            {isPersonalized ? <span className="flex shrink-0 items-center gap-1" aria-label="Reordenar lei"><button type="button" disabled={saving || index === 0} onClick={() => void move(index, -1)} aria-label={`Mover ${label} para cima`} className="grid h-9 w-9 place-items-center rounded text-base font-black text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent">↑</button><button type="button" disabled={saving || index === current.leis.length - 1} onClick={() => void move(index, 1)} aria-label={`Mover ${label} para baixo`} className="grid h-9 w-9 place-items-center rounded text-base font-black text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent">↓</button></span> : null}
-            <span className="min-w-0">{onStudyLawSelect ? <button type="button" onClick={() => onStudyLawSelect(law)} className="block min-w-0 break-words text-left text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</button> : <Link href={studyHref} className="block min-w-0 break-words text-sm font-semibold leading-5 text-[#062a5f] underline decoration-blue-200 underline-offset-4 hover:text-blue-700">{label}</Link>}<ExamProgressBar progress={law.progress} />{isPersonalized ? <span className="mt-2 flex flex-wrap items-center gap-2"><button type="button" disabled={saving} onClick={() => void change("remove", { leiId: law.id })} aria-label={`Remover ${label} do edital`} className="min-h-8 text-xs font-bold text-slate-500 underline underline-offset-2 hover:text-red-700 disabled:text-slate-300">Remover do edital</button></span> : null}</span>
+          const progress = examLawProgress(law.progress);
+          const studyAction = onStudyLawSelect ? <button type="button" onClick={() => onStudyLawSelect(law)} className="inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-700 px-4 text-sm font-black text-blue-700 hover:bg-blue-50">{progress ? "Continuar" : "Iniciar"}</button> : <Link href={studyHref} className="inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-700 px-4 text-sm font-black text-blue-700 hover:bg-blue-50">{progress ? "Continuar" : "Iniciar"}</Link>;
+          return <li key={law.id} className="grid min-w-0 gap-4 py-5 md:grid-cols-[minmax(0,1fr)_minmax(170px,300px)_auto] md:items-center md:gap-5"><div className="flex min-w-0 items-start gap-3"><span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={28} height={28} className="h-7 w-7 object-contain" /></span><div className="min-w-0">{onStudyLawSelect ? <><button type="button" onClick={() => onStudyLawSelect(law)} className="inline min-w-0 break-words text-left text-base font-black leading-5 text-[#062a5f] hover:text-blue-700">{label}</button><Link href={studyHref} aria-label={`Abrir ${label} em página completa`} className="ml-1 inline text-base font-black text-blue-700 hover:text-blue-900"><span aria-hidden="true">↗</span></Link></> : <Link href={studyHref} className="block min-w-0 break-words text-base font-black leading-5 text-[#062a5f] hover:text-blue-700">{label} <span aria-hidden="true">↗</span></Link>}<button type="button" disabled={saving || index === 0} onClick={() => void move(index, -1)} aria-label={`Mover ${label} para cima`} className="mt-2 mr-2 text-xs font-bold text-blue-700 disabled:text-slate-300">↑</button><button type="button" disabled={saving || index === current.leis.length - 1} onClick={() => void move(index, 1)} aria-label={`Mover ${label} para baixo`} className="mt-2 mr-3 text-xs font-bold text-blue-700 disabled:text-slate-300">↓</button><button type="button" disabled={saving} onClick={() => void change("remove", { leiId: law.id })} aria-label={`Remover ${label} do edital`} className="mt-2 text-xs font-bold text-slate-500 underline underline-offset-2 hover:text-red-700 disabled:text-slate-300">Remover</button></div></div><div><ExamProgressBar progress={law.progress} /></div><div>{studyAction}</div>
           </li>;
-        })}</ol></>}
+         })}</ol></>}</div><p className="mt-4 text-sm text-slate-600">Clique na seta <span aria-hidden="true">↗</span> para acessar todos os recursos da lei e no nome da lei para colocá-la em foco.</p>
       </section> : null}
     </> : null}
   </Container>;
@@ -107,6 +122,7 @@ export function StudentExamClient({ embedded = false, contained = false, request
 
 function ExamProgressBar({ progress }: { progress: StudentExam["leis"][number]["progress"] }) {
   const total = progress.correct + progress.errors + progress.unanswered;
-  const segments = total ? [{ key: "correct", value: progress.correct, className: "bg-emerald-500" }, { key: "errors", value: progress.errors, className: "bg-red-500" }, { key: "unanswered", value: progress.unanswered, className: "bg-slate-200" }] : [{ key: "unanswered", value: 1, className: "bg-slate-200" }];
-  return <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-slate-200" aria-label="Progresso de respostas da lei">{segments.filter((segment) => segment.value > 0).map((segment) => <span key={segment.key} className={segment.className} style={{ width: `${segment.value / (total || 1) * 100}%` }} />)}</div>;
+  const completed = progress.correct + progress.errors;
+  const percentage = total ? completed / total * 100 : 0;
+  return <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Progresso de respostas da lei" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}><span className="block h-full rounded-full bg-blue-400 transition-[width]" style={{ width: `${percentage}%` }} /></div>;
 }
