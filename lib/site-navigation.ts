@@ -10,7 +10,7 @@ const publicNavigation: readonly SiteNavigationItem[] = [
 ] as const;
 
 const profileNavigation: SiteNavigationItem = { label: "Meu perfil", href: "/conta" };
-const examNavigation: SiteNavigationItem = { label: "Edital personalizado", href: "/meu-edital" };
+const examNavigation: SiteNavigationItem = { label: "Meus Atalhos", href: "/meu-edital" };
 
 export function legisQuestionsNavigation(authenticated: boolean | null): SiteNavigationItem {
   return authenticated === true

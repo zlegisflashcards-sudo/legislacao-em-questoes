@@ -15,7 +15,7 @@ describe("cabeçalho único", () => {
   });
 
   it("preserva os acessos secundários do aluno sem expor Dashboard", () => {
-    expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Edital personalizado", "Meu perfil"]);
+    expect(headerNavigation(true).map((item) => item.label)).toEqual([...publicLabels, "Meus Atalhos", "Meu perfil"]);
     expect(legisQuestionsNavigation(true)).toEqual({ label: "Fazer questões", href: "/minhas-leis" });
     expect(legisQuestionsNavigation(false)).toEqual({ label: "Fazer questões", href: "/conta?modo=login&retorno=%2Fminhas-leis" });
     expect(headerNavigation(true).at(-1)).toEqual({ label: "Meu perfil", href: "/conta" });
@@ -24,7 +24,7 @@ describe("cabeçalho único", () => {
 
   it("deixa o CTA Fazer questões responsável pelo login do visitante", () => {
     expect(headerNavigation(false).some((item) => item.label === "Meu perfil")).toBe(false);
-    expect(headerNavigation(false).some((item) => item.label === "Edital personalizado")).toBe(false);
+    expect(headerNavigation(false).some((item) => item.label === "Meus Atalhos")).toBe(false);
   });
 
   it("renderiza desktop e mobile a partir das mesmas fontes", () => {
