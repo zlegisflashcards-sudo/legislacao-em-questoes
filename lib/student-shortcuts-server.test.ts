@@ -37,6 +37,7 @@ describe("Meus Atalhos", () => {
     expect(client).toContain('aria-label="Selecionar um edital sugerido"');
     expect(client).toContain("legisflashcards:atalhos-organizacao");
     expect(client).toContain("window.localStorage.setItem(selectedOrganizationKey, id)");
+    expect(client).toContain("border-2 border-dashed border-current");
     expect(client).toContain('touchAction: "none"');
     expect(client).toContain("setPointerCapture(event.pointerId)");
     expect(client).toContain("🗑 Remover");
