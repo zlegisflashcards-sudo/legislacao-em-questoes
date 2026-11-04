@@ -106,7 +106,7 @@ export function StudentExamClient({ embedded = false, contained = false, request
   const Container = embedded ? "section" : "main";
   return <Container aria-label={embedded ? "Edital personalizado" : undefined} className={embedded ? (contained ? "" : "mt-6 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6") : "mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10"}>
     {!embedded ? <header><h1 className="text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">Meus Editais</h1></header> : null}
-    {!embedded ? <StudentAreaTabs activeTab="edital" minhasLeisHref="/minhas-leis" meuEditalHref="/meu-edital" /> : null}
+    {!embedded ? <StudentAreaTabs activeTab="atalhos" minhasLeisHref="/minhas-leis" /> : null}
     {loading ? <p className="border-b border-slate-200 py-5 text-slate-600">Carregando seus editais…</p> : null}
     {error ? <p role="alert" className="mt-5 border-b border-red-200 py-4 text-red-700">{error}</p> : null}
     {!loading && !error ? <>

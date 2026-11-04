@@ -7,6 +7,17 @@ import { PUBLICATION_STATUSES, publicationStatusFromActive } from "@/lib/publica
 export type AdminLawData = Record<string, unknown>;
 
 const text = (value: unknown) => value == null ? "" : String(value);
+const lawCategories = [
+  { value: "Constituições", label: "Constituições — verde" },
+  { value: "Códigos", label: "Códigos — amarelo" },
+  { value: "Código", label: "Código (legado) — amarelo" },
+  { value: "Legislações federais", label: "Legislações federais — laranja" },
+  { value: "Legislações municipais", label: "Legislações municipais — laranja" },
+  { value: "Legislações Municipais", label: "Legislações Municipais (legado) — laranja" },
+  { value: "Legislações Especificas", label: "Legislações específicas — vermelho" },
+  { value: "Tratados Internacionais", label: "Tratados internacionais — azul" },
+  { value: "Direito Internacional Público", label: "Direito Internacional Público — azul" },
+] as const;
 
 /** Campos canônicos do cadastro de lei, compartilhados pelos dois painéis administrativos. */
 export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawData | null; showFreeAccess?: boolean }) {
@@ -25,7 +36,7 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
         <label>Título<input name="titulo" defaultValue={text(law?.titulo)} placeholder="Título" required /></label>
         <label>Nome curto<input name="nome_curto" defaultValue={text(law?.nome_curto)} placeholder="Nome curto" /></label>
         <label>Código<input name="codigo" defaultValue={text(law?.codigo)} placeholder="Código" /></label>
-        <label>Categoria<input name="categoria" defaultValue={text(law?.categoria)} placeholder="Categoria" /></label>
+        <label>Tipo de lei<select name="categoria" defaultValue={text(law?.categoria)}><option value="">Selecione o tipo</option>{lawCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
         <label>Ordem<input name="ordem" type="number" min="0" defaultValue={text(law?.ordem) || "0"} required /></label>
         <label className="law-data-wide">URL da miniatura<input name="thumbnail_url" defaultValue={text(law?.thumbnail_url)} placeholder="URL da miniatura" /></label>
         <label className="law-data-wide">Descrição<textarea name="descricao" defaultValue={text(law?.descricao)} placeholder="Descrição" /></label>

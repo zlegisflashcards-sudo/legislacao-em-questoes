@@ -57,6 +57,18 @@ function parseSelection(value: unknown, id: string): StudentShortcutSelection {
   };
 }
 
+async function withFullScopeNames(data: StudentShortcutsData): Promise<StudentShortcutsData> {
+  const selections = [data.minhaSelecao, ...data.selecoesProntas];
+  const scopeIds = [...new Set([...selections.flatMap((selection) => selection.leis), ...data.leisDisponiveis].flatMap((law) => law.recorteId ? [law.recorteId] : []))];
+  if (!scopeIds.length) return data;
+  const db = getSupabaseServerClient();
+  const { data: scopes, error } = await db.from("recortes_leis").select("id,nome,nome_exibicao").in("id", scopeIds);
+  if (error) return data;
+  const labelByScope = new Map((scopes ?? []).map((scope) => [scope.id, typeof scope.nome_exibicao === "string" && scope.nome_exibicao.trim() ? scope.nome_exibicao.trim() : scope.nome]));
+  const withNames = (selection: StudentShortcutSelection): StudentShortcutSelection => ({ ...selection, leis: selection.leis.map((law) => law.recorteId ? { ...law, recorteNome: labelByScope.get(law.recorteId) ?? law.recorteNome } : law) });
+  return { minhaSelecao: withNames(data.minhaSelecao), selecoesProntas: data.selecoesProntas.map(withNames), leisDisponiveis: data.leisDisponiveis.map((law) => law.recorteId ? { ...law, recorteNome: labelByScope.get(law.recorteId) ?? law.recorteNome } : law) };
+}
+
 export async function loadStudentShortcuts(request: Request): Promise<StudentShortcutsData> {
   const client = await authenticatedClient(request);
   const { data, error } = await client.rpc("obter_meus_atalhos");
@@ -73,7 +85,7 @@ export async function loadStudentShortcuts(request: Request): Promise<StudentSho
     const parsed = item ? parseShortcut({ ...item, temAcesso: true }) : null;
     return parsed ? [parsed] : [];
   }) : [];
-  return { minhaSelecao, selecoesProntas, leisDisponiveis };
+  return withFullScopeNames({ minhaSelecao, selecoesProntas, leisDisponiveis });
 }
 
 export async function setStudentShortcutColor(request: Request, lawId: unknown, color: unknown) {

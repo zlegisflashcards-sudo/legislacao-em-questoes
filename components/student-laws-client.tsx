@@ -37,8 +37,10 @@ export function StudentLawsClient() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<"library" | "shortcuts">(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("aba") === "atalhos" ? "shortcuts" : "library");
 
   useEffect(() => {
+    if (tab !== "library" || !loading) return;
     let active = true;
     async function load() {
       try {
@@ -59,10 +61,16 @@ export function StudentLawsClient() {
     }
     void load();
     return () => { active = false; };
-  }, []);
+  }, [loading, tab]);
 
   const filteredLaws = useMemo(() => filterStudentLaws(laws, search), [laws, search]);
-  return <StudentStudyHub laws={laws} loading={loading} error={error} onRetry={() => window.location.reload()} library={<StudentLawsLibrary laws={laws} filteredLaws={filteredLaws} loading={loading} error={error} search={search} onSearch={setSearch} />} />;
+  function changeTab(nextTab: "library" | "shortcuts") {
+    setTab(nextTab);
+    const url = new URL(window.location.href);
+    if (nextTab === "shortcuts") url.searchParams.set("aba", "atalhos"); else url.searchParams.delete("aba");
+    window.history.replaceState(null, "", url);
+  }
+  return <StudentStudyHub loading={loading} error={error} onRetry={() => { setError(""); setLoading(true); }} tab={tab} onTabChange={changeTab} library={<StudentLawsLibrary laws={laws} filteredLaws={filteredLaws} loading={loading} error={error} search={search} onSearch={setSearch} />} />;
 }
 
 function StudentLawsLibrary({ laws, filteredLaws, loading, error, search, onSearch }: { laws: StudentLaw[]; filteredLaws: StudentLaw[]; loading: boolean; error: string; search: string; onSearch(value: string): void }) {

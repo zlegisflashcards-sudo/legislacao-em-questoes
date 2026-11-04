@@ -4,32 +4,23 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("components/student-study-hub.tsx", "utf8");
 
 describe("central Meus estudos", () => {
-  it("carrega o estudo acima somente após o aluno escolher uma lei do edital", () => {
-    expect(source).toContain('<ActiveStudy law={selected} recorteId={selectedScopeId} requester={studyRequester} />');
-    expect(source).toContain('setSelectedScopeId(examLaw.recorteId);');
-    expect(source).toContain('onStudyLawSelect={selectExamLaw}');
-    expect(source).toContain('function ActiveStudy');
-    expect(source).toContain('if (!law) return null;');
-    expect(source).toContain('<LawStudyPageClient');
-    expect(source).toContain('window.localStorage.setItem(lastStudyKey, key);');
-  });
-
-  it("preserva o recorte ao abrir uma lei da biblioteca", () => {
-    expect(source).toContain('recorte_id=${encodeURIComponent(law.studyContextId)}');
-    expect(source).toContain('/estudar/lei/${encodeURIComponent(law.slug)}?contexto=completo');
-  });
-
-  it("mantém o recorte escolhido no estudo embutido e deixa a expansão abrir a lei completa", () => {
-    expect(source).toContain('recorteId={recorteId}');
-  });
-
-  it("expõe abas acessíveis, carregamento e erro", () => {
+  it("mantém Todas as leis adquiridas e Meus Atalhos como abas acessíveis", () => {
     expect(source).toContain('role="tablist"');
-    expect(source).toContain('aria-selected={tab === "active"}');
+    expect(source).toContain('aria-selected={tab === "library"}');
+    expect(source).toContain('aria-selected={tab === "shortcuts"}');
+    expect(source).toContain('>Todas as leis adquiridas</button>');
+    expect(source).toContain('>Meus Atalhos</button>');
+    expect(source).toContain('<StudentShortcutsClient embedded />');
+    expect(source).not.toContain('StudentExamClient');
+    expect(source).not.toContain('Edital personalizado');
+  });
+
+  it("mantém carregamento e erro da biblioteca isolados da aba de atalhos", () => {
     expect(source).toContain('role="status"');
     expect(source).toContain('role="alert"');
     expect(source).toContain('Sala de Records');
-    expect(source).toContain('Organize seu estudo da lei seca no seu edital personalizado');
+    expect(source).toContain('tab === "library"');
+    expect(source).toContain('tab === "shortcuts"');
   });
 
 });

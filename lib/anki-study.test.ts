@@ -108,9 +108,9 @@ describe("página autenticada do Anki", () => {
 
   it("reutiliza as abas padronizadas sem botão Voltar", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
-    expect(tabs).toContain('primaryLabel="Edital personalizado"');
-    expect(tabs).toContain('secondaryLabel="Minhas Leis"');
-    expect(tabs).toContain('href="/meu-edital"');
+    expect(tabs).toContain('>Meus Atalhos</Link>');
+    expect(tabs).toContain('>Todas as leis adquiridas</Link>');
+    expect(tabs).toContain('meusAtalhosHref = "/minhas-leis?aba=atalhos"');
     expect(client).not.toContain("Voltar");
   });
 

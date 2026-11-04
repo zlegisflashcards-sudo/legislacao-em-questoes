@@ -22,6 +22,9 @@ describe("Meus Atalhos", () => {
     expect(migration).toContain("function public.obter_meus_atalhos()");
     expect(migration).not.toContain("campanhas_leis_respostas");
     expect(migration).not.toContain("questions");
+    expect(server).toContain('select("id,nome,nome_exibicao")');
+    expect(server).toContain("scope.nome_exibicao.trim()");
+    expect(server).toContain("withFullScopeNames");
   });
 
   it("preserva recortes, desabilita prefetch e informa bloqueio sem apagar a cor", () => {
@@ -29,6 +32,14 @@ describe("Meus Atalhos", () => {
     expect(client).toContain("prefetch={false}");
     expect(client).toContain("🔒");
     expect(client).toContain("confirmReplace: Boolean(existing)");
+    expect(client).toContain('updatePersonal("rename", { nome: name })');
+    expect(client).toContain("Sugestões de organização:");
+    expect(client).toContain('aria-label="Selecionar um edital sugerido"');
+    expect(client).toContain('touchAction: "none"');
+    expect(client).toContain("setPointerCapture(event.pointerId)");
+    expect(client).toContain("🗑 Remover");
+    expect(client).toContain("🎨 Cores");
+    expect(client).toContain("translate(${offset.x}px, ${offset.y}px)");
   });
 
   it("usa a categoria cadastrada como cor inicial e nas seleções prontas", () => {
