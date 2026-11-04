@@ -2,7 +2,7 @@ import "server-only";
 
 import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabase-server";
 
-export const shortcutColors = ["azul", "verde", "lilas", "amarelo", "coral", "turquesa"] as const;
+export const shortcutColors = ["azul", "verde", "lilas", "amarelo", "laranja", "vermelho", "coral", "turquesa"] as const;
 export type ShortcutColor = (typeof shortcutColors)[number];
 export type StudentShortcut = { leiId: number; slug: string; titulo: string; recorteId: string | null; recorteNome: string | null; cor: ShortcutColor; temAcesso: boolean };
 export type StudentShortcutSelection = { id: string; nome: string; leis: StudentShortcut[] };

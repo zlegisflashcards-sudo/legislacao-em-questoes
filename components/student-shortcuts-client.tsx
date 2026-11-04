@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-const colors = ["azul", "verde", "lilas", "amarelo", "coral", "turquesa"] as const;
+const colors = ["azul", "verde", "lilas", "amarelo", "laranja", "vermelho", "coral", "turquesa"] as const;
 type Color = (typeof colors)[number];
 type Shortcut = { leiId: number; slug: string; titulo: string; recorteId: string | null; recorteNome: string | null; cor: Color; temAcesso: boolean };
 type Selection = { id: string; nome: string; leis: Shortcut[] };
@@ -14,9 +14,12 @@ const colorClass: Record<Color, string> = {
   verde: "from-emerald-100 to-lime-200 text-emerald-950 before:bg-lime-500",
   lilas: "from-violet-100 to-purple-200 text-violet-950 before:bg-violet-500",
   amarelo: "from-amber-100 to-yellow-200 text-amber-950 before:bg-amber-400",
+  laranja: "from-orange-100 to-amber-200 text-orange-950 before:bg-orange-500",
+  vermelho: "from-red-100 to-rose-200 text-red-950 before:bg-red-600",
   coral: "from-rose-100 to-orange-200 text-rose-950 before:bg-rose-500",
   turquesa: "from-cyan-100 to-teal-200 text-cyan-950 before:bg-teal-400",
 };
+const colorDotClass: Record<Color, string> = { azul: "bg-blue-500", verde: "bg-lime-500", lilas: "bg-violet-500", amarelo: "bg-amber-400", laranja: "bg-orange-500", vermelho: "bg-red-600", coral: "bg-rose-500", turquesa: "bg-teal-400" };
 
 async function authorizedFetch(path: string, init?: RequestInit) {
   const { data } = await supabase.auth.getSession();
@@ -97,8 +100,17 @@ export function StudentShortcutsClient() {
 }
 
 function ShortcutTag({ shortcut, editable, first, last, disabled, onColor, onMove, onRemove }: { shortcut: Shortcut; editable: boolean; first: boolean; last: boolean; disabled: boolean; onColor(lawId: number, color: Color): Promise<void>; onMove(index: number, direction: number): Promise<void>; onRemove(): void }) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const label = `${shortcut.titulo}${shortcut.recorteNome ? ` — ${shortcut.recorteNome}` : ""}`;
   const content = <><span className="grid h-8 w-6 shrink-0 place-items-center text-slate-500" aria-hidden="true">⠿</span><span className="min-w-0 flex-1 break-words text-base font-black sm:text-lg">{label}</span>{!shortcut.temAcesso ? <span className="shrink-0 text-base" title="Acesso não disponível" aria-label="Acesso não disponível">🔒</span> : <span className="shrink-0 text-lg" aria-hidden="true">→</span>}</>;
-  return <div className="flex min-w-0 items-stretch gap-2"><>{shortcut.temAcesso ? <Link href={hrefFor(shortcut)} prefetch={false} className={`relative flex min-h-14 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r px-4 shadow-sm transition hover:-translate-y-px hover:shadow-md before:absolute before:inset-y-2 before:right-0 before:w-3 before:translate-x-1 ${colorClass[shortcut.cor]}`}>{content}</Link> : <div className={`relative flex min-h-14 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r px-4 opacity-90 before:absolute before:inset-y-2 before:right-0 before:w-3 before:translate-x-1 ${colorClass[shortcut.cor]}`}>{content}</div>}</>
-    {editable ? <div className="flex shrink-0 items-center gap-1"><select aria-label={`Cor de ${label}`} value={shortcut.cor} disabled={disabled} onChange={(event) => void onColor(shortcut.leiId, event.target.value as Color)} className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-1 text-xs font-bold text-slate-700"><option value="azul">Azul</option><option value="verde">Verde</option><option value="lilas">Lilás</option><option value="amarelo">Amarelo</option><option value="coral">Coral</option><option value="turquesa">Turquesa</option></select><button type="button" disabled={disabled || first} onClick={() => void onMove(shortcut.leiId, -1)} aria-label={`Mover ${label} para cima`} className="grid h-10 w-9 place-items-center rounded-lg border border-slate-300 bg-white font-black text-slate-700 disabled:opacity-35">↑</button><button type="button" disabled={disabled || last} onClick={() => void onMove(shortcut.leiId, 1)} aria-label={`Mover ${label} para baixo`} className="grid h-10 w-9 place-items-center rounded-lg border border-slate-300 bg-white font-black text-slate-700 disabled:opacity-35">↓</button><button type="button" disabled={disabled} onClick={onRemove} aria-label={`Remover ${label}`} className="grid h-10 w-9 place-items-center rounded-lg border border-slate-300 bg-white text-sm text-slate-600 hover:text-red-700 disabled:opacity-35">×</button></div> : null}</div>;
+  const tagClass = `relative flex min-h-14 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r px-4 shadow-sm transition hover:-translate-y-px hover:shadow-md before:absolute before:inset-y-2 before:right-0 before:w-3 before:translate-x-1 ${colorClass[shortcut.cor]}`;
+  const tag = shortcut.temAcesso ? <Link href={hrefFor(shortcut)} prefetch={false} className={tagClass}>{content}</Link> : <div className={`${tagClass} opacity-90`}>{content}</div>;
+  return <div className="flex min-w-0 items-stretch gap-2"><MobileShortcutGesture disabled={disabled || !editable} onRemove={onRemove} onColor={() => setPaletteOpen(true)} onMove={onMove} lawId={shortcut.leiId}>{tag}{paletteOpen ? <div className="absolute bottom-full right-0 z-10 mb-2 grid w-32 grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">{colors.map((color) => <button key={color} type="button" disabled={disabled} onClick={() => { setPaletteOpen(false); void onColor(shortcut.leiId, color); }} aria-label={`Usar ${color} em ${label}`} className={`grid h-8 w-8 place-items-center rounded-full ring-2 ring-offset-2 ${shortcut.cor === color ? "ring-slate-800" : "ring-transparent"}`}><span className={`h-5 w-5 rounded-full ${colorDotClass[color]}`} /></button>)}</div> : null}</MobileShortcutGesture><div className="hidden min-w-0 flex-1 sm:flex">{tag}</div>
+    {editable ? <><div className="hidden shrink-0 items-center gap-1 sm:flex"><select aria-label={`Cor de ${label}`} value={shortcut.cor} disabled={disabled} onChange={(event) => void onColor(shortcut.leiId, event.target.value as Color)} className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-1 text-xs font-bold text-slate-700"><option value="azul">Azul</option><option value="verde">Verde</option><option value="lilas">Lilás</option><option value="amarelo">Amarelo</option><option value="laranja">Laranja</option><option value="vermelho">Vermelho</option><option value="coral">Coral</option><option value="turquesa">Turquesa</option></select><button type="button" disabled={disabled || first} onClick={() => void onMove(shortcut.leiId, -1)} aria-label={`Mover ${label} para cima`} className="grid h-10 w-9 place-items-center rounded-lg border border-slate-300 bg-white font-black text-slate-700 disabled:opacity-35">↑</button><button type="button" disabled={disabled || last} onClick={() => void onMove(shortcut.leiId, 1)} aria-label={`Mover ${label} para baixo`} className="grid h-10 w-9 place-items-center rounded-lg border border-slate-300 bg-white font-black text-slate-700 disabled:opacity-35">↓</button><button type="button" disabled={disabled} onClick={onRemove} aria-label={`Remover ${label}`} className="grid h-10 w-9 place-items-center rounded-lg border border-slate-300 bg-white text-sm text-slate-600 hover:text-red-700 disabled:opacity-35">×</button></div><div className="sr-only sm:hidden"><button type="button" onClick={() => setPaletteOpen(true)}>Escolher cor de {label}</button><button type="button" disabled={first} onClick={() => void onMove(shortcut.leiId, -1)}>Mover {label} para cima</button><button type="button" disabled={last} onClick={() => void onMove(shortcut.leiId, 1)}>Mover {label} para baixo</button><button type="button" onClick={onRemove}>Remover {label}</button></div></> : null}</div>;
+}
+
+function MobileShortcutGesture({ children, disabled, lawId, onRemove, onColor, onMove }: { children: React.ReactNode; disabled: boolean; lawId: number; onRemove(): void; onColor(): void; onMove(lawId: number, direction: number): Promise<void> }) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  return <div className="relative min-w-0 flex-1 sm:hidden" onPointerDown={(event) => { start.current = { x: event.clientX, y: event.clientY }; }} onPointerUp={(event) => { const origin = start.current; start.current = null; if (!origin || disabled) return; const x = event.clientX - origin.x; const y = event.clientY - origin.y; if (Math.max(Math.abs(x), Math.abs(y)) < 56) return; suppressClick.current = true; event.preventDefault(); if (Math.abs(x) > Math.abs(y)) { if (x < 0) onRemove(); else onColor(); } else { void onMove(lawId, y < 0 ? -1 : 1); } }} onClickCapture={(event) => { if (suppressClick.current) { suppressClick.current = false; event.preventDefault(); event.stopPropagation(); } }}>{children}</div>;
 }

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const server = readFileSync("lib/student-shortcuts-server.ts", "utf8");
 const client = readFileSync("components/student-shortcuts-client.tsx", "utf8");
 const migration = readFileSync("supabase/migrations/20261104185509_add_student_shortcut_colors.sql", "utf8");
+const categoryColors = readFileSync("supabase/migrations/20261104190000_color_shortcuts_by_law_category.sql", "utf8");
 
 describe("Meus Atalhos", () => {
   it("persiste somente a cor do atalho pessoal e preserva a ordem existente", () => {
@@ -28,5 +29,18 @@ describe("Meus Atalhos", () => {
     expect(client).toContain("prefetch={false}");
     expect(client).toContain("🔒");
     expect(client).toContain("confirmReplace: Boolean(existing)");
+  });
+
+  it("usa a categoria cadastrada como cor inicial e nas seleções prontas", () => {
+    expect(categoryColors).toContain("function public.cor_atalho_por_categoria");
+    expect(categoryColors).toContain("'verde'");
+    expect(categoryColors).toContain("'amarelo'");
+    expect(categoryColors).toContain("'laranja'");
+    expect(categoryColors).toContain("'azul'");
+    expect(categoryColors).toContain("'vermelho'");
+    expect(categoryColors).toContain("'cor', public.cor_atalho_por_categoria(lei.categoria)");
+    expect(categoryColors).toContain("atalho_cor)");
+    expect(client).toContain('laranja: "from-orange-100');
+    expect(client).toContain('vermelho: "from-red-100');
   });
 });
