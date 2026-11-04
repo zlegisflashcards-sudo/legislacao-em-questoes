@@ -20,6 +20,7 @@ const colorClass: Record<Color, string> = {
   turquesa: "from-cyan-100 to-teal-200 text-cyan-950 before:bg-teal-400",
 };
 const colorDotClass: Record<Color, string> = { azul: "bg-blue-500", verde: "bg-lime-500", lilas: "bg-violet-500", amarelo: "bg-amber-400", laranja: "bg-orange-500", vermelho: "bg-red-600", coral: "bg-rose-500", turquesa: "bg-teal-400" };
+const selectedOrganizationKey = "legisflashcards:atalhos-organizacao";
 
 async function authorizedFetch(path: string, init?: RequestInit) {
   const { data } = await supabase.auth.getSession();
@@ -53,6 +54,11 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (data) setSelectionName(data.minhaSelecao.nome); }, [data]);
+  useEffect(() => {
+    if (!data) return;
+    const saved = window.localStorage.getItem(selectedOrganizationKey);
+    if (saved && (saved === "pessoal" || data.selecoesProntas.some((selection) => selection.id === saved))) setSelected(saved);
+  }, [data]);
 
   const current = useMemo(() => selected === "pessoal" ? data?.minhaSelecao ?? null : data?.selecoesProntas.find((item) => item.id === selected) ?? null, [data, selected]);
   const options = useMemo(() => data?.leisDisponiveis ?? [], [data]);
@@ -94,6 +100,10 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
     if (!name) { setSelectionName(data?.minhaSelecao.nome ?? "Minha seleção"); return; }
     if (name !== data?.minhaSelecao.nome) void updatePersonal("rename", { nome: name });
   }
+  function chooseSelection(id: string) {
+    setSelected(id);
+    window.localStorage.setItem(selectedOrganizationKey, id);
+  }
 
   const Wrapper = embedded ? "section" : "main";
   return <Wrapper className={embedded ? "w-full" : "mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12"}>
@@ -101,7 +111,7 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
     {loading ? <p className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">Carregando seus atalhos…</p> : null}
     {error ? <p role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</p> : null}
     {data && !loading ? <section className="mt-6"><div className="flex flex-col gap-3 sm:flex-row"><select aria-label="Adicionar lei ou recorte aos meus atalhos" value={option} onChange={(event) => setOption(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"><option value="">Adicionar lei ou recorte…</option>{options.map((law) => <option key={`${law.leiId}:${law.recorteId ?? ""}`} value={`${law.leiId}:${law.recorteId ?? ""}`}>{law.titulo}{law.recorteNome ? ` — ${law.recorteNome}` : ""}</option>)}</select><button type="button" disabled={!option || saving} onClick={add} className="min-h-11 rounded-xl bg-[#f26352] px-5 font-black text-white shadow-sm transition hover:bg-[#e55141] disabled:opacity-50">＋ Adicionar lei</button></div>
-      <div className="mt-6 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-end sm:justify-between"><button type="button" aria-pressed={selected === "pessoal"} onClick={() => setSelected("pessoal")} className={`min-h-11 self-start border-b-2 px-4 text-sm font-black ${selected === "pessoal" ? "border-rose-500 text-rose-700" : "border-transparent text-slate-600 hover:text-rose-700"}`}>Minha seleção</button><label className="flex min-w-0 flex-col gap-1 text-sm font-black text-slate-700 sm:flex-row sm:items-center"><span className="whitespace-nowrap">Sugestões de organização:</span><select aria-label="Selecionar um edital sugerido" value={selected === "pessoal" ? "" : selected} onChange={(event) => setSelected(event.target.value || "pessoal")} className="min-h-11 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"><option value="">Escolher edital</option>{data.selecoesProntas.map((selection) => <option key={selection.id} value={selection.id}>{selection.nome}</option>)}</select></label></div>
+      <div className="mt-6 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-end sm:justify-between"><button type="button" aria-pressed={selected === "pessoal"} onClick={() => chooseSelection("pessoal")} className={`min-h-11 self-start border-b-2 px-4 text-sm font-black ${selected === "pessoal" ? "border-rose-500 text-rose-700" : "border-transparent text-slate-600 hover:text-rose-700"}`}>Minha seleção</button><label className="flex min-w-0 flex-col gap-1 text-sm font-black text-slate-700 sm:flex-row sm:items-center"><span className="whitespace-nowrap">Sugestões de organização:</span><select aria-label="Selecionar um edital sugerido" value={selected === "pessoal" ? "" : selected} onChange={(event) => chooseSelection(event.target.value || "pessoal")} className="min-h-11 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"><option value="">Escolher edital</option>{data.selecoesProntas.map((selection) => <option key={selection.id} value={selection.id}>{selection.nome}</option>)}</select></label></div>
       {selected === "pessoal" ? <label className="mt-4 block max-w-md text-sm font-black text-slate-700">Nome da sua seleção<input aria-label="Nome da sua seleção" value={selectionName} disabled={saving} onChange={(event) => setSelectionName(event.target.value)} onBlur={renamePersonal} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} maxLength={80} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base font-semibold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /></label> : null}
       {current ? <div role="tabpanel" className="mt-5"><h2 className="sr-only">{current.nome}</h2><div className="grid gap-3">{current.leis.map((law, index) => <ShortcutTag key={`${law.leiId}:${law.recorteId ?? "completa"}`} shortcut={law} editable={selected === "pessoal"} first={index === 0} last={index === current.leis.length - 1} disabled={saving} onColor={setColor} onMove={move} onRemove={() => void updatePersonal("remove", { leiId: law.leiId })} />)}</div>{!current.leis.length ? <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">Escolha uma lei acima para criar seu primeiro atalho.</p> : null}</div> : null}
     </section> : null}

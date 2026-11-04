@@ -35,6 +35,8 @@ describe("Meus Atalhos", () => {
     expect(client).toContain('updatePersonal("rename", { nome: name })');
     expect(client).toContain("Sugestões de organização:");
     expect(client).toContain('aria-label="Selecionar um edital sugerido"');
+    expect(client).toContain("legisflashcards:atalhos-organizacao");
+    expect(client).toContain("window.localStorage.setItem(selectedOrganizationKey, id)");
     expect(client).toContain('touchAction: "none"');
     expect(client).toContain("setPointerCapture(event.pointerId)");
     expect(client).toContain("🗑 Remover");
