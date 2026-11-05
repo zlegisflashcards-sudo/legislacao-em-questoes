@@ -1645,6 +1645,7 @@ export function AdminQuestionConference({
             {manualCorrection ? (
               <AdminQuestionEditor
                 lawName={law.titulo}
+                questionId={current.id}
                 nodes={nodes}
                 value={manualCorrection}
                 original={manualOriginal}

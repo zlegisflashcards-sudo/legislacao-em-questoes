@@ -190,6 +190,10 @@ describe("administração de Legis Questões", () => {
     expect(panel).toContain("<AdminQuestionEditor");
     expect(sharedEditor).toContain('input required inputMode="decimal" value={value.ordem}');
     expect(panel).toContain("onClick={() => void editQuestion(question.id)}");
+    expect(panel).toContain("questionId={editingId}");
+    expect(sharedEditor).toContain('UUID da questão');
+    expect(sharedEditor).toContain('readOnly aria-readonly="true"');
+    expect(sharedEditor).toContain('<CopyButton value={questionId} label="Copiar UUID" />');
   });
 
   it("edita cada campo rico visualmente sem sanitizar ou reserializar o HTML armazenado", () => {

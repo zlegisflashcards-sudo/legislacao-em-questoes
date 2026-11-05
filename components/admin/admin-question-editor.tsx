@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { QuestionRichEditor } from "@/components/admin/question-rich-editor";
+import CopyButton from "@/components/admin/copy-button";
 import { QUESTION_ANSWERS, QUESTION_LONG_CONTENT_MAX_LENGTH, type QuestionAnswer, type QuestionDraft } from "@/lib/admin-questoes";
 import { compareQuestionStructureNames, type QuestionStructureType } from "@/lib/questoes-structure";
 import { plainQuestionText } from "@/lib/admin-question-search";
@@ -16,7 +17,7 @@ export function adminQuestionFormFrom(question: AdminQuestionForm): AdminQuestio
   return { structure_id: question.structure_id, pergunta: question.pergunta, resposta: question.resposta, justificativa: question.justificativa, assunto: question.assunto, legislacao: question.legislacao, ordem: question.ordem, titulo: question.titulo, total_artigos: question.total_artigos, capitulo: question.capitulo, secao: question.secao, subsecao: question.subsecao, artigo: question.artigo };
 }
 
-export function AdminQuestionEditor({ lawName, nodes, value, original, editing, saving, error, onChange, onSubmit, onCancel, onPrevious, onNext, onDuplicate, onMove, onDelete, showPreview = false }: { lawName: string; nodes: AdminQuestionStructureNode[]; value: AdminQuestionForm; original: AdminQuestionForm | null; editing: boolean; saving: boolean; error?: string; onChange: (value: AdminQuestionForm) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel?: () => void; onPrevious?: () => void; onNext?: () => void; onDuplicate?: () => void; onMove?: () => void; onDelete?: () => void; showPreview?: boolean }) {
+export function AdminQuestionEditor({ lawName, questionId = null, nodes, value, original, editing, saving, error, onChange, onSubmit, onCancel, onPrevious, onNext, onDuplicate, onMove, onDelete, showPreview = false }: { lawName: string; questionId?: string | null; nodes: AdminQuestionStructureNode[]; value: AdminQuestionForm; original: AdminQuestionForm | null; editing: boolean; saving: boolean; error?: string; onChange: (value: AdminQuestionForm) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel?: () => void; onPrevious?: () => void; onNext?: () => void; onDuplicate?: () => void; onMove?: () => void; onDelete?: () => void; showPreview?: boolean }) {
   const options = useMemo(() => {
     const visit = (parentId: number | null, prefix: string): Array<{ id: number; label: string }> => nodes.filter((node) => node.parent_id === parentId).sort(compareQuestionStructureNames).flatMap((node) => [{ id: node.id, label: `${prefix}${node.nome}` }, ...visit(node.id, `${prefix}— `)]);
     return visit(null, "");
@@ -31,7 +32,7 @@ export function AdminQuestionEditor({ lawName, nodes, value, original, editing, 
   const canSubmit = hasQuestionText && hasStructure && hasTotalArticles && legislationWithinLimit;
 
   return <article className="commercial-card question-editor-card">
-    <header><div><p className="question-editor-eyebrow">{lawName}</p><h2 id="admin-question-editor-title">{editing ? "Editar questão" : "Cadastrar questão"}</h2><p>{dirty ? "Alterações não salvas" : editing ? "Alterações salvas" : "Preencha os dados da nova questão"}</p></div></header>
+    <header><div><p className="question-editor-eyebrow">{lawName}</p><h2 id="admin-question-editor-title">{editing ? "Editar questão" : "Cadastrar questão"}</h2><p>{dirty ? "Alterações não salvas" : editing ? "Alterações salvas" : "Preencha os dados da nova questão"}</p></div>{questionId ? <div className="mt-3 grid gap-1 sm:min-w-[26rem]"><label className="text-xs font-black uppercase tracking-wide text-slate-600" htmlFor="question-uuid">UUID da questão</label><div className="flex min-w-0 gap-2"><input id="question-uuid" className="min-w-0 flex-1 font-mono text-xs" value={questionId} readOnly aria-readonly="true" onFocus={(event) => event.currentTarget.select()} /><CopyButton value={questionId} label="Copiar UUID" /></div></div> : null}</header>
 	    {error ? <p className="admin-alert error" role="alert">{error}</p> : null}
 	    {editing && (onPrevious || onNext || onDuplicate || onMove || onDelete) ? <nav className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 sm:px-6" aria-label="Ações da questão"><button type="button" className="admin-button secondary" disabled={saving || !onPrevious} onClick={onPrevious}>← Questão anterior</button><button type="button" className="admin-button secondary" disabled={saving || !onNext} onClick={onNext}>Próxima questão →</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onDuplicate}>Duplicar</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onMove}>Mover para outra estrutura</button><button type="button" className="admin-button danger ml-auto" disabled={saving} onClick={onDelete}>Excluir questão</button></nav> : null}
 	    <form onSubmit={onSubmit} className="question-editor-form">
