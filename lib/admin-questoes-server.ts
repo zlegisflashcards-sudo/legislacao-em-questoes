@@ -11,7 +11,7 @@ import { apkgQuestionProposal, classifyApkgQuestion, hasMixedApkgBatch, validate
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
 import { compareQuestionStructureNames, creatableQuestionStructureTypes, normalizeQuestionStructureName, parseQuestionStructureTxt, planQuestionDeckStructure, questionCountsByStructure, validQuestionStructureParent, type CreatableQuestionStructureType, type QuestionStructureNode, type QuestionStructureType, type StructureImportMapping } from "@/lib/questoes-structure";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
+import { descendantsForScope, questionsInScope, summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, parseAdminQuestionSearchSort, plainQuestionText } from "@/lib/admin-question-search";
 import { descendantStructureIds, groupDuplicateQuestionStatements, introducedDuplicateQuestionStatementIds, sameStructureQuestionStatement } from "@/lib/admin-question-management";
 import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
@@ -34,6 +34,7 @@ function fail(context: string, error: { code?: string; message?: string; details
 function slug(value: unknown) { if (typeof value !== "string" || !/^[a-z0-9-]{1,160}$/.test(value)) throw new AdminQuestoesError(400, "Lei inválida."); return value; }
 function id(value: unknown) { if (!Number.isSafeInteger(Number(value)) || Number(value) < 1) throw new AdminQuestoesError(400, "Estrutura inválida."); return Number(value); }
 function qid(value: unknown) { if (typeof value !== "string" || !/^[0-9a-f-]{36}$/i.test(value)) throw new AdminQuestoesError(400, "Questão inválida."); return value; }
+function scopeId(value: unknown) { if (value === null || value === undefined || value === "") return null; if (typeof value !== "string" || !/^[0-9a-f-]{36}$/i.test(value)) throw new AdminQuestoesError(400, "Recorte inválido."); return value; }
 function text(value: unknown, label: string) { if (typeof value !== "string" || !value.trim() || value.trim().length > 500) throw new AdminQuestoesError(400, `${label} inválido.`); return value.trim(); }
 function type(value: unknown) { if (!types.includes(value as StructureType)) throw new AdminQuestoesError(400, "Tipo estrutural inválido."); return value as StructureType; }
 function optionalId(value: unknown) { return value === null || value === undefined || value === "" ? null : id(value); }
@@ -66,7 +67,7 @@ async function rejectDuplicateQuestion(leiId: number, d: QuestionDraft, exceptId
 }
 
 export async function listAdminQuestionLaws() { await requireAdmin(); const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo").eq("ativo", true).order("ordem").order("titulo"); if (r.error) fail("listar_leis", r.error); return r.data ?? []; }
-export async function getAdminQuestionStructureCounts(lawSlug: string) {
+export async function getAdminQuestionStructureCounts(lawSlug: string, requestedScopeId?: unknown) {
   await requireAdmin();
   const current = await law(lawSlug);
   const [nodes, questions] = await Promise.all([
@@ -77,7 +78,34 @@ export async function getAdminQuestionStructureCounts(lawSlug: string) {
       return result.data ?? [];
     }, questionExportPageSize),
   ]);
-  return { counts: questionCountsByStructure(nodes, questions as Array<{ structure_id: number | null }>) };
+  const allowedStructureIds = await scopeStructureIds(current, requestedScopeId, nodes);
+  return { counts: questionCountsByStructure(nodes, questionsInScope(questions as Array<{ id: string; structure_id: number | null }>, allowedStructureIds)) };
+}
+export async function listAdminQuestionScopeFilters(lawSlug: string) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const [scopes, links] = await Promise.all([
+    db().from("recortes_leis").select("id,nome,nome_exibicao").eq("lei_id", current.id).eq("ativo", true).order("nome"),
+    db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id),
+  ]);
+  if (scopes.error) fail("listar_recortes_filtro_questoes", scopes.error);
+  if (links.error) fail("listar_estruturas_recortes_filtro_questoes", links.error);
+  const structuresByScope = new Map<string, number[]>();
+  for (const link of links.data ?? []) structuresByScope.set(String(link.recorte_id), [...(structuresByScope.get(String(link.recorte_id)) ?? []), Number(link.structure_id)]);
+  return (scopes.data ?? []).map((scope) => ({ id: String(scope.id), nome: String(scope.nome), nome_exibicao: scope.nome_exibicao === null ? null : String(scope.nome_exibicao), structure_ids: structuresByScope.get(String(scope.id)) ?? [] }));
+}
+
+async function scopeStructureIds(current: Law, requestedScopeId: unknown, nodes: QuestionStructureNode[]) {
+  const selectedScopeId = scopeId(requestedScopeId);
+  if (!selectedScopeId) return null;
+  const [selectedScope, links] = await Promise.all([
+    db().from("recortes_leis").select("id").eq("id", selectedScopeId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(),
+    db().from("recortes_leis_estrutura").select("structure_id").eq("recorte_id", selectedScopeId).eq("lei_id", current.id),
+  ]);
+  if (selectedScope.error) fail("validar_recorte_filtro_questoes", selectedScope.error);
+  if (!selectedScope.data) throw new AdminQuestoesError(404, "Recorte ativo não encontrado para esta lei.");
+  if (links.error) fail("listar_estruturas_recorte_filtro_questoes", links.error);
+  return descendantsForScope(nodes, (links.data ?? []).map((link) => Number(link.structure_id)));
 }
 export async function listLawQuestionScopes(lawSlug: string) { await requireAdmin(); const current = await law(lawSlug); const [scopes, nodes, questions, links] = await Promise.all([db().from("recortes_leis").select("id,nome,nome_exibicao,descricao,ativo,status_publicacao,acesso_gratuito,created_at,updated_at").eq("lei_id", current.id).order("nome"), structure(current.id), db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true), db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id)]); if (scopes.error) fail("listar_recortes", scopes.error); if (questions.error) fail("contar_recortes", questions.error); if (links.error) fail("listar_estruturas_recortes", links.error); const scopeRows = scopes.data ?? []; const questionRows = questions.data ?? []; return { law: current, structure: nodes, questions: questionRows, unstructured_questions: questionRows.filter((question) => question.structure_id === null).length, recortes: summarizeLawQuestionScopes(scopeRows, links.data ?? [], nodes, questionRows) }; }
 export async function saveLawQuestionScope(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const name = text(body.nome, "Cód. do recorte"); const displayName = typeof body.nome_exibicao === "string" ? body.nome_exibicao.trim() : ""; const description = typeof body.descricao === "string" ? body.descricao.trim() : ""; const ids = Array.isArray(body.structure_ids) ? body.structure_ids.map(Number).filter((item) => Number.isSafeInteger(item) && item > 0) : []; const suppliedId = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null; const status = body.status_publicacao === "em_breve" || body.status_publicacao === "inativa" ? body.status_publicacao : "ativa"; const free = body.acesso_gratuito === true; const result = await db().rpc("admin_salvar_recorte_lei", { p_recorte_id: suppliedId, p_lei_id: current.id, p_nome: name, p_nome_exibicao: displayName, p_descricao: description, p_ativo: status !== "inativa", p_status_publicacao: status, p_acesso_gratuito: free, p_structure_ids: ids }); if (result.error || !result.data) fail("salvar_recorte", result.error); return { id: result.data, lei_id: current.id, nome: name, nome_exibicao: displayName || null, descricao: description, status_publicacao: status, acesso_gratuito: free, structure_ids: ids }; }
@@ -98,12 +126,12 @@ export async function listQuestionContent(lawSlug: string) {
   return { law: current, questions, structure: nodes, questionCount };
 }
 export async function listAdminQuestions(lawSlug: string) { await requireAdmin(); return listQuestionContent(lawSlug); }
-export async function searchAdminQuestions(input: { lawSlug: string; query?: unknown; filter?: unknown; sort?: unknown; page?: unknown; limit?: unknown; structureId?: unknown; article?: unknown }) {
-  await requireAdmin(); const current = await law(input.lawSlug); const questionId = adminQuestionSearchId(input.query); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const sort = parseAdminQuestionSearchSort(input.sort); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit; const nodes = await structure(current.id); const structureId = input.structureId ? id(input.structureId) : null; const structureIds = structureId ? descendantStructureIds(nodes, structureId) : [];
+export async function searchAdminQuestions(input: { lawSlug: string; query?: unknown; filter?: unknown; sort?: unknown; page?: unknown; limit?: unknown; structureId?: unknown; article?: unknown; scopeId?: unknown }) {
+  await requireAdmin(); const current = await law(input.lawSlug); const questionId = adminQuestionSearchId(input.query); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const sort = parseAdminQuestionSearchSort(input.sort); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit; const nodes = await structure(current.id); const structureId = input.structureId ? id(input.structureId) : null; const selectedStructureIds = structureId ? descendantStructureIds(nodes, structureId) : null; const recorteStructureIds = await scopeStructureIds(current, input.scopeId, nodes); const structureIds = recorteStructureIds === null ? selectedStructureIds : selectedStructureIds === null ? recorteStructureIds : selectedStructureIds.filter((nodeId) => recorteStructureIds.includes(nodeId));
   let request = db().from("questions").select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,ativo,updated_at", { count: "exact" }).eq("lei_id", current.id).eq("ativo", true);
   if (questionId) request = request.eq("id", questionId);
   if (filter === "certo") request = request.eq("resposta", "Certo"); else if (filter === "errado") request = request.eq("resposta", "Errado"); else if (filter === "unstructured") request = request.is("structure_id", null);
-  if (structureIds.length) request = request.in("structure_id", structureIds);
+  if (structureIds !== null) request = structureIds.length ? request.in("structure_id", structureIds) : request.eq("structure_id", 0);
   if (typeof input.article === "string" && input.article.trim()) request = request.ilike("artigo", `%${input.article.trim().slice(0, 80)}%`);
   if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); request = request.or(predicates.join(",")); }
   request = sort === "ordem_asc" ? request.order("ordem").order("id") : sort === "ordem_desc" ? request.order("ordem", { ascending: false }).order("id", { ascending: false }) : terms.length || questionId ? request.order("ordem").order("id") : request.order("updated_at", { ascending: false }).order("id");
@@ -112,7 +140,7 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
     let scoped = db().from("questions").select("ordem").eq("lei_id", current.id).eq("ativo", true);
     if (questionId) scoped = scoped.eq("id", questionId);
     if (filter === "certo") scoped = scoped.eq("resposta", "Certo"); else if (filter === "errado") scoped = scoped.eq("resposta", "Errado"); else if (filter === "unstructured") scoped = scoped.is("structure_id", null);
-    if (structureIds.length) scoped = scoped.in("structure_id", structureIds);
+    if (structureIds !== null) scoped = structureIds.length ? scoped.in("structure_id", structureIds) : scoped.eq("structure_id", 0);
     if (typeof input.article === "string" && input.article.trim()) scoped = scoped.ilike("artigo", `%${input.article.trim().slice(0, 80)}%`);
     if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); scoped = scoped.or(predicates.join(",")); }
     return scoped;
@@ -120,7 +148,7 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
   const [firstOrder, lastOrder] = await Promise.all([matchingOrders().order("ordem").order("id").limit(1), matchingOrders().order("ordem", { ascending: false }).order("id", { ascending: false }).limit(1)]);
   if (firstOrder.error || lastOrder.error) fail("abrangencia_pesquisa_questoes", firstOrder.error ?? lastOrder.error);
   const range = { first_order: firstOrder.data?.[0]?.ordem ?? null, last_order: lastOrder.data?.[0]?.ordem ?? null };
-  return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, range, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId };
+  return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, range, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId, scope_id: scopeId(input.scopeId) };
 }
 function questionStructurePath(nodes: QuestionStructureNode[], structureId: number | null) {
   if (structureId === null) return "Sem estrutura";
@@ -549,13 +577,13 @@ async function bulkQuestionIds(current: Law, body: Record<string, unknown>) {
   if (scope === "all") { const result = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true); if (result.error) fail("selecionar_todas_questoes", result.error); return (result.data ?? []).map((row) => String(row.id)); }
   if (scope === "structure") { const nodeId = id(body.structure_id); const nodes = await structure(current.id); const descendants = descendantStructureIds(nodes, nodeId); if (!descendants.length) throw new AdminQuestoesError(404, "Estrutura não encontrada para esta lei."); const result = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true).in("structure_id", descendants); if (result.error) fail("selecionar_questoes_estrutura", result.error); return (result.data ?? []).map((row) => String(row.id)); }
   if (scope === "questions") { const ids = Array.isArray(body.question_ids) ? body.question_ids.map(qid) : []; if (!ids.length || new Set(ids).size !== ids.length) throw new AdminQuestoesError(400, "Informe uma lista não vazia de questões sem duplicidades."); return ids; }
-  if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
+  if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, scopeId: body.recorte_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
   throw new AdminQuestoesError(400, "Escopo de exclusão em massa inválido.");
 }
 
 async function bulkQuestionEditIds(current: Law, body: Record<string, unknown>, scope: BulkQuestionEditScope) {
   if (scope === "all") { const result = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true); if (result.error) fail("selecionar_todas_questoes_edicao", result.error); return (result.data ?? []).map((row) => String(row.id)); }
-  if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
+  if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, scopeId: body.recorte_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
   const ids = Array.isArray(body.question_ids) ? body.question_ids.map(qid) : [];
   if (!ids.length || new Set(ids).size !== ids.length) throw new AdminQuestoesError(400, "Selecione uma ou mais questões sem duplicidades.");
   return ids;

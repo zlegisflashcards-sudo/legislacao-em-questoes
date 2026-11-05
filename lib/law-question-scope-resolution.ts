@@ -13,6 +13,24 @@ export function descendantsForScope(nodes: ScopeStructureNode[], selectedIds: nu
   return [...found];
 }
 
+/**
+ * Mantém o recorte navegável na árvore administrativa: inclui os dispositivos
+ * selecionados, seus descendentes e os ancestrais necessários para exibir o
+ * caminho completo até cada dispositivo.
+ */
+export function visibleStructureIdsForScope(nodes: ScopeStructureNode[], selectedIds: number[]) {
+  const visible = new Set(descendantsForScope(nodes, selectedIds));
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  for (const id of [...visible]) {
+    const seen = new Set<number>();
+    for (let parentId = byId.get(id)?.parent_id ?? null; parentId !== null && !seen.has(parentId); parentId = byId.get(parentId)?.parent_id ?? null) {
+      seen.add(parentId);
+      visible.add(parentId);
+    }
+  }
+  return [...visible];
+}
+
 /** Mantém todos os ancestrais fornecidos pela API; nós sem pai conhecido ficam na raiz. */
 export function buildScopeTree<T extends ScopeStructureNode>(nodes: T[]) {
   const ids = new Set(nodes.map((node) => node.id));

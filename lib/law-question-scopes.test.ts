@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScopeTree, descendantsForScope, normalizeScopeSelection, questionsInScope, summarizeLawQuestionScopes } from "./law-question-scope-resolution";
+import { buildScopeTree, descendantsForScope, normalizeScopeSelection, questionsInScope, summarizeLawQuestionScopes, visibleStructureIdsForScope } from "./law-question-scope-resolution";
 
 const nodes = [
   { id: 1, parent_id: null }, { id: 2, parent_id: 1 }, { id: 3, parent_id: 2 }, { id: 4, parent_id: null }, { id: 5, parent_id: null },
@@ -9,6 +9,9 @@ const questions: Array<{ id: string; structure_id: number | null }> = [
 ];
 
 describe("recortes de questões canônicas", () => {
+  it("mantém ancestrais visíveis ao restringir a árvore por recorte", () => {
+    expect(visibleStructureIdsForScope(nodes, [2]).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+  });
   it("inclui um capítulo e todos os seus descendentes sem duplicar IDs", () => {
     const ids = descendantsForScope(nodes, [1, 2]);
     expect(ids.sort()).toEqual([1, 2, 3]);
