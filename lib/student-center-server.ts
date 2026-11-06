@@ -4,10 +4,14 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { postSaleCompletionForPurchase } from "@/lib/student-center-postsale";
 import { matchesStudentCenterFilters } from "@/lib/student-center-filters";
 import { parseTagIds, tagPatch } from "@/lib/student-center-tags";
+import { generateStudentProvisionalPassword } from "@/lib/student-provisional-password-server";
 
 const db = () => getSupabaseServerClient();
 const clean = (value: unknown) => typeof value === "string" ? value.trim() : "";
-async function admin() { const user = await obterAdministrador(); if (!user) throw new Error("Administração obrigatória."); return user; }
+export class StudentCenterHttpError extends Error {
+  constructor(public status: number, message: string) { super(message); this.name = "StudentCenterHttpError"; }
+}
+async function admin() { const user = await obterAdministrador(); if (!user) throw new StudentCenterHttpError(401, "Autenticação administrativa obrigatória."); return user; }
 
 export async function studentCenterList(url: URL) {
   await admin();
@@ -67,6 +71,10 @@ export async function studentCenterDetail(id: string) {
 
 export async function studentCenterAction(body: Record<string, unknown>) {
   const actor = await admin(); const action = clean(body.action); const supabase = db();
+  if (action === "gerar_senha_provisoria") {
+    const alunoId = clean(body.aluno_id);
+    return generateStudentProvisionalPassword(alunoId, actor.id);
+  }
   if (action === "create_tag") { const result=await supabase.from("etiquetas_alunos").insert(tagPatch(body)).select().single();if(result.error)throw new Error(result.error.message);return result.data; }
   if (action === "update_tag") { const id=Number(body.id);if(!Number.isSafeInteger(id)||id<1)throw new Error("Etiqueta inválida.");const result=await supabase.from("etiquetas_alunos").update(tagPatch(body)).eq("id",id).select().single();if(result.error)throw new Error(result.error.message);return result.data; }
   if (action === "delete_tag") { const id=Number(body.id);if(!Number.isSafeInteger(id)||id<1)throw new Error("Etiqueta inválida.");const linked=await supabase.from("alunos_etiquetas").select("aluno_id",{count:"exact",head:true}).eq("etiqueta_id",id);if(linked.error)throw new Error(linked.error.message);if(linked.count)throw new Error("Remova a etiqueta dos alunos vinculados ou inative-a antes de excluir.");const result=await supabase.from("etiquetas_alunos").delete().eq("id",id);if(result.error)throw new Error(result.error.message);return {ok:true}; }

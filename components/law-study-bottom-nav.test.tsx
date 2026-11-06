@@ -8,13 +8,14 @@ const legiscastPage = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", 
 const interactiveLawPage = readFileSync("app/legisbot/[slug]/page.tsx", "utf8");
 
 describe("navegação responsiva dos modos da lei", () => {
-  it("monta as quatro rotas e preserva recorte_id somente nos modos de estudo", () => {
+  it("monta as quatro rotas e preserva recorte_id apenas para Questões e Anki", () => {
     expect(source).toContain('suffix: ""');
     expect(source).toContain('suffix: "/anki"');
     expect(source).toContain('suffix: "/legiscast"');
     expect(source).toContain('label: "Lei Interativa"');
     expect(source).toContain('mode: "lei_interativa"');
     expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}`');
+    expect(source).toContain('if (mode === "legiscast") return `/estudar/lei/${encodeURIComponent(slug)}${suffix}`;');
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
     expect(source).toContain("grid-cols-4");
     expect(source).toContain('<ScannerIcon className={mobile ? "h-6 w-6"');

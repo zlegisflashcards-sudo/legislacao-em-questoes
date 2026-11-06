@@ -1,0 +1,16 @@
+{
+  "description": "Dados fictícios para testes isolados; não importar em produção.",
+  "student": { "userId": "51000001-0000-4000-8000-000000000001", "studentId": "52000002-0000-4000-8000-000000000002", "email": "aluno-p0@example.invalid" },
+  "laws": [
+    { "id": 1, "slug": "p0-gratuita", "free": true },
+    { "id": 2, "slug": "p0-integral-paga", "free": false },
+    { "id": 3, "slug": "p0-recortada", "free": false }
+  ],
+  "products": [
+    { "id": "produto-integral-teste", "lawId": 2, "recorteId": null },
+    { "id": "produto-recorte-teste", "lawId": 3, "recorteId": "53000003-0000-4000-8000-000000000003" },
+    { "id": "combo-teste", "lawIds": [1, 2, 3] }
+  ],
+  "payment": { "id": "evento-ficticio-p0", "event": "PURCHASE_APPROVED", "data": { "buyer": { "email": "aluno-p0@example.invalid", "name": "Aluno Teste" }, "product": { "id": "produto-hotmart-ficticio" }, "purchase": { "transaction": "transacao-ficticia-p0", "status": "APPROVED" } } },
+  "priorProgress": { "lawId": 1, "questionId": "54000004-0000-4000-8000-000000000004", "answer": "Certo" }
+}

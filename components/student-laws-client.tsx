@@ -96,7 +96,7 @@ function StudentLawCard({ law }: { law: StudentLaw }) {
   const title = isScope ? studentLawMotherTitle(law.titulo, law.studyContextName) : law.titulo;
   const contextLabel = law.totalFlashcards === 1 ? "1 questão disponível" : `${law.totalFlashcards} questões disponíveis`;
   const ankiHref = `/estudar/lei/${encodeURIComponent(law.slug)}/anki${scopeId ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`;
-  const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast${scopeId ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`;
+  const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast`;
   const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}`;
   return <article className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex min-w-0 items-center gap-3"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" /><div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f]">{title}</h2>{isScope && law.studyContextName?.trim() ? <span className="mt-2 inline-flex max-w-full rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-700">{law.studyContextName}</span> : null}<p className="mt-1 text-sm font-semibold text-slate-600">{contextLabel}</p></div></div>

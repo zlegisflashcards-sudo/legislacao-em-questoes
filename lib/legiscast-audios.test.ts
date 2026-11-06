@@ -35,7 +35,7 @@ describe("LegisCast em áudio", () => {
   });
 
   it("emite URL temporária somente depois da autorização da lei", () => {
-    expect(server).toContain("authorizeLawQuestionScope(request, slug, recorteId)");
+    expect(server).toContain("authorizeLawStudy(request, slug)");
     expect(server).toContain('createSignedUrl(audio.storage_path, 60 * 60)');
     expect(server).toContain('from(BUCKET)');
     expect(server).not.toContain("getPublicUrl");
@@ -46,11 +46,11 @@ describe("LegisCast em áudio", () => {
     for (const forbidden of ["score", "ranking", "campanha", "porcentagem"]) expect(player.toLowerCase()).not.toContain(forbidden);
     expect(page).not.toContain("LegiscastAudioPlayer");
     expect(lawLegiscastPage).toContain("LawLegiscastPageClient");
-    for (const expected of ["LegiscastPdfViewer", "<LegiscastAudioPlayer slug={slug} embedded />", "StudentAreaTabs", "minhasLeisHref=\"/minhas-leis\"", "/api/aluno/estudar/lei/", "/conta?modo=login", "recorteId ? `?recorte_id="]) expect(lawLegiscastClient).toContain(expected);
+    for (const expected of ["LegiscastPdfViewer", "<LegiscastAudioPlayer key={\`audio-${attempt}\`} slug={slug} embedded", "StudentAreaTabs", "minhasLeisHref=\"/minhas-leis\"", "/api/aluno/estudar/lei/", "/conta?modo=login"]) expect(lawLegiscastClient).toContain(expected);
     expect(player).toContain("embedded = false");
     expect(player).toContain("border-t border-slate-200 pt-6");
     expect(lawLegiscastPage).toContain("searchParams");
-    expect(lawLegiscastPage).toContain("recorte_id");
+    expect(lawLegiscastPage).toContain("studyRecorteId");
   });
 
   it("usa título opcional como override e recorre ao nome da estrutura", () => {

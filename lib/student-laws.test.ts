@@ -246,12 +246,12 @@ describe("interface das leis adquiridas", () => {
     }
   });
 
-  it("ativa as rotas seguras de estudo, Anki e LegisCast sem alterar o edital", () => {
+  it("ativa as rotas seguras de estudo, Anki e LegisCast integral sem alterar o edital", () => {
     expect(client).toContain('const lawHref = isScope ?');
     expect(client).toContain('const ankiHref =');
     expect(client).toContain('}/anki${scopeId ?');
     expect(client).toContain('const legiscastHref =');
-    expect(client).toContain('}/legiscast${scopeId ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`');
+    expect(client).toContain('const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast`;');
     expect(client).toContain('href={legiscastHref}');
     expect(client).not.toContain('/api/aluno/editais');
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
