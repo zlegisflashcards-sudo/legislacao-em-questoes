@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { accountStepPath, safeReturnPath } from "@/lib/safe-return-path";
 import { normalizeStudentPhone } from "@/lib/student-phone";
+import { studentLoginFailure } from "@/lib/student-login-error";
 import { StudentLawUpdateNotices } from "@/components/student-law-update-notices";
 
 type PublicProfile = { id: string; nome_publico: string };
@@ -83,6 +84,15 @@ export function StudentAccount() {
     return result.deve_trocar_senha === true;
   }
 
+  async function completePasswordChange(password: string) {
+    const { data } = await supabase.auth.getSession();
+    return fetch("/api/aluno/acesso-provisorio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+      body: JSON.stringify({ password }),
+    });
+  }
+
   async function authenticate(formData: FormData) {
     setPending(true); setMessage("");
     const authEmail = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -91,7 +101,7 @@ export function StudentAccount() {
     try {
       if (formMode === "login") {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
-        if (error) { setMessage("E-mail ou senha inválidos."); return; }
+        if (error) { setMessage(studentLoginFailure(error).message); return; }
         await vincularAluno();
         await registrarAcesso(data.session?.access_token);
         if (await needsProvisionalPasswordChange()) {
@@ -180,12 +190,17 @@ export function StudentAccount() {
     if (password.length < 8 || password !== confirmation) {
       setMessage("As senhas devem coincidir e ter pelo menos 8 caracteres."); setPending(false); return;
     }
-    const { error } = await supabase.auth.updateUser({ password });
-    if (!error && params.has("retorno")) {
+    const completion = await completePasswordChange(password);
+    if (!completion.ok) {
+      setMessage("Não foi possível concluir a recuperação. Tente novamente.");
+      setPending(false);
+      return;
+    }
+    if (params.has("retorno")) {
       window.location.assign(returnPath);
       return;
     }
-    setMessage(error ? "O link expirou ou não foi possível alterar a senha." : "Senha alterada. Você já pode continuar.");
+    setMessage("Senha alterada. Você já pode continuar.");
     setPending(false);
   }
 
@@ -213,17 +228,9 @@ export function StudentAccount() {
     if (password.length < 8 || password !== confirmation) {
       setMessage("As senhas devem coincidir e ter pelo menos 8 caracteres."); setPending(false); return;
     }
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      setMessage("Não foi possível alterar a senha com a sessão atual."); setPending(false); return;
-    }
-    const { data } = await supabase.auth.getSession();
-    const response = await fetch("/api/aluno/acesso-provisorio", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
-    });
+    const response = await completePasswordChange(password);
     if (!response.ok) {
-      setMessage("A senha foi alterada, mas não foi possível concluir o primeiro acesso. Tente novamente."); setPending(false); return;
+      setMessage("Não foi possível concluir o primeiro acesso. Tente novamente."); setPending(false); return;
     }
     window.location.assign(returnPath);
   }

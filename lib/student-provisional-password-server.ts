@@ -66,27 +66,34 @@ export async function generateStudentProvisionalPassword(alunoId: string, actorU
   const sameIdentity = (duplicates.data ?? []).filter((item) => String(item.email).trim().toLowerCase() === email);
   if (sameIdentity.length !== 1) throw new StudentProvisionalPasswordError(409, "Acesso bloqueado: existe duplicidade histórica para este e-mail.");
 
-  // Marque antes de alterar o Auth: se o provedor falhar, a conta continua
-  // bloqueada das áreas do aluno, sem uma janela de senha provisória não forçada.
+  let userId = current.data.user_id as string | null;
+  let existingAuthUser: Awaited<ReturnType<typeof findAuthUserByEmail>> | null = null;
+  if (userId) {
+    await requirePasswordIdentity(userId);
+  } else {
+    existingAuthUser = await findAuthUserByEmail(email);
+    if (existingAuthUser && !hasEmailPasswordIdentity(existingAuthUser)) {
+      throw new StudentProvisionalPasswordError(422, "A conta encontrada usa exclusivamente um provedor externo. Não foi criada uma senha para evitar alterar o método de acesso sem tratamento específico.");
+    }
+  }
+
+  // A identidade é comprovadamente compatível com senha. Marque antes de
+  // alterar o Auth: se o provedor falhar, não haverá uma janela de senha
+  // provisória válida sem a obrigação de troca.
   const flagged = await supabase.from("alunos").update({ deve_trocar_senha: true }).eq("id", alunoId);
   if (flagged.error) throw new StudentProvisionalPasswordError(500, "Não foi possível marcar a troca obrigatória de senha.");
 
   const password = provisionalPassword();
-  let userId = current.data.user_id as string | null;
   if (userId) {
-    await requirePasswordIdentity(userId);
     const updated = await supabase.auth.admin.updateUserById(userId, { password });
     if (updated.error) throw new StudentProvisionalPasswordError(500, "Não foi possível atualizar a senha da conta Auth.");
   } else {
-    let authUser = await findAuthUserByEmail(email);
+    let authUser = existingAuthUser;
     if (!authUser) {
       const created = await supabase.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { nome: current.data.nome ?? undefined } });
       if (created.error || !created.data.user) throw new StudentProvisionalPasswordError(500, "Não foi possível criar a conta Auth.");
       authUser = created.data.user;
     } else {
-      if (!hasEmailPasswordIdentity(authUser)) {
-        throw new StudentProvisionalPasswordError(422, "A conta encontrada usa exclusivamente um provedor externo. Não foi criada uma senha para evitar alterar o método de acesso sem tratamento específico.");
-      }
       const updated = await supabase.auth.admin.updateUserById(authUser.id, { password });
       if (updated.error) throw new StudentProvisionalPasswordError(500, "Não foi possível atualizar a senha da conta Auth existente.");
     }

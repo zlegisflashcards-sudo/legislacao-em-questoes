@@ -44,6 +44,10 @@ describe("senha provisória de primeiro acesso", () => {
     expect(studentCenterUi).toContain("Copiar senha");
     expect(passwordService).toContain("auth.admin.getUserById");
     expect(passwordService).toContain("provedor externo");
+    expect(passwordService.indexOf("await requirePasswordIdentity(userId)"))
+      .toBeLessThan(passwordService.indexOf("const flagged = await supabase.from(\"alunos\").update({ deve_trocar_senha: true })"));
+    expect(passwordService.indexOf("existingAuthUser && !hasEmailPasswordIdentity(existingAuthUser)"))
+      .toBeLessThan(passwordService.indexOf("const flagged = await supabase.from(\"alunos\").update({ deve_trocar_senha: true })"));
   });
 
   it("exige a troca após o login e limpa o marcador somente depois da senha Auth", () => {
@@ -51,9 +55,13 @@ describe("senha provisória de primeiro acesso", () => {
     expect(account).toContain("needsProvisionalPasswordChange");
     expect(account).toContain('accountStepPath("primeiro-acesso", returnPath)');
     expect(account).toContain('title="Crie sua nova senha"');
-    expect(account).toContain("supabase.auth.updateUser({ password })");
+    expect(account).toContain("completePasswordChange(password)");
     expect(account).toContain('window.location.assign(returnPath)');
     expect(provisionalRoute).toContain("deve_trocar_senha: false");
+    expect(account).toContain('body: JSON.stringify({ password })');
+    expect(account).toContain("Não foi possível concluir a recuperação.");
+    expect(provisionalRoute).toContain('typeof body?.password === "string"');
+    expect(provisionalRoute).toContain("auth.admin.updateUserById(user.data.user.id, { password })");
   });
 
   it("bloqueia as áreas autenticadas enquanto a troca estiver pendente", () => {
