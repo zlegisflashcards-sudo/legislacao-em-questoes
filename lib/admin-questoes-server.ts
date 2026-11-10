@@ -79,7 +79,12 @@ export async function getAdminQuestionStructureCounts(lawSlug: string, requested
     }, questionExportPageSize),
   ]);
   const allowedStructureIds = await scopeStructureIds(current, requestedScopeId, nodes);
-  return { counts: questionCountsByStructure(nodes, questionsInScope(questions as Array<{ id: string; structure_id: number | null }>, allowedStructureIds)) };
+  const scopedQuestions = questionsInScope(questions as Array<{ id: string; structure_id: number | null }>, allowedStructureIds);
+  return {
+    counts: questionCountsByStructure(nodes, scopedQuestions),
+    total: scopedQuestions.length,
+    unstructured: scopedQuestions.filter((question) => question.structure_id === null).length,
+  };
 }
 export async function listAdminQuestionScopeFilters(lawSlug: string) {
   await requireAdmin();

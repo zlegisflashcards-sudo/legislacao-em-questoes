@@ -12,12 +12,13 @@ describe("Questões na Central da Lei", () => {
   it("cria a rota contextual sem seletor de lei", () => {
     const page = "app/admin/leis/[slug]/questoes/page.tsx";
     expect(existsSync(page)).toBe(true);
-    expect(read(page)).toContain("<AdminLawQuestions law=");
+    expect(read(page)).toContain("<AdminLawQuestions");
     expect(central).not.toContain("LawSearchSelect");
   });
 
   it("pesquisa no enunciado e na justificativa no servidor", () => {
-    const search = server.slice(server.indexOf("export async function searchAdminQuestions"), server.indexOf("export async function getAdminQuestion"));
+    const start = server.indexOf("export async function searchAdminQuestions");
+    const search = server.slice(start, server.indexOf("export async function getAdminQuestion(", start));
     expect(search).toContain('"pergunta", "justificativa"');
     expect(search).toContain(".ilike.%${term}%");
     expect(route).toContain('searchParams.get("mode") === "search"');
@@ -31,7 +32,8 @@ describe("Questões na Central da Lei", () => {
   });
 
   it("localiza exatamente a questão quando a busca recebe seu UUID", () => {
-    const search = server.slice(server.indexOf("export async function searchAdminQuestions"), server.indexOf("export async function getAdminQuestion"));
+    const start = server.indexOf("export async function searchAdminQuestions");
+    const search = server.slice(start, server.indexOf("export async function getAdminQuestion(", start));
     const questionId = "18452a01-1234-4abc-8def-1234567890ab";
     expect(adminQuestionSearchId(questionId)).toBe(questionId);
     expect(adminQuestionSearchId("texto comum")).toBeNull();
@@ -42,10 +44,11 @@ describe("Questões na Central da Lei", () => {
   });
 
   it("isola pesquisa e leitura completa pela lei atual", () => {
-    const search = server.slice(server.indexOf("export async function searchAdminQuestions"), server.indexOf("export async function createAdminQuestion"));
+    const start = server.indexOf("export async function searchAdminQuestions");
+    const search = server.slice(start, server.indexOf("export async function createAdminQuestion", start));
     expect(search).toContain('.eq("lei_id", current.id)');
-    expect(search).toContain('.eq("id", qid(questionId)).eq("lei_id", current.id)');
-    expect(search).toContain("Questão não encontrada para a lei selecionada.");
+    expect(server).toContain('.eq("id", qid(questionId)).eq("lei_id", current.id)');
+    expect(server).toContain("Questão não encontrada para a lei selecionada.");
   });
 
   it("aplica os filtros Certo, Errado e Sem estrutura", () => {
@@ -59,6 +62,15 @@ describe("Questões na Central da Lei", () => {
     expect(server).toContain('request.eq("resposta", "Certo")');
     expect(server).toContain('request.eq("resposta", "Errado")');
     expect(server).toContain('request.is("structure_id", null)');
+  });
+
+  it("mantém a lei como raiz navegável e mostra questões sem estrutura nela", () => {
+    expect(server).toContain("total: scopedQuestions.length");
+    expect(server).toContain("unstructured: scopedQuestions.filter");
+    expect(central).toContain("initialStructureSummary");
+    expect(central).toContain("onSelectLaw={selectLawRoot}");
+    expect(central).toContain(">Sem estrutura<");
+    expect(central).toContain("onSelectUnstructured={selectUnstructuredQuestions}");
   });
 
   it("usa debounce, limite e paginação server-side", () => {
@@ -78,7 +90,8 @@ describe("Questões na Central da Lei", () => {
   });
 
   it("preserva pesquisa, filtro e página após salvar", () => {
-    const save = central.slice(central.indexOf("async function save("), central.indexOf("return <section"));
+    const start = central.indexOf("async function save(");
+    const save = central.slice(start, central.indexOf("function duplicateQuestion", start));
     expect(save).toContain("setRefresh((value) => value + 1)");
     expect(save).not.toContain("setQuery(");
     expect(save).not.toContain("setFilter(");
