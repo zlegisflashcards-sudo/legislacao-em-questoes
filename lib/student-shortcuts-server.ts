@@ -4,7 +4,7 @@ import { createSupabaseUserClient, getSupabaseServerClient } from "@/lib/supabas
 
 export const shortcutColors = ["azul", "verde", "lilas", "amarelo", "laranja", "vermelho", "coral", "turquesa"] as const;
 export type ShortcutColor = (typeof shortcutColors)[number];
-export type StudentShortcut = { leiId: number; slug: string; titulo: string; recorteId: string | null; recorteNome: string | null; cor: ShortcutColor; temAcesso: boolean };
+export type StudentShortcut = { leiId: number; slug: string; titulo: string; recorteId: string | null; recorteNome: string | null; cor: ShortcutColor; temAcesso: boolean; produtoHref: string | null };
 export type StudentShortcutSelection = { id: string; nome: string; leis: StudentShortcut[] };
 export type StudentShortcutsData = { minhaSelecao: StudentShortcutSelection; selecoesProntas: StudentShortcutSelection[]; leisDisponiveis: StudentShortcut[] };
 
@@ -42,6 +42,7 @@ function parseShortcut(value: unknown, fallbackColor: ShortcutColor = "azul"): S
     recorteNome: typeof item.recorteNome === "string" ? item.recorteNome : null,
     cor,
     temAcesso: item.temAcesso,
+    produtoHref: null,
   };
 }
 
@@ -69,6 +70,40 @@ async function withFullScopeNames(data: StudentShortcutsData): Promise<StudentSh
   return { minhaSelecao: withNames(data.minhaSelecao), selecoesProntas: data.selecoesProntas.map(withNames), leisDisponiveis: data.leisDisponiveis.map((law) => law.recorteId ? { ...law, recorteNome: labelByScope.get(law.recorteId) ?? law.recorteNome } : law) };
 }
 
+type ProductLink = { lei_id: number | string; recorte_id: string | null; produtos: { slug?: unknown; ativo?: unknown; tipo_produto?: unknown; ordem?: unknown } | Array<{ slug?: unknown; ativo?: unknown; tipo_produto?: unknown; ordem?: unknown }> | null };
+
+/** Resolve somente a rota comercial pública. Nenhum dado de produto é exposto ao aluno. */
+async function withPurchaseLinks(data: StudentShortcutsData): Promise<StudentShortcutsData> {
+  const selections = [data.minhaSelecao, ...data.selecoesProntas];
+  const shortcuts = [...selections.flatMap((selection) => selection.leis), ...data.leisDisponiveis];
+  const lawIds = [...new Set(shortcuts.filter((shortcut) => !shortcut.temAcesso).map((shortcut) => shortcut.leiId))];
+  if (!lawIds.length) return data;
+
+  const { data: rawLinks, error } = await getSupabaseServerClient()
+    .from("produto_leis")
+    .select("lei_id,recorte_id,produtos(slug,ativo,tipo_produto,ordem)")
+    .in("lei_id", lawIds);
+  if (error) return data;
+
+  const links = (rawLinks ?? []) as ProductLink[];
+  function hrefFor(shortcut: StudentShortcut) {
+    const candidates = links.flatMap((link) => {
+      if (Number(link.lei_id) !== shortcut.leiId) return [];
+      const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos;
+      if (product?.ativo !== true || typeof product.slug !== "string" || !product.slug) return [];
+      const scopeRank = link.recorte_id === shortcut.recorteId ? 0 : link.recorte_id === null ? 1 : 2;
+      const typeRank = product.tipo_produto === "lei_avulsa" ? 0 : 1;
+      const order = typeof product.ordem === "number" && Number.isFinite(product.ordem) ? product.ordem : Number.MAX_SAFE_INTEGER;
+      return [{ href: `/leisflashcards/${encodeURIComponent(product.slug)}`, rank: scopeRank * 10 + typeRank, order }];
+    });
+    candidates.sort((a, b) => a.rank - b.rank || a.order - b.order || a.href.localeCompare(b.href));
+    return candidates[0]?.href ?? null;
+  }
+  const attach = (shortcut: StudentShortcut) => shortcut.temAcesso ? shortcut : { ...shortcut, produtoHref: hrefFor(shortcut) };
+  const selectionWithLinks = (selection: StudentShortcutSelection): StudentShortcutSelection => ({ ...selection, leis: selection.leis.map(attach) });
+  return { minhaSelecao: selectionWithLinks(data.minhaSelecao), selecoesProntas: data.selecoesProntas.map(selectionWithLinks), leisDisponiveis: data.leisDisponiveis.map(attach) };
+}
+
 export async function loadStudentShortcuts(request: Request): Promise<StudentShortcutsData> {
   const client = await authenticatedClient(request);
   const { data, error } = await client.rpc("obter_meus_atalhos");
@@ -85,7 +120,7 @@ export async function loadStudentShortcuts(request: Request): Promise<StudentSho
     const parsed = item ? parseShortcut({ ...item, temAcesso: true }) : null;
     return parsed ? [parsed] : [];
   }) : [];
-  return withFullScopeNames({ minhaSelecao, selecoesProntas, leisDisponiveis });
+  return withPurchaseLinks(await withFullScopeNames({ minhaSelecao, selecoesProntas, leisDisponiveis }));
 }
 
 export async function setStudentShortcutColor(request: Request, lawId: unknown, color: unknown) {

@@ -25,12 +25,16 @@ describe("Meus Atalhos", () => {
     expect(server).toContain('select("id,nome,nome_exibicao")');
     expect(server).toContain("scope.nome_exibicao.trim()");
     expect(server).toContain("withFullScopeNames");
+    expect(server).toContain("withPurchaseLinks");
+    expect(server).toContain('select("lei_id,recorte_id,produtos(slug,ativo,tipo_produto,ordem)")');
   });
 
   it("preserva recortes, desabilita prefetch e informa bloqueio sem apagar a cor", () => {
     expect(client).toContain("recorte_id=${encodeURIComponent(shortcut.recorteId)}");
     expect(client).toContain("prefetch={false}");
     expect(client).toContain("🔒");
+    expect(client).toContain("shortcut.produtoHref");
+    expect(client).toContain("Ver ${label} no catálogo");
     expect(client).toContain("confirmReplace: Boolean(existing)");
     expect(client).toContain('updatePersonal("rename", { nome: name })');
     expect(client).toContain("Sugestões de organização:");
