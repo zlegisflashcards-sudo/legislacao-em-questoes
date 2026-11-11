@@ -14,6 +14,11 @@ describe("composição de blocos legislativos", () => {
 
   it("rejeita blocos não adjacentes", () => expect(() => previewBlockUnification({ blocks: [block(), block({ id: "p2", ordem: "0015.a.02.0.00.0", identificacao: "§ 2º" })], lawShortName: "Lei 13.869/2019", questions: [], dependencies: [] })).toThrow("adjacentes"));
 
+  it("calcula a resolução contra todos os blocos ativos, inclusive os não selecionados", () => {
+    const preview = previewBlockUnification({ blocks: [block(), block({ id: "p1", ordem: "0015.a.01.0.00.0", identificacao: "§ 1º" })], availableBlocks: [block(), block({ id: "p1", ordem: "0015.a.01.0.00.0", identificacao: "§ 1º" }), block({ id: "p2", ordem: "0015.a.02.0.00.0", identificacao: "§ 2º" })], lawShortName: "Lei 13.869/2019", questions: [{ id: "q-3", ordem: "0015.a.02.0.00.0" }], dependencies: [] });
+    expect(preview.impact[0]).toMatchObject({ before: "0015.a.02.0.00.0", after: "0015.a.02.0.00.0" });
+  });
+
   it("separa preservando o UUID do primeiro trecho e sem distribuir comentários", () => {
     const source = block({ legislacao: "<p>Art. 15-A.</p><p>§ 1º Primeiro.</p><p>§ 2º Segundo.</p>" });
     const preview = previewBlockSplit({ block: source, lawShortName: "Lei 13.869/2019", questions: [{ id: "q-2", ordem: "0015.a.02.0.00.0" }], dependencies: [{ kind: "legisbot", id: "caput", ordem: source.ordem, detail: "Comentário do artigo inteiro" }], pieces: [
@@ -32,6 +37,14 @@ describe("composição de blocos legislativos", () => {
     const source = block({ legislacao: "<p>Art. 15-A.</p><p>Parágrafo único. Texto.</p>" });
     const preview = previewBlockSplit({ block: source, lawShortName: "Lei 13.869/2019", questions: [], dependencies: [], pieces: [{ ordem: source.ordem, identificacao: "Art. 15-A", legislacao: "<p>Art. 15-A.</p>" }, { ordem: "0015.a.01.b.00.0", identificacao: "Parágrafo único", legislacao: "<p>Parágrafo único. Texto.</p>" }] });
     expect(preview.pieces[1].reference).toBe("Art. 15-A, parágrafo único, Lei 13.869/2019");
+  });
+
+  it("mostra Art. 15-A e § 1º na mesma forma da Central", () => {
+    const preview = previewBlockSplit({ block: block({ legislacao: "<p>Art. 15-A.</p><p>§ 1º Texto.</p>" }), lawShortName: "Lei 13.869/2019", questions: [], dependencies: [], pieces: [
+      { ordem: "0015.a.00.0.00.0", identificacao: "Art. 15-A", legislacao: "<p>Art. 15-A.</p>" },
+      { ordem: "0015.a.01.0.00.0", identificacao: "§ 1º", legislacao: "<p>§ 1º Texto.</p>" },
+    ] });
+    expect(preview.pieces[1].reference).toBe("Art. 15-A, § 1º, Lei 13.869/2019");
   });
 
   it("faz todos os leitores de blocos ignorarem a situação arquivada", () => {

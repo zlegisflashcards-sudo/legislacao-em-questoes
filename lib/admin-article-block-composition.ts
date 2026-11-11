@@ -40,21 +40,23 @@ export async function previewArticleBlockComposition(input: { lawSlug: unknown; 
   const ids = Array.isArray(input.referenceIds) ? [...new Set(input.referenceIds.filter((id): id is string => typeof id === "string" && UUID.test(id)))] : [];
   if (!slug || !ids.length || ids.length > 20) throw new Error("Selecione de 1 a 20 blocos da lei.");
   const db = getSupabaseServerClient();
-  const [law, refs, questions] = await Promise.all([
+  const [law, refs, allRefs, questions] = await Promise.all([
     db.from("leis").select("id,nome_curto").eq("slug", slug).maybeSingle(),
     db.from("legislative_references").select("id,lei_id,slug,ordem,identificacao,legislacao,updated_at,situacao").eq("slug", slug).in("id", ids).or("situacao.is.null,situacao.neq.arquivada"),
+    db.from("legislative_references").select("id,lei_id,slug,ordem,identificacao,legislacao,updated_at,situacao").eq("slug", slug).or("situacao.is.null,situacao.neq.arquivada"),
     db.from("questions").select("id,ordem").eq("slug", slug).eq("ativo", true),
   ]);
-  if (law.error || !law.data || refs.error || questions.error || (refs.data ?? []).length !== ids.length) throw new Error("Não foi possível montar uma prévia confiável dos blocos selecionados.");
+  if (law.error || !law.data || refs.error || allRefs.error || questions.error || (refs.data ?? []).length !== ids.length) throw new Error("Não foi possível montar uma prévia confiável dos blocos selecionados.");
   const lawData = law.data;
   const blocks = (refs.data ?? []).map((row) => asBlock(row as Record<string, unknown>));
+  const availableBlocks = (allRefs.data ?? []).map((row) => asBlock(row as Record<string, unknown>));
   if (blocks.some((block) => block.leiId !== Number(lawData.id) || !block.legislacao.trim())) throw new Error("Todos os blocos devem pertencer à lei e conter texto legislativo preparado.");
   const foundDependencies = await dependencies(blocks);
   const shortName = lawData.nome_curto ? String(lawData.nome_curto) : "";
-  if (input.mode === "unificar") return previewBlockUnification({ blocks, lawShortName: shortName, questions: (questions.data ?? []).map((row) => ({ id: String(row.id), ordem: String(row.ordem) })), dependencies: foundDependencies });
+  if (input.mode === "unificar") return previewBlockUnification({ blocks, availableBlocks, lawShortName: shortName, questions: (questions.data ?? []).map((row) => ({ id: String(row.id), ordem: String(row.ordem) })), dependencies: foundDependencies });
   if (input.mode === "separar" && blocks.length === 1 && Array.isArray(input.pieces)) {
     const pieces = input.pieces.flatMap((item): SplitPiece[] => item && typeof item === "object" ? [{ ordem: value((item as Record<string, unknown>).ordem), identificacao: value((item as Record<string, unknown>).identificacao, 500), legislacao: value((item as Record<string, unknown>).legislacao, 100_000) }] : []);
-    return previewBlockSplit({ block: blocks[0], pieces, lawShortName: shortName, questions: (questions.data ?? []).map((row) => ({ id: String(row.id), ordem: String(row.ordem) })), dependencies: foundDependencies });
+    return previewBlockSplit({ block: blocks[0], availableBlocks, pieces, lawShortName: shortName, questions: (questions.data ?? []).map((row) => ({ id: String(row.id), ordem: String(row.ordem) })), dependencies: foundDependencies });
   }
   throw new Error("Para separar, selecione um único bloco e informe os trechos completos da prévia.");
 }
@@ -63,7 +65,25 @@ export async function previewArticleBlockComposition(input: { lawSlug: unknown; 
 export async function applyArticleBlockComposition(input: { operation: unknown; expected: unknown; commentTreatment: unknown }) {
   const user = await exigirAdministrador();
   if (input.commentTreatment !== "preservar_e_sinalizar_revisao") throw new Error("Comentários vinculados exigem o tratamento explícito “preservar e sinalizar para revisão”.");
-  const result = await getSupabaseServerClient().rpc("admin_apply_legislative_block_composition", { p_actor_user_id: user.id, p_operation: input.operation, p_expected: input.expected, p_comment_treatment: input.commentTreatment });
+  const submitted = input.operation && typeof input.operation === "object" ? input.operation as Record<string, unknown> : null;
+  const kind = submitted?.kind === "unificar" || submitted?.kind === "separar" ? submitted.kind : null;
+  const sourceRows = kind === "unificar" && Array.isArray(submitted?.sources) ? submitted.sources : kind === "separar" && submitted?.source ? [submitted.source] : [];
+  const ids = sourceRows.flatMap((row) => row && typeof row === "object" && UUID.test(String((row as Record<string, unknown>).id)) ? [String((row as Record<string, unknown>).id)] : []);
+  if (!kind || !ids.length || ids.length !== sourceRows.length) throw new Error("A confirmação não corresponde a uma prévia válida. Gere outra prévia.");
+  const operation = submitted;
+  if (!operation) throw new Error("A confirmação não corresponde a uma prévia válida. Gere outra prévia.");
+  const source = await getSupabaseServerClient().from("legislative_references").select("slug").in("id", ids).limit(1).maybeSingle();
+  if (source.error || !source.data?.slug) throw new Error("Não foi possível validar os blocos da prévia.");
+  const fresh = await previewArticleBlockComposition({ lawSlug: String(source.data.slug), mode: kind, referenceIds: ids, pieces: operation.pieces });
+  const submittedOperation = kind === "unificar"
+    ? { kind, target: operation.target, sources: operation.sources, archiveIds: operation.archiveIds }
+    : { kind, source: operation.source, pieces: operation.pieces };
+  const freshOperation = fresh.kind === "unificar"
+    ? { kind: fresh.kind, target: fresh.target, sources: fresh.sources, archiveIds: fresh.archiveIds }
+    : { kind: fresh.kind, source: fresh.source, pieces: fresh.pieces };
+  if (JSON.stringify(submittedOperation) !== JSON.stringify(freshOperation)) throw new Error("A prévia não corresponde mais aos blocos atuais. Gere e revise uma nova prévia.");
+  const expected = fresh.kind === "unificar" ? { sources: fresh.sources } : { sources: [fresh.source] };
+  const result = await getSupabaseServerClient().rpc("admin_apply_legislative_block_composition", { p_actor_user_id: user.id, p_operation: fresh, p_expected: expected, p_comment_treatment: input.commentTreatment });
   if (result.error) throw new Error(result.error.code === "PGRST202" ? "A migration da composição de blocos ainda não foi aplicada neste ambiente." : "A composição não foi aplicada; gere uma nova prévia e revise os vínculos.");
   return result.data;
 }

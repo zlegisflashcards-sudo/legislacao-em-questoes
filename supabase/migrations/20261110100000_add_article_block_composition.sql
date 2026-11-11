@@ -40,9 +40,12 @@ declare
   v_target uuid;
   v_law_id bigint;
   v_slug text;
+  v_target_order text;
   v_source jsonb;
   v_reference public.legislative_references%rowtype;
   v_expected_updated text;
+  v_expected_count integer := 0;
+  v_locked_count integer := 0;
   v_archived uuid[] := array[]::uuid[];
   v_piece jsonb;
 begin
@@ -53,27 +56,35 @@ begin
   v_target := coalesce((p_operation->'target'->>'id')::uuid, (p_operation->'source'->>'id')::uuid);
   select * into v_reference from public.legislative_references where id = v_target for update;
   if not found or v_reference.situacao = 'arquivada' then raise exception 'bloco de origem indisponível' using errcode = '40001'; end if;
-  v_law_id := v_reference.lei_id; v_slug := v_reference.slug;
+  v_law_id := v_reference.lei_id; v_slug := v_reference.slug; v_target_order := v_reference.ordem;
 
   for v_source in select value from jsonb_array_elements(coalesce(p_expected->'sources', '[]'::jsonb)) loop
+    v_expected_count := v_expected_count + 1;
     select * into v_reference from public.legislative_references where id = (v_source->>'id')::uuid for update;
     if not found or v_reference.lei_id <> v_law_id or v_reference.situacao = 'arquivada' then raise exception 'um bloco da prévia não está mais disponível' using errcode = '40001'; end if;
     v_expected_updated := v_source->>'updatedAt';
-    if v_expected_updated is null or v_reference.updated_at::text <> v_expected_updated then raise exception 'um bloco foi alterado desde a prévia; gere outra prévia' using errcode = '40001'; end if;
+    if v_expected_updated is null or v_reference.updated_at <> v_expected_updated::timestamptz then raise exception 'um bloco foi alterado desde a prévia; gere outra prévia' using errcode = '40001'; end if;
+    v_locked_count := v_locked_count + 1;
   end loop;
+
+  if v_expected_count = 0 or v_locked_count <> v_expected_count then
+    raise exception 'a confirmação não contém o snapshot completo da prévia' using errcode = '22023';
+  end if;
 
   if v_kind = 'unificar' then
     update public.legislative_references
        set legislacao = p_operation->'target'->>'legislation', situacao = 'preparada', preparado_em = now()
      where id = v_target;
     select coalesce(array_agg(value::uuid), array[]::uuid[]) into v_archived from jsonb_array_elements_text(coalesce(p_operation->'archiveIds', '[]'::jsonb));
+    if array_position(v_archived, v_target) is not null or cardinality(v_archived) = 0 then raise exception 'os blocos arquivados da unificação são inválidos' using errcode = '22023'; end if;
     if exists (select 1 from public.legislative_references where id = any(v_archived) and lei_id <> v_law_id) then raise exception 'a prévia mistura leis diferentes' using errcode = '22023'; end if;
     update public.legislative_references set situacao = 'arquivada', arquivado_em = now(), arquivado_por = p_actor_user_id, motivo_arquivamento = 'unificação de blocos'
      where id = any(v_archived);
     update public.legisbot_comentarios set precisa_revisao = true where reference_id = any(v_archived);
   else
+    if jsonb_array_length(coalesce(p_operation->'pieces', '[]'::jsonb)) < 2 then raise exception 'a separação exige ao menos dois trechos' using errcode = '22023'; end if;
     for v_piece in select value from jsonb_array_elements(p_operation->'pieces') loop
-      if v_piece->>'ordem' = v_reference.ordem then
+      if v_piece->>'ordem' = v_target_order then
         update public.legislative_references set identificacao = v_piece->>'identificacao', legislacao = v_piece->>'legislacao', preparado_em = now(), situacao = 'preparada' where id = v_target;
       else
         insert into public.legislative_references (lei_id, slug, ordem, identificacao, legislacao, preparado_em, situacao)

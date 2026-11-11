@@ -58,6 +58,7 @@ export type LegislativeReference = {
   slug: string;
   ordem: string;
   identification: string;
+  storedIdentification: string;
   legislation: string | null;
   preparedAt: string | null;
   status: "pendente" | "preparada" | "revogada";
@@ -113,7 +114,7 @@ export async function previewManualLegislativeReference(input: { lawSlug: unknow
       : null;
   const existing = validationError
     ? { data: null, error: null }
-    : await db.from("legislative_references").select("id,identificacao,legislacao").eq("lei_id", law.data.id).eq("ordem", ordem).maybeSingle();
+    : await db.from("legislative_references").select("id,identificacao,legislacao").eq("lei_id", law.data.id).eq("ordem", ordem).or("situacao.is.null,situacao.neq.arquivada").maybeSingle();
   if (existing.error) throw new Error("Não foi possível verificar se já existe um bloco nessa Ordem.");
   return {
     lawId: Number(law.data.id), slug, identification, ordem, legislation,
@@ -160,6 +161,7 @@ function mapReference(row: Record<string, unknown>, lawShortName?: string | null
     // A identificação histórica pode ser apenas o parágrafo. A Central a
     // recompõe da mesma chave canônica das questões, sem gravar nada no banco.
     identification: formatLegalReferenceFromOrder(String(row.ordem), lawShortName, typeof row.identificacao === "string" ? row.identificacao : null) ?? String(row.identificacao),
+    storedIdentification: String(row.identificacao ?? ""),
     legislation: row.legislacao ? String(row.legislacao) : null,
     preparedAt: row.preparado_em ? String(row.preparado_em) : null,
     status: row.situacao === "revogada" ? "revogada" : row.situacao === "preparada" || Boolean(row.legislacao) ? "preparada" : "pendente",
@@ -217,7 +219,7 @@ export async function previewLegislativeReferenceIdentifierRepair(lawSlug: strin
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
   const result = await db.from("legislative_references")
     .select("id,ordem,identificacao,legislacao,updated_at")
-    .eq("lei_id", law.data.id).eq("slug", slug).not("legislacao", "is", null).order("ordem");
+    .eq("lei_id", law.data.id).eq("slug", slug).not("legislacao", "is", null).or("situacao.is.null,situacao.neq.arquivada").order("ordem");
   if (result.error) throw new Error("Não foi possível revisar a base legislativa.");
   const repairs = (result.data ?? []).flatMap((row) => {
     const repair = planLegislativeReferenceIdentifierRepair({
@@ -286,9 +288,9 @@ export async function clearLegislativeReferences(lawSlug: string) {
   const db = getSupabaseServerClient();
   const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
-  const existing = await db.from("legislative_references").select("id", { count: "exact", head: true }).eq("lei_id", law.data.id).eq("slug", slug);
+  const existing = await db.from("legislative_references").select("id", { count: "exact", head: true }).eq("lei_id", law.data.id).eq("slug", slug).or("situacao.is.null,situacao.neq.arquivada");
   if (existing.error) throw new Error("Não foi possível verificar a base legislativa.");
-  const removed = await db.from("legislative_references").delete().eq("lei_id", law.data.id).eq("slug", slug);
+  const removed = await db.from("legislative_references").delete().eq("lei_id", law.data.id).eq("slug", slug).or("situacao.is.null,situacao.neq.arquivada");
   if (removed.error) throw new Error("Não foi possível limpar a base legislativa.");
   const audit = await db.rpc("admin_comercial_auditar", {
     p_ator_user_id: user.id, p_acao: "excluir", p_entidade: "base_legislativa", p_entidade_id: String(law.data.id),
@@ -307,7 +309,7 @@ async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8
   const db = getSupabaseServerClient();
   const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
-  const stored = await db.from("legislative_references").select("ordem,legislacao").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem));
+  const stored = await db.from("legislative_references").select("ordem,legislacao").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem)).or("situacao.is.null,situacao.neq.arquivada");
   if (stored.error) throw new Error("Não foi possível verificar a base legislativa.");
   const existing = new Map((stored.data ?? []).map((row) => [String(row.ordem), typeof row.legislacao === "string" && row.legislacao.trim().length > 0]));
   const candidates = parsed.references.map((reference) => ({ ...reference, operation: existing.has(reference.ordem) ? existing.get(reference.ordem) ? "preservar" as const : "preencher" as const : "criar" as const }));
@@ -378,7 +380,7 @@ export async function resolveLegislativeReferenceShadow(input: { lawSlug: string
   if (inventory.error || !inventory.data) throw new Error("O dispositivo não consta no inventário oficial da lei.");
   const source = inventory.data as { ordem: string; identificacao: string; legislacao: string };
   if (!source.legislacao.trim()) throw new Error("O inventário oficial não contém o texto deste dispositivo.");
-  const existing = await db.from("legislative_references").select("id,legislacao").eq("lei_id", law.data.id).eq("ordem", ordem).maybeSingle();
+  const existing = await db.from("legislative_references").select("id,legislacao").eq("lei_id", law.data.id).eq("ordem", ordem).or("situacao.is.null,situacao.neq.arquivada").maybeSingle();
   if (existing.error) throw new Error("Não foi possível verificar a base legislativa.");
   if (existing.data?.legislacao?.trim()) throw new Error("Este dispositivo já possui texto preparado na base legislativa.");
   const payload = {
@@ -413,7 +415,7 @@ export async function importQuestionLegislationToReferences(lawSlug: string) {
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
   const references = await db.from("legislative_references")
     .select("id,ordem,legislacao")
-    .eq("slug", slug);
+    .eq("slug", slug).or("situacao.is.null,situacao.neq.arquivada");
   if (references.error) throw new Error("Não foi possível carregar a base legislativa.");
   const existingByOrder = new Map((references.data ?? []).map((reference) => [String(reference.ordem), { id: String(reference.id), hasLegislation: Boolean(typeof reference.legislacao === "string" && reference.legislacao.trim()) }]));
   const versionsByOrder = new Map<string, Map<string, string>>();
