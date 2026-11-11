@@ -195,6 +195,13 @@ describe("fronteira administrativa comercial", () => {
     expect(client).toContain("· {scopeName(id)}");
   });
 
+  it("mantém a composição visível dentro da edição do produto", () => {
+    expect(client).toContain('<CompositionEditor key={text(editing.id)} product={editing} laws={laws} busy={busy} mutate={mutate} />');
+    expect(client).toContain('As leis vinculadas ficam visíveis aqui para você revisar, ordenar e ajustar o recorte de cada uma.');
+    expect(client).not.toContain('setView("composition")');
+    expect(readFileSync("app/globals.css", "utf8")).toContain(".commercial-form-grid>.commercial-composition{grid-column:1/-1}");
+  });
+
   it("disponibiliza todos os recortes da lei escolhida na composição", () => {
     expect(client).toContain("(body.recortes ?? []).map");
     expect(client).not.toContain("(body.recortes ?? []).filter((item: { ativo?: boolean }) => item.ativo)");

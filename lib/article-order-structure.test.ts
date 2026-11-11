@@ -21,7 +21,13 @@ describe("estrutura da ordem do artigo", () => {
 
   it("compõe a referência exibida somente pela Ordem e pelo nome curto cadastrado", () => {
     expect(formatLegalReferenceFromOrder("0005.0.01.0.02.a", "Lei nº 1/2026")).toBe('Art. 5º, § 1º, II, "a", Lei nº 1/2026');
+    expect(formatLegalReferenceFromOrder("0001.0.00.0.00.0", "Lei 13.869/2019", "Art. 1º, caput")).toBe("Art. 1º, Lei 13.869/2019");
     expect(formatLegalReferenceFromOrder("0091.a.00.0.00.0", "CP")).toBe("Art. 91-A, CP");
+    expect(formatLegalReferenceFromOrder("0001.0.02.0.00.0", "Lei 13.869/2019", "§ 2º")).toBe("Art. 1º, § 2º, Lei 13.869/2019");
+    expect(formatLegalReferenceFromOrder("0015.a.01.0.00.0", "Lei 13.869/2019", "§ 1º")).toBe("Art. 15-A, § 1º, Lei 13.869/2019");
+    expect(formatLegalReferenceFromOrder("0015.a.00.0.00.0", "Lei 13.869/2019", "Art. 15-A")).toBe("Art. 15-A, Lei 13.869/2019");
+    expect(formatLegalReferenceFromOrder("0015.a.01.0.00.0", "Lei 13.869/2019", "Parágrafo único")).toBe("Art. 15-A, parágrafo único, Lei 13.869/2019");
+    expect(formatLegalReferenceFromOrder("0015.a.01.b.02.c", "Lei 13.869/2019", "§ 1º-B, II, \"c\"")).toBe('Art. 15-A, § 1º-B, II, "c", Lei 13.869/2019');
   });
 
   it("não inventa referência quando faltam Ordem canônica ou nome curto", () => {

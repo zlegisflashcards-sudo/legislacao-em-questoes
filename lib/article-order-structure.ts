@@ -26,12 +26,13 @@ function legalArticleNumber(value: string) {
  * curto cadastrado da lei. Sem esses metadados, retorna null em vez de
  * adivinhar a filiação a partir de cartões vizinhos ou do texto legislativo.
  */
-export function formatLegalReferenceFromOrder(ordem: string, lawShortName: string | null | undefined) {
+export function formatLegalReferenceFromOrder(ordem: string, lawShortName: string | null | undefined, storedIdentification?: string | null) {
   const parsed = parseQuestionOrder(ordem);
   const shortName = lawShortName?.trim();
   if (!parsed?.artigo || !shortName) return null;
   const levels = [`Art. ${legalArticleNumber(parsed.artigo)}${parsed.letraArtigo ? `-${parsed.letraArtigo}` : ""}`];
-  if (parsed.paragrafo) levels.push(`§ ${parsed.paragrafo}º${parsed.letraParagrafo ? `-${parsed.letraParagrafo}` : ""}`);
+  const hasUniqueParagraph = /(?:§\s*único|parágrafo\s+único)/i.test(storedIdentification ?? "");
+  if (parsed.paragrafo) levels.push(hasUniqueParagraph ? "parágrafo único" : `§ ${parsed.paragrafo}º${parsed.letraParagrafo ? `-${parsed.letraParagrafo}` : ""}`);
   if (parsed.inciso) levels.push(roman(parsed.inciso) ?? parsed.inciso);
   if (parsed.letraInciso) levels.push(`"${parsed.letraInciso.toLowerCase()}"`);
   return `${levels.join(", ")}, ${shortName}`;

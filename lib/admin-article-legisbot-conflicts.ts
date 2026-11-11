@@ -27,7 +27,7 @@ export async function listArticleLegisBotConflicts(rawSlug: string) {
   if (!slug) return [] as ArticleLegisBotConflict[];
   const db = getSupabaseServerClient();
   const [references, bots] = await Promise.all([
-    pages<Reference>((from, to) => db.from("legislative_references").select("id,ordem,identificacao").eq("slug", slug).order("ordem").range(from, to)),
+    pages<Reference>((from, to) => db.from("legislative_references").select("id,ordem,identificacao").eq("slug", slug).or("situacao.is.null,situacao.neq.arquivada").order("ordem").range(from, to)),
     pages<Bot>((from, to) => db.from("legisbot_comentarios").select("id,ordem,titulo,status,last_error_category").eq("slug", slug.toUpperCase()).order("ordem").order("id").range(from, to)),
   ]);
   const referenceByOrder = new Map(references.map((reference) => [reference.ordem, reference]));

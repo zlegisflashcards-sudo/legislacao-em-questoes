@@ -35,7 +35,7 @@ export async function searchLegislativeReferencesForQuestionLink(input: { slug: 
   const query = (input.query ?? "").trim().slice(0, 120).replace(/[,%()]/g, " ");
   const pageSize = Math.min(50, Math.max(1, Number(input.pageSize) || 20));
   const page = Math.max(1, Number(input.page) || 1);
-  let request = getSupabaseServerClient().from("legislative_references").select("id,slug,ordem,identificacao,preparado_em", { count: "exact" }).eq("slug", slug).not("preparado_em", "is", null).order("ordem").order("id").range((page - 1) * pageSize, page * pageSize - 1);
+  let request = getSupabaseServerClient().from("legislative_references").select("id,slug,ordem,identificacao,preparado_em", { count: "exact" }).eq("slug", slug).not("preparado_em", "is", null).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range((page - 1) * pageSize, page * pageSize - 1);
   if (query) {
     const value = `%${query}%`;
     request = UUID.test(query) ? request.eq("id", query) : request.or(`ordem.ilike.${value},identificacao.ilike.${value}`);
@@ -57,7 +57,7 @@ export async function setQuestionLegislativeReferenceLink(input: { questionIds: 
     return { linked: 0, unlinked: ids.length };
   }
   if (!UUID.test(input.referenceId)) throw new Error("Bloco legislativo inválido.");
-  const reference = await db.from("legislative_references").select("id,preparado_em").eq("id", input.referenceId).maybeSingle();
+  const reference = await db.from("legislative_references").select("id,preparado_em").eq("id", input.referenceId).or("situacao.is.null,situacao.neq.arquivada").maybeSingle();
   if (reference.error || !reference.data || !reference.data.preparado_em) throw new Error("O bloco legislativo selecionado não está preparado.");
   const saved = await db.from("question_legislative_reference_links").upsert(ids.map((questionId) => ({ question_id: questionId, reference_id: input.referenceId, linked_by: user.id })), { onConflict: "question_id" });
   if (saved.error) throw new Error(saved.error.code === "23514" ? "O bloco legislativo selecionado pertence a outra legislação." : "Não foi possível salvar os vínculos dos blocos legislativos.");

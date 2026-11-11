@@ -124,7 +124,7 @@ async function articleBlockOrphans(questions: ConflictQuestion[]): Promise<Orpha
   if (!questions.length) return [];
   const db = getSupabaseServerClient();
   const slugs = [...new Set(questions.map((question) => question.slug.toLowerCase()))];
-  const references = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").in("slug", slugs);
+  const references = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").in("slug", slugs).or("situacao.is.null,situacao.neq.arquivada");
   if (references.error) throw new AdminArticleConflictError(503, "Não foi possível consultar os blocos legislativos preparados.", "legislative_references_query_failed");
   const manualTargets = await listManualQuestionReferenceTargets(questions.map((question) => question.id));
   const byLaw = new Map<string, ConflictQuestion[]>();

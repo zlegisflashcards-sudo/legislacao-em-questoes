@@ -62,7 +62,7 @@ async function allReferenceSummaries(lawId: number) {
   const db = getSupabaseServerClient();
   const rows: ReferenceRow[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const result = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").eq("lei_id", lawId).order("ordem").order("id").range(from, from + PAGE_SIZE - 1);
+    const result = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").eq("lei_id", lawId).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range(from, from + PAGE_SIZE - 1);
     if (result.error) throw new Error("A base legislativa canônica está indisponível.");
     rows.push(...((result.data ?? []) as ReferenceRow[]));
     if ((result.data?.length ?? 0) < PAGE_SIZE) break;
@@ -105,7 +105,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     ordem: reference.ordem,
     // A grade do Mapa e a leitura usam a mesma identidade das questões:
     // Ordem canônica + nome curto já carregado da lei, sem consulta por cartão.
-    identificacao: formatLegalReferenceFromOrder(reference.ordem, law.nome_curto) ?? reference.identificacao,
+    identificacao: formatLegalReferenceFromOrder(reference.ordem, law.nome_curto, reference.identificacao) ?? reference.identificacao,
     sourceQuestionId: reference.source_question_id,
     prepared: Boolean(reference.preparado_em),
   }));
@@ -158,7 +158,7 @@ export async function getContinuousReadingBlocks(model: ContinuousReadingModel, 
   const prepared = model.references.filter((reference) => reference.prepared);
   const selected = prepared.slice(Math.max(0, offset), Math.max(0, offset) + Math.min(100, Math.max(1, limit)));
   if (!selected.length) return [];
-  const result = await getSupabaseServerClient().from("legislative_references").select("id,legislacao").eq("lei_id", model.law.id).in("id", selected.map((reference) => reference.id));
+  const result = await getSupabaseServerClient().from("legislative_references").select("id,legislacao").eq("lei_id", model.law.id).in("id", selected.map((reference) => reference.id)).or("situacao.is.null,situacao.neq.arquivada");
   if (result.error) throw new Error("Não foi possível carregar os blocos legislativos.");
   const legislationById = new Map((result.data ?? []).map((row) => [String(row.id), sanitizeLegalHtmlCore(String(row.legislacao ?? "")).trim()]));
   return selected.flatMap((reference) => {
@@ -178,7 +178,7 @@ export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawI
       return result.data ? { id: Number(result.data.id) } : null;
     },
     async findPreparedBlocks(lawId, referenceIds) {
-      const result = await db.from("legislative_references").select("id,legislacao").eq("lei_id", lawId).not("preparado_em", "is", null).in("id", referenceIds);
+      const result = await db.from("legislative_references").select("id,legislacao").eq("lei_id", lawId).not("preparado_em", "is", null).in("id", referenceIds).or("situacao.is.null,situacao.neq.arquivada");
       if (result.error) throw new Error("Não foi possível carregar os blocos legislativos.");
       return (result.data ?? []).map((row) => ({ id: String(row.id), legislation: String(row.legislacao ?? "") }));
     },

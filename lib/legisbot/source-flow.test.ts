@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { conflictingImportSourceGroups, groupImportSourceWarnings, normalizedImportSource, validateImportSource } from "./import-source";
 import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
-import { createLegisBotSourceSignature, LegisBotSourceError, legisBotOrderCandidates, resolveLegisBotSourceRows } from "./source";
+import { createLegisBotSourceSignature, formatLegisBotReference, LegisBotSourceError, legisBotOrderCandidates, resolveLegisBotSourceRows } from "./source";
 
 describe("fonte canônica do LegisBot", () => {
   it("preserva HTML estrutural e formatação editorial segura, removendo conteúdo perigoso", () => {
@@ -64,6 +64,14 @@ describe("fonte canônica do LegisBot", () => {
     expect(resolveLegisBotSourceRows([row, { ...row, id: "b", assunto: "Art. 1º, Lei 8.429/92" }], identifiers, null).questionId).toBe("a");
   });
 
+  it("apresenta no LegisBot a mesma referência canônica da Central sem alterar a identificação armazenada", () => {
+    const stored = { ordem: "0001.0.02.0.00.0", identificacao: "§ 2º" };
+    expect(formatLegisBotReference(stored, "Lei 13.869/2019")).toBe("Art. 1º, § 2º, Lei 13.869/2019");
+    expect(stored.identificacao).toBe("§ 2º");
+    expect(formatLegisBotReference({ ordem: "0015.a.01.0.00.0", identificacao: "§ 1º" }, "Lei 13.869/2019")).toBe("Art. 15-A, § 1º, Lei 13.869/2019");
+    expect(formatLegisBotReference({ ordem: "ordem-inválida", identificacao: "§ 2º" }, "Lei 13.869/2019")).toBe("§ 2º");
+  });
+
   it("procura a Ordem exata antes dos dispositivos superiores", () => {
     expect(legisBotOrderCandidates("0027.b.01.c.02.b")).toEqual([
       "0027.b.01.c.02.b",
@@ -111,9 +119,9 @@ describe("fonte canônica do LegisBot", () => {
     expect(template).not.toMatch(/encodeURIComponent\((titulo|assunto|legislacao)\)/);
     expect(template).not.toContain("?titulo=");
     expect(template).toContain("Aprofundar neste trecho da lei");
-    expect(template).toContain("stableTarget");
-    expect(template).toContain("stableTarget.indexOf('#bloco-') === -1");
-    expect(template).toContain("botaoLegisbot.hidden = true");
+    expect(template).toContain("var target = siteBase + '/legisbot/' + encodeURIComponent(slug)");
+    expect(template).toContain("target += '?ordem=' + encodeURIComponent(ordem)");
+    expect(template).toContain("'?question_id=' + encodeURIComponent(questionId) + '&ordem=' + encodeURIComponent(ordem)");
     expect(template).not.toContain("hrefBase");
     expect(template).not.toContain("data-aba=");
   });
@@ -124,6 +132,9 @@ describe("fonte canônica do LegisBot", () => {
     expect(generationRoute).toContain("findHierarchicalLegisBotSource");
     expect(generationRoute).not.toContain("findLegisBotSource(supabase, identifiers)");
     expect(highlightsServer).toContain("findHierarchicalLegisBotSource");
+    const source = readFileSync("lib/legisbot/source.ts", "utf8");
+    expect(source).toContain('select("titulo,nome_curto")');
+    expect(source).toContain("formatLegisBotReference(reference, law?.nome_curto)");
   });
 
   it("mantém a revelação pedagógica do Legis Questões e respeita redução de movimento", () => {

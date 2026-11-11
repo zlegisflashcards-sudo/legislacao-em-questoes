@@ -36,7 +36,7 @@ export async function getAdministrativeLegislativePreview(rawSlug: string): Prom
   if (!lawResult.data) return null;
   const law = lawResult.data as LawRow;
   const [referenceResult, questionResult, inventoryResult] = await Promise.all([
-    db.from("legislative_references").select("id,slug,ordem,identificacao,legislacao,situacao,lei_revogadora").eq("lei_id", law.id).order("ordem"),
+    db.from("legislative_references").select("id,slug,ordem,identificacao,legislacao,situacao,lei_revogadora").eq("lei_id", law.id).or("situacao.is.null,situacao.neq.arquivada").order("ordem"),
     db.from("questions").select("id,ordem,assunto").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
     db.from("legislative_reference_inventory").select("ordem,identificacao,legislacao").eq("lei_id", law.id).order("ordem"),
   ]);

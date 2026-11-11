@@ -4,9 +4,11 @@ import type { LegisBotIdentifiers } from "./request-validation";
 import { legalHtmlToStructuredText, sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import { validateQuestionStructure } from "@/lib/question-structure-consistency";
 import { legisBotOrderCandidates } from "./order-candidates";
+import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
 
 type QuestionSourceRow = { id: string; slug: string; ordem: string; titulo: string | null; assunto: string | null; legislacao: string | null; updated_at: string };
 type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; legislacao: string | null };
+type LawRow = { titulo: string | null; nome_curto: string | null };
 
 export type LegisBotSource = {
   referenceId: string | null;
@@ -45,11 +47,20 @@ export function createLegisBotSourceSignature(input: Pick<LegisBotSource, "titul
 
 export { legisBotOrderCandidates } from "./order-candidates";
 
-function buildReferenceSource(reference: ReferenceRow, title: string | null): LegisBotSource {
+/**
+ * A identificação persistida é metadado editorial e pode ser curta (por
+ * exemplo, somente “§ 2º”). A apresentação do LegisBot deve usar a mesma
+ * referência canônica da Central, sem regravar o campo original.
+ */
+export function formatLegisBotReference(reference: Pick<ReferenceRow, "ordem" | "identificacao">, lawShortName: string | null | undefined) {
+  return formatLegalReferenceFromOrder(reference.ordem, lawShortName, reference.identificacao) ?? reference.identificacao.trim();
+}
+
+function buildReferenceSource(reference: ReferenceRow, law: LawRow | null): LegisBotSource {
   const legislacao = sanitizeLegalHtmlCore(reference.legislacao ?? "").trim();
   const promptLegislacao = legalHtmlToStructuredText(legislacao);
-  const assunto = reference.identificacao.trim();
-  const titulo = title?.trim() || reference.slug.toUpperCase();
+  const assunto = formatLegisBotReference(reference, law?.nome_curto);
+  const titulo = law?.titulo?.trim() || reference.slug.toUpperCase();
   if (!legislacao || !promptLegislacao) throw new LegisBotSourceError("incomplete", "A legislação preparada deste dispositivo ainda não está disponível.");
   const source = { referenceId: reference.id, questionId: `reference:${reference.id}`, slug: reference.slug.toUpperCase(), ordem: reference.ordem, titulo, assunto, legislacao, promptLegislacao, signature: "" };
   return { ...source, signature: createLegisBotSourceSignature(source) };
@@ -58,27 +69,27 @@ function buildReferenceSource(reference: ReferenceRow, title: string | null): Le
 /** Fonte persistente da Etapa 3. Nunca consulta questions. */
 export async function findLegisBotSource(supabase: SupabaseClient, identifiers: LegisBotIdentifiers): Promise<LegisBotSource> {
   const [referenceResult, lawResult] = await Promise.all([
-    supabase.from("legislative_references").select("id,slug,ordem,identificacao,legislacao").eq("slug", identifiers.slug.toLowerCase()).eq("ordem", identifiers.ordem).maybeSingle(),
-    supabase.from("leis").select("titulo").eq("slug", identifiers.slug.toLowerCase()).maybeSingle(),
+    supabase.from("legislative_references").select("id,slug,ordem,identificacao,legislacao").eq("slug", identifiers.slug.toLowerCase()).eq("ordem", identifiers.ordem).or("situacao.is.null,situacao.neq.arquivada").maybeSingle(),
+    supabase.from("leis").select("titulo,nome_curto").eq("slug", identifiers.slug.toLowerCase()).maybeSingle(),
   ]);
   if (referenceResult.error || lawResult.error) throw new LegisBotSourceError("unavailable", "Não foi possível consultar a base legislativa.");
   if (!referenceResult.data) throw new LegisBotSourceError("not_found", "A referência legislativa deste dispositivo não foi identificada.");
-  return buildReferenceSource(referenceResult.data as ReferenceRow, lawResult.data?.titulo ? String(lawResult.data.titulo) : null);
+  return buildReferenceSource(referenceResult.data as ReferenceRow, lawResult.data as LawRow | null);
 }
 
 /** Retorna a primeira fonte preparada na cadeia de pais, sem tocar nas questões. */
 export async function findHierarchicalLegisBotSource(supabase: SupabaseClient, identifiers: LegisBotIdentifiers) {
   const candidates = legisBotOrderCandidates(identifiers.ordem);
-  const result = await supabase.from("legislative_references").select("id,slug,ordem,identificacao,legislacao").eq("slug", identifiers.slug.toLowerCase()).in("ordem", candidates);
+  const result = await supabase.from("legislative_references").select("id,slug,ordem,identificacao,legislacao").eq("slug", identifiers.slug.toLowerCase()).in("ordem", candidates).or("situacao.is.null,situacao.neq.arquivada");
   if (result.error) throw new LegisBotSourceError("unavailable", "Não foi possível consultar a base legislativa.");
   const byOrder = new Map((result.data ?? []).map((row) => [String(row.ordem), row as ReferenceRow]));
-  const law = await supabase.from("leis").select("titulo").eq("slug", identifiers.slug.toLowerCase()).maybeSingle();
+  const law = await supabase.from("leis").select("titulo,nome_curto").eq("slug", identifiers.slug.toLowerCase()).maybeSingle();
   if (law.error) throw new LegisBotSourceError("unavailable", "Não foi possível consultar a legislação.");
   for (const ordem of candidates) {
     const row = byOrder.get(ordem);
     if (!row) continue;
     try {
-      return buildReferenceSource(row, law.data?.titulo ? String(law.data.titulo) : null);
+      return buildReferenceSource(row, law.data as LawRow | null);
     } catch (error) {
       if (!(error instanceof LegisBotSourceError) || error.kind !== "incomplete") throw error;
     }

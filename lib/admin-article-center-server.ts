@@ -96,7 +96,7 @@ export async function getArticleContext(slug: string, ordem: string): Promise<Ar
   // A prepared reference is an editorial entity in its own right. It must open
   // even when this dispositivo has no active flashcard or community comment.
   const [reference, law] = await Promise.all([
-    db.from("legislative_references").select("id,slug,ordem,identificacao,legislacao,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).maybeSingle(),
+    db.from("legislative_references").select("id,slug,ordem,identificacao,legislacao,updated_at").eq("slug", slug.toLowerCase()).eq("ordem", ordem).or("situacao.is.null,situacao.neq.arquivada").maybeSingle(),
     db.from("leis").select("titulo,codigo").eq("slug", slug.toLowerCase()).maybeSingle(),
   ]);
   if (reference.error || law.error) throw new Error("Não foi possível carregar a referência legislativa.");

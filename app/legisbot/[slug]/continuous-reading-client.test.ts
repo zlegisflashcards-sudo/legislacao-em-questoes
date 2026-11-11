@@ -46,7 +46,7 @@ describe("leitura contínua pública", () => {
     expect(client).toContain('className={styles.cardRecentFlag}');
     expect(client).toContain('aria-label="Conteúdo recente"');
     expect(server).toContain("priority: publicPriority(linkedQuestions)");
-    expect(server).toContain("formatLegalReferenceFromOrder(reference.ordem, law.nome_curto)");
+    expect(server).toContain("formatLegalReferenceFromOrder(reference.ordem, law.nome_curto, reference.identificacao)");
     expect(server).toContain('select("id,slug,titulo,nome_curto,codigo")');
     expect(server).toContain('select("slug,ordem,artigo_recente")');
     expect(server).not.toContain("mapping?.incidencia");

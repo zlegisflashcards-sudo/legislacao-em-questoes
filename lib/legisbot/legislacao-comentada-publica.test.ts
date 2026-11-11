@@ -55,4 +55,23 @@ describe("legislação comentada confiável do LegisCast", () => {
     expect(getReferenciaDispositivo({ assunto: "Art. 1º", slug: "cp" })).toBe("Art. 1º");
     expect(getReferenciaDispositivo({ assunto: "Art. 2º, § 2º,&nbsp; Lei X", slug: "cp" })).toBe("Art. 2º, § 2º, Lei X");
   });
+
+  it("recompõe a referência do LegisBot a partir da Ordem sem regravar o assunto", () => {
+    const source = question({
+      slug: "l13869",
+      ordem: "0001.0.02.0.00.0",
+      assunto: "§ 2º",
+      titulo: "Lei nº 13.869/2019",
+    });
+    const [context] = consolidarLegislacaoComentadaConfiavel(
+      [source],
+      [],
+      "Lei nº 13.869/2019",
+      [],
+      "Lei 13.869/2019",
+    );
+
+    expect(context?.assunto).toBe("Art. 1º, § 2º, Lei 13.869/2019");
+    expect(source.assunto).toBe("§ 2º");
+  });
 });

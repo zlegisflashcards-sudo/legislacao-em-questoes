@@ -159,7 +159,7 @@ function mapReference(row: Record<string, unknown>, lawShortName?: string | null
     ordem: String(row.ordem),
     // A identificação histórica pode ser apenas o parágrafo. A Central a
     // recompõe da mesma chave canônica das questões, sem gravar nada no banco.
-    identification: formatLegalReferenceFromOrder(String(row.ordem), lawShortName) ?? String(row.identificacao),
+    identification: formatLegalReferenceFromOrder(String(row.ordem), lawShortName, typeof row.identificacao === "string" ? row.identificacao : null) ?? String(row.identificacao),
     legislation: row.legislacao ? String(row.legislacao) : null,
     preparedAt: row.preparado_em ? String(row.preparado_em) : null,
     status: row.situacao === "revogada" ? "revogada" : row.situacao === "preparada" || Boolean(row.legislacao) ? "preparada" : "pendente",
@@ -177,6 +177,7 @@ export async function listLegislativeReferences(input: { lawSlug?: string; query
   const db = getSupabaseServerClient();
   let request = db.from("legislative_references")
     .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,situacao,lei_revogadora,updated_at")
+    .or("situacao.is.null,situacao.neq.arquivada")
     .order("ordem", { ascending: input.orderDirection !== "desc" })
     .range(offset, offset + PAGE_SIZE);
   if (lawSlug) request = request.eq("slug", lawSlug);
@@ -200,6 +201,7 @@ export async function getLegislativeReference(slug: string, ordem: string) {
     .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,situacao,lei_revogadora,updated_at")
     .eq("slug", slug.trim().toLowerCase())
     .eq("ordem", ordem.trim())
+    .or("situacao.is.null,situacao.neq.arquivada")
     .maybeSingle();
   if (result.error) throw new Error("Não foi possível carregar a referência legislativa.");
   return result.data ? mapReference(result.data as Record<string, unknown>) : null;

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
     await requireRequestUser(request);
     // Confere a lei no servidor e consulta os destaques em lote pelo cliente
     // do aluno; RLS continua sendo a autoridade para a propriedade dos dados.
-    const references = await getSupabaseServerClient().from("legislative_references").select("id").eq("slug", slug).in("id", requested);
+    const references = await getSupabaseServerClient().from("legislative_references").select("id").eq("slug", slug).in("id", requested).or("situacao.is.null,situacao.neq.arquivada");
     if (references.error) throw references.error;
     const ids = (references.data ?? []).map((row) => String(row.id));
     if (!ids.length) return NextResponse.json({ success: true, highlights: [] });
