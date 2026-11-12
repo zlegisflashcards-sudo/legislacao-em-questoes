@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectManualLegislativeReference, isCanonicalManualReferenceOrder } from "./manual-legislative-reference";
+import { detectManualLegislativeReference, isCanonicalManualReferenceOrder, preserveManualLegislationLineBreaks } from "./manual-legislative-reference";
 
 describe("detecção de bloco legislativo manual", () => {
   it("sugere a Ordem canônica para artigo com letra e parágrafo", () => {
@@ -38,5 +38,14 @@ describe("detecção de bloco legislativo manual", () => {
   it("aceita somente a Ordem com seis segmentos canônicos", () => {
     expect(isCanonicalManualReferenceOrder("0018.a.01.0.00.0")).toBe(true);
     expect(isCanonicalManualReferenceOrder("18-A, § 1º")).toBe(false);
+  });
+
+  it("preserva parágrafos e quebras ao preparar texto colado para armazenamento", () => {
+    expect(preserveManualLegislationLineBreaks("Art. 5º Texto.\n\n§ 1º Primeiro.\n\n§ 2º Segundo.")).toBe("<p>Art. 5º Texto.</p>\n<p>§ 1º Primeiro.</p>\n<p>§ 2º Segundo.</p>");
+    expect(preserveManualLegislationLineBreaks("Linha 1\nLinha 2")).toBe("<p>Linha 1<br>Linha 2</p>");
+  });
+
+  it("não reescreve HTML legal já formatado", () => {
+    expect(preserveManualLegislationLineBreaks("<p><strong>Art. 5º</strong> Texto.</p>")).toBe("<p><strong>Art. 5º</strong> Texto.</p>");
   });
 });

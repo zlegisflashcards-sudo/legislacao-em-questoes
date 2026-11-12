@@ -13,6 +13,27 @@ const plainText = (value: string) => value
   .replace(/\s+/g, " ")
   .trim();
 
+const escapeHtml = (value: string) => value
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
+
+/**
+ * The manual field accepts both legal HTML and ordinary pasted text. Plain
+ * text needs structural markup before sanitization: browsers collapse bare
+ * newlines into spaces when the block is rendered later.
+ */
+export function preserveManualLegislationLineBreaks(value: string) {
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+  if (!normalized || /<\/?[a-z][^>]*>/i.test(normalized)) return normalized;
+  return normalized
+    .split(/\n[\t ]*\n+/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}
+
 const unique = (items: string[]) => [...new Set(items.map((item) => item.toLowerCase()))];
 
 /**

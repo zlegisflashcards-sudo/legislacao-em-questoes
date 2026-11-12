@@ -9,7 +9,7 @@ import { legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/l
 import { planLegislativeReferenceIdentifierRepair, type LegislativeReferenceIdentifierRepair } from "@/lib/legislative-reference-identifiers";
 import { sanitizeLegalHtmlCore } from "@/lib/legisbot/sanitize-legal-html-core";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
-import { detectManualLegislativeReference, isCanonicalManualReferenceOrder } from "@/lib/manual-legislative-reference";
+import { detectManualLegislativeReference, isCanonicalManualReferenceOrder, preserveManualLegislationLineBreaks } from "@/lib/manual-legislative-reference";
 
 export { referenceCandidatesFromQuestions, referencesNotYetStored, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 
@@ -99,7 +99,7 @@ export async function previewManualLegislativeReference(input: { lawSlug: unknow
   const slug = text(input.lawSlug, 160).toLowerCase();
   if (!slug) throw new Error("Escolha uma legislação antes de adicionar o bloco.");
   const rawLegislation = text(input.legislation, 40_000);
-  const legislation = sanitizarHtmlLegislacao(rawLegislation);
+  const legislation = sanitizarHtmlLegislacao(preserveManualLegislationLineBreaks(rawLegislation));
   if (!possuiTextoLegislacao(legislation)) throw new Error("Cole o texto legislativo do dispositivo.");
   const db = getSupabaseServerClient();
   const law = await db.from("leis").select("id,slug,nome_curto").eq("slug", slug).maybeSingle();
