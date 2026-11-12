@@ -36,6 +36,13 @@ type Audio = {
   updated_at?: string | null;
   leis?: { titulo?: string } | null;
 };
+type Coverage = {
+  audio_id: string;
+  lei_id: number;
+  structure_id: number;
+  created_at?: string;
+  created_by?: string | null;
+};
 type Job = {
   id: string;
   structure_id: number | null;
@@ -166,14 +173,17 @@ function audioStatusForTracks(tracks: Audio[], law: Law) {
   if (!changeDate || tracks.some((audio) => typeof audio.publicado_em === "string" && audio.publicado_em >= changeDate)) return "current" as const;
   return "outdated" as const;
 }
-function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], law: Law): LegiscastCoverage {
+function tracksCoveringStructure(tracks: Audio[], coverages: Coverage[], structureId: number) {
+  return tracks.filter((audio) => audio.structure_id === structureId || coverages.some((coverage) => coverage.audio_id === audio.id && coverage.structure_id === structureId));
+}
+function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], coverages: Coverage[], law: Law): LegiscastCoverage {
   const lawStructures = structuresForLaw(structures, law.id);
   const lawTracks = tracksForLaw(audios, law.id);
   let withAudio = 0;
   let notApplicable = 0;
   let outdated = 0;
   lawStructures.forEach((structure) => {
-    const status = audioStatusForTracks(lawTracks.filter((audio) => audio.structure_id === structure.id), law);
+    const status = audioStatusForTracks(tracksCoveringStructure(lawTracks, coverages, structure.id), law);
     if (status === "current") withAudio += 1;
     else if (status === "outdated") outdated += 1;
     else if (structure.audio_not_applicable) notApplicable += 1;
@@ -205,9 +215,13 @@ function structureOptions(structures: Structure[], lawId: number) {
 }
 function structureName(structures: Structure[], structureId: number | null) {
   return structureId === null
-    ? "Outros / Sem estrutura"
+    ? "Lei completa"
     : (structures.find((structure) => structure.id === structureId)?.nome ??
         "Estrutura não encontrada");
+}
+
+function lawRootLabel(law: Pick<Law, "titulo"> | null | undefined) {
+  return law?.titulo ? `${law.titulo} · Lei completa` : "Lei completa";
 }
 
 function DeleteAudioConfirmation({
@@ -250,6 +264,8 @@ function DeleteAudioConfirmation({
 export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: LegiscastAdminLaw | null } = {}) {
   const [laws, setLaws] = useState<Law[]>(lawContext ? [lawContext] : []);
   const [audios, setAudios] = useState<Audio[]>([]);
+  const [coverages, setCoverages] = useState<Coverage[]>([]);
+  const [coverageAvailable, setCoverageAvailable] = useState(false);
   const [structures, setStructures] = useState<Structure[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [busy, setBusy] = useState(false);
@@ -263,6 +279,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const [previewAudioId, setPreviewAudioId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [deletingAudio, setDeletingAudio] = useState<Audio | null>(null);
+  const [coverageAudio, setCoverageAudio] = useState<Audio | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   async function load() {
     const endpoint = lawContext ? `/api/admin/legiscast-audios?law_slug=${encodeURIComponent(lawContext.slug)}` : "/api/admin/legiscast-audios";
@@ -274,6 +291,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       throw new Error(apiError(body, "Não foi possível carregar os áudios."));
     setLaws(Array.isArray(body.laws) ? (body.laws as Law[]) : []);
     setAudios(Array.isArray(body.audios) ? (body.audios as Audio[]) : []);
+    setCoverages(Array.isArray(body.coverages) ? (body.coverages as Coverage[]) : []);
+    setCoverageAvailable(body.coverageAvailable === true);
     setStructures(
       Array.isArray(body.structures) ? (body.structures as Structure[]) : [],
     );
@@ -490,6 +509,27 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       setActionId(null);
     }
   }
+  async function setAudioCoverage(audio: Audio, structure: Structure, action: "add" | "remove") {
+    const actionKey = `coverage:${audio.id}:${structure.id}`;
+    setActionId(actionKey);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "update-coverage", audioId: audio.id, structureId: structure.id, action }),
+      });
+      const body = await readResponse(response);
+      if (!response.ok) throw new Error(apiError(body, "Não foi possível atualizar a cobertura editorial."));
+      setMessage(action === "add" ? "Cobertura editorial confirmada." : "Cobertura editorial removida.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a cobertura editorial.");
+    } finally {
+      setActionId(null);
+    }
+  }
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingAudio) return;
@@ -503,6 +543,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
     });
   }
   const selectedLaw = laws.find((law) => law.id === selectedLawId) ?? null;
+  const uploadLaw = laws.find((law) => String(law.id) === uploadLawId) ?? lawContext ?? null;
   const visibleLaws = laws.filter((law) =>
     law.titulo
       .toLocaleLowerCase("pt-BR")
@@ -511,9 +552,10 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const selectedTracks = selectedLaw
     ? tracksForLaw(audios, selectedLaw.id)
     : [];
+  const coverageForAudio = (audioId: string) => coverages.filter((coverage) => coverage.audio_id === audioId);
   const selectedCoverage = useMemo(
-    () => selectedLaw ? legiscastCoverageForLaw(structures, audios, selectedLaw) : null,
-    [audios, selectedLaw, structures],
+    () => selectedLaw ? legiscastCoverageForLaw(structures, audios, coverages, selectedLaw) : null,
+    [audios, coverages, selectedLaw, structures],
   );
   const uploadStructure = structures.find(
     (structure) => String(structure.id) === uploadStructureId,
@@ -542,14 +584,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
           <label className="grid min-w-0 gap-1 font-bold">
             Trecho da estrutura
             <select name="structure_id" value={uploadStructureId} disabled={!uploadLawId} onChange={(event) => setUploadStructureId(event.target.value)}>
-              <option value="">{uploadLawId ? "Sem estrutura" : "Selecione uma lei primeiro"}</option>
+              <option value="">{uploadLawId ? lawRootLabel(uploadLaw) : "Selecione uma lei primeiro"}</option>
               {uploadLawId ? structureOptions(structures, Number(uploadLawId)).map(({ structure, depth }) => <option key={structure.id} value={structure.id}>{"— ".repeat(depth)}{structure.tipo}: {structure.nome}</option>) : null}
             </select>
           </label>
           <aside className="rounded-lg border border-blue-200 bg-white px-3 py-3 text-sm" aria-live="polite">
             <p className="font-black text-[#062a5f]">Destino do áudio</p>
-            <p className="mt-1 font-semibold text-slate-700">{uploadStructure ? `${uploadStructure.tipo}: ${uploadStructure.nome}` : "Sem trecho vinculado"}</p>
-            <p className="mt-1 text-slate-500">O áudio será vinculado somente ao trecho selecionado.</p>
+            <p className="mt-1 font-semibold text-slate-700">{uploadStructure ? `${uploadStructure.tipo}: ${uploadStructure.nome}` : lawRootLabel(uploadLaw)}</p>
+            <p className="mt-1 text-slate-500">{uploadStructure ? "O áudio será vinculado somente ao trecho selecionado." : "O áudio será organizado na raiz desta lei, sem criar uma estrutura cadastrada."}</p>
           </aside>
         </fieldset>
         <fieldset className="grid gap-4 rounded-xl border border-slate-200 p-4 lg:grid-cols-2">
@@ -570,7 +612,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
           <button className="admin-button primary min-h-12 lg:col-span-2" disabled={busy}>{busy ? "Enviando…" : "Enviar e processar áudio"}</button>
         </fieldset>
       </form>
-      {lawContext && !structures.length ? <p className="admin-alert mt-4">Esta lei ainda não possui estrutura. Você pode cadastrar o áudio sem estrutura ou <a className="font-bold underline" href={`/admin/leis/${encodeURIComponent(lawContext.slug)}/estrutura`}>criar a estrutura da lei</a>.</p> : null}
+      {lawContext && !structures.length ? <p className="admin-alert mt-4">Esta lei ainda não possui subdivisões estruturais. Você pode cadastrar o áudio na raiz <strong>{lawContext.titulo}</strong> ou <a className="font-bold underline" href={`/admin/leis/${encodeURIComponent(lawContext.slug)}/estrutura`}>criar subdivisões da lei</a>.</p> : null}
       {error ? (
         <p className="admin-alert error" role="alert">
           {error}
@@ -581,6 +623,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
           {message}
         </p>
       ) : null}
+      {!coverageAvailable ? <p className="admin-alert mt-4">A cobertura editorial adicional estará disponível após a aplicação da migration. Os vínculos diretos dos áudios continuam funcionando normalmente.</p> : null}
       {jobs[0] ? (
         <div className="mt-6 grid gap-2">
           <div className="flex items-baseline justify-between gap-3">
@@ -651,9 +694,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
             </section> : null}
             {structureOptions(structures, selectedLaw.id).map(
               ({ structure, depth }) => {
-                const tracks = selectedTracks.filter(
-                  (audio) => audio.structure_id === structure.id,
-                );
+                const tracks = tracksCoveringStructure(selectedTracks, coverages, structure.id);
                 const audioStatus = audioStatusForTracks(tracks, selectedLaw);
                 return (
                   <div
@@ -740,6 +781,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <button
                             type="button"
                             className="admin-button"
+                            disabled={!coverageAvailable}
+                            onClick={() => setCoverageAudio(audio)}
+                          >
+                            Cobertura{coverageForAudio(audio.id).length ? ` (${coverageForAudio(audio.id).length})` : ""}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-button"
                             disabled={actionId === audio.id}
                             onClick={() =>
                               void audioOperation("update", audio.id, {
@@ -818,7 +867,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
               .length ? (
               <div className="grid gap-2">
                 <h5 className="font-bold text-slate-700">
-                  Outros / Sem estrutura
+                  Faixas da lei inteira
                 </h5>
                 {selectedTracks
                   .filter((audio) => audio.structure_id === null)
@@ -868,6 +917,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           onClick={() => setEditingAudio(audio)}
                         >
                           Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-button"
+                          disabled={!coverageAvailable}
+                          onClick={() => setCoverageAudio(audio)}
+                        >
+                          Cobertura{coverageForAudio(audio.id).length ? ` (${coverageForAudio(audio.id).length})` : ""}
                         </button>
                         <button
                           type="button"
@@ -965,7 +1022,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
               name="structure_id"
               defaultValue={editingAudio.structure_id ?? ""}
             >
-              <option value="">Outros / Sem estrutura</option>
+              <option value="">{lawRootLabel(laws.find((law) => law.id === editingAudio.lei_id))}</option>
               {structureOptions(structures, editingAudio.lei_id).map(
                 ({ structure, depth }) => (
                   <option key={structure.id} value={structure.id}>
@@ -995,6 +1052,31 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+      {coverageAudio ? (
+        <div className="fixed inset-0 z-[60] grid place-items-end bg-slate-950/40 p-3 sm:place-items-center" role="dialog" aria-modal="true" aria-labelledby="legiscast-coverage-title">
+          <section className="grid max-h-[85vh] w-full max-w-2xl gap-3 overflow-y-auto rounded-lg bg-white p-4 shadow-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 id="legiscast-coverage-title" className="font-black">Cobertura editorial</h3>
+                <p className="text-sm text-slate-600">Selecione somente as estruturas que esta faixa efetivamente cobre. A hierarquia não cria cobertura automática.</p>
+              </div>
+              <button type="button" className="admin-button" onClick={() => setCoverageAudio(null)}>Fechar</button>
+            </div>
+            <p className="rounded-lg bg-slate-50 p-3 text-sm"><strong>Estrutura principal:</strong> {structureName(structures, coverageAudio.structure_id)}.</p>
+            <div className="grid gap-2">
+              {structureOptions(structures, coverageAudio.lei_id).map(({ structure, depth }) => {
+                const direct = coverageAudio.structure_id === structure.id;
+                const selected = coverageForAudio(coverageAudio.id).some((coverage) => coverage.structure_id === structure.id);
+                const actionKey = `coverage:${coverageAudio.id}:${structure.id}`;
+                return <label key={structure.id} className="flex items-start gap-2 rounded border border-slate-200 p-3" style={{ marginLeft: `${depth * 12}px` }}>
+                  <input type="checkbox" checked={direct || selected} disabled={direct || actionId === actionKey} onChange={(event) => void setAudioCoverage(coverageAudio, structure, event.target.checked ? "add" : "remove")} />
+                  <span><strong>{structure.tipo}: {structure.nome}</strong>{direct ? <small className="ml-2 text-slate-500">vínculo direto</small> : null}</span>
+                </label>;
+              })}
+            </div>
+          </section>
         </div>
       ) : null}
     </section>

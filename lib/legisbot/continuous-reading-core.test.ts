@@ -50,6 +50,41 @@ describe("links Anki da leitura contínua", () => {
     expect(resolveQuestionReferenceId({ questionId, questions: [question], references: [reference(), reference(otherReferenceId)], resolutions: integrity.resolutions })).toBe(otherReferenceId);
   });
 
+  it("resolve pela Ordem exata antes de subir a hierarquia", () => {
+    const exactReference = reference(referenceId, "0027.b.01.c.02.b");
+    const parentReference = reference(otherReferenceId, "0027.b.01.c.00.0");
+    const structuredQuestion = { ...question, ordem: "0027.b.01.c.02.b" };
+    const integrity = resolveContinuousReadingIntegrity({ lawSlug: "l10826", questions: [structuredQuestion], references: [exactReference, parentReference] });
+    expect(integrity.resolutions).toMatchObject([{ status: "hierarchy", referenceId }]);
+  });
+
+  it("resolve pelo ancestral quando o dispositivo específico não possui bloco", () => {
+    const structuredQuestion = { ...question, ordem: "0027.b.01.c.02.b" };
+    const parentReference = reference(referenceId, "0027.b.01.c.00.0");
+    const integrity = resolveContinuousReadingIntegrity({ lawSlug: "l10826", questions: [structuredQuestion], references: [parentReference] });
+    expect(integrity.resolutions).toMatchObject([{ status: "hierarchy", referenceId, ordem: "0027.b.01.c.00.0" }]);
+  });
+
+  it("expõe órfã, vínculo inválido, ambiguidade e bloco não preparado sem escolher destino", () => {
+    const orphan = { ...question, id: "8ea93a63-951d-4f08-b90f-d3d460981a50", ordem: "0002.0.00.0.00.0" };
+    const invalid = { ...question, id: "9ea93a63-951d-4f08-b90f-d3d460981a50", ordem: "0003.0.00.0.00.0" };
+    const ambiguous = { ...question, id: "aea93a63-951d-4f08-b90f-d3d460981a50", ordem: "0004.0.00.0.00.0" };
+    const unprepared = { ...question, id: "bea93a63-951d-4f08-b90f-d3d460981a50", ordem: "0005.0.00.0.00.0" };
+    const integrity = resolveContinuousReadingIntegrity({
+      lawSlug: "l10826",
+      questions: [orphan, invalid, ambiguous, unprepared],
+      references: [
+        reference(referenceId, "0004.0.00.0.00.0"),
+        reference(otherReferenceId, "0004.0.00.0.00.0"),
+        reference("6bc999aa-951d-4f08-b90f-d3d460981a50", "0005.0.00.0.00.0", false),
+      ],
+      manualTargets: [{ questionId: invalid.id, referenceId: "7bc999aa-951d-4f08-b90f-d3d460981a50" }],
+    });
+    expect(integrity.resolutions.map((item) => item.status)).toEqual(["missing", "invalid_manual", "ambiguous", "missing"]);
+    expect(integrity.pendingQuestions).toBe(4);
+    expect(integrity.readingAvailable).toBe(false);
+  });
+
   it("mantém a identidade da questão se a Ordem do cartão foi corrigida", () => {
     const corrected = { ...question, ordem: "0002.0.00.0.00.0" };
     const integrity = resolveContinuousReadingIntegrity({ lawSlug: "l10826", questions: [corrected], references: [reference(referenceId, corrected.ordem)] });

@@ -14,12 +14,21 @@ import { incidenceFromQuestionCount } from "@/lib/article-mapping-incidence";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
 import { getContinuousReadingBlockTexts, type ContinuousReadingBlockText, type ContinuousReadingBlockTextRepository } from "./continuous-reading-block-texts-core";
+import {
+  continuousReadingStructurePath,
+  orderContinuousReadingReferences,
+  resolveContinuousReadingReferenceStructureAssociations,
+  type ContinuousReadingReferenceStructureAssociation,
+} from "./continuous-reading-structure-core";
+import { resolveContinuousReadingStructureIntegrity } from "./continuous-reading-structure-integrity-core";
+import { canExposeContinuousReadingReference, resolveContinuousReadingPartialMode, resolveContinuousReadingPublicAccess, type ContinuousReadingPartialMode, type ContinuousReadingPublicAccess } from "./continuous-reading-public-access-core";
+import type { StructureReleaseRecord } from "./continuous-reading-structure-release-core";
 
 const PAGE_SIZE = 500;
 
 type LawRow = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null };
 type QuestionRow = { id: string; slug: string; ordem: string; structure_id: number | null };
-type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; source_question_id: string | null; preparado_em: string | null; situacao: string | null };
+type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; source_question_id: string | null; structure_id: number | null; preparado_em: string | null; situacao: string | null };
 type StructureRow = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number };
 type MappingRow = { slug: string; ordem: string; artigo_recente: boolean | null };
 
@@ -28,10 +37,20 @@ export type ContinuousReadingPriority = "muito_alta" | "alta" | "media" | "baixa
 export type ContinuousHierarchyNode = { id: number; type: string; name: string };
 export type ContinuousReadingReference = ContinuousReferenceSummary & {
   hierarchy: ContinuousHierarchyNode[];
+  structureAssociation: ContinuousReadingReferenceStructureAssociation["status"];
+  structureCandidateIds: number[];
   priority: ContinuousReadingPriority;
   recent: boolean;
   linkedQuestions: number;
   inactive: boolean;
+};
+export type ContinuousReadingStructureCatalogItem = {
+  id: number;
+  parentId: number | null;
+  type: string;
+  name: string;
+  order: number;
+  status: "accessible" | "pending" | "blocked";
 };
 export type ContinuousReadingBlock = ContinuousReadingReference & { legislation: string };
 
@@ -41,6 +60,10 @@ export type ContinuousReadingModel = {
   questions: ContinuousQuestion[];
   references: ContinuousReadingReference[];
   integrity: ReadingIntegrity;
+  /** Controle server-side opt-in; não altera a leitura global enquanto inativo. */
+  partialMode: ContinuousReadingPartialMode;
+  publicAccess: ContinuousReadingPublicAccess;
+  structures: ContinuousReadingStructureCatalogItem[];
 };
 
 function publicPriority(questionCount: number): ContinuousReadingPriority {
@@ -62,25 +85,51 @@ async function allQuestions(lawId: number) {
 async function allReferenceSummaries(lawId: number) {
   const db = getSupabaseServerClient();
   const rows: ReferenceRow[] = [];
+  let structureLinkAvailable = true;
   for (let from = 0; ; from += PAGE_SIZE) {
-    const result = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em,situacao").eq("lei_id", lawId).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range(from, from + PAGE_SIZE - 1);
+    const query = (columns: string) => db.from("legislative_references").select(columns).eq("lei_id", lawId).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range(from, from + PAGE_SIZE - 1);
+    let result = await query("id,slug,ordem,identificacao,source_question_id,structure_id,preparado_em,situacao");
+    // A migration é aditiva, mas a leitura pública não pode indisponibilizar-se
+    // durante a janela entre a publicação do código e a aplicação da coluna.
+    if (result.error?.code === "PGRST204" && /structure_id/i.test(result.error.message ?? "")) {
+      structureLinkAvailable = false;
+      const legacy = await query("id,slug,ordem,identificacao,source_question_id,preparado_em,situacao");
+      if (legacy.error) throw new Error("A base legislativa canônica está indisponível.");
+      const legacyRows = (legacy.data ?? []) as unknown as Array<Omit<ReferenceRow, "structure_id">>;
+      rows.push(...legacyRows.map((reference) => ({ ...reference, structure_id: null })));
+      if (legacyRows.length < PAGE_SIZE) break;
+      continue;
+    }
     if (result.error) throw new Error("A base legislativa canônica está indisponível.");
-    rows.push(...((result.data ?? []) as ReferenceRow[]));
+    rows.push(...((result.data ?? []) as unknown as ReferenceRow[]));
     if ((result.data?.length ?? 0) < PAGE_SIZE) break;
   }
-  return rows;
+  return { rows, structureLinkAvailable };
 }
 
-function hierarchyPath(structureId: number | null, structure: StructureRow[]) {
-  if (!structureId) return [] as ContinuousHierarchyNode[];
-  const byId = new Map(structure.map((node) => [Number(node.id), node]));
-  const path: ContinuousHierarchyNode[] = [];
-  const visited = new Set<number>();
-  for (let node = byId.get(structureId); node && !visited.has(node.id); node = node.parent_id ? byId.get(node.parent_id) : undefined) {
-    visited.add(node.id);
-    path.unshift({ id: node.id, type: node.tipo, name: node.nome });
+const PARTIAL_READING_KEY_PREFIX = "lei_interativa_modo_parcial:";
+
+function migrationPending(error: { code?: string } | null) {
+  return error?.code === "42P01" || error?.code === "PGRST204" || error?.code === "PGRST205";
+}
+
+/** A configuração é deliberadamente opt-in e só aceita o valor explícito. */
+async function partialReadingRequested(slug: string) {
+  const result = await getSupabaseServerClient().from("legisbot_configuracoes")
+    .select("valor").eq("chave", `${PARTIAL_READING_KEY_PREFIX}${slug}`).maybeSingle();
+  return !result.error && result.data?.valor?.trim().toLowerCase() === "habilitado";
+}
+
+async function readStructureReleases(lawId: number): Promise<{ available: boolean; records: StructureReleaseRecord[] }> {
+  const result = await getSupabaseServerClient().from("legislative_structure_releases")
+    .select("structure_id,status").eq("lei_id", lawId);
+  if (result.error) {
+    // A leitura global continua disponível se a migration ainda não chegou ao
+    // banco; nunca tratamos ausência de tabela como autorização parcial.
+    if (!migrationPending(result.error)) console.error("[LegisBot] Liberações estruturais indisponíveis.", { code: result.error.code });
+    return { available: false, records: [] };
   }
-  return path;
+  return { available: true, records: (result.data ?? []).flatMap((row) => row.status === "released" || row.status === "blocked" ? [{ structureId: Number(row.structure_id), status: row.status }] : []) };
 }
 
 export async function getContinuousReadingModel(rawSlug: string): Promise<ContinuousReadingModel | null> {
@@ -91,13 +140,15 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
   if (lawResult.error) throw new Error("Não foi possível consultar a legislação.");
   if (!lawResult.data) return null;
   const law = lawResult.data as LawRow;
-  const [questions, references, structure, mappings] = await Promise.all([
+  const [questions, referenceResult, structure, mappings, requestedPartialMode] = await Promise.all([
     allQuestions(law.id),
     allReferenceSummaries(law.id),
     db.from("law_structure").select("id,parent_id,tipo,nome,ordem").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
     db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
+    partialReadingRequested(slug),
   ]);
   if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
+  const references = referenceResult.rows;
   const questionInput: ContinuousQuestion[] = questions.map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id }));
   const targets = await listManualQuestionReferenceTargets(questionInput.map((question) => question.id));
   const referenceInput: ContinuousReferenceSummary[] = references.map((reference) => ({
@@ -113,16 +164,42 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
   const inactiveReferenceIds = new Set(references.filter((reference) => reference.situacao === "revogada").map((reference) => reference.id));
   const integrity: ReadingIntegrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
 
-  const questionById = new Map(questions.map((question) => [question.id, question]));
-  const structureByReference = new Map<string, number>();
-  for (const reference of references) {
-    const sourceQuestion = reference.source_question_id ? questionById.get(reference.source_question_id) : undefined;
-    if (sourceQuestion?.structure_id) structureByReference.set(reference.id, sourceQuestion.structure_id);
-  }
-  for (const resolution of integrity.resolutions) {
-    if (!resolution.referenceId || structureByReference.has(resolution.referenceId)) continue;
-    const question = questionById.get(resolution.questionId);
-    if (question?.structure_id) structureByReference.set(resolution.referenceId, question.structure_id);
+  const readingStructure = ((structure.data ?? []) as StructureRow[]).map((node) => ({ ...node, parentId: node.parent_id }));
+  const structureAssociations = resolveContinuousReadingReferenceStructureAssociations({
+    references: references.map((reference) => ({ id: reference.id, sourceQuestionId: reference.source_question_id, structureId: reference.structure_id })),
+    questions: questions.map((question) => ({ id: question.id, structureId: question.structure_id })),
+    resolutions: integrity.resolutions,
+    structures: readingStructure,
+  });
+  const associationByReference = new Map(structureAssociations.map((association) => [association.referenceId, association]));
+
+  // A revalidação é feita no instante da leitura. Em caso de inventário ou
+  // migration indisponível, o modo parcial não é ativado; a política global
+  // previamente publicada permanece sendo a única rota possível.
+  let partialMode = resolveContinuousReadingPartialMode({ requested: requestedPartialMode, migrationsAvailable: false, structures: readingStructure });
+  let publicAccess = resolveContinuousReadingPublicAccess({ mode: partialMode, structures: readingStructure, reports: [], releases: [] });
+  let structureReports: ReturnType<typeof resolveContinuousReadingStructureIntegrity>["reports"] = [];
+  let releaseRecords: StructureReleaseRecord[] = [];
+  if (requestedPartialMode && referenceResult.structureLinkAvailable && readingStructure.length) {
+    const [inventoryResult, releases] = await Promise.all([
+      db.from("legislative_reference_inventory").select("ordem").eq("lei_id", law.id).order("ordem"),
+      readStructureReleases(law.id),
+    ]);
+    const inventoryAvailable = !inventoryResult.error && (inventoryResult.data?.length ?? 0) > 0;
+    const migrationsAvailable = releases.available && !inventoryResult.error && referenceResult.structureLinkAvailable;
+    partialMode = resolveContinuousReadingPartialMode({ requested: true, migrationsAvailable, structures: readingStructure });
+    const structureIntegrity = resolveContinuousReadingStructureIntegrity({
+      structures: readingStructure,
+      questions: questions.map((question) => ({ id: question.id, structureId: question.structure_id })),
+      references: referenceInput.map((reference) => ({ id: reference.id, ordem: reference.ordem, prepared: reference.prepared })),
+      resolutions: integrity.resolutions,
+      associations: structureAssociations,
+      inventoryAvailable,
+      inventory: inventoryResult.error ? [] : (inventoryResult.data ?? []) as Array<{ ordem: string }>,
+    });
+    structureReports = structureIntegrity.reports;
+    releaseRecords = releases.records;
+    publicAccess = resolveContinuousReadingPublicAccess({ mode: partialMode, structures: readingStructure, reports: structureIntegrity.reports, releases: releases.records });
   }
 
   const questionCountByReference = new Map<string, number>();
@@ -137,28 +214,61 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     ]),
   );
 
+  const publicReferences = orderContinuousReadingReferences(referenceInput).flatMap((reference) => {
+    const linkedQuestions = questionCountByReference.get(reference.id) ?? 0;
+    const mapping = mappingByContext.get(`${reference.slug.toLowerCase()}\u0000${reference.ordem}`);
+    const association = associationByReference.get(reference.id) ?? { structureId: null, status: "unassociated" as const, candidateStructureIds: [], suggestionStatus: "unassociated" as const, suggestedStructureId: null };
+    if (!canExposeContinuousReadingReference({ access: publicAccess, associationStatus: association.status, structureId: association.structureId })) return [];
+    return [{
+      ...reference,
+      hierarchy: continuousReadingStructurePath(association.structureId, readingStructure).map((node) => ({ id: node.id, type: node.tipo, name: node.nome })),
+      structureAssociation: association.status,
+      structureCandidateIds: association.candidateStructureIds,
+      priority: publicPriority(linkedQuestions),
+      recent: mapping?.artigo_recente === true,
+      linkedQuestions,
+      inactive: inactiveReferenceIds.has(reference.id),
+    }];
+  });
+  const reportByStructure = new Map(structureReports.map((report) => [report.structureId, report]));
+  const releaseByStructure = new Map(releaseRecords.map((release) => [release.structureId, release.status]));
+  const structures: ContinuousReadingStructureCatalogItem[] = readingStructure.map((structure) => ({
+    id: structure.id,
+    parentId: structure.parentId,
+    type: structure.tipo,
+    name: structure.nome,
+    order: structure.ordem,
+    status: publicAccess.mode === "global"
+      ? "accessible"
+      : releaseByStructure.get(structure.id) === "blocked"
+        ? "blocked"
+        : publicAccess.accessibleStructureIds.includes(structure.id) && reportByStructure.get(structure.id)?.status === "ready"
+          ? "accessible"
+          : "pending",
+  }));
+
   return {
     law,
     questions: questionInput,
-    integrity,
-    references: referenceInput.map((reference) => {
-      const linkedQuestions = questionCountByReference.get(reference.id) ?? 0;
-      const mapping = mappingByContext.get(`${reference.slug.toLowerCase()}\u0000${reference.ordem}`);
-      return {
-        ...reference,
-        hierarchy: hierarchyPath(structureByReference.get(reference.id) ?? null, (structure.data ?? []) as StructureRow[]),
-        priority: publicPriority(linkedQuestions),
-        recent: mapping?.artigo_recente === true,
-        linkedQuestions,
-        inactive: inactiveReferenceIds.has(reference.id),
-      };
-    }),
+    // No modo parcial, pendências de outros recortes não derrubam a leitura
+    // dos recortes liberados. No global, a regra histórica é preservada.
+    integrity: publicAccess.mode === "partial" ? { ...integrity, readingAvailable: publicReferences.length > 0 } : integrity,
+    references: publicReferences,
+    partialMode,
+    publicAccess,
+    structures,
   };
 }
 
-export async function getContinuousReadingBlocks(model: ContinuousReadingModel, offset: number, limit: number) {
+export function continuousReadingReferencesForStructure(model: ContinuousReadingModel, structureId: number | null) {
+  if (model.publicAccess.mode !== "partial" || structureId === null) return model.references;
+  if (!model.publicAccess.accessibleStructureIds.includes(structureId)) return [] as ContinuousReadingReference[];
+  return model.references.filter((reference) => reference.hierarchy.some((node) => node.id === structureId));
+}
+
+export async function getContinuousReadingBlocks(model: ContinuousReadingModel, offset: number, limit: number, structureId: number | null = null) {
   if (!model.integrity.readingAvailable) return [] as ContinuousReadingBlock[];
-  const prepared = model.references.filter((reference) => reference.prepared);
+  const prepared = continuousReadingReferencesForStructure(model, structureId).filter((reference) => reference.prepared);
   const selected = prepared.slice(Math.max(0, offset), Math.max(0, offset) + Math.min(100, Math.max(1, limit)));
   if (!selected.length) return [];
   const result = await getSupabaseServerClient().from("legislative_references").select("id,legislacao").eq("lei_id", model.law.id).in("id", selected.map((reference) => reference.id)).or("situacao.is.null,situacao.neq.arquivada");
@@ -172,8 +282,30 @@ export async function getContinuousReadingBlocks(model: ContinuousReadingModel, 
 
 export { getContinuousReadingBlockTexts, type ContinuousReadingBlockText, type ContinuousReadingBlockTextRepository } from "./continuous-reading-block-texts-core";
 
-export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawIds: string[]) {
+export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawIds: string[], rawStructureId: string | null = null) {
   const db = getSupabaseServerClient();
+  const slug = rawSlug.trim().toLowerCase();
+  // A página envia somente IDs do seu catálogo. A rota revalida no servidor
+  // quando o modo parcial foi solicitado, portanto um UUID copiado de outro
+  // recorte não contorna a política alterando a URL.
+  if (await partialReadingRequested(slug)) {
+    const model = await getContinuousReadingModel(slug);
+    if (!model) return null;
+    if (model.publicAccess.mode === "partial") {
+      const structureId = rawStructureId && /^\d+$/.test(rawStructureId) ? Number(rawStructureId) : null;
+      const allowed = new Set(continuousReadingReferencesForStructure(model, structureId).filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
+      const requested = rawIds.filter((id) => allowed.has(id.trim().toLowerCase()));
+      if (!requested.length) return [] as ContinuousReadingBlockText[];
+      return getContinuousReadingBlockTexts(slug, requested, {
+        async findActiveLaw() { return { id: model.law.id }; },
+        async findPreparedBlocks(lawId, referenceIds) {
+          const result = await db.from("legislative_references").select("id,legislacao").eq("lei_id", lawId).not("preparado_em", "is", null).in("id", referenceIds).or("situacao.is.null,situacao.neq.arquivada");
+          if (result.error) throw new Error("Não foi possível carregar os blocos legislativos.");
+          return (result.data ?? []).map((row) => ({ id: String(row.id), legislation: String(row.legislacao ?? "") }));
+        },
+      });
+    }
+  }
   return getContinuousReadingBlockTexts(rawSlug, rawIds, {
     async findActiveLaw(slug) {
       const result = await db.from("leis").select("id").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();

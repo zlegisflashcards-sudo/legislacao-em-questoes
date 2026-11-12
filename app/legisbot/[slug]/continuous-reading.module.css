@@ -277,6 +277,7 @@
 .layoutTocClosed {
   grid-template-columns: 52px minmax(0, 1fr);
 }
+.layoutNoToc { grid-template-columns: minmax(0, 1fr); }
 
 .tocShell {
   position: sticky;
@@ -347,6 +348,9 @@
   font-weight: 850;
   letter-spacing: .02em;
 }
+.tocLine { display: flex; align-items: stretch; gap: 3px; }
+.tocLine > button { width: 24px; flex: none; border: 0; border-radius: 7px; background: transparent; color: #64748b; font-weight: 900; }
+.tocLine > a, .tocLine > span { min-width: 0; flex: 1; }
 
 .tocDevice > a { font-weight: 600; }
 
@@ -367,6 +371,10 @@
   color: #1d4ed8;
   outline: none;
 }
+.tocSection > span { display: grid; gap: 2px; border-radius: 9px; padding: 7px 9px; font-size: .84rem; line-height: 1.35; }
+.tocSection > span small { font-size: .68rem; font-weight: 800; }
+.tocPending { background: #fffbeb; color: #92400e; }
+.tocBlocked { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
 
 .content {
   min-width: 0;
@@ -376,6 +384,14 @@
   background: #fff;
   box-shadow: 0 12px 34px #1e3a5f0c;
 }
+.stickyStructureHeader { position: sticky; z-index: 12; top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #dbe6f6; background: #fffffff2; padding: 10px 18px; box-shadow: 0 8px 22px #1e3a5f12; backdrop-filter: blur(10px); }
+.stickyStructureHeader > div:first-child { display: grid; min-width: 0; gap: 2px; }
+.stickyStructureHeader small { color: #64748b; font-size: .66rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.stickyStructureHeader strong { overflow: hidden; color: #102a56; font-size: .88rem; text-overflow: ellipsis; white-space: nowrap; }
+.structurePager { display: flex; align-items: center; gap: 6px; }
+.structurePager button { min-height: 34px; border: 1px solid #bfdbfe; border-radius: 8px; background: #fff; padding: 6px 9px; color: #1d4ed8; font-size: .75rem; font-weight: 800; }
+.structurePager button:disabled { border-color: #e2e8f0; color: #94a3b8; }
+.structurePager span { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
 
 .readingStructure {
   display: grid;
@@ -723,6 +739,10 @@
 .studentReadinessReady { border-color: #86efac; background: #f0fdf4; color: #166534; }
 .studentReadinessActions { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
 .studentReadinessActions .admin-button { flex: none; white-space: nowrap; }
+.tocLawRoot { display: grid; gap: 7px; }
+.tocLawRootLink { display: block; padding: 8px 9px; border-radius: 9px; background: #eff6ff; color: #1d4ed8; font-size: .85rem; font-weight: 800; line-height: 1.35; text-decoration: none; }
+.tocLawRootLink:hover { background: #dbeafe; text-decoration: underline; }
+.tocLawRoot > p { margin: 0; padding: 2px 9px 7px; color: #64748b; font-size: .82rem; line-height: 1.4; }
 .previewEditor { margin-bottom: 18px; border: 1px solid #bfdbfe; border-radius: 18px; background: #fff; padding: 22px; box-shadow: 0 12px 30px #1e3a5f0d; }
 .previewEditor > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .previewEditor h2 { margin: 4px 0; color: #102a56; }
@@ -928,6 +948,11 @@
   .mobileTocPanel ol ol { margin-left: 12px; padding-left: 9px; border-left: 1px solid #dbe6f6; }
   .mobileTocPanel a { display: block; border-radius: 9px; padding: 9px; color: #475569; text-decoration: none; }
   .mobileTocPanel a.tocActive { background: #eff6ff; color: #1d4ed8; }
+  .mobileTocPanel .tocSection > span { padding: 9px; }
+
+  .stickyStructureHeader { top: 68px; padding: 9px 12px; }
+  .stickyStructureHeader strong { max-width: 40vw; font-size: .78rem; }
+  .structurePager button { min-height: 32px; padding: 5px 7px; font-size: .7rem; }
 
   .content { border-radius: 16px; }
   .studentReadinessActions { align-items: stretch; flex-direction: column; }

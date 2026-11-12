@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { archiveLegislativeReference, changeLegislativeReferenceOrder, clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, resolveLegislativeReferenceShadow, saveLegislativeReference, seedLegislativeReferences, setLegislativeReferenceInactive } from "@/lib/admin-legislative-references";
+import { setAdminLegislativeReferenceStructureAssociation } from "@/lib/admin-legislative-reference-structures";
+import { LegislativeStructureReleaseError, setAdminLegislativeStructureRelease } from "@/lib/admin-legislative-structure-releases";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -88,6 +90,20 @@ export async function changePreparedLegislativeReferenceOrder(formData: FormData
   redirect(`/admin/artigos/${encodeURIComponent(result.slug)}/${encodeURIComponent(result.ordem)}?aba=artigo&ordem_alterada=1`);
 }
 
+/** Confirma (ou remove) o vínculo editorial do bloco com a estrutura da própria lei. */
+export async function savePreparedLegislativeReferenceStructureAssociation(formData: FormData) {
+  const result = await setAdminLegislativeReferenceStructureAssociation({
+    referenceId: value(formData, "id"),
+    structureId: value(formData, "structure_id") || null,
+  });
+  const slug = value(formData, "slug").toLowerCase();
+  const ordem = value(formData, "ordem");
+  revalidatePath("/admin/artigos");
+  revalidatePath(`/admin/artigos/${slug}/${ordem}`);
+  revalidatePath("/admin/artigos/legisbot-preview");
+  redirect(`/admin/artigos/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}?aba=artigo&estrutura_referencia=${result.structureId === null ? "removida" : "salva"}`);
+}
+
 export async function resolvePreparedLegislativeShadow(formData: FormData) {
   const slug = value(formData, "slug").toLowerCase();
   const ordem = value(formData, "ordem");
@@ -95,4 +111,18 @@ export async function resolvePreparedLegislativeShadow(formData: FormData) {
   revalidatePath("/admin/artigos");
   revalidatePath("/admin/artigos/legisbot-preview");
   redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&filtro=sombra&sombra=${result.resolution === "revogada" ? "revogado" : "criado"}`);
+}
+
+export async function setLegislativeStructureRelease(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  const structureId = value(formData, "structure_id");
+  const action = value(formData, "release_action");
+  try {
+    const result = await setAdminLegislativeStructureRelease({ lawSlug: slug, structureId, action });
+    revalidatePath("/admin/artigos/legisbot-preview");
+    redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao=${result.changed ? result.status === "released" ? "liberada" : "bloqueada" : "sem_alteracao"}`);
+  } catch (error) {
+    const message = error instanceof LegislativeStructureReleaseError ? error.code : "database";
+    redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao_erro=${encodeURIComponent(message)}`);
+  }
 }

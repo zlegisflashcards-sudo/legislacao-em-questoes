@@ -38,25 +38,28 @@ describe("LegisCast na Central da Lei", () => {
 
   it("preserva o fluxo completo de upload, processamento e acervo", () => {
     const client = read("components/admin/legiscast-audios-admin.tsx");
-    for (const operation of ["authorize-original", "confirm-original", "retry", "update", "preview", "delete", "update-structure-pdf-page"]) expect(client).toContain(`"${operation}"`);
+    for (const operation of ["authorize-original", "confirm-original", "retry", "update", "preview", "delete"]) expect(client).toContain(`"${operation}"`);
     for (const status of ["pendente", "processando", "concluido", "erro"]) expect(client).toContain(`"${status}"`);
     expect(client).toContain("LEGISCAST_ORIGINAL_MAX_BYTES");
     expect(client).toContain("isAcceptedLegiscastOriginal");
   });
 
-  it("permite áudio sem estrutura e orienta a criação sem depender de Questões ou Anki", () => {
+  it("organiza áudio sem subdivisão na raiz da lei e orienta a criação sem depender de Questões ou Anki", () => {
     const client = read("components/admin/legiscast-audios-admin.tsx");
     const server = read("lib/admin-legiscast-audios-server.ts");
-    expect(client).toContain('"Sem estrutura"');
-    expect(client).toContain("criar a estrutura da lei");
+    expect(client).toContain("function lawRootLabel");
+    expect(client).toContain("function tracksCoveringStructure");
+    expect(client).toContain("coverage.audio_id === audio.id && coverage.structure_id === structureId");
+    expect(client).toContain("Lei completa");
+    expect(client).toContain("criar subdivisões da lei");
     expect(server).not.toContain('.from("questions")');
     expect(server).not.toContain("anki");
   });
 
-  it("mantém pdf_page em law_structure e limita a alteração à lei informada", () => {
+  it("mantém a compatibilidade de pdf_page no servidor, sem expor a função na tela, e limita a alteração à lei informada", () => {
     const client = read("components/admin/legiscast-audios-admin.tsx");
     const server = read("lib/admin-legiscast-audios-server.ts");
-    expect(client).toContain("lawId: uploadLawId");
+    expect(client).not.toContain("Página no PDF");
     expect(server).toContain('.from("law_structure").update({ pdf_page: pdfPage');
     expect(server).toContain('request = request.eq("lei_id", lawId)');
     expect(client).not.toContain("legiscast_audios.pdf_page");

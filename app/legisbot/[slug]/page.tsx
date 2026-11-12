@@ -39,8 +39,9 @@ export default async function ContinuousLegisBotPage({ params, searchParams }: {
   // `redirect` lança NEXT_REDIRECT; ele deve permanecer fora do catch de I/O.
   if (reference) redirect(`/legisbot/${encodeURIComponent(model.law.slug)}#${continuousBlockAnchor(reference.id)}`);
   try {
-    const initialBlocks = await getContinuousReadingBlocks(model, 0, 30);
-    return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} references={model.references} initialBlocks={initialBlocks} initialTab={initialTab(first(query.tab) || first(query.aba))} />{studyNav}</div>;
+    const initialStructureId = model.publicAccess.mode === "partial" ? model.publicAccess.firstAccessibleStructureId : null;
+    const initialBlocks = await getContinuousReadingBlocks(model, 0, 30, initialStructureId);
+    return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} partialMode={model.publicAccess.mode === "partial"} initialStructureId={initialStructureId} initialBlocks={initialBlocks} initialTab={initialTab(first(query.tab) || first(query.aba))} />{studyNav}</div>;
   } catch (error) {
     console.error("[LegisBot] Falha segura ao carregar os blocos da leitura contínua.", { slug, tipo: error instanceof Error ? error.name : "unknown" });
     return <main className={styles.page}><section className={`${styles.shell} ${styles.empty}`}><h1>Leitura temporariamente indisponível</h1><p>A base legislativa não pôde ser verificada. Nenhuma legislação foi liberada automaticamente.</p></section></main>;

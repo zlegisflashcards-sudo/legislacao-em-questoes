@@ -72,11 +72,13 @@ describe("leitura contínua pública", () => {
   it("mostra somente a estrutura no sumário e acompanha a seção ativa", () => {
     expect(client).not.toContain('key: `reference:${reference.id}`');
     expect(client).not.toContain("reference.identificacao, reference");
-    expect(client).toContain("for (const node of reference.hierarchy)");
+    expect(client).toContain("function structureTree(structures: StructureCatalogItem[], references: Reference[])");
+    expect(client).toContain("for (const reference of references) for (const hierarchy of reference.hierarchy)");
+    expect(client).toContain("{lawTitle}");
     expect(client).toContain("aria-current");
     expect(client).toContain("IntersectionObserver");
     expect(client).toContain("setMobileTocOpen(false)");
-    expect(client).toContain("Procurando um artigo? Escolha aqui e eu te levo até ele.");
+    expect(client).toContain("Escolha uma estrutura disponível.");
   });
 
   it("insere títulos e capítulos no fluxo da lei sem repeti-los em cada dispositivo", () => {
@@ -90,9 +92,8 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("desktopTocOpen");
     expect(client).toContain("mobileTocOpen");
     expect(client).toContain("☰ <span>Sumário</span>");
-    expect(client).toContain("📖 Clique na Lei");
     expect(client).toContain("styles.mobileTocCurrent");
-    expect(client).toContain("prepared.find((item) => item.id === activeId)?.identificacao");
+    expect(client).toContain('activeStructure?.name ?? "Início da lei"');
     expect(styles).toContain("position: sticky");
     expect(styles).toContain("transform: translateX(-50%)");
     expect(styles).toContain("scroll-margin-top");

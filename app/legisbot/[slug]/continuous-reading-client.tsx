@@ -11,9 +11,10 @@ import styles from "./continuous-reading.module.css";
 type HierarchyNode = { id: number; type: string; name: string };
 type Priority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[]; priority: Priority; recent: boolean; linkedQuestions: number; inactive: boolean };
+type StructureCatalogItem = { id: number; parentId: number | null; type: string; name: string; order: number; status: "accessible" | "pending" | "blocked" };
 type Block = Reference & { legislation: string };
 type BlockText = Pick<Block, "id" | "legislation">;
-type TocNode = { key: string; label: string; reference: Reference; children: TocNode[]; referenceIds: string[] };
+type TocNode = { key: string; structure: StructureCatalogItem; reference: Reference | null; children: TocNode[]; referenceIds: string[] };
 
 const PAGE_SIZE = 30;
 const PRIORITY_ORDER: Priority[] = ["muito_alta", "alta", "media", "baixa", "nao_mapeado"];
@@ -53,40 +54,41 @@ function LegisBotGuide({ title, mode, adminPreview }: { title: string; mode: "ma
   </header>;
 }
 
-function structureTree(references: Reference[]): TocNode[] {
+function structureTree(structures: StructureCatalogItem[], references: Reference[]): TocNode[] {
   const roots: TocNode[] = [];
-  const childrenByPath = new Map<string, TocNode[]>([["root", roots]]);
-  for (const reference of references) {
-    let parentPath = "root";
-    for (const node of reference.hierarchy) {
-      const path = `${parentPath}/${node.type}:${node.id}`;
-      const siblings = childrenByPath.get(parentPath) ?? roots;
-      let item = siblings.find((candidate) => candidate.key === path);
-      if (!item) {
-        item = { key: path, label: node.name, reference, children: [], referenceIds: [] };
-        siblings.push(item);
-        childrenByPath.set(path, item.children);
-      }
-      item.referenceIds.push(reference.id);
-      parentPath = path;
-    }
+  const byId = new Map<number, TocNode>();
+  for (const structure of structures.slice().sort((a, b) => a.order - b.order || a.id - b.id)) {
+    const item: TocNode = { key: `structure:${structure.id}`, structure, reference: null, children: [], referenceIds: [] };
+    byId.set(structure.id, item);
+    const parent = structure.parentId === null ? null : byId.get(structure.parentId);
+    (parent?.children ?? roots).push(item);
+  }
+  for (const reference of references) for (const hierarchy of reference.hierarchy) {
+    const item = byId.get(hierarchy.id);
+    if (!item) continue;
+    item.referenceIds.push(reference.id);
+    if (!item.reference) item.reference = reference;
   }
   return roots;
 }
 
-function StructureItems({ nodes, activeId, onNavigate }: { nodes: TocNode[]; activeId: string | null; onNavigate: (reference: Reference) => void }) {
+function StructureItems({ nodes, activeId, onNavigate, collapsed, onToggle }: { nodes: TocNode[]; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
   return <ol>{nodes.map((node) => {
     const active = Boolean(activeId && node.referenceIds.includes(activeId));
+    const enabled = node.structure.status === "accessible" && node.reference;
     return <li key={node.key} className={styles.tocSection}>
-      <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference.id)}`} onClick={() => onNavigate(node.reference)}>{node.label}</a>
-      {node.children.length ? <StructureItems nodes={node.children} activeId={activeId} onNavigate={onNavigate} /> : null}
+      <div className={styles.tocLine}>{node.children.length ? <button type="button" aria-label={collapsed.has(node.key) ? `Expandir ${node.structure.name}` : `Recolher ${node.structure.name}`} aria-expanded={!collapsed.has(node.key)} onClick={() => onToggle(node.key)}>{collapsed.has(node.key) ? "+" : "−"}</button> : null}{enabled ? <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference!.id)}`} onClick={() => onNavigate(node.reference!)}>{node.structure.name}</a> : <span className={node.structure.status === "blocked" ? styles.tocBlocked : styles.tocPending}>{node.structure.name}<small>{node.structure.status === "blocked" ? "Bloqueada" : "Pendente"}</small></span>}</div>
+      {node.children.length && !collapsed.has(node.key) ? <StructureItems nodes={node.children} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} /> : null}
     </li>;
   })}</ol>;
 }
 
-function TableOfContents({ references, activeId, onNavigate }: { references: Reference[]; activeId: string | null; onNavigate: (reference: Reference) => void }) {
-  const nodes = structureTree(references);
-  return nodes.length ? <StructureItems nodes={nodes} activeId={activeId} onNavigate={onNavigate} /> : <p>Estrutura ainda não informada.</p>;
+function TableOfContents({ structures, references, lawTitle, rootHref, activeId, onNavigate, collapsed, onToggle }: { structures: StructureCatalogItem[]; references: Reference[]; lawTitle: string; rootHref: string; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
+  const nodes = structureTree(structures, references);
+  return <div className={styles.tocLawRoot}>
+    <a href={rootHref} className={styles.tocLawRootLink} title="Voltar ao início da lei">{lawTitle}</a>
+    {nodes.length ? <StructureItems nodes={nodes} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} /> : <p>Sem subdivisões estruturais cadastradas.</p>}
+  </div>;
 }
 
 function hierarchyIntroducedBy(reference: Reference, previous?: Reference) {
@@ -220,7 +222,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, references, initialBlocks, initialTab, adminPreview = false }: { slug: string; title: string; references: Reference[]; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], partialMode = false, initialStructureId = null, initialBlocks, initialTab, adminPreview = false }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; partialMode?: boolean; initialStructureId?: number | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
@@ -234,28 +236,44 @@ export default function ContinuousReadingClient({ slug, title, references, initi
   const [activeId, setActiveId] = useState<string | null>(null);
   const [desktopTocOpen, setDesktopTocOpen] = useState(true);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const [collapsedStructures, setCollapsedStructures] = useState<Set<string>>(() => new Set());
   const [missingTarget, setMissingTarget] = useState(false);
+  const [selectedStructureId, setSelectedStructureId] = useState<number | null>(initialStructureId);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
   const requestedPagesRef = useRef(new Set<number>());
   const loadedHighlightReferencesRef = useRef(new Set<string>());
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto");
   const ignoreHashRef = useRef(false);
+  const scopeVersionRef = useRef(0);
+  const toggleStructure = useCallback((key: string) => setCollapsedStructures((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; }), []);
+  const visiblePrepared = useMemo(() => !partialMode || selectedStructureId === null ? prepared : prepared.filter((reference) => reference.hierarchy.some((node) => node.id === selectedStructureId)), [partialMode, prepared, selectedStructureId]);
+
+  useEffect(() => {
+    if (!partialMode) return;
+    scopeVersionRef.current += 1;
+    requestedPagesRef.current.clear();
+    setLoadedPages(new Set());
+    setFailedPages(new Set());
+  }, [partialMode, selectedStructureId]);
 
   const loadPage = useCallback(async (page: number) => {
-    if (!canLoadContinuousPage({ page, preparedCount: prepared.length, pageSize: PAGE_SIZE, loadedPages, loadingPages })) return;
+    if (!canLoadContinuousPage({ page, preparedCount: visiblePrepared.length, pageSize: PAGE_SIZE, loadedPages, loadingPages })) return;
     if (requestedPagesRef.current.has(page)) return;
     const offset = page * PAGE_SIZE;
-    if (offset >= prepared.length) return;
-    const referenceIds = prepared.slice(offset, offset + PAGE_SIZE).map((reference) => reference.id);
+    if (offset >= visiblePrepared.length) return;
+    const referenceIds = visiblePrepared.slice(offset, offset + PAGE_SIZE).map((reference) => reference.id);
     if (!referenceIds.length) return;
     requestedPagesRef.current.add(page);
+    const scopeVersion = scopeVersionRef.current;
     setFailedPages((current) => { const next = new Set(current); next.delete(page); return next; });
     setLoadingPages((current) => new Set(current).add(page));
     try {
-      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}`, { cache: "no-store" });
+      const scope = partialMode && selectedStructureId !== null ? `&structure_id=${encodeURIComponent(String(selectedStructureId))}` : "";
+      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`, { cache: "no-store" });
       const result = await response.json() as { blocks?: BlockText[] };
       if (!response.ok || !result.blocks) throw new Error("load_failed");
+      if (scopeVersion !== scopeVersionRef.current) return;
       setBlocks((current) => {
         const next = new Map(current);
         for (const block of result.blocks ?? []) {
@@ -271,11 +289,16 @@ export default function ContinuousReadingClient({ slug, title, references, initi
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [loadedPages, loadingPages, prepared, preparedById, slug]);
+  }, [loadedPages, loadingPages, partialMode, preparedById, selectedStructureId, slug, visiblePrepared]);
+
+  useEffect(() => {
+    if (!partialMode || !visiblePrepared.length || loadedPages.has(0)) return;
+    void loadPage(0);
+  }, [loadPage, loadedPages, partialMode, visiblePrepared.length]);
 
   useEffect(() => {
     setLoadedPages(new Set(initialBlocks.length ? [0] : []));
-  }, [initialBlocks, prepared]);
+  }, [initialBlocks, visiblePrepared]);
 
   useEffect(() => {
     const referenceIds = [...blocks.keys()].filter((id) => !loadedHighlightReferencesRef.current.has(id)).slice(0, PAGE_SIZE);
@@ -300,13 +323,15 @@ export default function ContinuousReadingClient({ slug, title, references, initi
   }, [adminPreview, blocks, slug]);
 
   const navigate = useCallback((reference: Reference) => {
-    const index = prepared.findIndex((item) => item.id === reference.id);
+    const structureId = reference.hierarchy.at(-1)?.id ?? null;
+    if (partialMode && structureId !== null) setSelectedStructureId(structureId);
+    const index = visiblePrepared.findIndex((item) => item.id === reference.id);
     if (index >= 0 && !blocks.has(reference.id)) void loadPage(Math.floor(index / PAGE_SIZE));
     scrollBehaviorRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     setFocusedId(reference.id);
     setActiveId(reference.id);
     setMobileTocOpen(false);
-  }, [blocks, loadPage, prepared]);
+  }, [blocks, loadPage, partialMode, visiblePrepared]);
 
   const openFromMap = useCallback((reference: Reference) => {
     ignoreHashRef.current = false;
@@ -358,7 +383,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileTocOpen(false); };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
-    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); };
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); window.setTimeout(() => returnFocusRef.current?.focus(), 0); };
   }, [mobileTocOpen]);
 
   useEffect(() => {
@@ -443,6 +468,20 @@ export default function ContinuousReadingClient({ slug, title, references, initi
     openBlock(block, trigger);
   }
 
+  const accessibleStructureIds = useMemo(() => new Set(structures.filter((structure) => structure.status === "accessible").map((structure) => structure.id)), [structures]);
+  const structureTargets = useMemo(() => {
+    const seen = new Set<number>();
+    return prepared.filter((reference) => {
+      const structureId = reference.hierarchy.at(-1)?.id;
+      if (!structureId || !accessibleStructureIds.has(structureId) || seen.has(structureId)) return false;
+      seen.add(structureId);
+      return true;
+    });
+  }, [accessibleStructureIds, prepared]);
+  const activeStructure = prepared.find((reference) => reference.id === activeId)?.hierarchy.at(-1) ?? null;
+  const activeStructureIndex = structureTargets.findIndex((reference) => reference.hierarchy.at(-1)?.id === activeStructure?.id);
+  const hasStructureNavigation = structures.length > 0 && structureTargets.length > 0;
+
   return <div className={styles.page}>
     <main className={styles.shell}>
       <LegisBotGuide title={title} mode={studyMode} adminPreview={adminPreview} />
@@ -453,16 +492,17 @@ export default function ContinuousReadingClient({ slug, title, references, initi
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
         {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
-        <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={() => setMobileTocOpen((open) => !open)}>☰ <span>Sumário</span></button><span className={styles.mobileTocPrompt}>📖 Clique na Lei</span><span className={styles.mobileTocCurrent} aria-live="polite">{prepared.find((item) => item.id === activeId)?.identificacao ?? "Início da lei"}</span></div>
-        {mobileTocOpen ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Procurando um artigo? Escolha aqui e eu te levo até ele.</p></div><button type="button" aria-label="Fechar sumário" onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents references={prepared} activeId={activeId} onNavigate={navigate} /></nav></div> : null}
-        <div className={`${styles.layout} ${desktopTocOpen ? "" : styles.layoutTocClosed}`}>
-        <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents references={prepared} activeId={activeId} onNavigate={navigate} /></nav> : null}</aside>
+        {hasStructureNavigation ? <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={(event) => { returnFocusRef.current = event.currentTarget; setMobileTocOpen((open) => !open); }}>☰ <span>Sumário</span></button><span className={styles.mobileTocCurrent} aria-live="polite">{activeStructure?.name ?? "Início da lei"}</span></div> : null}
+        {mobileTocOpen && hasStructureNavigation ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Escolha uma estrutura disponível.</p></div><button type="button" aria-label="Fechar sumário" autoFocus onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
+        <div className={`${styles.layout} ${hasStructureNavigation ? (desktopTocOpen ? "" : styles.layoutTocClosed) : styles.layoutNoToc}`}>
+        {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
         <section ref={contentRef} className={styles.content} aria-label="Texto da legislação">
-          {prepared.map((reference, index) => {
+          {hasStructureNavigation ? <header className={styles.stickyStructureHeader}><div><small>Estrutura atual</small><strong>{activeStructure?.name ?? structureTargets[0]?.hierarchy.at(-1)?.name}</strong></div><div className={styles.structurePager}><button type="button" disabled={activeStructureIndex <= 0} onClick={() => { const target = structureTargets[activeStructureIndex - 1]; if (target) navigate(target); }}>Anterior</button><span aria-label="Área reservada para o futuro áudio LegisCast" /><button type="button" disabled={activeStructureIndex < 0 || activeStructureIndex >= structureTargets.length - 1} onClick={() => { const target = structureTargets[activeStructureIndex + 1]; if (target) navigate(target); }}>Próxima</button></div></header> : null}
+          {visiblePrepared.map((reference, index) => {
             const block = blocks.get(reference.id);
             const canOpenLegisBot = Boolean(block) && !reference.inactive;
             const page = Math.floor(index / PAGE_SIZE);
-            const introducedHierarchy = hierarchyIntroducedBy(reference, prepared[index - 1]);
+            const introducedHierarchy = hierarchyIntroducedBy(reference, visiblePrepared[index - 1]);
             return <Fragment key={reference.id}>
               <ReadingStructureHeadings nodes={introducedHierarchy} />
               <article

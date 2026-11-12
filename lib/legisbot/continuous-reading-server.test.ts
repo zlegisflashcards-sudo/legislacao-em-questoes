@@ -12,9 +12,21 @@ describe("carregamento da leitura contínua", () => {
 
   it("usa o índice canônico da página e não remonta o modelo ao buscar textos", () => {
     const route = readFileSync("app/api/legisbot/[slug]/references/route.ts", "utf8");
-    expect(route).toContain("getContinuousReadingBlockTextsForLaw(slug, referenceIds)");
+    expect(route).toContain("getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId)");
     expect(route).toContain("reference_ids");
     expect(route).not.toContain("getContinuousReadingModel(slug)");
     expect(route).not.toContain("getContinuousReadingBlocks(model");
+  });
+
+  it("revalida no servidor os blocos quando o modo parcial foi solicitado", () => {
+    expect(server).toContain("if (await partialReadingRequested(slug))");
+    expect(server).toContain("continuousReadingReferencesForStructure(model, structureId)");
+    expect(server).toContain(".eq(\"lei_id\", lawId)");
+  });
+
+  it("não ativa a leitura parcial pela mera existência das migrations", () => {
+    expect(server).toContain('PARTIAL_READING_KEY_PREFIX = "lei_interativa_modo_parcial:"');
+    expect(server).toContain('=== "habilitado"');
+    expect(server).toContain("migrationsAvailable: false");
   });
 });

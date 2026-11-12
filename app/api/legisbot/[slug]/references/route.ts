@@ -7,9 +7,10 @@ const MAXIMUM_BLOCKS = 60;
 export async function GET(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
   const referenceIds = (request.nextUrl.searchParams.get("reference_ids") ?? "").split(",").slice(0, MAXIMUM_BLOCKS);
+  const structureId = request.nextUrl.searchParams.get("structure_id");
   if (!referenceIds.length || !referenceIds.some(Boolean)) return NextResponse.json({ error: "Selecione os blocos da leitura." }, { status: 400 });
   try {
-    const blocks = await getContinuousReadingBlockTextsForLaw(slug, referenceIds);
+    const blocks = await getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId);
     if (blocks === null) return NextResponse.json({ error: "Legislação não encontrada." }, { status: 404 });
     return NextResponse.json({ blocks });
   } catch (error) {

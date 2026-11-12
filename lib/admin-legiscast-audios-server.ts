@@ -11,6 +11,7 @@ type AuthorizeInput = { lawId: unknown; structureId?: unknown; titulo: unknown; 
 type ConfirmInput = { jobId: unknown; operationToken: unknown };
 type RetryInput = { jobId: unknown };
 type AudioInput = { audioId: unknown; titulo?: unknown; descricao?: unknown; ordem?: unknown; ativo?: unknown; structureId?: unknown };
+type AudioCoverageInput = { audioId: unknown; structureId: unknown; action: unknown };
 type StructurePdfPageInput = { structureId: unknown; lawId?: unknown; pdfPage?: unknown };
 type StructureAudioNotApplicableInput = { structureId: unknown; lawId?: unknown; audioNotApplicable?: unknown };
 
@@ -52,7 +53,7 @@ function logLegiscastUploadAuthorizationFailure(error: unknown) {
   const code = typeof details.code === "string" ? details.code : undefined;
   console.error("legiscast_upload_authorization_failed", { errorName: error instanceof Error ? error.name : "UnknownError", message: safeAuthorizationErrorMessage(error), status, code });
 }
-async function requireAdmin() { if (!await obterAdministrador()) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); }
+async function requireAdmin() { const user = await obterAdministrador(); if (!user) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); return user; }
 function positiveInteger(value: unknown, optional = false) { if ((value === null || value === undefined || value === "") && optional) return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 0) throw new AdminLegiscastAudioError(400, "Número inválido."); return parsed; }
 function positivePdfPage(value: unknown) { if (value === null || value === undefined || value === "") return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 1) throw new AdminLegiscastAudioError(400, "A página do PDF deve ser um número inteiro maior ou igual a 1."); return parsed; }
 function booleanValue(value: unknown) { if (typeof value !== "boolean") throw new AdminLegiscastAudioError(400, "A marcação de áudio não se aplica é inválida."); return value; }
@@ -90,18 +91,44 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
   if (lawId !== null) { audiosRequest = audiosRequest.eq("lei_id", lawId); jobsRequest = jobsRequest.eq("lei_id", lawId); structuresRequest = structuresRequest.eq("lei_id", lawId); }
   const [audios, jobs, structures] = await Promise.all([audiosRequest, jobsRequest, structuresRequest]);
   if (audios.error || jobs.error || structures.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar os áudios do LegisCast.");
+  // A migration de cobertura pode ainda não estar aplicada. Nesse intervalo a
+  // administração e o LegisCast preservam exatamente a cobertura direta.
+  let coverageRequest = db.from("legiscast_audio_structure_coverage").select("audio_id,lei_id,structure_id,created_at,created_by");
+  if (lawId !== null) coverageRequest = coverageRequest.eq("lei_id", lawId);
+  const coverage = await coverageRequest;
   const audioPaths = (audios.data ?? []).map((audio) => audio.storage_path);
   const mp3Jobs = audioPaths.length
     ? await db.from("legiscast_audio_jobs").select("final_path").eq("status", "concluido").not("mp3_path", "is", null).in("final_path", audioPaths)
     : { data: [], error: null };
   if (mp3Jobs.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar as versões MP3 do LegisCast.");
   const mp3ByFinalPath = new Set((mp3Jobs.data ?? []).map((job) => job.final_path));
-  return { laws: laws.data ?? [], audios: (audios.data ?? []).map((audio) => ({ ...audio, mp3_available: mp3ByFinalPath.has(audio.storage_path) })), structures: structures.data ?? [], jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
+  return { laws: laws.data ?? [], audios: (audios.data ?? []).map((audio) => ({ ...audio, mp3_available: mp3ByFinalPath.has(audio.storage_path) })), structures: structures.data ?? [], coverages: coverage.error ? [] : coverage.data ?? [], coverageAvailable: !coverage.error, jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
 }
 
 export async function updateAdminLegiscastStructurePdfPage(input: StructurePdfPageInput) { await requireAdmin(); const structureId = positiveInteger(input.structureId) as number; const lawId = positiveInteger(input.lawId, true); const pdfPage = positivePdfPage(input.pdfPage); const db = getSupabaseServerClient(); let request = db.from("law_structure").update({ pdf_page: pdfPage, updated_at: new Date().toISOString() }).eq("id", structureId); if (lawId !== null) request = request.eq("lei_id", lawId); const result = await request.select("id").maybeSingle(); if (result.error) throw new AdminLegiscastAudioError(503, "Não foi possível atualizar a página da estrutura."); if (!result.data) throw new AdminLegiscastAudioError(404, "Estrutura não encontrada."); return { id: structureId, pdfPage }; }
 
 export async function updateAdminLegiscastStructureAudioNotApplicable(input: StructureAudioNotApplicableInput) { await requireAdmin(); const structureId = positiveInteger(input.structureId) as number; const lawId = positiveInteger(input.lawId, true); const audioNotApplicable = booleanValue(input.audioNotApplicable); const db = getSupabaseServerClient(); let request = db.from("law_structure").update({ audio_not_applicable: audioNotApplicable, updated_at: new Date().toISOString() }).eq("id", structureId); if (lawId !== null) request = request.eq("lei_id", lawId); const result = await request.select("id,audio_not_applicable").maybeSingle(); if (result.error) throw new AdminLegiscastAudioError(503, "Não foi possível atualizar a marcação de áudio da estrutura."); if (!result.data) throw new AdminLegiscastAudioError(404, "Estrutura não encontrada."); return { id: structureId, audioNotApplicable: result.data.audio_not_applicable }; }
+
+export async function updateAdminLegiscastAudioCoverage(input: AudioCoverageInput) {
+  const actor = await requireAdmin();
+  const { db, audio } = await audioForAdmin(input.audioId);
+  const structureId = positiveInteger(input.structureId) as number;
+  const action = String(input.action ?? "");
+  if (action !== "add" && action !== "remove") throw new AdminLegiscastAudioError(400, "Ação de cobertura inválida.");
+  const result = await db.rpc("admin_set_legiscast_audio_structure_coverage", {
+    p_actor_user_id: actor.id,
+    p_audio_id: audio.id,
+    p_structure_id: structureId,
+    p_action: action,
+  });
+  if (result.error) {
+    if (result.error.code === "PGRST202" || result.error.code === "42P01" || result.error.code === "42883") {
+      throw new AdminLegiscastAudioError(503, "As coberturas editoriais ainda não estão disponíveis. A migration correspondente precisa ser aplicada.");
+    }
+    throw new AdminLegiscastAudioError(400, action === "add" ? "Não foi possível confirmar a cobertura desta estrutura." : "Não foi possível remover a cobertura desta estrutura.");
+  }
+  return result.data;
+}
 
 export async function authorizeAdminLegiscastOriginal(input: AuthorizeInput) {
   await requireAdmin(); const payload = fields(input); const { db, law } = await activeLaw(payload.lawId); if (payload.structureId) { const structure = await db.from("law_structure").select("id").eq("id", payload.structureId).eq("lei_id", payload.lawId).maybeSingle(); if (structure.error || !structure.data) throw new AdminLegiscastAudioError(400, "Estrutura inválida para esta lei."); } const id = randomUUID(); const originalPath = `legiscast-audio-original/${id}/original.${payload.extension}`; const finalPath = `${law.slug}/${id}.m4a`; const mp3Path = `${law.slug}/${id}.mp3`;
