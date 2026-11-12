@@ -19,7 +19,7 @@ const PAGE_SIZE = 500;
 
 type LawRow = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null };
 type QuestionRow = { id: string; slug: string; ordem: string; structure_id: number | null };
-type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; source_question_id: string | null; preparado_em: string | null };
+type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; source_question_id: string | null; preparado_em: string | null; situacao: string | null };
 type StructureRow = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number };
 type MappingRow = { slug: string; ordem: string; artigo_recente: boolean | null };
 
@@ -31,6 +31,7 @@ export type ContinuousReadingReference = ContinuousReferenceSummary & {
   priority: ContinuousReadingPriority;
   recent: boolean;
   linkedQuestions: number;
+  inactive: boolean;
 };
 export type ContinuousReadingBlock = ContinuousReadingReference & { legislation: string };
 
@@ -62,7 +63,7 @@ async function allReferenceSummaries(lawId: number) {
   const db = getSupabaseServerClient();
   const rows: ReferenceRow[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const result = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em").eq("lei_id", lawId).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range(from, from + PAGE_SIZE - 1);
+    const result = await db.from("legislative_references").select("id,slug,ordem,identificacao,source_question_id,preparado_em,situacao").eq("lei_id", lawId).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range(from, from + PAGE_SIZE - 1);
     if (result.error) throw new Error("A base legislativa canônica está indisponível.");
     rows.push(...((result.data ?? []) as ReferenceRow[]));
     if ((result.data?.length ?? 0) < PAGE_SIZE) break;
@@ -109,6 +110,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     sourceQuestionId: reference.source_question_id,
     prepared: Boolean(reference.preparado_em),
   }));
+  const inactiveReferenceIds = new Set(references.filter((reference) => reference.situacao === "revogada").map((reference) => reference.id));
   const integrity: ReadingIntegrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
@@ -148,6 +150,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
         priority: publicPriority(linkedQuestions),
         recent: mapping?.artigo_recente === true,
         linkedQuestions,
+        inactive: inactiveReferenceIds.has(reference.id),
       };
     }),
   };

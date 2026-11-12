@@ -428,6 +428,17 @@
   outline-offset: -3px;
 }
 
+.blockInactive {
+  border-left-color: #94a3b8;
+  background: #f1f5f9;
+  color: #64748b;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.blockInactive:hover { background: #eaf0f6; }
+.blockInactive :is(a, strong, b, em, i, mark, th, td) { color: inherit; text-decoration: inherit; }
+
 .block:target,
 .blockFocused {
   border-left-color: #2563eb;
@@ -702,7 +713,16 @@
 .previewQuestions { margin-top: 8px !important; color: #64748b; font-size: .85rem; }
 .previewQuestions a { color: #1d4ed8; font-weight: 850; }
 .previewActions { display: flex; flex: none; gap: 8px; }
-.previewRevoked { border-left-color: #94a3b8; background: #f8fafc; }
+.previewRevoked { border-left-color: #94a3b8; background: #f1f5f9; color: #64748b; }
+.previewRevoked .legalHtml { color: inherit; text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.previewRevoked .legalHtml :is(a, strong, b, em, i, mark, th, td) { color: inherit; text-decoration: inherit; }
+.studentReadiness { margin: 18px 0; border: 1px solid #facc15; border-radius: 14px; background: #fffbeb; padding: 14px 16px; color: #713f12; }
+.studentReadiness strong { display: block; font-size: .95rem; }
+.studentReadiness p { margin: 6px 0 0; line-height: 1.5; }
+.studentReadiness ul { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 20px; line-height: 1.5; }
+.studentReadinessReady { border-color: #86efac; background: #f0fdf4; color: #166534; }
+.studentReadinessActions { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+.studentReadinessActions .admin-button { flex: none; white-space: nowrap; }
 .previewEditor { margin-bottom: 18px; border: 1px solid #bfdbfe; border-radius: 18px; background: #fff; padding: 22px; box-shadow: 0 12px 30px #1e3a5f0d; }
 .previewEditor > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .previewEditor h2 { margin: 4px 0; color: #102a56; }
@@ -910,6 +930,8 @@
   .mobileTocPanel a.tocActive { background: #eff6ff; color: #1d4ed8; }
 
   .content { border-radius: 16px; }
+  .studentReadinessActions { align-items: stretch; flex-direction: column; }
+  .studentReadinessActions .admin-button { width: 100%; text-align: center; }
   .readingStructure { padding: 17px 19px 14px; }
   .readingStructure p { font-size: .78rem; }
   .readingStructure p + p { padding-left: 10px; font-size: .74rem; }

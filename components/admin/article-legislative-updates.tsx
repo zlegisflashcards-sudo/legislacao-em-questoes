@@ -79,16 +79,15 @@ export function ArticleLegislativeUpdates({ slug, ordem }: { slug: string; ordem
 
   const copyQuestionLegislation = () => {
     const source = document.querySelector<HTMLElement>(".article-legisbot > .admin-card .markdown-content");
-    const target = document.querySelector<HTMLTextAreaElement>('textarea[name="legislation"]');
+    const target = document.querySelector<HTMLElement>(".article-legislative-editor");
     if (!source || !target) {
-      setError("Abra a aba Artigo para copiar o recorte das questões para a base legislativa.");
+      setError("O editor da base legislativa não está disponível neste artigo.");
       return;
     }
-    target.value = source.innerHTML.trim();
-    target.dispatchEvent(new Event("input", { bubbles: true }));
-    target.dispatchEvent(new Event("change", { bubbles: true }));
-    target.focus();
+    window.dispatchEvent(new CustomEvent("article-legislation-replace", { detail: { html: source.innerHTML.trim() } }));
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
     setCopied(true);
+    setError("");
   };
 
   const open = data?.updates.find((item) => item.status !== "concluida") ?? null;

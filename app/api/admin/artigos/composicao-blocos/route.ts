@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { applyArticleBlockComposition, previewArticleBlockComposition } from "@/lib/admin-article-block-composition";
+import { applyArticleBlockComposition, archiveArticleBlocks, previewArticleBlockComposition } from "@/lib/admin-article-block-composition";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,11 @@ export async function POST(request: Request) {
     if (body.action === "preview") return NextResponse.json(await previewArticleBlockComposition({ lawSlug: body.law, mode: body.mode, referenceIds: body.reference_ids, pieces: body.pieces }), { headers: { "Cache-Control": "no-store" } });
     if (body.action === "apply") {
       const result = await applyArticleBlockComposition({ operation: body.operation, expected: body.expected, commentTreatment: body.comment_treatment });
+      revalidatePath("/admin/artigos"); revalidatePath("/admin/artigos/legisbot-preview");
+      return NextResponse.json(result);
+    }
+    if (body.action === "archive") {
+      const result = await archiveArticleBlocks({ lawSlug: body.law, referenceIds: body.reference_ids });
       revalidatePath("/admin/artigos"); revalidatePath("/admin/artigos/legisbot-preview");
       return NextResponse.json(result);
     }

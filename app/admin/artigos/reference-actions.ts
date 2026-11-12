@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, resolveLegislativeReferenceShadow, saveLegislativeReference, seedLegislativeReferences } from "@/lib/admin-legislative-references";
+import { archiveLegislativeReference, changeLegislativeReferenceOrder, clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, resolveLegislativeReferenceShadow, saveLegislativeReference, seedLegislativeReferences, setLegislativeReferenceInactive } from "@/lib/admin-legislative-references";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -61,6 +61,31 @@ export async function savePreparedLegislativeReference(formData: FormData) {
   revalidatePath("/admin/artigos/legisbot-preview");
   if (returnToPreview) redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&referencia=salva`);
   redirect(`/admin/artigos/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}?aba=artigo&referencia=salva`);
+}
+
+export async function setPreparedLegislativeReferenceInactive(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  const orderDirection = value(formData, "ordem_sort") === "desc" ? "desc" : "asc";
+  await setLegislativeReferenceInactive({ id: value(formData, "id"), inactive: value(formData, "inactive") === "1" });
+  revalidatePath("/admin/artigos");
+  revalidatePath("/admin/artigos/legisbot-preview");
+  redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&ordem_sort=${orderDirection}&inativo=${value(formData, "inactive") === "1" ? "marcado" : "revertido"}`);
+}
+
+export async function archivePreparedLegislativeReference(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  const orderDirection = value(formData, "ordem_sort") === "desc" ? "desc" : "asc";
+  await archiveLegislativeReference({ id: value(formData, "id") });
+  revalidatePath("/admin/artigos");
+  revalidatePath("/admin/artigos/legisbot-preview");
+  redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&ordem_sort=${orderDirection}&base=bloco_excluido`);
+}
+
+export async function changePreparedLegislativeReferenceOrder(formData: FormData) {
+  const result = await changeLegislativeReferenceOrder({ id: value(formData, "id"), ordem: value(formData, "ordem") });
+  revalidatePath("/admin/artigos");
+  revalidatePath("/admin/artigos/legisbot-preview");
+  redirect(`/admin/artigos/${encodeURIComponent(result.slug)}/${encodeURIComponent(result.ordem)}?aba=artigo&ordem_alterada=1`);
 }
 
 export async function resolvePreparedLegislativeShadow(formData: FormData) {

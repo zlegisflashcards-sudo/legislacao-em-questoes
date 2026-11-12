@@ -22,8 +22,12 @@ const unique = (items: string[]) => [...new Set(items.map((item) => item.toLower
  */
 export function detectManualLegislativeReference(legislation: string, lawShortName: string | null | undefined): ManualReferenceDetection {
   const text = plainText(legislation);
-  const articles = unique([...text.matchAll(/\bart(?:igo)?\.?\s*(\d+)\s*(?:[ºo])?(?:\s*-\s*([a-z]))?/gi)].map((match) => `${match[1]}${match[2] ? `-${match[2]}` : ""}`));
-  const paragraphs = unique([...text.matchAll(/§\s*(\d+)\s*(?:[ºo])?(?:\s*-\s*([a-z]))?/gi)].map((match) => `${match[1]}${match[2] ? `-${match[2]}` : ""}`));
+  // Notas entre parênteses normalmente registram a origem, renumeração ou
+  // alteração do dispositivo. Elas não transformam o caput colado em dois
+  // blocos (ex.: "Art. 21 ... (primitivo art. 20 renumerado ...)").
+  const deviceText = text.replace(/\([^()]*\)/g, " ");
+  const articles = unique([...deviceText.matchAll(/\bart(?:igo)?\.?\s*(\d+)\s*(?:[ºo])?(?:\s*-\s*([a-z]))?/gi)].map((match) => `${match[1]}${match[2] ? `-${match[2]}` : ""}`));
+  const paragraphs = unique([...deviceText.matchAll(/§\s*(\d+)\s*(?:[ºo])?(?:\s*-\s*([a-z]))?/gi)].map((match) => `${match[1]}${match[2] ? `-${match[2]}` : ""}`));
   if (!articles.length) return { suggestion: null, warning: "Não foi possível identificar um Artigo no trecho. Informe Assunto e Ordem manualmente." };
   if (articles.length > 1 || paragraphs.length > 1) return { suggestion: null, warning: "O trecho contém mais de um dispositivo. Escolha Assunto e Ordem manualmente antes de salvar." };
   const subject = parseQuestionSubject(text);

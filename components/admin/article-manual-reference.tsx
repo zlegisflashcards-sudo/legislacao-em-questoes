@@ -27,6 +27,7 @@ export function ArticleManualReference({ law }: { law: string }) {
   const [identification, setIdentification] = useState("");
   const [ordem, setOrdem] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewNeedsRefresh, setPreviewNeedsRefresh] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -39,7 +40,13 @@ export function ArticleManualReference({ law }: { law: string }) {
       });
       if (!response.ok) throw new Error(await errorFrom(response));
       const result = await response.json() as Preview;
-      setPreview(result); setIdentification(result.identification); setOrdem(result.ordem);
+      setPreview(result);
+      // A sugestão automática só completa os campos vazios. Depois que o
+      // administrador escolheu manualmente Assunto/Ordem, uma nova prévia
+      // deve validar exatamente essa escolha — inclusive após achar colisão.
+      setIdentification((current) => current.trim() ? current : result.identification);
+      setOrdem((current) => current.trim() ? current : result.ordem);
+      setPreviewNeedsRefresh(false);
     } catch (error) { setPreview(null); setMessage(error instanceof Error ? error.message : "Não foi possível analisar o bloco."); }
     finally { setBusy(false); }
   };
@@ -68,7 +75,8 @@ export function ArticleManualReference({ law }: { law: string }) {
     finally { setBusy(false); }
   };
 
-  const invalidatePreview = () => setPreview(null);
+  const invalidatePreview = () => { setPreview(null); setPreviewNeedsRefresh(false); };
+  const markPreviewForRefresh = () => { if (preview) setPreviewNeedsRefresh(true); };
   const existingHref = preview?.existing ? `/admin/artigos/${encodeURIComponent(law)}/${encodeURIComponent(preview.ordem)}?aba=artigo&lei=${encodeURIComponent(law)}` : "";
 
   return <details className="article-reference-reset" open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
@@ -79,16 +87,17 @@ export function ArticleManualReference({ law }: { law: string }) {
       {preview ? <>
         {preview.detectionWarning ? <p className="admin-alert">{preview.detectionWarning}</p> : <p className="admin-alert success">Dispositivo identificado automaticamente. Revise antes de salvar.</p>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label>Assunto / identificação<input value={identification} onChange={(event) => { setIdentification(event.target.value); invalidatePreview(); }} /></label>
-          <label>Ordem<input value={ordem} placeholder="0018.a.01.0.00.0" onChange={(event) => { setOrdem(event.target.value); invalidatePreview(); }} /></label>
+          <label>Assunto / identificação<input value={identification} onChange={(event) => { setIdentification(event.target.value); markPreviewForRefresh(); }} /></label>
+          <label>Ordem<input value={ordem} placeholder="0018.a.01.0.00.0" onChange={(event) => { setOrdem(event.target.value); markPreviewForRefresh(); }} /></label>
         </div>
+        {previewNeedsRefresh ? <p className="admin-alert">Assunto ou Ordem foram alterados. Revalide a prévia para conferir essa nova combinação.</p> : null}
         {preview.validationError ? <p className="admin-alert error" role="alert">{preview.validationError}</p> : null}
-        {preview.existing ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm"><strong>Já existe um bloco nesta Ordem</strong><p className="mt-1">{preview.existing.identification}</p><p className="mt-1 text-slate-600">Nada será sobrescrito automaticamente.</p><Link className="admin-button secondary mt-3" href={existingHref}>Abrir bloco atual para comparar</Link></section> : null}
+        {preview.existing && !previewNeedsRefresh ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm"><strong>Já existe um bloco nesta Ordem</strong><p className="mt-1">{preview.existing.identification}</p><p className="mt-1 text-slate-600">Nada será sobrescrito automaticamente.</p><Link className="admin-button secondary mt-3" href={existingHref}>Abrir bloco atual para comparar</Link></section> : null}
       </> : null}
       {message ? <p className="admin-alert error" role="alert">{message}</p> : null}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="admin-button secondary" disabled={busy || !legislation.trim()} onClick={() => void requestPreview()}>{busy ? "Analisando…" : preview ? "Revalidar prévia" : "Gerar prévia"}</button>
-        {preview && !preview.validationError && !preview.existing ? <><button type="button" className="admin-button primary" disabled={busy} onClick={() => void save(false)}>Salvar bloco</button><button type="button" className="admin-button primary" disabled={busy} onClick={() => void save(true)}>Salvar e próximo</button></> : null}
+        {preview && !previewNeedsRefresh && !preview.validationError && !preview.existing ? <><button type="button" className="admin-button primary" disabled={busy} onClick={() => void save(false)}>Salvar bloco</button><button type="button" className="admin-button primary" disabled={busy} onClick={() => void save(true)}>Salvar e próximo</button></> : null}
       </div>
     </div>
   </details>;

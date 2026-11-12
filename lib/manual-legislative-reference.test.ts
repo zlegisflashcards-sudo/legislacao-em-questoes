@@ -15,6 +15,13 @@ describe("detecção de bloco legislativo manual", () => {
     expect(detected.warning).toContain("mais de um dispositivo");
   });
 
+  it("ignora a referência histórica entre parênteses ao identificar o caput", () => {
+    expect(detectManualLegislativeReference("Art. 21. Esta Lei entra em vigor na data de sua publicação. (Primitivo art. 20 renumerado pela Lei nº 8.081, de 21/9/1990)", "Lei 7.716/1989")).toEqual({
+      suggestion: { identification: "Art. 21, Lei 7.716/1989", ordem: "0021.0.00.0.00.0" },
+      warning: null,
+    });
+  });
+
   it("aceita somente a Ordem com seis segmentos canônicos", () => {
     expect(isCanonicalManualReferenceOrder("0018.a.01.0.00.0")).toBe(true);
     expect(isCanonicalManualReferenceOrder("18-A, § 1º")).toBe(false);

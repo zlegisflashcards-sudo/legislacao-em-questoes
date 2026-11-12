@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = { initialHtml: string; name?: string };
 
@@ -12,6 +12,15 @@ export function ArticleLegislativeEditor({ initialHtml, name = "legislation" }: 
   const [html, setHtml] = useState(initialHtml);
   const [mode, setMode] = useState<"visual" | "html" | "preview">("visual");
   const editable = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const replace = (event: Event) => {
+      const html = (event as CustomEvent<{ html?: unknown }>).detail?.html;
+      if (typeof html === "string") setHtml(html);
+    };
+    window.addEventListener("article-legislation-replace", replace);
+    return () => window.removeEventListener("article-legislation-replace", replace);
+  }, []);
 
   const sync = () => setHtml(editable.current?.innerHTML ?? "");
   const command = (commandName: string, value?: string) => {

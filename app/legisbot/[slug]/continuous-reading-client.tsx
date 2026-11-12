@@ -10,7 +10,7 @@ import styles from "./continuous-reading.module.css";
 
 type HierarchyNode = { id: number; type: string; name: string };
 type Priority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
-type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[]; priority: Priority; recent: boolean; linkedQuestions: number };
+type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[]; priority: Priority; recent: boolean; linkedQuestions: number; inactive: boolean };
 type Block = Reference & { legislation: string };
 type BlockText = Pick<Block, "id" | "legislation">;
 type TocNode = { key: string; label: string; reference: Reference; children: TocNode[]; referenceIds: string[] };
@@ -120,6 +120,7 @@ function InteractiveLawMap({ references, lawShortName, onOpen }: { references: R
   const [filter, setFilter] = useState<Priority | "todas">("todas");
   const normalizedQuery = normalizeSearch(query);
   const ordered = useMemo(() => [...references]
+    .filter((reference) => !reference.inactive)
     .filter((reference) => reference.linkedQuestions > 0 || reference.priority !== "nao_mapeado" || reference.recent)
     .filter((reference) => filter === "todas" || reference.priority === filter)
     .filter((reference) => !normalizedQuery || normalizeSearch(`${reference.identificacao} ${reference.ordem} ${reference.hierarchy.map((node) => node.name).join(" ")}`).includes(normalizedQuery))
@@ -222,7 +223,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
 export default function ContinuousReadingClient({ slug, title, references, initialBlocks, initialTab, adminPreview = false }: { slug: string; title: string; references: Reference[]; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
-  const [studyMode, setStudyMode] = useState<"mapa" | "leitura">(adminPreview ? "leitura" : "mapa");
+  const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
   const [loadingPages, setLoadingPages] = useState<Set<number>>(() => new Set());
@@ -446,8 +447,8 @@ export default function ContinuousReadingClient({ slug, title, references, initi
     <main className={styles.shell}>
       <LegisBotGuide title={title} mode={studyMode} adminPreview={adminPreview} />
       {!adminPreview ? <div className={styles.studyModes} role="tablist" aria-label="Modos da Lei Interativa">
-        <button type="button" role="tab" aria-selected={studyMode === "mapa"} className={studyMode === "mapa" ? styles.studyModeActive : undefined} onClick={showMap}><span className={styles.modeIcon}><FlameIcon /></span><span><strong>Mapa</strong><small>Estudo por prioridade</small></span></button>
         <button type="button" role="tab" aria-selected={studyMode === "leitura"} className={studyMode === "leitura" ? styles.studyModeActive : undefined} onClick={() => setStudyMode("leitura")}><span className={styles.modeIcon}><ScannerIcon active={studyMode === "leitura"} /></span><span><strong>Leitura</strong><small>Estude toda a lei</small></span></button>
+        <button type="button" role="tab" aria-selected={studyMode === "mapa"} className={studyMode === "mapa" ? styles.studyModeActive : undefined} onClick={showMap}><span className={styles.modeIcon}><FlameIcon /></span><span><strong>Mapa</strong><small>Estudo por prioridade</small></span></button>
       </div> : null}
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
@@ -459,6 +460,7 @@ export default function ContinuousReadingClient({ slug, title, references, initi
         <section ref={contentRef} className={styles.content} aria-label="Texto da legislação">
           {prepared.map((reference, index) => {
             const block = blocks.get(reference.id);
+            const canOpenLegisBot = Boolean(block) && !reference.inactive;
             const page = Math.floor(index / PAGE_SIZE);
             const introducedHierarchy = hierarchyIntroducedBy(reference, prepared[index - 1]);
             return <Fragment key={reference.id}>
@@ -466,14 +468,14 @@ export default function ContinuousReadingClient({ slug, title, references, initi
               <article
               id={continuousBlockAnchor(reference.id)}
               data-load-page={block ? undefined : page}
-              className={`${styles.block} ${block ? styles.blockInteractive : ""} ${focusedId === reference.id || activeId === reference.id ? styles.blockFocused : ""}`}
-              tabIndex={block ? 0 : undefined}
-              aria-label={block ? `${reference.identificacao}. Abrir aprofundamento.` : undefined}
-              onClick={block ? (event) => {
+              className={`${styles.block} ${canOpenLegisBot ? styles.blockInteractive : ""} ${reference.inactive ? styles.blockInactive : ""} ${focusedId === reference.id || activeId === reference.id ? styles.blockFocused : ""}`}
+              tabIndex={canOpenLegisBot ? 0 : undefined}
+              aria-label={canOpenLegisBot ? `${reference.identificacao}. Abrir aprofundamento.` : undefined}
+              onClick={canOpenLegisBot && block ? (event) => {
                 if ((event.target as HTMLElement).closest("a")) return;
                 openFromArticle(block, event.currentTarget);
               } : undefined}
-              onKeyDown={block ? (event) => {
+              onKeyDown={canOpenLegisBot && block ? (event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
                 activateBlock(block, event.currentTarget);

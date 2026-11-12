@@ -369,9 +369,7 @@ export async function resolveLegislativeReferenceShadow(input: { lawSlug: string
   const slug = text(input.lawSlug, 160).toLowerCase();
   const ordem = text(input.ordem, 100);
   const resolution = input.resolution === "revogada" ? "revogada" : "preparada";
-  const revokingLaw = text(input.revokingLaw, 500);
   if (!slug || !ordem) throw new Error("Identificação do artigo sombra inválida.");
-  if (resolution === "revogada" && !revokingLaw) throw new Error("Informe a lei que revogou este dispositivo.");
   const db = getSupabaseServerClient();
   const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
@@ -388,7 +386,7 @@ export async function resolveLegislativeReferenceShadow(input: { lawSlug: string
     legislacao: source.legislacao,
     preparado_em: new Date().toISOString(),
     situacao: resolution,
-    lei_revogadora: resolution === "revogada" ? revokingLaw : null,
+    lei_revogadora: null,
     revogado_em: resolution === "revogada" ? new Date().toISOString() : null,
   };
   if (existing.data) {
@@ -476,7 +474,6 @@ export async function saveLegislativeReference(input: { id: string; identificati
   if (!legislation) throw new Error("O texto legislativo é obrigatório; não são permitidos blocos vazios.");
   const status = input.status === "revogada" ? "revogada" : "preparada";
   const revokingLaw = text(input.revokingLaw, 500);
-  if (status === "revogada" && !revokingLaw) throw new Error("Informe a lei que revogou este dispositivo antes de salvar.");
   const result = await getSupabaseServerClient().from("legislative_references").update({
     identificacao: identification,
     legislacao: legislation || null,
@@ -486,6 +483,50 @@ export async function saveLegislativeReference(input: { id: string; identificati
     revogado_em: status === "revogada" ? new Date().toISOString() : null,
   }).eq("id", input.id).select("id").maybeSingle();
   if (result.error || !result.data) throw new Error("Não foi possível salvar a referência legislativa.");
+}
+
+/** Toggles the visual inactive state while preserving text, UUID and links. */
+export async function setLegislativeReferenceInactive(input: { id: unknown; inactive: unknown }) {
+  await exigirAdministrador();
+  const id = text(input.id, 100);
+  if (!id) throw new Error("A referência legislativa não foi informada.");
+  const inactive = input.inactive === true || input.inactive === "1" || input.inactive === "true";
+  const result = await getSupabaseServerClient().from("legislative_references").update({
+    situacao: inactive ? "revogada" : "preparada",
+    lei_revogadora: null,
+    revogado_em: inactive ? new Date().toISOString() : null,
+  }).eq("id", id).select("id").maybeSingle();
+  if (result.error || !result.data) throw new Error("Não foi possível atualizar a exibição deste dispositivo.");
+}
+
+/** Removes a block from the active base without destroying its audit trail. */
+export async function archiveLegislativeReference(input: { id: unknown }) {
+  await exigirAdministrador();
+  const id = text(input.id, 100);
+  if (!id) throw new Error("A referência legislativa não foi informada.");
+  const result = await getSupabaseServerClient().from("legislative_references").update({
+    situacao: "arquivada",
+  }).eq("id", id).select("id").maybeSingle();
+  if (result.error || !result.data) throw new Error("Não foi possível excluir este bloco da base legislativa.");
+}
+
+/** Moves only the legislative reference to a distinct canonical Ordem. */
+export async function changeLegislativeReferenceOrder(input: { id: unknown; ordem: unknown }) {
+  await exigirAdministrador();
+  const id = text(input.id, 100);
+  const ordem = text(input.ordem, 100);
+  if (!id) throw new Error("A referência legislativa não foi informada.");
+  if (!isCanonicalManualReferenceOrder(ordem)) throw new Error("A Ordem deve seguir o padrão artigo.letra.parágrafo.letra.inciso.letra.");
+  const db = getSupabaseServerClient();
+  const current = await db.from("legislative_references").select("lei_id,slug,ordem").eq("id", id).maybeSingle();
+  if (current.error || !current.data) throw new Error("A referência legislativa não foi encontrada.");
+  if (String(current.data.ordem) === ordem) return { slug: String(current.data.slug), ordem };
+  const collision = await db.from("legislative_references").select("id").eq("lei_id", current.data.lei_id).eq("ordem", ordem).neq("id", id).maybeSingle();
+  if (collision.error) throw new Error("Não foi possível verificar se a Ordem já está em uso.");
+  if (collision.data) throw new Error("Já existe outra referência nesta lei com a Ordem informada. Abra-a para comparar antes de alterar o contexto.");
+  const updated = await db.from("legislative_references").update({ ordem }).eq("id", id).select("id").maybeSingle();
+  if (updated.error || !updated.data) throw new Error("Não foi possível alterar a Ordem desta referência.");
+  return { slug: String(current.data.slug), ordem };
 }
 
 /** Creates the one canonical reference for an already identified question context. */
