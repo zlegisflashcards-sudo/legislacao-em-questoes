@@ -12,7 +12,20 @@ describe("detecção de bloco legislativo manual", () => {
   it("não escolhe uma Ordem quando há mais de um dispositivo", () => {
     const detected = detectManualLegislativeReference("Art. 18. Texto. Art. 19. Outro texto.", "Lei nº 1.593/2026");
     expect(detected.suggestion).toBeNull();
-    expect(detected.warning).toContain("mais de um dispositivo");
+    expect(detected.warning).toContain("mais de um Artigo");
+  });
+
+  it("reconhece um artigo completo mesmo com vários parágrafos no corpo", () => {
+    const detected = detectManualLegislativeReference(`Art. 5º O porte de armas pelos ocupantes do cargo de Guarda Civil Municipal será autorizado pelos órgãos competentes.
+
+§ 1º Para a utilização de arma por guarda municipal é indispensável a frequência em curso específico.
+
+§ 2º A avaliação psicológica de que trata o parágrafo anterior deverá ser renovada a cada 24 meses.`, "Lei 13.022/2014");
+
+    expect(detected).toEqual({
+      suggestion: { identification: "Art. 5º, Lei 13.022/2014", ordem: "0005.0.00.0.00.0" },
+      warning: null,
+    });
   });
 
   it("ignora a referência histórica entre parênteses ao identificar o caput", () => {

@@ -82,7 +82,7 @@ export function ArticleManualReference({ law }: { law: string }) {
   return <details className="article-reference-reset" open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
     <summary>Adicionar bloco</summary>
     <div className="mt-3 grid gap-3">
-      <p>Cole um único dispositivo. A prévia sugere Assunto e Ordem; se houver mais de um dispositivo, escolha os dados manualmente.</p>
+      <p>Cole um bloco legislativo. Um Artigo com seus parágrafos, incisos e alíneas pode permanecer no mesmo bloco; se houver mais de um Artigo, escolha os dados manualmente.</p>
       <label>Texto legislativo<textarea value={legislation} rows={9} placeholder="Ex.: Art. 18-A, § 1º. ..." onChange={(event) => { setLegislation(event.target.value); invalidatePreview(); }} /></label>
       {preview ? <>
         {preview.detectionWarning ? <p className="admin-alert">{preview.detectionWarning}</p> : <p className="admin-alert success">Dispositivo identificado automaticamente. Revise antes de salvar.</p>}
