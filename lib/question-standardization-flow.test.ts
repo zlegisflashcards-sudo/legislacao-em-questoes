@@ -22,7 +22,10 @@ describe("fluxo de contexto da padronização", () => {
     const panel = readFileSync("components/admin/question-standardization-panel.tsx", "utf8");
     const service = readFileSync("lib/admin-article-context-standardization.ts", "utf8");
     expect(trigger).toContain("Padronizar contexto inteiro");
-    expect(articleQuestions).not.toContain('type="checkbox"');
+    // Os checkboxes pertencem exclusivamente à vinculação editorial de
+    // questões, não ao saneamento de contexto.
+    expect(articleQuestions).toContain('aria-label={`Selecionar questão ${item.id}`}');
+    expect(articleQuestions).toContain("<ArticleContextStandardizationTrigger");
     expect(panel).toContain("aplicar_padronizacao_contexto");
     expect(panel).toContain("contextMode");
     expect(service).toContain('from("legisbot_comentarios")');

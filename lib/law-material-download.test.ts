@@ -64,7 +64,7 @@ describe("fronteira autenticada de download", () => {
   it("reutiliza a autenticação e a autorização da lei antes de buscar o material", () => {
     expect(server).toContain("authorizeLawStudy(request, slug)");
     expect(pageServer).toContain("auth.getUser(token)");
-    expect(pageServer).toContain('.from("liberacoes_leis").select("id")');
+    expect(pageServer).toContain('.from("liberacoes_leis").select("produto_id")');
     expect(pageServer).toContain('.eq("status", "ativo")');
     expect(server.indexOf("authorizeLawStudy(request, slug)")).toBeLessThan(server.indexOf('.from("materiais_leis")'));
   });

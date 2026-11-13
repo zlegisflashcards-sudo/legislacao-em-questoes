@@ -26,7 +26,7 @@ describe("central de revisão da página da lei", () => {
 
   it("mantém a revisão no player, sem repetir os atalhos e sem retirar a estrela", () => {
     expect(player).not.toContain('function ReviewShortcuts');
-    expect(player).toContain('revisao${review ? `?tipo=${review}` : ""}');
+    expect(player).toContain('review ? fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/revisao${reviewQuery}`');
     expect(player).toContain('<FavoriteButton slug={slug} questionId={favoriteQuestionId} />');
     expect(player).toContain('aria-label={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}');
   });

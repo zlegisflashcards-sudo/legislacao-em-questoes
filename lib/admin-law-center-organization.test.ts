@@ -29,7 +29,8 @@ describe("organização de Recortes e Anki na Central da Lei", () => {
     expect(scopes).toContain("unstructured_questions");
     expect(scopes).toContain('action: "salvar_recorte"');
     expect(scopes).toContain("id: editing?.id");
-    expect(scopes).toContain("ativo: active");
+    expect(scopes).toContain("status_publicacao: status");
+    expect(scopes).toContain("acesso_gratuito: freeAccess");
   });
 
   it("preserva os fluxos TXT, APKG e o exportador administrativo", () => {

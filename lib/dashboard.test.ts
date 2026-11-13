@@ -38,7 +38,8 @@ describe("painel e edital ativo", () => {
     const server = readFileSync("lib/dashboard-server.ts", "utf8");
     expect(examClient).toContain("function ExamProgressBar");
     expect(examClient).toContain("progress.correct + progress.errors + progress.unanswered");
-    expect(examClient).not.toContain("campaignStatus");
+    expect(examClient).toContain('const completed = law.campaignStatus === "concluida"');
+    expect(examClient).toContain('const actionLabel = completed ? "Ver desempenho final"');
     expect(examClient).not.toContain('Próximo estudo:');
     expect(server).toContain("const estados = examStates(exam.leis)");
     expect(server).toContain("loadStudentExamSelection(request)");

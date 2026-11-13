@@ -21,15 +21,15 @@ describe("LegisCast integrado aos recortes", () => {
     const audios = [{ id: "a", structure_id: 3 }, { id: "b", structure_id: 4 }, { id: "c", structure_id: null }];
     expect(audiosForLegiscastScope(audios, [3])).toEqual([audios[0]]);
   });
-  it("reutiliza a autorização oficial e preserva recorte_id na chamada", () => {
-    expect(server).toContain("authorizeLawQuestionScope(request, slug, recorteId)");
-    expect(server).toContain("context.structureIds");
+  it("reutiliza a autorização oficial e mantém LegisCast no escopo da lei", () => {
+    expect(server).toContain("authorizeLawStudy(request, slug)");
+    expect(server).toMatch(/Recortes delimitam\s*\/\/ questões e Anki, mas não reduzem o catálogo audiovisual\./);
     expect(player).toContain("recorte_id=${encodeURIComponent(recorteId)}");
-    expect(page).toContain("recorteId={recorteId}");
+    expect(page).toContain("recorteId={null}");
   });
-  it("mantém o PDF integral e identifica o recorte sem recriar viewer", () => {
+  it("mantém o PDF integral e sincroniza a navegação com o player sem recriar viewer", () => {
     expect(page.match(/<LegiscastPdfViewer/g)).toHaveLength(2);
-    expect(page).toContain("scopeName ?? \"Recorte selecionado\"");
-    expect(page).toContain("onNavigateToPdfPage={setTargetPdfPage}");
+    expect(page).toContain('title={study.law.title}');
+    expect(page).toContain("onNavigateToPdfPage={navigateToPdfPage}");
   });
 });

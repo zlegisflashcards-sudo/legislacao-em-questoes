@@ -3,6 +3,7 @@ import "server-only";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getAdminLegislativeStructureIntegrity } from "@/lib/admin-legislative-structure-integrity";
 import { canReleaseStructure, structureReleaseViewStatus, type StructureReleaseRecord } from "@/lib/legisbot/continuous-reading-structure-release-core";
+import { continuousReadingIntegrityFingerprint } from "@/lib/legisbot/continuous-reading-integrity-fingerprint";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const INTEGER = /^\d+$/;
@@ -18,7 +19,7 @@ type ReleaseRow = {
 };
 
 export class LegislativeStructureReleaseError extends Error {
-  constructor(readonly code: "migration_pending" | "not_ready" | "law_unavailable" | "blocked_descendant" | "invalid_structure" | "database", message: string) {
+  constructor(readonly code: "migration_pending" | "stale_integrity" | "not_ready" | "law_unavailable" | "blocked_descendant" | "invalid_structure" | "database", message: string) {
     super(message);
     this.name = "LegislativeStructureReleaseError";
   }
@@ -60,6 +61,7 @@ export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: stri
       releases: rows,
       structures: report.integrity.reports.map((item) => ({
         ...item,
+        integrityFingerprint: continuousReadingIntegrityFingerprint(item),
         releaseStatus: structureReleaseViewStatus({ report: item, structures: report.structureNodes, records }),
       })),
     };
@@ -73,11 +75,12 @@ export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: stri
  * Confirma novamente a integridade no servidor. Nenhum estado vindo do
  * formulário decide a liberação; o cliente envia apenas ação e estrutura.
  */
-export async function setAdminLegislativeStructureRelease(input: { lawSlug: unknown; structureId: unknown; action: unknown }) {
+export async function setAdminLegislativeStructureRelease(input: { lawSlug: unknown; structureId: unknown; action: unknown; integrityFingerprint?: unknown }) {
   const admin = await requireAdmin();
   const slug = typeof input.lawSlug === "string" ? input.lawSlug.trim().toLowerCase() : "";
   const structureId = typeof input.structureId === "number" ? input.structureId : typeof input.structureId === "string" && INTEGER.test(input.structureId) ? Number(input.structureId) : NaN;
   const action = input.action === "release" || input.action === "block" ? input.action : null;
+  const expectedFingerprint = typeof input.integrityFingerprint === "string" ? input.integrityFingerprint : "";
   if (!slug || !Number.isSafeInteger(structureId) || structureId <= 0 || !action) throw new LegislativeStructureReleaseError("invalid_structure", "Estrutura ou ação de liberação inválida.");
 
   const diagnostic = await getAdminLegislativeStructureIntegrity(slug);
@@ -97,6 +100,9 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
     const fresh = await getAdminLegislativeStructureIntegrity(slug);
     const freshTarget = fresh?.integrity.reports.find((item) => item.structureId === structureId);
     if (!fresh || !freshTarget) throw new LegislativeStructureReleaseError("invalid_structure", "A estrutura não pertence a esta lei.");
+    if (!expectedFingerprint || expectedFingerprint !== continuousReadingIntegrityFingerprint(freshTarget)) {
+      throw new LegislativeStructureReleaseError("stale_integrity", "O diagnóstico mudou desde a prévia. Atualize a conferência antes de liberar a estrutura.");
+    }
     const decision = canReleaseStructure({ report: freshTarget, structures: fresh.structureNodes, records: compactRecords(currentRows) });
     if (!decision.allowed) {
       throw new LegislativeStructureReleaseError(decision.reason === "blocked_descendant" ? "blocked_descendant" : "not_ready", decision.reason === "blocked_descendant" ? "Existe descendente bloqueado explicitamente; revise-o antes de liberar este recorte." : "A estrutura não está pronta para liberação. Atualize o diagnóstico e resolva as pendências.");

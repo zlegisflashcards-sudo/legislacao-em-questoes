@@ -2,7 +2,7 @@ import { setLegislativeStructureRelease } from "@/app/admin/artigos/reference-ac
 import type { ContinuousReadingLawStructureIntegrity } from "@/lib/legisbot/continuous-reading-structure-integrity-core";
 import type { StructureReleaseViewStatus } from "@/lib/legisbot/continuous-reading-structure-release-core";
 
-type Row = ContinuousReadingLawStructureIntegrity["reports"][number] & { releaseStatus: StructureReleaseViewStatus };
+type Row = ContinuousReadingLawStructureIntegrity["reports"][number] & { releaseStatus: StructureReleaseViewStatus; integrityFingerprint: string };
 
 const label: Record<StructureReleaseViewStatus, string> = { pending: "Pendente", ready: "Pronta", released: "Liberada" };
 const reason: Record<string, string> = {
@@ -25,7 +25,7 @@ export function LegislativeStructureReleaseDashboard({ slug, migrationAvailable,
     <h2 id="structure-release-title">Liberação manual por estrutura</h2>
     <p>O estado Pronta não publica nada automaticamente. Liberar um recorte superior não cria liberações independentes para seus descendentes.</p>
     <div className="admin-table-wrap"><table><thead><tr><th>Estrutura</th><th>Questões</th><th>Blocos</th><th>Pendências</th><th>Status</th><th>Ação</th></tr></thead><tbody>
-      {rows.map((row) => <tr key={row.structureId}><td><strong>{row.path.join(" › ") || row.name}</strong></td><td>{row.activeQuestionCount}</td><td>{row.preparedReferenceCount}</td><td>{row.reasons.length ? row.reasons.map((item) => reason[item] ?? item).join("; ") : "Nenhuma"}</td><td><strong>{label[row.releaseStatus]}</strong></td><td>{row.releaseStatus === "released" ? <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="release_action" value="block"/><button className="admin-button secondary">Bloquear</button></form> : <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="release_action" value="release"/><button className="admin-button primary" disabled={!lawAvailable || row.releaseStatus !== "ready"}>Liberar</button></form>}</td></tr>)}
+      {rows.map((row) => <tr key={row.structureId}><td><strong>{row.path.join(" › ") || row.name}</strong></td><td>{row.activeQuestionCount}</td><td>{row.preparedReferenceCount}</td><td>{row.reasons.length ? row.reasons.map((item) => reason[item] ?? item).join("; ") : "Nenhuma"}</td><td><strong>{label[row.releaseStatus]}</strong></td><td>{row.releaseStatus === "released" ? <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="release_action" value="block"/><button className="admin-button secondary">Bloquear</button></form> : <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="integrity_fingerprint" value={row.integrityFingerprint}/><input type="hidden" name="release_action" value="release"/><button className="admin-button primary" disabled={!lawAvailable || row.releaseStatus !== "ready"}>Liberar</button></form>}</td></tr>)}
     </tbody></table></div>
   </section>;
 }

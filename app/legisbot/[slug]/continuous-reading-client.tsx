@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegisBotOverlay } from "@/components/legisbot-overlay";
+import { LegiscastAudioTransport, type LegiscastAudioTrack } from "@/components/legiscast-audio-player";
 import { continuousBlockAnchor, referenceIdFromHash } from "@/lib/legisbot/continuous-reading-core";
 import { canLoadContinuousPage, completedContinuousPage } from "@/lib/legisbot/continuous-reading-pagination";
 import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
@@ -239,6 +240,9 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const [collapsedStructures, setCollapsedStructures] = useState<Set<string>>(() => new Set());
   const [missingTarget, setMissingTarget] = useState(false);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(initialStructureId);
+  const [suggestedAudio, setSuggestedAudio] = useState<LegiscastAudioTrack | null>(null);
+  const [suggestedAudioStatus, setSuggestedAudioStatus] = useState<"direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading">("loading");
+  const [playingAudio, setPlayingAudio] = useState<LegiscastAudioTrack | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
   const requestedPagesRef = useRef(new Set<number>());
@@ -246,6 +250,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto");
   const ignoreHashRef = useRef(false);
   const scopeVersionRef = useRef(0);
+  const audioRequestRef = useRef(0);
+  const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" }>());
   const toggleStructure = useCallback((key: string) => setCollapsedStructures((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; }), []);
   const visiblePrepared = useMemo(() => !partialMode || selectedStructureId === null ? prepared : prepared.filter((reference) => reference.hierarchy.some((node) => node.id === selectedStructureId)), [partialMode, prepared, selectedStructureId]);
 
@@ -481,6 +487,40 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const activeStructure = prepared.find((reference) => reference.id === activeId)?.hierarchy.at(-1) ?? null;
   const activeStructureIndex = structureTargets.findIndex((reference) => reference.hierarchy.at(-1)?.id === activeStructure?.id);
   const hasStructureNavigation = structures.length > 0 && structureTargets.length > 0;
+  const visibleStructureId = activeStructure?.id ?? selectedStructureId;
+  const visibleStructureName = activeStructure?.name ?? structureTargets[0]?.hierarchy.at(-1)?.name ?? lawTitle;
+
+  useEffect(() => {
+    if (adminPreview) return;
+    const requestId = ++audioRequestRef.current;
+    const controller = new AbortController();
+    const cacheKey = visibleStructureId === null ? "law" : String(visibleStructureId);
+    const cached = audioByStructureRef.current.get(cacheKey);
+    // URL assinada dura uma hora; o cache vive somente nesta aba e expira antes.
+    if (cached && Date.now() - cached.at < 50 * 60 * 1000) {
+      setSuggestedAudio(cached.audio);
+      setSuggestedAudioStatus(cached.status);
+      return () => controller.abort();
+    }
+    setSuggestedAudio(null);
+    setSuggestedAudioStatus("loading");
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) { if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); return; }
+      const query = visibleStructureId === null ? "" : `?structure_id=${encodeURIComponent(String(visibleStructureId))}`;
+      try {
+        const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/legiscast${query}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+        const body = await response.json().catch(() => ({})) as { audio?: LegiscastAudioTrack | null; status?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" };
+        if (requestId !== audioRequestRef.current) return;
+        const value = { at: Date.now(), audio: response.ok && body.audio ? body.audio : null, status: response.ok && body.status ? body.status : "unavailable" as const };
+        audioByStructureRef.current.set(cacheKey, value);
+        setSuggestedAudio(value.audio);
+        setSuggestedAudioStatus(value.status);
+      } catch (error) { if (error instanceof DOMException && error.name === "AbortError") return; if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); }
+    })();
+    return () => controller.abort();
+  }, [adminPreview, slug, visibleStructureId]);
 
   return <div className={styles.page}>
     <main className={styles.shell}>
@@ -497,7 +537,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
         <div className={`${styles.layout} ${hasStructureNavigation ? (desktopTocOpen ? "" : styles.layoutTocClosed) : styles.layoutNoToc}`}>
         {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
         <section ref={contentRef} className={styles.content} aria-label="Texto da legislação">
-          {hasStructureNavigation ? <header className={styles.stickyStructureHeader}><div><small>Estrutura atual</small><strong>{activeStructure?.name ?? structureTargets[0]?.hierarchy.at(-1)?.name}</strong></div><div className={styles.structurePager}><button type="button" disabled={activeStructureIndex <= 0} onClick={() => { const target = structureTargets[activeStructureIndex - 1]; if (target) navigate(target); }}>Anterior</button><span aria-label="Área reservada para o futuro áudio LegisCast" /><button type="button" disabled={activeStructureIndex < 0 || activeStructureIndex >= structureTargets.length - 1} onClick={() => { const target = structureTargets[activeStructureIndex + 1]; if (target) navigate(target); }}>Próxima</button></div></header> : null}
+          {!adminPreview ? <header className={styles.stickyStructureHeader}><div><small>{hasStructureNavigation ? "Estrutura atual" : "Lei Interativa"}</small><strong>{visibleStructureName}</strong>{playingAudio && playingAudio.id !== suggestedAudio?.id ? <em>Reproduzindo: {playingAudio.title}</em> : null}</div><div className={styles.structureAudio}>{playingAudio ? <LegiscastAudioTransport track={playingAudio} compact /> : suggestedAudio ? <button type="button" className={styles.audioStart} onClick={() => setPlayingAudio(suggestedAudio)}>Ouvir {suggestedAudioStatus === "editorial" ? "áudio relacionado" : "áudio desta estrutura"}</button> : suggestedAudioStatus === "ambiguous" ? <small>Áudio requer revisão editorial</small> : null}</div><div className={styles.structurePager}>{hasStructureNavigation ? <button type="button" disabled={activeStructureIndex <= 0} onClick={() => { const target = structureTargets[activeStructureIndex - 1]; if (target) navigate(target); }}>Anterior</button> : null}<span aria-label={playingAudio ? "Faixa em reprodução" : "Sem faixa selecionada"} /><button type="button" aria-label="Abrir sumário" className={styles.headerSummaryButton} onClick={(event) => { returnFocusRef.current = event.currentTarget; setMobileTocOpen(true); }}>Sumário</button>{hasStructureNavigation ? <button type="button" disabled={activeStructureIndex < 0 || activeStructureIndex >= structureTargets.length - 1} onClick={() => { const target = structureTargets[activeStructureIndex + 1]; if (target) navigate(target); }}>Próxima</button> : null}</div></header> : null}
           {visiblePrepared.map((reference, index) => {
             const block = blocks.get(reference.id);
             const canOpenLegisBot = Boolean(block) && !reference.inactive;

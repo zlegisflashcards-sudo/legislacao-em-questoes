@@ -392,6 +392,18 @@
 .structurePager button { min-height: 34px; border: 1px solid #bfdbfe; border-radius: 8px; background: #fff; padding: 6px 9px; color: #1d4ed8; font-size: .75rem; font-weight: 800; }
 .structurePager button:disabled { border-color: #e2e8f0; color: #94a3b8; }
 .structurePager span { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
+.stickyStructureHeader em { overflow: hidden; color: #64748b; font-size: .68rem; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.structureAudio { flex: 1 1 320px; min-width: 0; }
+.audioStart { min-height: 34px; border: 1px solid #93c5fd; border-radius: 8px; background: #eff6ff; padding: 6px 9px; color: #1d4ed8; font-size: .75rem; font-weight: 800; }
+.headerSummaryButton { display: none; }
+.structureAudio :global(.legiscast-transport-compact) { display: grid; grid-template-columns: auto minmax(72px, 1fr) auto; align-items: center; gap: 3px 8px; min-width: 0; color: #334155; font-size: .67rem; }
+.structureAudio :global(.legiscast-transport-title) { grid-column: 1 / -1; overflow: hidden; color: #102a56; font-size: .72rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.structureAudio :global(.legiscast-transport-progress) { min-width: 0; accent-color: #2563eb; }
+.structureAudio :global(.legiscast-transport-times) { display: contents; color: #64748b; }
+.structureAudio :global(.legiscast-transport-controls) { display: contents; }
+.structureAudio :global(.legiscast-transport-skip), .structureAudio :global(.legiscast-transport-play), .structureAudio :global(.legiscast-transport-speed select) { min-height: 28px; border: 1px solid #bfdbfe; border-radius: 7px; background: #fff; padding: 3px 6px; color: #1d4ed8; font-size: .67rem; font-weight: 800; }
+.structureAudio :global(.legiscast-transport-play) { background: #2563eb; color: #fff; }
+.structureAudio :global(.legiscast-transport-speed) { display: flex; align-items: center; gap: 4px; font-weight: 700; }
 
 .readingStructure {
   display: grid;
@@ -953,6 +965,11 @@
   .stickyStructureHeader { top: 68px; padding: 9px 12px; }
   .stickyStructureHeader strong { max-width: 40vw; font-size: .78rem; }
   .structurePager button { min-height: 32px; padding: 5px 7px; font-size: .7rem; }
+  .structureAudio { flex: 1 1 100%; order: 3; }
+  .stickyStructureHeader { flex-wrap: wrap; }
+  .headerSummaryButton { display: inline-flex; }
+  .structureAudio :global(.legiscast-transport-compact) { grid-template-columns: auto minmax(56px, 1fr) auto; }
+  .structureAudio :global(.legiscast-transport-skip) { display: none; }
 
   .content { border-radius: 16px; }
   .studentReadinessActions { align-items: stretch; flex-direction: column; }

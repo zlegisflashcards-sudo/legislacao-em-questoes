@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync("supabase/migrations/20261112223532_add_legiscast_audio_structure_coverage.sql", "utf8");
+const migration = readFileSync("supabase/migrations/20261112225117_add_legiscast_audio_structure_coverage.sql", "utf8");
 const server = readFileSync("lib/admin-legiscast-audios-server.ts", "utf8");
 const route = readFileSync("app/api/admin/legiscast-audios/route.ts", "utf8");
 const client = readFileSync("components/admin/legiscast-audios-admin.tsx", "utf8");

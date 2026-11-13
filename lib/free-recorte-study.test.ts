@@ -11,9 +11,10 @@ describe("acesso e Estudo Ativo por recorte", () => {
   it("mantém o acesso gratuito no próprio recorte", () => {
     expect(migration).toContain("add column if not exists acesso_gratuito boolean not null default false");
     expect(migration).toContain("Somente recorte ativo pode ter acesso gratuito");
-    expect(contexts).toContain("acesso_gratuito.eq.true");
+    expect(contexts).toContain("scope.acesso_gratuito");
     expect(authorization).toContain("authenticateLawStudent");
-    expect(authorization).not.toContain("authorizeLawStudy(request, slug)");
+    expect(authorization).toContain("if (!recorteId)");
+    expect(authorization).toContain("const context = await authorizeLawStudy(request, slug)");
   });
 
   it("separa campanhas e progresso de recorte da lei completa", () => {

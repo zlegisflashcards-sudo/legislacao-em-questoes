@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const server = readFileSync("lib/admin-legislative-reference-structures.ts", "utf8");
-const migration = readFileSync("supabase/migrations/20261112190000_add_legislative_reference_structure_link.sql", "utf8");
+const migration = readFileSync("supabase/migrations/20261112223813_add_legislative_reference_structure_link.sql", "utf8");
 
 describe("administração da associação estrutural das referências", () => {
   it("prioriza o vínculo confirmado e mantém sugestão separada", () => {

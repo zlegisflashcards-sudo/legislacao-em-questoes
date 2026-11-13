@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const server = readFileSync("lib/admin-legislative-structure-releases.ts", "utf8");
-const migration = readFileSync("supabase/migrations/20261112194500_create_legislative_structure_releases.sql", "utf8");
+const migration = readFileSync("supabase/migrations/20261112223823_create_legislative_structure_releases.sql", "utf8");
 
 describe("liberação administrativa por estrutura", () => {
   it("exige diagnóstico atualizado, administrador e estrutura da mesma lei", () => {
@@ -16,6 +16,12 @@ describe("liberação administrativa por estrutura", () => {
     expect(server).toContain('current?.status === (action === "release" ? "released" : "blocked")');
     expect(server).toContain('p_entidade: "liberacao_estrutura_lei"');
     expect(server).toContain("admin_comercial_auditar");
+  });
+
+  it("recusa uma prévia cuja integridade mudou antes da liberação", () => {
+    expect(server).toContain("integrityFingerprint");
+    expect(server).toContain("continuousReadingIntegrityFingerprint(freshTarget)");
+    expect(server).toContain('"stale_integrity"');
   });
 
   it("fica indisponível de modo controlado até a migration existir", () => {

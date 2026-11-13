@@ -118,7 +118,7 @@ export async function setLegislativeStructureRelease(formData: FormData) {
   const structureId = value(formData, "structure_id");
   const action = value(formData, "release_action");
   try {
-    const result = await setAdminLegislativeStructureRelease({ lawSlug: slug, structureId, action });
+    const result = await setAdminLegislativeStructureRelease({ lawSlug: slug, structureId, action, integrityFingerprint: value(formData, "integrity_fingerprint") });
     revalidatePath("/admin/artigos/legisbot-preview");
     redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao=${result.changed ? result.status === "released" ? "liberada" : "bloqueada" : "sem_alteracao"}`);
   } catch (error) {
