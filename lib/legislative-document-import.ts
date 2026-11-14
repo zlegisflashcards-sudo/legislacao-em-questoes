@@ -17,6 +17,30 @@ function normalizedIdentifier(value: string) {
     .trim().toLowerCase();
 }
 
+function romanOrdinal(value: string) {
+  const symbols: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+  const roman = value.toUpperCase();
+  if (!/^[IVXLCDM]+$/.test(roman)) return null;
+  let total = 0;
+  for (let index = 0; index < roman.length; index += 1) {
+    const current = symbols[roman[index]];
+    const next = symbols[roman[index + 1] ?? ""] ?? 0;
+    total += current < next ? -current : current;
+  }
+  return total > 0 ? total : null;
+}
+
+/** Word may use `CAPÍTULO I` while the registered structure uses `CAPÍTULO 01`. */
+export function canonicalStructureName(value: string) {
+  return normalizedIdentifier(value).replace(
+    /\b(parte|livro|titulo|capitulo|secao|subsecao)\s+(\d+|[ivxlcdm]+)\b/g,
+    (_match, kind: string, ordinal: string) => {
+      const numeric = /^\d+$/.test(ordinal) ? Number(ordinal) : romanOrdinal(ordinal);
+      return numeric ? `${kind} ${numeric}` : `${kind} ${ordinal}`;
+    },
+  );
+}
+
 function bodyAlreadyIdentified(legislation: string, identification: string) {
   const expected = normalizedIdentifier(identification);
   const received = normalizedIdentifier(plain(legislation).slice(0, Math.max(identification.length + 24, 80)));

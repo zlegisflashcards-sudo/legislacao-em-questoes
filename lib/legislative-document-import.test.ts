@@ -1,8 +1,17 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { legislativeDocumentParagraphs, parseLegislativeDocument } from "./legislative-document-import";
+import { canonicalStructureName, legislativeDocumentParagraphs, parseLegislativeDocument } from "./legislative-document-import";
 
 describe("importação de documento legislativo", () => {
+  it("reconhece a mesma estrutura com ordinal romano ou numérico", () => {
+    expect(canonicalStructureName("CAPÍTULO I - DISPOSIÇÕES PRELIMINARES")).toBe(
+      canonicalStructureName("CAPÍTULO 01 - DISPOSIÇÕES PRELIMINARES"),
+    );
+    expect(canonicalStructureName("Seção II — Do Processo")).toBe(
+      canonicalStructureName("SEÇÃO 02 - DO PROCESSO"),
+    );
+  });
+
   it("cria blocos independentes para artigo e parágrafo numerado, mantendo incisos no fluxo", () => {
     const result = parseLegislativeDocument([
       "# Art. 27-B", "Caput do artigo.", "# § 1º-C", "Texto do parágrafo.", "II", "Texto do inciso.", "a)", "Texto da alínea.",

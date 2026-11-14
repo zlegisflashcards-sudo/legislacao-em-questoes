@@ -5,7 +5,7 @@ import { possuiTextoLegislacao, sanitizarHtmlLegislacao } from "@/lib/legisbot/s
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
-import { legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/legislative-document-import";
+import { canonicalStructureName, legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/legislative-document-import";
 import { planLegislativeReferenceIdentifierRepair, type LegislativeReferenceIdentifierRepair } from "@/lib/legislative-reference-identifiers";
 import { sanitizeLegalHtmlCore } from "@/lib/legisbot/sanitize-legal-html-core";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
@@ -321,7 +321,7 @@ async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8
     : { data: [], error: null };
   if (structureResult.error) throw new Error("Não foi possível consultar as estruturas cadastradas da lei.");
   const structures = (structureResult.data ?? []) as Array<{ id: number; parent_id: number | null; nome: string; ordem: number }>;
-  const normalizeStructureName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, " ").trim().toLowerCase();
+  const normalizeStructureName = canonicalStructureName;
   const byId = new Map(structures.map((structure) => [Number(structure.id), structure]));
   const pathOf = (structure: { id: number; parent_id: number | null; nome: string }) => {
     const path: string[] = [];
