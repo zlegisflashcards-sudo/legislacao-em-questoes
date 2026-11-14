@@ -88,13 +88,15 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("reference.hierarchy.slice(sharedDepth)");
   });
 
-  it("mantém sumário recolhível, sticky no celular e margem segura para âncoras", () => {
+  it("mantém o sumário recolhível dentro do cabeçalho do player no celular", () => {
     expect(client).toContain("desktopTocOpen");
     expect(client).toContain("mobileTocOpen");
     expect(client).toContain("☰ <span>Sumário</span>");
-    expect(client).toContain("styles.mobileTocCurrent");
+    expect(client).toContain("styles.headerMobileToc");
     expect(client).toContain('activeStructure?.name ?? "Início da lei"');
     expect(styles).toContain("position: sticky");
+    expect(styles).toContain(".stickyStructureHeader { top: 0;");
+    expect(styles).toContain(".content { overflow: clip;");
     expect(styles).toContain("transform: translateX(-50%)");
     expect(styles).toContain("scroll-margin-top");
     expect(styles).toContain("env(safe-area-inset-bottom)");

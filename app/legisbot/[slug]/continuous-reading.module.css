@@ -351,6 +351,7 @@
 .tocLine { display: flex; align-items: stretch; gap: 3px; }
 .tocLine > button { width: 24px; flex: none; border: 0; border-radius: 7px; background: transparent; color: #64748b; font-weight: 900; }
 .tocLine > a, .tocLine > span { min-width: 0; flex: 1; }
+.tocLine > .tocToggleSpacer { width: 24px; flex: none; }
 
 .tocDevice > a { font-weight: 600; }
 
@@ -384,26 +385,33 @@
   background: #fff;
   box-shadow: 0 12px 34px #1e3a5f0c;
 }
-.stickyStructureHeader { position: sticky; z-index: 12; top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #dbe6f6; background: #fffffff2; padding: 10px 18px; box-shadow: 0 8px 22px #1e3a5f12; backdrop-filter: blur(10px); }
-.stickyStructureHeader > div:first-child { display: grid; min-width: 0; gap: 2px; }
-.stickyStructureHeader small { color: #64748b; font-size: .66rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
-.stickyStructureHeader strong { overflow: hidden; color: #102a56; font-size: .88rem; text-overflow: ellipsis; white-space: nowrap; }
-.structurePager { display: flex; align-items: center; gap: 6px; }
-.structurePager button { min-height: 34px; border: 1px solid #bfdbfe; border-radius: 8px; background: #fff; padding: 6px 9px; color: #1d4ed8; font-size: .75rem; font-weight: 800; }
-.structurePager button:disabled { border-color: #e2e8f0; color: #94a3b8; }
-.structurePager span { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
+.stickyStructureHeader { position: sticky; z-index: 12; top: 8px; min-height: 0; border-bottom: 1px solid #dbe6f6; background: #fffffff2; padding: 14px 18px 12px; box-shadow: 0 8px 22px #1e3a5f12; backdrop-filter: blur(10px); transition: padding .18s ease, box-shadow .18s ease; }
+.stickyStructureHeader strong { overflow: hidden; color: #102a56; font-size: .95rem; text-overflow: ellipsis; white-space: nowrap; }
 .stickyStructureHeader em { overflow: hidden; color: #64748b; font-size: .68rem; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.structureAudio { flex: 1 1 320px; min-width: 0; }
+.structureAudio { display: grid; min-width: 0; align-content: start; gap: 8px; }
+.audioHeading { display: grid; min-width: 0; align-self: start; gap: 2px; }
+.audioLabel { color: #2563eb; font-size: .62rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
 .audioStart { min-height: 34px; border: 1px solid #93c5fd; border-radius: 8px; background: #eff6ff; padding: 6px 9px; color: #1d4ed8; font-size: .75rem; font-weight: 800; }
-.headerSummaryButton { display: none; }
-.structureAudio :global(.legiscast-transport-compact) { display: grid; grid-template-columns: auto minmax(72px, 1fr) auto; align-items: center; gap: 3px 8px; min-width: 0; color: #334155; font-size: .67rem; }
+.structureAudio :global(.legiscast-transport-compact) { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 5px; min-width: 0; color: #334155; font-size: .67rem; }
+.structureAudio :global(.legiscast-transport-element) { display: none; }
 .structureAudio :global(.legiscast-transport-title) { grid-column: 1 / -1; overflow: hidden; color: #102a56; font-size: .72rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-.structureAudio :global(.legiscast-transport-progress) { min-width: 0; accent-color: #2563eb; }
-.structureAudio :global(.legiscast-transport-times) { display: contents; color: #64748b; }
-.structureAudio :global(.legiscast-transport-controls) { display: contents; }
-.structureAudio :global(.legiscast-transport-skip), .structureAudio :global(.legiscast-transport-play), .structureAudio :global(.legiscast-transport-speed select) { min-height: 28px; border: 1px solid #bfdbfe; border-radius: 7px; background: #fff; padding: 3px 6px; color: #1d4ed8; font-size: .67rem; font-weight: 800; }
-.structureAudio :global(.legiscast-transport-play) { background: #2563eb; color: #fff; }
-.structureAudio :global(.legiscast-transport-speed) { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+.structureAudio :global(.legiscast-transport-progress) { width: 100%; min-width: 0; order: 3; accent-color: #2563eb; }
+.structureAudio :global(.legiscast-transport-times) { display: flex; justify-content: space-between; order: 4; color: #64748b; }
+.structureAudio :global(.legiscast-transport-controls) { display: flex; align-items: center; justify-content: center; order: 2; gap: 8px; }
+.structureAudio :global(.legiscast-transport-skip) { min-width: 32px; min-height: 32px; border: 0; border-radius: 50%; background: transparent; padding: 3px; color: #1e3a5f; font-size: .7rem; font-weight: 850; }
+.structureAudio :global(.legiscast-transport-skip:hover) { background: #eff6ff; color: #1d4ed8; }
+.structureAudio :global(.legiscast-transport-play) { display: grid; width: 38px; min-width: 38px; min-height: 38px; place-items: center; border: 0; border-radius: 50%; background: #2563eb; padding: 0; color: #fff; font-size: .9rem; font-weight: 900; box-shadow: 0 4px 10px #2563eb45; }
+.structureAudio :global(.legiscast-transport-speed) { display: flex; align-items: center; gap: 4px; margin-left: 5px; color: #475569; font-weight: 700; }
+.structureAudio :global(.legiscast-transport-speed select) { min-height: 30px; border: 1px solid #bfdbfe; border-radius: 7px; background: #fff; padding: 3px 5px; color: #1d4ed8; font-size: .67rem; font-weight: 800; }
+.stickyStructureHeaderCompact { padding: 7px 14px; box-shadow: 0 5px 14px #1e3a5f10; }
+.stickyStructureHeaderCompact .structureAudio { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.stickyStructureHeaderCompact .audioLabel, .stickyStructureHeaderCompact .audioHeading em { display: none; }
+.stickyStructureHeaderCompact .audioHeading strong { font-size: .78rem; }
+.stickyStructureHeaderCompact :global(.legiscast-transport-compact) { grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 8px; }
+.stickyStructureHeaderCompact :global(.legiscast-transport-controls) { grid-column: 1; grid-row: 1; }
+.stickyStructureHeaderCompact :global(.legiscast-transport-play) { width: 32px; min-width: 32px; min-height: 32px; }
+.stickyStructureHeaderCompact :global(.legiscast-transport-skip), .stickyStructureHeaderCompact :global(.legiscast-transport-speed), .stickyStructureHeaderCompact :global(.legiscast-transport-times) { display: none; }
+.stickyStructureHeaderCompact :global(.legiscast-transport-progress) { grid-column: 2; grid-row: 1; order: initial; }
 
 .readingStructure {
   display: grid;
@@ -844,6 +852,10 @@
   display: none;
 }
 
+.headerMobileToc {
+  display: none;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -1028,16 +1040,48 @@
   .mobileTocPanel a.tocActive { background: #eff6ff; color: #1d4ed8; }
   .mobileTocPanel .tocSection > span { padding: 9px; }
 
-  .stickyStructureHeader { top: 68px; padding: 9px 12px; }
-  .stickyStructureHeader strong { max-width: 40vw; font-size: .78rem; }
-  .structurePager button { min-height: 32px; padding: 5px 7px; font-size: .7rem; }
-  .structureAudio { flex: 1 1 100%; order: 3; }
-  .stickyStructureHeader { flex-wrap: wrap; }
-  .headerSummaryButton { display: inline-flex; }
-  .structureAudio :global(.legiscast-transport-compact) { grid-template-columns: auto minmax(56px, 1fr) auto; }
-  .structureAudio :global(.legiscast-transport-skip) { display: none; }
+  /* O player pertence à área de leitura. Com top: 68px o sticky era
+     deslocado da sua posição natural e deixava um vazio antes dele. */
+  .stickyStructureHeader { top: 0; padding: 11px 12px 9px; }
+  .stickyStructureHeader strong { max-width: 100%; font-size: .84rem; }
+  .structureAudio :global(.legiscast-transport-compact) { gap: 4px; }
+  .stickyStructureHeaderCompact { padding: 7px 12px; }
 
-  .content { border-radius: 16px; }
+  /* No celular, o próprio cabeçalho do player ocupa a área antes vazia.
+     Assim o acesso ao sumário e a unidade atual não aparecem em uma barra
+     separada nem disputam espaço com a leitura. */
+  .headerMobileToc {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    margin: 0 0 12px;
+  }
+  .headerMobileToc button {
+    min-height: 40px;
+    border: 1px solid #bfdbfe;
+    border-radius: 9px;
+    background: #eff6ff;
+    padding: 6px 10px;
+    color: #1d4ed8;
+    font-size: .78rem;
+    font-weight: 850;
+  }
+  .headerMobileToc > span {
+    min-width: 0;
+    overflow: hidden;
+    color: #475569;
+    font-size: .74rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* `overflow: hidden` cria um contêiner de rolagem e faz o sticky parar
+     no topo do conteúdo. `clip` preserva o recorte visual sem capturar o
+     posicionamento do cabeçalho móvel. */
+  .content { overflow: clip; border-radius: 16px; }
   .studentReadinessActions { align-items: stretch; flex-direction: column; }
   .studentReadinessActions .admin-button { width: 100%; text-align: center; }
   .readingStructure { padding: 17px 19px 14px; }

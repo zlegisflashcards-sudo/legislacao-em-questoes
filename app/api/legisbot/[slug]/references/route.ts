@@ -8,9 +8,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const { slug } = await context.params;
   const referenceIds = (request.nextUrl.searchParams.get("reference_ids") ?? "").split(",").slice(0, MAXIMUM_BLOCKS);
   const structureId = request.nextUrl.searchParams.get("structure_id");
+  const studyUnitId = request.nextUrl.searchParams.get("study_unit_id");
   if (!referenceIds.length || !referenceIds.some(Boolean)) return NextResponse.json({ error: "Selecione os blocos da leitura." }, { status: 400 });
   try {
-    const blocks = await getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId);
+    const blocks = await getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId, studyUnitId);
     if (blocks === null) return NextResponse.json({ error: "Legislação não encontrada." }, { status: 404 });
     return NextResponse.json({ blocks });
   } catch (error) {

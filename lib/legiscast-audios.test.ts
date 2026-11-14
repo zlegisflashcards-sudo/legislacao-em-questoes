@@ -186,6 +186,8 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).toContain("blocos cobertos por áudio ou dispensa");
     expect(adminClient).toContain("Faltam · {selectedCoverage.total");
     expect(adminClient).toContain("CoverageBar");
+    expect(adminClient).toContain("lawTracks.filter((audio) => audio.structure_id === null)");
+    expect(adminClient).toContain("total: 1");
   });
 
   it("separa cobertura, falta e áudio desatualizado pela alteração legislativa da lei", () => {

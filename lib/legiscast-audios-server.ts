@@ -20,19 +20,28 @@ function coverageMigrationPending(error: { code?: string } | null) {
  */
 export async function getAuthorizedLegiscastAudioForStructure(request: Request, slug: string, rawStructureId: string | null) {
   const context = await authorizeLawStudy(request, slug);
+  return getLegiscastAudioForLaw(context.lawId, rawStructureId);
+}
+
+/**
+ * Resolve uma única faixa por estrutura para um chamador que já confirmou o
+ * acesso à lei. A autorização (comercial ou administrativa) permanece fora
+ * desta função; a mesma resolução evita divergência entre os dois fluxos.
+ */
+export async function getLegiscastAudioForLaw(lawId: number, rawStructureId: string | null) {
   const structureId = rawStructureId === null || rawStructureId === "" ? null : /^\d+$/.test(rawStructureId) ? Number(rawStructureId) : NaN;
   if (!Number.isInteger(structureId) && structureId !== null) throw new LawStudyApiError(400, "Estrutura inválida.");
   const db = getSupabaseServerClient();
   const [tracksResult, structuresResult] = await Promise.all([
-    db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,storage_path").eq("lei_id", context.lawId).eq("ativo", true),
-    db.from("law_structure").select("id,nome,audio_not_applicable").eq("lei_id", context.lawId).eq("ativo", true),
+    db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,storage_path").eq("lei_id", lawId).eq("ativo", true),
+    db.from("law_structure").select("id,nome,audio_not_applicable").eq("lei_id", lawId).eq("ativo", true),
   ]);
   if (tracksResult.error || structuresResult.error) throw new LawStudyApiError(503, "Não foi possível consultar o áudio desta estrutura.");
   const structures = structuresResult.data ?? [];
   const requestedStructure = structureId === null ? null : structures.find((structure) => Number(structure.id) === structureId);
   if (structureId !== null && !requestedStructure) throw new LawStudyApiError(404, "Estrutura não encontrada nesta legislação.");
   if (requestedStructure?.audio_not_applicable === true) return { audio: null, status: "not_applicable" as const };
-  const coverageResult = await db.from("legiscast_audio_structure_coverage").select("audio_id,structure_id,lei_id").eq("lei_id", context.lawId);
+  const coverageResult = await db.from("legiscast_audio_structure_coverage").select("audio_id,structure_id,lei_id").eq("lei_id", lawId);
   if (coverageResult.error && !coverageMigrationPending(coverageResult.error)) throw new LawStudyApiError(503, "Não foi possível verificar a cobertura editorial do áudio.");
   const tracks = attachConfirmedLegiscastAudioCoverage(
     (tracksResult.data ?? []).map((track) => ({ id: String(track.id), structureId: track.structure_id === null ? null : Number(track.structure_id), active: true })),

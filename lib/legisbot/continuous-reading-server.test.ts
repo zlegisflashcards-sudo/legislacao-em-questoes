@@ -10,17 +10,19 @@ describe("carregamento da leitura contínua", () => {
     expect(resolver).not.toContain("await allQuestions(model.law.id)");
   });
 
-  it("usa o índice canônico da página e não remonta o modelo ao buscar textos", () => {
+  it("usa o índice canônico da página e encaminha o escopo editorial para validação no servidor", () => {
     const route = readFileSync("app/api/legisbot/[slug]/references/route.ts", "utf8");
-    expect(route).toContain("getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId)");
+    expect(route).toContain("study_unit_id");
+    expect(route).toContain("getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId, studyUnitId)");
     expect(route).toContain("reference_ids");
     expect(route).not.toContain("getContinuousReadingModel(slug)");
     expect(route).not.toContain("getContinuousReadingBlocks(model");
   });
 
-  it("revalida no servidor os blocos quando o modo parcial foi solicitado", () => {
-    expect(server).toContain("if (await partialReadingRequested(slug))");
+  it("revalida no servidor os blocos no modo parcial e em unidades de estudo", () => {
+    expect(server).toContain("if (rawStudyUnitId !== null || await partialReadingRequested(slug))");
     expect(server).toContain("continuousReadingReferencesForStructure(model, structureId)");
+    expect(server).toContain("continuousReadingReferencesForStudyUnit(model, rawStudyUnitId)");
     expect(server).toContain(".eq(\"lei_id\", lawId)");
   });
 

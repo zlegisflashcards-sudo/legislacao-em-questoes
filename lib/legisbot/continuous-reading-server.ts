@@ -23,13 +23,15 @@ import {
 import { resolveContinuousReadingStructureIntegrity } from "./continuous-reading-structure-integrity-core";
 import { canExposeContinuousReadingReference, resolveContinuousReadingPartialMode, resolveContinuousReadingPublicAccess, type ContinuousReadingPartialMode, type ContinuousReadingPublicAccess } from "./continuous-reading-public-access-core";
 import type { StructureReleaseRecord } from "./continuous-reading-structure-release-core";
+import { attachConfirmedLegiscastAudioCoverage, type LegiscastCoverageTrack } from "@/lib/legiscast-audio-coverage-core";
+import { resolveLegiscastStudyUnits, type LegiscastStudyUnit, type LegiscastStudyCoverageConflict } from "@/lib/legiscast-study-units-core";
 
 const PAGE_SIZE = 500;
 
 type LawRow = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null };
 type QuestionRow = { id: string; slug: string; ordem: string; structure_id: number | null };
 type ReferenceRow = { id: string; slug: string; ordem: string; identificacao: string; source_question_id: string | null; structure_id: number | null; preparado_em: string | null; situacao: string | null };
-type StructureRow = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number };
+type StructureRow = { id: number; parent_id: number | null; tipo: string; nome: string; ordem: number; audio_not_applicable: boolean | null };
 type MappingRow = { slug: string; ordem: string; artigo_recente: boolean | null };
 
 export type ContinuousReadingPriority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
@@ -64,6 +66,9 @@ export type ContinuousReadingModel = {
   partialMode: ContinuousReadingPartialMode;
   publicAccess: ContinuousReadingPublicAccess;
   structures: ContinuousReadingStructureCatalogItem[];
+  /** Unidades de carregamento editoriais; nunca ampliam a cobertura de áudio pela hierarquia. */
+  studyUnits: LegiscastStudyUnit[];
+  studyUnitCoverageConflicts: LegiscastStudyCoverageConflict[];
 };
 
 function publicPriority(questionCount: number): ContinuousReadingPriority {
@@ -143,7 +148,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
   const [questions, referenceResult, structure, mappings, requestedPartialMode] = await Promise.all([
     allQuestions(law.id),
     allReferenceSummaries(law.id),
-    db.from("law_structure").select("id,parent_id,tipo,nome,ordem").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
+    db.from("law_structure").select("id,parent_id,tipo,nome,ordem,audio_not_applicable").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
     db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
     partialReadingRequested(slug),
   ]);
@@ -247,6 +252,40 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
           : "pending",
   }));
 
+  // A unidade de estudo é uma projeção da mesma hierarquia da lei e das
+  // coberturas explicitamente confirmadas. Se a migration de cobertura ainda
+  // não existir, continuamos com unidades textuais por estrutura — sem supor
+  // que uma faixa ancestral cubra seus descendentes.
+  const [tracksResult, coverageResult] = await Promise.all([
+    db.from("legiscast_audios").select("id,structure_id").eq("lei_id", law.id).eq("ativo", true),
+    db.from("legiscast_audio_structure_coverage").select("audio_id,structure_id").eq("lei_id", law.id),
+  ]);
+  const tracks: LegiscastCoverageTrack[] = tracksResult.error ? [] : (tracksResult.data ?? []).map((track) => ({
+    id: String(track.id),
+    structureId: track.structure_id === null ? null : Number(track.structure_id),
+    active: true,
+  }));
+  const coveredTracks = attachConfirmedLegiscastAudioCoverage(
+    tracks,
+    coverageResult.error && migrationPending(coverageResult.error)
+      ? []
+      : coverageResult.error
+        ? []
+        : (coverageResult.data ?? []).map((coverage) => ({ audioId: String(coverage.audio_id), structureId: Number(coverage.structure_id) })),
+  );
+  const rawStudyUnits = resolveLegiscastStudyUnits({
+    structures: readingStructure.map((structure) => ({ id: structure.id, parentId: structure.parentId, ordem: structure.ordem, name: structure.nome })),
+    tracks: coveredTracks,
+    notApplicableStructureIds: readingStructure.filter((structure) => structure.audio_not_applicable === true).map((structure) => structure.id),
+  });
+  const allowedStudyStructures = new Set(publicAccess.mode === "partial" ? publicAccess.accessibleStructureIds : readingStructure.map((structure) => structure.id));
+  const preparedStudyStructures = new Set(publicReferences.filter((reference) => reference.prepared).map((reference) => reference.hierarchy.at(-1)?.id).filter((id): id is number => typeof id === "number"));
+  const studyUnits = rawStudyUnits.units.flatMap((unit) => {
+    const structureIds = unit.structureIds.filter((structureId) => allowedStudyStructures.has(structureId));
+    if (!structureIds.length || !structureIds.some((structureId) => preparedStudyStructures.has(structureId))) return [];
+    return [{ ...unit, titleStructureId: structureIds.includes(unit.titleStructureId) ? unit.titleStructureId : structureIds[0], structureIds }];
+  });
+
   return {
     law,
     questions: questionInput,
@@ -257,6 +296,8 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     partialMode,
     publicAccess,
     structures,
+    studyUnits,
+    studyUnitCoverageConflicts: rawStudyUnits.conflicts,
   };
 }
 
@@ -266,9 +307,21 @@ export function continuousReadingReferencesForStructure(model: ContinuousReading
   return model.references.filter((reference) => reference.hierarchy.some((node) => node.id === structureId));
 }
 
-export async function getContinuousReadingBlocks(model: ContinuousReadingModel, offset: number, limit: number, structureId: number | null = null) {
+/** Uma unidade só reúne os blocos associados diretamente às estruturas que a compõem. */
+export function continuousReadingReferencesForStudyUnit(model: ContinuousReadingModel, studyUnitId: string | null) {
+  const unit = studyUnitId === null ? null : model.studyUnits.find((candidate) => candidate.id === studyUnitId);
+  if (!unit) return [] as ContinuousReadingReference[];
+  const structureIds = new Set(unit.structureIds);
+  return model.references.filter((reference) => {
+    const structureId = reference.hierarchy.at(-1)?.id ?? null;
+    return structureId !== null && structureIds.has(structureId);
+  });
+}
+
+export async function getContinuousReadingBlocks(model: ContinuousReadingModel, offset: number, limit: number, structureId: number | null = null, studyUnitId: string | null = null) {
   if (!model.integrity.readingAvailable) return [] as ContinuousReadingBlock[];
-  const prepared = continuousReadingReferencesForStructure(model, structureId).filter((reference) => reference.prepared);
+  const selectedReferences = studyUnitId === null ? continuousReadingReferencesForStructure(model, structureId) : continuousReadingReferencesForStudyUnit(model, studyUnitId);
+  const prepared = selectedReferences.filter((reference) => reference.prepared);
   const selected = prepared.slice(Math.max(0, offset), Math.max(0, offset) + Math.min(100, Math.max(1, limit)));
   if (!selected.length) return [];
   const result = await getSupabaseServerClient().from("legislative_references").select("id,legislacao").eq("lei_id", model.law.id).in("id", selected.map((reference) => reference.id)).or("situacao.is.null,situacao.neq.arquivada");
@@ -282,18 +335,25 @@ export async function getContinuousReadingBlocks(model: ContinuousReadingModel, 
 
 export { getContinuousReadingBlockTexts, type ContinuousReadingBlockText, type ContinuousReadingBlockTextRepository } from "./continuous-reading-block-texts-core";
 
-export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawIds: string[], rawStructureId: string | null = null) {
+export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawIds: string[], rawStructureId: string | null = null, rawStudyUnitId: string | null = null) {
   const db = getSupabaseServerClient();
   const slug = rawSlug.trim().toLowerCase();
   // A página envia somente IDs do seu catálogo. A rota revalida no servidor
   // quando o modo parcial foi solicitado, portanto um UUID copiado de outro
   // recorte não contorna a política alterando a URL.
-  if (await partialReadingRequested(slug)) {
+  // No modo parcial, a unidade é um escopo validado pelo catálogo do servidor:
+  // um UUID copiado de outro recorte não contorna a liberação pela URL. No modo
+  // global todos os blocos preparados da própria lei já pertencem à leitura
+  // autorizada, e evitamos reconstruir o catálogo inteiro a cada página.
+  if (rawStudyUnitId !== null || await partialReadingRequested(slug)) {
     const model = await getContinuousReadingModel(slug);
     if (!model) return null;
-    if (model.publicAccess.mode === "partial") {
+    if (model.publicAccess.mode === "partial" || rawStudyUnitId !== null) {
       const structureId = rawStructureId && /^\d+$/.test(rawStructureId) ? Number(rawStructureId) : null;
-      const allowed = new Set(continuousReadingReferencesForStructure(model, structureId).filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
+      const allowedReferences = rawStudyUnitId === null
+        ? continuousReadingReferencesForStructure(model, structureId)
+        : continuousReadingReferencesForStudyUnit(model, rawStudyUnitId);
+      const allowed = new Set(allowedReferences.filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
       const requested = rawIds.filter((id) => allowed.has(id.trim().toLowerCase()));
       if (!requested.length) return [] as ContinuousReadingBlockText[];
       return getContinuousReadingBlockTexts(slug, requested, {

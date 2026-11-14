@@ -13,6 +13,7 @@ type HierarchyNode = { id: number; type: string; name: string };
 type Priority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[]; priority: Priority; recent: boolean; linkedQuestions: number; inactive: boolean };
 type StructureCatalogItem = { id: number; parentId: number | null; type: string; name: string; order: number; status: "accessible" | "pending" | "blocked" };
+type StudyUnit = { id: string; kind: "audio" | "text"; audioId: string | null; titleStructureId: number; structureIds: number[] };
 type Block = Reference & { legislation: string };
 type BlockText = Pick<Block, "id" | "legislation">;
 type TocNode = { key: string; structure: StructureCatalogItem; reference: Reference | null; children: TocNode[]; referenceIds: string[] };
@@ -58,12 +59,22 @@ function LegisBotGuide({ title, mode, adminPreview }: { title: string; mode: "ma
 function structureTree(structures: StructureCatalogItem[], references: Reference[]): TocNode[] {
   const roots: TocNode[] = [];
   const byId = new Map<number, TocNode>();
-  for (const structure of structures.slice().sort((a, b) => a.order - b.order || a.id - b.id)) {
+  // The `ordem` is only unique among siblings. Creating the whole registry
+  // before attaching nodes prevents a "Seção 01" from appearing at the root
+  // simply because its parent "Capítulo 02" has a later global order.
+  for (const structure of structures) {
     const item: TocNode = { key: `structure:${structure.id}`, structure, reference: null, children: [], referenceIds: [] };
     byId.set(structure.id, item);
-    const parent = structure.parentId === null ? null : byId.get(structure.parentId);
+  }
+  for (const item of byId.values()) {
+    const parent = item.structure.parentId === null ? null : byId.get(item.structure.parentId);
     (parent?.children ?? roots).push(item);
   }
+  const sortTree = (nodes: TocNode[]) => {
+    nodes.sort((left, right) => left.structure.order - right.structure.order || left.structure.id - right.structure.id);
+    nodes.forEach((node) => sortTree(node.children));
+  };
+  sortTree(roots);
   for (const reference of references) for (const hierarchy of reference.hierarchy) {
     const item = byId.get(hierarchy.id);
     if (!item) continue;
@@ -78,7 +89,7 @@ function StructureItems({ nodes, activeId, onNavigate, collapsed, onToggle }: { 
     const active = Boolean(activeId && node.referenceIds.includes(activeId));
     const enabled = node.structure.status === "accessible" && node.reference;
     return <li key={node.key} className={styles.tocSection}>
-      <div className={styles.tocLine}>{node.children.length ? <button type="button" aria-label={collapsed.has(node.key) ? `Expandir ${node.structure.name}` : `Recolher ${node.structure.name}`} aria-expanded={!collapsed.has(node.key)} onClick={() => onToggle(node.key)}>{collapsed.has(node.key) ? "+" : "−"}</button> : null}{enabled ? <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference!.id)}`} onClick={() => onNavigate(node.reference!)}>{node.structure.name}</a> : <span className={node.structure.status === "blocked" ? styles.tocBlocked : styles.tocPending}>{node.structure.name}<small>{node.structure.status === "blocked" ? "Bloqueada" : "Pendente"}</small></span>}</div>
+      <div className={styles.tocLine}>{node.children.length ? <button type="button" aria-label={collapsed.has(node.key) ? `Expandir ${node.structure.name}` : `Recolher ${node.structure.name}`} aria-expanded={!collapsed.has(node.key)} onClick={() => onToggle(node.key)}>{collapsed.has(node.key) ? "+" : "−"}</button> : <span className={styles.tocToggleSpacer} aria-hidden="true" />}{enabled ? <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference!.id)}`} onClick={() => onNavigate(node.reference!)}>{node.structure.name}</a> : <span className={node.structure.status === "blocked" ? styles.tocBlocked : styles.tocPending}>{node.structure.name}<small>{node.structure.status === "blocked" ? "Bloqueada" : "Pendente"}</small></span>}</div>
       {node.children.length && !collapsed.has(node.key) ? <StructureItems nodes={node.children} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} /> : null}
     </li>;
   })}</ol>;
@@ -223,7 +234,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], partialMode = false, initialStructureId = null, initialBlocks, initialTab, adminPreview = false }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; partialMode?: boolean; initialStructureId?: number | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, scopedReading = false, audioEndpoint }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; scopedReading?: boolean; audioEndpoint?: string }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
@@ -245,28 +256,44 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const [collapsedStructures, setCollapsedStructures] = useState<Set<string>>(() => new Set());
   const [missingTarget, setMissingTarget] = useState(false);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(initialStructureId);
+  const [selectedStudyUnitId, setSelectedStudyUnitId] = useState<string | null>(initialStudyUnitId);
   const [suggestedAudio, setSuggestedAudio] = useState<LegiscastAudioTrack | null>(null);
   const [suggestedAudioStatus, setSuggestedAudioStatus] = useState<"direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading">("loading");
   const [playingAudio, setPlayingAudio] = useState<LegiscastAudioTrack | null>(null);
+  const [playerCondensed, setPlayerCondensed] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
+  const playerHeaderRef = useRef<HTMLElement | null>(null);
   const requestedPagesRef = useRef(new Set<number>());
   const loadedHighlightReferencesRef = useRef(new Set<string>());
   const scrollBehaviorRef = useRef<ScrollBehavior>("auto");
   const ignoreHashRef = useRef(false);
   const scopeVersionRef = useRef(0);
+  const scopeInitializedRef = useRef(false);
   const audioRequestRef = useRef(0);
   const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" }>());
   const toggleStructure = useCallback((key: string) => setCollapsedStructures((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; }), []);
-  const visiblePrepared = useMemo(() => !partialMode || selectedStructureId === null ? prepared : prepared.filter((reference) => reference.hierarchy.some((node) => node.id === selectedStructureId)), [partialMode, prepared, selectedStructureId]);
+  const studyUnitByStructureId = useMemo(() => new Map(studyUnits.flatMap((unit) => unit.structureIds.map((structureId) => [structureId, unit] as const))), [studyUnits]);
+  const selectedStudyUnit = useMemo(() => selectedStudyUnitId === null ? null : studyUnits.find((unit) => unit.id === selectedStudyUnitId) ?? null, [selectedStudyUnitId, studyUnits]);
+  const visiblePrepared = useMemo(() => {
+    if (selectedStudyUnit) {
+      const structureIds = new Set(selectedStudyUnit.structureIds);
+      return prepared.filter((reference) => structureIds.has(reference.hierarchy.at(-1)?.id ?? -1));
+    }
+    return (!partialMode && !scopedReading) || selectedStructureId === null ? prepared : prepared.filter((reference) => reference.hierarchy.some((node) => node.id === selectedStructureId));
+  }, [partialMode, prepared, scopedReading, selectedStructureId, selectedStudyUnit]);
 
   useEffect(() => {
-    if (!partialMode) return;
+    if (!partialMode && !scopedReading && selectedStudyUnitId === null) return;
+    if (!scopeInitializedRef.current) {
+      scopeInitializedRef.current = true;
+      return;
+    }
     scopeVersionRef.current += 1;
     requestedPagesRef.current.clear();
     setLoadedPages(new Set());
     setFailedPages(new Set());
-  }, [partialMode, selectedStructureId]);
+  }, [partialMode, scopedReading, selectedStructureId, selectedStudyUnitId]);
 
   const loadPage = useCallback(async (page: number) => {
     if (!canLoadContinuousPage({ page, preparedCount: visiblePrepared.length, pageSize: PAGE_SIZE, loadedPages, loadingPages })) return;
@@ -280,7 +307,13 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     setFailedPages((current) => { const next = new Set(current); next.delete(page); return next; });
     setLoadingPages((current) => new Set(current).add(page));
     try {
-      const scope = partialMode && selectedStructureId !== null ? `&structure_id=${encodeURIComponent(String(selectedStructureId))}` : "";
+      // No modo global, o servidor já autoriza qualquer bloco preparado desta
+      // lei. Enviar a unidade a cada página obrigaria a reconstruir todo o
+      // catálogo no endpoint, sem acrescentar proteção. No modo parcial a
+      // unidade continua sendo validada no servidor antes de entregar HTML.
+      const scope = partialMode && selectedStudyUnitId !== null
+        ? `&study_unit_id=${encodeURIComponent(selectedStudyUnitId)}`
+        : partialMode && selectedStructureId !== null ? `&structure_id=${encodeURIComponent(String(selectedStructureId))}` : "";
       const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`, { cache: "no-store" });
       const result = await response.json() as { blocks?: BlockText[] };
       if (!response.ok || !result.blocks) throw new Error("load_failed");
@@ -300,16 +333,16 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [loadedPages, loadingPages, partialMode, preparedById, selectedStructureId, slug, visiblePrepared]);
+  }, [loadedPages, loadingPages, partialMode, preparedById, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
 
   useEffect(() => {
-    if (!partialMode || !visiblePrepared.length || loadedPages.has(0)) return;
+    if ((!partialMode && selectedStudyUnitId === null) || !visiblePrepared.length || loadedPages.has(0)) return;
     void loadPage(0);
-  }, [loadPage, loadedPages, partialMode, visiblePrepared.length]);
+  }, [loadPage, loadedPages, partialMode, selectedStudyUnitId, visiblePrepared.length]);
 
   useEffect(() => {
     setLoadedPages(initialLoadedPages());
-  }, [initialBlocks, initialLoadedPages, visiblePrepared]);
+  }, [initialBlocks, initialLoadedPages]);
 
   useEffect(() => {
     const referenceIds = [...blocks.keys()].filter((id) => !loadedHighlightReferencesRef.current.has(id)).slice(0, PAGE_SIZE);
@@ -336,13 +369,15 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const navigate = useCallback((reference: Reference) => {
     const structureId = reference.hierarchy.at(-1)?.id ?? null;
     if (partialMode && structureId !== null) setSelectedStructureId(structureId);
+    const unit = structureId === null ? null : studyUnitByStructureId.get(structureId) ?? null;
+    if (unit) setSelectedStudyUnitId(unit.id);
     const index = visiblePrepared.findIndex((item) => item.id === reference.id);
     if (index >= 0 && !blocks.has(reference.id)) void loadPage(Math.floor(index / PAGE_SIZE));
     scrollBehaviorRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     setFocusedId(reference.id);
     setActiveId(reference.id);
     setMobileTocOpen(false);
-  }, [blocks, loadPage, partialMode, visiblePrepared]);
+  }, [blocks, loadPage, partialMode, studyUnitByStructureId, visiblePrepared]);
 
   const openFromMap = useCallback((reference: Reference) => {
     ignoreHashRef.current = false;
@@ -366,12 +401,22 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     if (!adminPreview) setStudyMode("leitura");
     const index = prepared.findIndex((item) => item.id === referenceId);
     if (index < 0) { setMissingTarget(true); return; }
+    const reference = prepared[index];
+    const structureId = reference.hierarchy.at(-1)?.id ?? null;
+    const unit = structureId === null ? null : studyUnitByStructureId.get(structureId) ?? null;
+    if (unit) setSelectedStudyUnitId(unit.id);
     setMissingTarget(false);
     scrollBehaviorRef.current = "auto";
     setFocusedId(referenceId);
     setActiveId(referenceId);
     if (!blocks.has(referenceId)) void loadPage(Math.floor(index / PAGE_SIZE));
-  }, [adminPreview, blocks, loadPage, prepared]);
+  }, [adminPreview, blocks, loadPage, prepared, studyUnitByStructureId]);
+
+  useEffect(() => {
+    if (!focusedId) return;
+    const index = visiblePrepared.findIndex((item) => item.id === focusedId);
+    if (index >= 0 && !blocks.has(focusedId)) void loadPage(Math.floor(index / PAGE_SIZE));
+  }, [blocks, focusedId, loadPage, visiblePrepared]);
 
   useEffect(() => {
     if (adminPreview) return;
@@ -490,10 +535,20 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     });
   }, [accessibleStructureIds, prepared]);
   const activeStructure = prepared.find((reference) => reference.id === activeId)?.hierarchy.at(-1) ?? null;
-  const activeStructureIndex = structureTargets.findIndex((reference) => reference.hierarchy.at(-1)?.id === activeStructure?.id);
-  const hasStructureNavigation = structures.length > 0 && structureTargets.length > 0;
+  const activeStudyUnit = activeStructure ? studyUnitByStructureId.get(activeStructure.id) ?? selectedStudyUnit : selectedStudyUnit;
+  const studyUnitTargets = useMemo(() => studyUnits.flatMap((unit) => {
+    const structureIds = new Set(unit.structureIds);
+    const reference = prepared.find((candidate) => {
+      const structureId = candidate.hierarchy.at(-1)?.id;
+      return structureId !== undefined && structureIds.has(structureId) && accessibleStructureIds.has(structureId);
+    });
+    return reference ? [{ unit, reference }] : [];
+  }), [accessibleStructureIds, prepared, studyUnits]);
+  const navigationTargets = studyUnitTargets.length ? studyUnitTargets.map((target) => target.reference) : structureTargets;
+  const hasStructureNavigation = structures.length > 0 && navigationTargets.length > 0;
   const visibleStructureId = activeStructure?.id ?? selectedStructureId;
-  const visibleStructureName = activeStructure?.name ?? structureTargets[0]?.hierarchy.at(-1)?.name ?? lawTitle;
+  const unitTitle = activeStudyUnit ? structures.find((structure) => structure.id === activeStudyUnit.titleStructureId)?.name : null;
+  const visibleStructureName = unitTitle ?? activeStructure?.name ?? navigationTargets[0]?.hierarchy.at(-1)?.name ?? lawTitle;
 
   useEffect(() => {
     if (adminPreview) return;
@@ -512,10 +567,11 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     void (async () => {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-      if (!token) { if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); return; }
+      if (!audioEndpoint && !token) { if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); return; }
       const query = visibleStructureId === null ? "" : `?structure_id=${encodeURIComponent(String(visibleStructureId))}`;
       try {
-        const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/legiscast${query}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+        const endpoint = audioEndpoint ?? `/api/legisbot/${encodeURIComponent(slug)}/legiscast`;
+        const response = await fetch(`${endpoint}${query}`, { cache: "no-store", headers: audioEndpoint ? undefined : { Authorization: `Bearer ${token}` }, signal: controller.signal });
         const body = await response.json().catch(() => ({})) as { audio?: LegiscastAudioTrack | null; status?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" };
         if (requestId !== audioRequestRef.current) return;
         const value = { at: Date.now(), audio: response.ok && body.audio ? body.audio : null, status: response.ok && body.status ? body.status : "unavailable" as const };
@@ -525,7 +581,18 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       } catch (error) { if (error instanceof DOMException && error.name === "AbortError") return; if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); }
     })();
     return () => controller.abort();
-  }, [adminPreview, slug, visibleStructureId]);
+  }, [adminPreview, audioEndpoint, slug, visibleStructureId]);
+
+  useEffect(() => {
+    if (adminPreview) return;
+    const updatePlayerDensity = () => {
+      const top = playerHeaderRef.current?.getBoundingClientRect().top;
+      setPlayerCondensed(typeof top === "number" && top <= 80);
+    };
+    updatePlayerDensity();
+    window.addEventListener("scroll", updatePlayerDensity, { passive: true });
+    return () => window.removeEventListener("scroll", updatePlayerDensity);
+  }, [adminPreview]);
 
   return <div className={styles.page}>
     <main className={styles.shell}>
@@ -537,12 +604,27 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
         {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
-        {hasStructureNavigation ? <div className={styles.mobileTocBar}><button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={(event) => { returnFocusRef.current = event.currentTarget; setMobileTocOpen((open) => !open); }}>☰ <span>Sumário</span></button><span className={styles.mobileTocCurrent} aria-live="polite">{activeStructure?.name ?? "Início da lei"}</span></div> : null}
         {mobileTocOpen && hasStructureNavigation ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Escolha uma estrutura disponível.</p></div><button type="button" aria-label="Fechar sumário" autoFocus onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
         <div className={`${styles.layout} ${hasStructureNavigation ? (desktopTocOpen ? "" : styles.layoutTocClosed) : styles.layoutNoToc}`}>
         {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
         <section ref={contentRef} className={styles.content} aria-label="Texto da legislação">
-          {!adminPreview ? <header className={styles.stickyStructureHeader}><div><small>{hasStructureNavigation ? "Estrutura atual" : "Lei Interativa"}</small><strong>{visibleStructureName}</strong>{playingAudio && playingAudio.id !== suggestedAudio?.id ? <em>Reproduzindo: {playingAudio.title}</em> : null}</div><div className={styles.structureAudio}>{playingAudio ? <LegiscastAudioTransport track={playingAudio} compact /> : suggestedAudio ? <button type="button" className={styles.audioStart} onClick={() => setPlayingAudio(suggestedAudio)}>Ouvir {suggestedAudioStatus === "editorial" ? "áudio relacionado" : "áudio desta estrutura"}</button> : suggestedAudioStatus === "ambiguous" ? <small>Áudio requer revisão editorial</small> : null}</div><div className={styles.structurePager}>{hasStructureNavigation ? <button type="button" disabled={activeStructureIndex <= 0} onClick={() => { const target = structureTargets[activeStructureIndex - 1]; if (target) navigate(target); }}>Anterior</button> : null}<span aria-label={playingAudio ? "Faixa em reprodução" : "Sem faixa selecionada"} /><button type="button" aria-label="Abrir sumário" className={styles.headerSummaryButton} onClick={(event) => { returnFocusRef.current = event.currentTarget; setMobileTocOpen(true); }}>Sumário</button>{hasStructureNavigation ? <button type="button" disabled={activeStructureIndex < 0 || activeStructureIndex >= structureTargets.length - 1} onClick={() => { const target = structureTargets[activeStructureIndex + 1]; if (target) navigate(target); }}>Próxima</button> : null}</div></header> : null}
+          {!adminPreview ? <header ref={playerHeaderRef} className={`${styles.stickyStructureHeader} ${playerCondensed ? styles.stickyStructureHeaderCompact : ""}`}>
+            {hasStructureNavigation ? <div className={styles.headerMobileToc}>
+              <button type="button" aria-expanded={mobileTocOpen} aria-controls="legisbot-mobile-toc" onClick={(event) => { returnFocusRef.current = event.currentTarget; setMobileTocOpen((open) => !open); }}>☰ <span>Sumário</span></button>
+              <span aria-live="polite">{activeStructure?.name ?? "Início da lei"}</span>
+            </div> : null}
+            <div className={styles.structureAudio}>
+              {playingAudio ?? suggestedAudio ? <>
+                <div className={styles.audioHeading}>
+                  <span className={styles.audioLabel}>LegisCast · {title}</span>
+                  <strong>{visibleStructureName}</strong>
+                  {playingAudio && playingAudio.id !== suggestedAudio?.id ? <em>Reproduzindo: {playingAudio.title}</em> : null}
+                </div>
+                <LegiscastAudioTransport track={playingAudio ?? suggestedAudio!} compact hideTitle onStart={(track) => setPlayingAudio((current) => current ?? track)} />
+              </> : suggestedAudioStatus === "loading" ? <small>Carregando áudio desta unidade…</small> : suggestedAudioStatus === "ambiguous" ? <small>Áudio requer revisão editorial</small> : null}
+            </div>
+            <span className={styles.srOnly} aria-live="polite">{playingAudio ? "Faixa em reprodução" : suggestedAudio ? "Faixa disponível" : "Sem faixa selecionada"}</span>
+          </header> : null}
           {visiblePrepared.map((reference, index) => {
             const block = blocks.get(reference.id);
             const canOpenLegisBot = Boolean(block) && !reference.inactive;

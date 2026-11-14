@@ -192,6 +192,22 @@ function tracksCoveringStructure(tracks: Audio[], coverages: Coverage[], structu
 function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], coverages: Coverage[], law: Law): LegiscastCoverage {
   const lawStructures = structuresForLaw(structures, law.id);
   const lawTracks = tracksForLaw(audios, law.id);
+  // A própria lei é a raiz da organização. Quando ela ainda não possui
+  // estruturas filhas, uma faixa vinculada diretamente à lei cobre esse único
+  // nível — não deve resultar em 0% de cobertura.
+  if (!lawStructures.length) {
+    const status = audioStatusForTracks(
+      lawTracks.filter((audio) => audio.structure_id === null),
+      law,
+    );
+    return {
+      total: 1,
+      withAudio: status === "current" ? 1 : 0,
+      notApplicable: 0,
+      outdated: status === "outdated" ? 1 : 0,
+      missing: status === "none" ? 1 : 0,
+    };
+  }
   let withAudio = 0;
   let notApplicable = 0;
   let outdated = 0;
