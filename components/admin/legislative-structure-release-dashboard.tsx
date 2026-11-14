@@ -1,13 +1,12 @@
 import { setLegislativeStructureRelease } from "@/app/admin/artigos/reference-actions";
+import Link from "next/link";
 import type { ContinuousReadingLawStructureIntegrity } from "@/lib/legisbot/continuous-reading-structure-integrity-core";
 import type { StructureReleaseViewStatus } from "@/lib/legisbot/continuous-reading-structure-release-core";
 
-type Row = ContinuousReadingLawStructureIntegrity["reports"][number] & { releaseStatus: StructureReleaseViewStatus; integrityFingerprint: string };
+type Row = ContinuousReadingLawStructureIntegrity["reports"][number] & { releaseStatus: StructureReleaseViewStatus; integrityFingerprint: string; suggestedAssociationCount: number };
 
 const label: Record<StructureReleaseViewStatus, string> = { pending: "Pendente", ready: "Pronta", released: "Liberada" };
 const reason: Record<string, string> = {
-  inventory_unavailable: "inventário oficial indisponível",
-  inventory_unattributed: "item do inventário sem associação segura",
   reference_unattributed: "bloco sem associação estrutural",
   reference_unprepared: "bloco ainda não preparado",
   reference_unassociated: "associação editorial pendente",
@@ -16,6 +15,7 @@ const reason: Record<string, string> = {
   orphan_question_unattributed: "questão órfã sem recorte seguro",
   question_structure_mismatch: "questão e bloco em estruturas diferentes",
   descendant_empty: "descendente sem evidência suficiente",
+  article_gap_confirmed: "lacuna comprovada na sequência de artigos",
 };
 
 export function LegislativeStructureReleaseDashboard({ slug, migrationAvailable, rows, lawAvailable }: { slug: string; migrationAvailable: boolean; rows: Row[]; lawAvailable: boolean }) {
@@ -25,7 +25,7 @@ export function LegislativeStructureReleaseDashboard({ slug, migrationAvailable,
     <h2 id="structure-release-title">Liberação manual por estrutura</h2>
     <p>O estado Pronta não publica nada automaticamente. Liberar um recorte superior não cria liberações independentes para seus descendentes.</p>
     <div className="admin-table-wrap"><table><thead><tr><th>Estrutura</th><th>Questões</th><th>Blocos</th><th>Pendências</th><th>Status</th><th>Ação</th></tr></thead><tbody>
-      {rows.map((row) => <tr key={row.structureId}><td><strong>{row.path.join(" › ") || row.name}</strong></td><td>{row.activeQuestionCount}</td><td>{row.preparedReferenceCount}</td><td>{row.reasons.length ? row.reasons.map((item) => reason[item] ?? item).join("; ") : "Nenhuma"}</td><td><strong>{label[row.releaseStatus]}</strong></td><td>{row.releaseStatus === "released" ? <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="release_action" value="block"/><button className="admin-button secondary">Bloquear</button></form> : <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="integrity_fingerprint" value={row.integrityFingerprint}/><input type="hidden" name="release_action" value="release"/><button className="admin-button primary" disabled={!lawAvailable || row.releaseStatus !== "ready"}>Liberar</button></form>}</td></tr>)}
+      {rows.map((row) => <tr key={row.structureId}><td><strong>{row.path.join(" › ") || row.name}</strong></td><td>{row.activeQuestionCount}</td><td>{row.preparedReferenceCount}</td><td>{row.reasons.length ? row.reasons.map((item) => reason[item] ?? item).join("; ") : "Nenhuma"}{row.articleContinuity && row.articleContinuity.possibleMissingArticles.length && !row.articleContinuity.confirmedMissingArticles.length ? <><br/><small>Aviso: possível salto entre artigos {row.articleContinuity.possibleMissingArticles.join(", ")}.</small></> : null}</td><td><strong>{label[row.releaseStatus]}</strong></td><td><div className="article-header-actions"><Link className="admin-button secondary" href={`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&estrutura=${row.structureId}`}>Prévia da estrutura</Link>{row.releaseStatus === "released" ? <form action={setLegislativeStructureRelease}><input type="hidden" name="slug" value={slug}/><input type="hidden" name="structure_id" value={row.structureId}/><input type="hidden" name="release_action" value="block"/><button className="admin-button secondary">Bloquear</button></form> : null}</div></td></tr>)}
     </tbody></table></div>
   </section>;
 }

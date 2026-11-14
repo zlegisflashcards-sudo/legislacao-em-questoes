@@ -761,6 +761,61 @@
 .previewEditor header p:last-child { margin: 0; color: #64748b; font-size: .85rem; }
 .revokeControl { display: flex !important; align-items: center; gap: 8px; }
 
+.confirmationPreview { display: grid; gap: 18px; border-color: #bfdbfe; background: linear-gradient(145deg, #f8fbff 0%, #fff 42%); padding: 24px; }
+.confirmationHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.confirmationHeaderActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.confirmationHeader h2 { margin: 3px 0 5px; color: #102a56; font-size: clamp(1.2rem, 2vw, 1.5rem); }
+.confirmationHeader p:last-child { margin: 0; color: #52657e; line-height: 1.45; }
+.confirmationEyebrow { margin: 0; color: #2563eb; font-size: .73rem; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.confirmationStatus { flex: none; border: 1px solid #bfdbfe; border-radius: 999px; background: #eff6ff; padding: 6px 10px; color: #1d4ed8; font-size: .77rem; font-weight: 850; }
+.confirmationMetrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid #dbe7f5; border-radius: 14px; background: #fff; }
+.confirmationMetrics > div { display: grid; gap: 3px; min-width: 0; padding: 13px 15px; border-right: 1px solid #e5edf7; }
+.confirmationMetrics > div:last-child { border-right: 0; }
+.confirmationMetrics strong { color: #102a56; font-size: 1.3rem; line-height: 1; }
+.confirmationMetrics span { color: #64748b; font-size: .74rem; font-weight: 750; line-height: 1.35; }
+.confirmationRange { margin: -8px 0 0; color: #52657e; font-size: .88rem; }
+.confirmationRange code { color: #1d4ed8; font-weight: 800; }
+.confirmationAdd { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 14px; border: 1px solid #dbe7f5; border-radius: 14px; background: #f8fbff; padding: 14px; }
+.confirmationAdd label { display: grid; gap: 5px; color: #172033; font-size: .9rem; }
+.confirmationAdd label span { color: #64748b; font-size: .8rem; line-height: 1.45; }
+.confirmationAdd textarea { min-height: 78px; width: 100%; resize: vertical; border: 1px solid #c7d7eb; border-radius: 10px; background: #fff; padding: 10px; color: #172033; font: .82rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.confirmationAdd > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.confirmationUnlinked { overflow: hidden; border: 1px solid #fde68a; border-radius: 14px; background: #fffbeb; }
+.confirmationUnlinked header { padding: 13px 16px 11px; }
+.confirmationUnlinked header p { margin: 0 0 3px; color: #a16207; font-size: .72rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.confirmationUnlinked h3 { margin: 0; color: #713f12; font-size: 1rem; }
+.confirmationUnlinked header span { display: block; margin-top: 4px; color: #854d0e; font-size: .8rem; line-height: 1.45; }
+.confirmationUnlinked .confirmationTableWrap { border-top-color: #fde68a; }
+.confirmationUnlinked .confirmationTableWrap th { background: #fef3c7; color: #854d0e; }
+.confirmationUnlinked .admin-button { min-height: 34px; white-space: nowrap; }
+.confirmationBlocks { overflow: hidden; border: 1px solid #dbe7f5; border-radius: 14px; background: #fff; }
+.confirmationBlocks > div:first-child { padding: 14px 16px 10px; }
+.confirmationBlocks h3 { margin: 0; color: #102a56; font-size: 1rem; }
+.confirmationBlocks p { margin: 4px 0 0; color: #64748b; font-size: .8rem; line-height: 1.45; }
+.confirmationTableWrap { overflow-x: auto; border-top: 1px solid #e5edf7; }
+.confirmationTableWrap table { width: 100%; min-width: 670px; border-collapse: collapse; }
+.confirmationTableWrap th { background: #f8fafc; color: #52657e; font-size: .72rem; letter-spacing: .03em; text-align: left; text-transform: uppercase; }
+.confirmationTableWrap th, .confirmationTableWrap td { padding: 10px 14px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+.confirmationTableWrap tr:last-child td { border-bottom: 0; }
+.confirmationTableWrap td { color: #334155; font-size: .85rem; }
+.confirmationTableWrap code { color: #1e3a5f; font-size: .76rem; white-space: nowrap; }
+.confirmationAssociated, .confirmationCandidate { display: inline-flex; border-radius: 999px; padding: 4px 7px; font-size: .7rem; font-weight: 850; white-space: nowrap; }
+.confirmationAssociated { background: #dcfce7; color: #166534; }
+.confirmationCandidate { background: #dbeafe; color: #1d4ed8; }
+.confirmationChecks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.confirmationChecks p { margin: 0; border: 1px solid #e2e8f0; border-radius: 11px; background: #f8fafc; padding: 10px 12px; color: #52657e; font-size: .8rem; line-height: 1.45; }
+.confirmationChecks strong { color: #334155; }
+.confirmationChecks span { display: block; margin-top: 2px; font-size: .72rem; }
+.confirmationChecks .confirmationWarning { border-color: #fde68a; background: #fffbeb; color: #854d0e; }
+.confirmationChecks .confirmationWarning strong { color: #713f12; }
+.confirmationChecks .confirmationOk { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+.confirmationChecks .confirmationOk strong { color: #166534; }
+.confirmationSubmit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, .65fr) auto; align-items: end; gap: 12px; border: 1px solid #bfdbfe; border-radius: 14px; background: #eff6ff; padding: 15px; }
+.confirmationSubmit strong { color: #102a56; font-size: .93rem; }
+.confirmationSubmit p { margin: 4px 0 0; color: #52657e; font-size: .79rem; line-height: 1.45; }
+.confirmationSubmit input { min-height: 42px; width: 100%; border: 1px solid #9fc2ed; border-radius: 9px; background: #fff; padding: 0 11px; color: #172033; font: .8rem/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.confirmationSubmit .admin-alert { grid-column: 1 / -1; margin: 0; }
+
 .pending {
   display: grid;
   gap: 10px;
@@ -862,6 +917,17 @@
   .previewEditor { padding: 17px; }
   .previewEditor > header { align-items: stretch; flex-direction: column; }
   .previewEditor > header .admin-button { justify-content: center; }
+  .confirmationPreview { padding: 17px; }
+  .confirmationHeader { align-items: stretch; flex-direction: column; }
+  .confirmationHeaderActions { align-items: stretch; justify-content: flex-start; }
+  .confirmationStatus { align-self: flex-start; }
+  .confirmationMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .confirmationMetrics > div:nth-child(2) { border-right: 0; }
+  .confirmationMetrics > div:nth-child(-n+2) { border-bottom: 1px solid #e5edf7; }
+  .confirmationAdd, .confirmationSubmit { grid-template-columns: 1fr; align-items: stretch; }
+  .confirmationAdd > div { display: grid; grid-template-columns: 1fr 1fr; }
+  .confirmationAdd .admin-button, .confirmationSubmit .admin-button { justify-content: center; }
+  .confirmationChecks { grid-template-columns: 1fr; }
   .layout { grid-template-columns: 1fr; }
   .tocShell { display: none; }
 

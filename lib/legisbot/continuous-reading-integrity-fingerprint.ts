@@ -10,6 +10,7 @@ export function continuousReadingIntegrityFingerprint(report: ContinuousReadingS
     prepared: report.preparedReferenceCount,
     orphan: report.orphanQuestionCount,
     pending: report.pendingAssociationCount,
+    articleContinuity: report.articleContinuity ?? null,
     status: report.status,
     reasons: [...report.reasons].sort(),
   });

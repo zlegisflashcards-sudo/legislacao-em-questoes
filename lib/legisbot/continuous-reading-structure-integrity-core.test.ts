@@ -43,7 +43,7 @@ describe("integridade estrutural da leitura contínua", () => {
     expect(unassigned.reports.every((item) => item.status !== "ready")).toBe(true);
   });
 
-  it("não aprova bloco não preparado, associação ambígua ou inventário incompleto", () => {
+  it("não aprova bloco não preparado ou associação ambígua, mas mantém o inventário como aviso", () => {
     const unprepared = base();
     unprepared.references = [{ ...unprepared.references[0], prepared: false }];
     expect(resolveContinuousReadingStructureIntegrity(unprepared).reports.find((item) => item.structureId === 2)?.reasons).toContain("reference_unprepared");
@@ -52,7 +52,7 @@ describe("integridade estrutural da leitura contínua", () => {
     expect(resolveContinuousReadingStructureIntegrity(ambiguous).reports.find((item) => item.structureId === 2)?.status).toBe("ambiguous");
     const inventory = resolveContinuousReadingStructureIntegrity({ ...base(), inventory: [{ ordem: "0099.0.00.0.00.0" }] });
     expect(inventory.unassigned.inventoryOrders).toEqual(["0099.0.00.0.00.0"]);
-    expect(inventory.reports.every((item) => item.status !== "ready")).toBe(true);
+    expect(inventory.reports.find((item) => item.structureId === 2)?.status).toBe("ready");
   });
 
   it("mantém leis sem hierarquia compatíveis e pendentes de diagnóstico estrutural", () => {
@@ -60,8 +60,8 @@ describe("integridade estrutural da leitura contínua", () => {
     expect(result).toEqual({ hasStructures: false, reports: [], unassigned: { orphanQuestionIds: [], referenceIds: [], inventoryOrders: [] } });
   });
 
-  it("trata inventário indisponível como falta de prova, não como cobertura completa", () => {
+  it("não bloqueia a estrutura quando o inventário oficial está indisponível", () => {
     const result = resolveContinuousReadingStructureIntegrity({ ...base(), inventoryAvailable: false, inventory: [] });
-    expect(result.reports.find((item) => item.structureId === 2)).toMatchObject({ status: "pending_blocks", reasons: expect.arrayContaining(["inventory_unavailable"]) });
+    expect(result.reports.find((item) => item.structureId === 2)).toMatchObject({ status: "ready", reasons: [] });
   });
 });

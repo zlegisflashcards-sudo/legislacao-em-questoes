@@ -23,4 +23,13 @@ describe("administração da associação estrutural das referências", () => {
     expect(server).toContain("admin_comercial_auditar");
     expect(server).toContain('entidade: "referencia_legislativa_estrutura"');
   });
+
+  it("confirma em lote somente sugestões unânimes ainda sem vínculo editorial", () => {
+    expect(server).toContain("confirmSuggestedLegislativeReferenceStructureAssociations");
+    expect(server).toContain('association.suggestionStatus === "associated"');
+    expect(server).toContain("association.suggestedStructureId === structureId");
+    expect(server).toContain('.is("structure_id", null)');
+    expect(server).toContain('origem: "sugestao_estrutural_por_questoes"');
+  });
+
 });

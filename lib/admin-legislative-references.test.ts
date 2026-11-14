@@ -69,4 +69,15 @@ describe("base legislativa persistente", () => {
     expect(source).toContain("O texto ou os dados do bloco mudaram desde a prévia");
     expect(source).toContain('from("legislative_references").insert');
   });
+
+  it("permite importar já vinculado à estrutura escolhida, sem substituir vínculo editorial", () => {
+    const source = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    const route = readFileSync("app/api/admin/artigos/importar-documento/route.ts", "utf8");
+    expect(source).toContain('from("law_structure").select("id")');
+    expect(source).toContain('eq("lei_id", law.data.id).eq("ativo", true)');
+    expect(source).toContain("structureTrail");
+    expect(source).toContain("...(reference.structureId ? { structure_id: reference.structureId } : {})");
+    expect(source).toContain("!existing?.structureId ? { structure_id: reference.structureId } : {}");
+    expect(route).toContain('const structureId = String(form.get("structure_id") ?? "")');
+  });
 });

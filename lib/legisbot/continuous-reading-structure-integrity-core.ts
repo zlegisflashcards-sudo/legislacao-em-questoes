@@ -1,10 +1,9 @@
 import type { QuestionReferenceResolution } from "./continuous-reading-core";
 import { continuousReadingStructureDescendantIds, continuousReadingStructurePath, type ContinuousReadingReferenceStructureAssociation, type ContinuousReadingStructureNode } from "./continuous-reading-structure-core";
+import { resolveContinuousReadingArticleContinuity, type ArticleContinuity } from "./continuous-reading-article-continuity-core";
 
 export type StructureIntegrityStatus = "ready" | "pending_blocks" | "orphan_questions" | "ambiguous" | "empty";
 export type StructureIntegrityReason =
-  | "inventory_unavailable"
-  | "inventory_unattributed"
   | "reference_unattributed"
   | "reference_unprepared"
   | "reference_unassociated"
@@ -12,7 +11,8 @@ export type StructureIntegrityReason =
   | "orphan_question"
   | "orphan_question_unattributed"
   | "question_structure_mismatch"
-  | "descendant_empty";
+  | "descendant_empty"
+  | "article_gap_confirmed";
 
 export type StructureIntegrityReference = {
   id: string;
@@ -36,6 +36,7 @@ export type ContinuousReadingStructureIntegrity = {
   preparedReferenceCount: number;
   orphanQuestionCount: number;
   pendingAssociationCount: number;
+  articleContinuity?: ArticleContinuity;
   status: StructureIntegrityStatus;
   reasons: StructureIntegrityReason[];
 };
@@ -142,17 +143,14 @@ export function resolveContinuousReadingStructureIntegrity(input: {
     if (associations.some((item) => item.status === "unassociated" || item.status === "associated")) reasons.push("reference_unassociated");
     if (associations.some((item) => item.status === "ambiguous")) reasons.push("reference_ambiguous");
     if (referenceIds.some((id) => !referenceById.get(id)?.prepared)) reasons.push("reference_unprepared");
-    if (!input.inventoryAvailable) reasons.push("inventory_unavailable");
+    const articleContinuity = resolveContinuousReadingArticleContinuity({ orders: referenceIds.map((id) => referenceById.get(id)?.ordem ?? "") });
+    if (articleContinuity.confirmedMissingArticles.length) reasons.push("article_gap_confirmed");
     if (unassignedReferenceIds.length) reasons.push("reference_unattributed");
-    if (unassignedInventoryOrders.length) reasons.push("inventory_unattributed");
     if (unassignedOrphanQuestionIds.length) reasons.push("orphan_question_unattributed");
     // A estrutura superior só fica pronta se todos os seus ramos também têm
     // evidência suficiente; um ramo vazio não é convertido em cobertura.
     if (descendants.some((id) => id !== structure.id && !hasDirectElement(id))) reasons.push("descendant_empty");
-    const hasElements = questionIds.length > 0 || referenceIds.length > 0 || input.inventory.some((item) => {
-      const referenceId = inventoryByOrder.get(item.ordem.trim());
-      return referenceId ? referenceIds.includes(referenceId) : false;
-    });
+    const hasElements = questionIds.length > 0 || referenceIds.length > 0;
     const path = continuousReadingStructurePath(structure.id, input.structures).map((item) => (item as ContinuousReadingStructureNode & { nome?: string }).nome ?? String(item.id));
     return {
       structureId: structure.id,
@@ -163,6 +161,7 @@ export function resolveContinuousReadingStructureIntegrity(input: {
       preparedReferenceCount: referenceIds.filter((id) => Boolean(referenceById.get(id)?.prepared)).length,
       orphanQuestionCount,
       pendingAssociationCount: associations.filter((item) => item.status !== "editorial").length,
+      articleContinuity,
       status: summaryStatus(unique(reasons), hasElements),
       reasons: unique(reasons),
     };

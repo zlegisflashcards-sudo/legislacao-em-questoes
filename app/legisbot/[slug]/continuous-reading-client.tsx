@@ -230,7 +230,12 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
   const [loadingPages, setLoadingPages] = useState<Set<number>>(() => new Set());
-  const [loadedPages, setLoadedPages] = useState<Set<number>>(() => new Set(initialBlocks.length ? [0] : []));
+  const initialLoadedPages = useCallback(() => {
+    if (!initialBlocks.length) return new Set<number>();
+    if (adminPreview && initialBlocks.length >= prepared.length) return new Set(Array.from({ length: Math.ceil(prepared.length / PAGE_SIZE) }, (_, index) => index));
+    return new Set([0]);
+  }, [adminPreview, initialBlocks.length, prepared.length]);
+  const [loadedPages, setLoadedPages] = useState<Set<number>>(initialLoadedPages);
   const [failedPages, setFailedPages] = useState<Set<number>>(() => new Set());
   const [selected, setSelected] = useState<Block | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -303,8 +308,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   }, [loadPage, loadedPages, partialMode, visiblePrepared.length]);
 
   useEffect(() => {
-    setLoadedPages(new Set(initialBlocks.length ? [0] : []));
-  }, [initialBlocks, visiblePrepared]);
+    setLoadedPages(initialLoadedPages());
+  }, [initialBlocks, initialLoadedPages, visiblePrepared]);
 
   useEffect(() => {
     const referenceIds = [...blocks.keys()].filter((id) => !loadedHighlightReferencesRef.current.has(id)).slice(0, PAGE_SIZE);

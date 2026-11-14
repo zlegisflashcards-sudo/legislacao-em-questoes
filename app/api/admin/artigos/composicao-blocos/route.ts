@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { applyArticleBlockComposition, archiveArticleBlocks, previewArticleBlockComposition } from "@/lib/admin-article-block-composition";
+import { applyArticleBlockComposition, archiveArticleBlocks, previewArticleBlockComposition, taxArticleBlocks } from "@/lib/admin-article-block-composition";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,11 @@ export async function POST(request: Request) {
     }
     if (body.action === "archive") {
       const result = await archiveArticleBlocks({ lawSlug: body.law, referenceIds: body.reference_ids });
+      revalidatePath("/admin/artigos"); revalidatePath("/admin/artigos/legisbot-preview");
+      return NextResponse.json(result);
+    }
+    if (body.action === "tax") {
+      const result = await taxArticleBlocks({ lawSlug: body.law, referenceIds: body.reference_ids });
       revalidatePath("/admin/artigos"); revalidatePath("/admin/artigos/legisbot-preview");
       return NextResponse.json(result);
     }

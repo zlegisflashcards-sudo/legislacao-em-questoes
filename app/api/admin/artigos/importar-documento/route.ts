@@ -12,10 +12,11 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const action = String(form.get("action") ?? "");
     const lawSlug = String(form.get("law") ?? "");
+    const structureId = String(form.get("structure_id") ?? "");
     const file = form.get("file");
     if (!(file instanceof File) || !file.size) return NextResponse.json({ error: "Selecione um documento DOCX, TXT ou Markdown." }, { status: 400, headers });
     if (file.size > 2_000_000) return NextResponse.json({ error: "O documento pode ter no máximo 2 MB." }, { status: 413, headers });
-    const input = { lawSlug, name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+    const input = { lawSlug, name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), structureId };
     if (action === "preview") return NextResponse.json(await previewLegislativeDocumentImport(input), { headers });
     if (action === "apply") return NextResponse.json(await importLegislativeDocument({ ...input, expected: JSON.parse(String(form.get("expected") ?? "[]")) }), { headers });
     return NextResponse.json({ error: "Ação de importação inválida." }, { status: 400, headers });

@@ -52,5 +52,18 @@ describe("composição de blocos legislativos", () => {
       expect(readFileSync(file, "utf8")).toContain("situacao.is.null,situacao.neq.arquivada");
     }
   });
+
+  it("oferece taxação em lote sem alterar texto, Ordem ou vínculos", () => {
+    const service = readFileSync("lib/admin-article-block-composition.ts", "utf8");
+    const route = readFileSync("app/api/admin/artigos/composicao-blocos/route.ts", "utf8");
+    const component = readFileSync("components/admin/article-block-composition.tsx", "utf8");
+    expect(service).toContain("export async function taxArticleBlocks");
+    expect(service).toContain('situacao: "revogada"');
+    expect(service).toContain("lei_revogadora: null");
+    expect(service).toContain("revogado_em: new Date().toISOString()");
+    expect(route).toContain('body.action === "tax"');
+    expect(component).toContain("Taxar selecionados");
+    expect(component).toContain('action: "tax"');
+  });
 });
 import { readFileSync } from "node:fs";

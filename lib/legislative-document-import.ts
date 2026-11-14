@@ -1,7 +1,8 @@
 import { strFromU8, unzipSync } from "fflate";
 
-export type LegislativeDocumentReference = { ordem: string; identification: string; legislation: string };
-export type LegislativeDocumentParse = { references: LegislativeDocumentReference[]; rejected: string[] };
+/** `structureTrail` is documentary evidence, never an inferred question link. */
+export type LegislativeDocumentReference = { ordem: string; identification: string; legislation: string; structureTrail?: string[] };
+export type LegislativeDocumentParse = { references: LegislativeDocumentReference[]; rejected: string[]; structureMarkers: string[] };
 
 const decode = (value: string) => value.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 const escapeHtml = (value: string) => decode(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -52,7 +53,8 @@ function docxRunHtml(run: string) {
 
 function docxParagraphHtml(paragraph: string) {
   const runs = [...paragraph.matchAll(/<w:r(?:\s[^>]*)?>([\s\S]*?)<\/w:r>/gi)].map((match) => docxRunHtml(match[0])).join("");
-  return runs.trim() ? `<p>${runs}</p>` : "";
+  const style = /<w:pStyle\b[^>]*w:val\s*=\s*["']([^"']+)["'][^>]*\/?\s*>/i.exec(paragraph)?.[1] ?? "";
+  return runs.trim() ? `<p${style ? ` data-legis-style="${escapeHtml(style)}"` : ""}>${runs}</p>` : "";
 }
 
 function docxTableHtml(table: string) {
@@ -84,26 +86,85 @@ export function legislativeDocumentParagraphs(name: string, bytes: Uint8Array) {
 type Context = { article?: number; articleLetter?: string; paragraph?: number; paragraphLetter?: string; inciso?: number; incisoLetter?: string };
 function orderOf(value: Context) { return [String(value.article ?? 0).padStart(4, "0"), value.articleLetter ?? "0", String(value.paragraph ?? 0).padStart(2, "0"), value.paragraphLetter ?? "0", String(value.inciso ?? 0).padStart(2, "0"), value.incisoLetter ?? "0"].join("."); }
 
+function isExplicitBlockHeading(value: string) {
+  const source = value.trim();
+  if (/^#\s+/.test(source)) return true;
+  const style = /data-legis-style\s*=\s*["']([^"']+)["']/i.exec(source)?.[1] ?? "";
+  return /(?:heading|title|titulo)\s*1$/i.test(normalizedIdentifier(style));
+}
+
+function romanToNumber(value: string) {
+  const symbols: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100 };
+  const roman = value.toUpperCase();
+  if (!/^[IVXLC]+$/.test(roman)) return null;
+  let total = 0;
+  for (let index = 0; index < roman.length; index += 1) {
+    const current = symbols[roman[index]];
+    const next = symbols[roman[index + 1]] ?? 0;
+    total += current < next ? -current : current;
+  }
+  return total > 0 && total <= 99 ? total : null;
+}
+
+/** Only an explicit Título 1 / `#` heading can start a new editorial block. */
 function heading(value: string, context: Context): Context | null {
+  if (!isExplicitBlockHeading(value)) return null;
   const line = value.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/^#{1,6}\s*/, "").trim();
   const article = /^art\.?\s*(\d+)\s*(?:º|o)?(?:\s*-\s*([a-z]))?\.?$/i.exec(line);
   if (article) return { article: Number(article[1]), articleLetter: article[2]?.toLowerCase() };
   const paragraph = /^§\s*(\d+|único)\s*(?:º|o)?(?:\s*-\s*([a-z]))?\.?$/i.exec(line);
-  // Only numbered paragraphs have their own prepared block. Parágrafo único,
-  // incisos and alíneas stay in the current continuous reading block.
+  // Parágrafo único has no distinct canonical Ordem; it remains with the caput.
   if (paragraph && context.article && paragraph[1].toLowerCase() !== "único") return { ...context, paragraph: Number(paragraph[1]), paragraphLetter: paragraph[2]?.toLowerCase(), inciso: undefined, incisoLetter: undefined };
+  const inciso = /^(?:inciso\s+)?([ivxlc]+)\.?$/i.exec(line);
+  const incisoNumber = inciso ? romanToNumber(inciso[1]) : null;
+  if (incisoNumber && context.article) return { ...context, inciso: incisoNumber, incisoLetter: undefined };
   return null;
+}
+
+type StructureMarker = { label: string; rank: number };
+
+function documentStructureMarker(value: string): StructureMarker | null {
+  const source = value.trim();
+  const markdown = /^(#{2,6})\s+/.exec(source);
+  const style = /data-legis-style\s*=\s*["']([^"']+)["']/i.exec(source)?.[1] ?? "";
+  const styleNormalized = normalizedIdentifier(style).replace(/\s/g, "");
+  const plainLabel = plain(source).replace(/^#{1,6}\s*/, "").trim();
+  const type = /^(parte|livro|t[ií]tulo|cap[ií]tulo|se[cç][aã]o|subse[cç][aã]o)\b/i.exec(plainLabel)?.[1];
+  if (!type) return null;
+  // Markdown uses ##+ and DOCX uses Título 2–6. Plain TXT may use an
+  // all-caps legal heading. An ordinary sentence mentioning a chapter never
+  // becomes a structural marker merely because it contains the word.
+  const formatted = Boolean(markdown) || /(?:heading|title|titulo)[2-6]/i.test(styleNormalized) || plainLabel === plainLabel.toUpperCase();
+  if (!formatted) return null;
+  const normalizedType = normalizedIdentifier(type);
+  const rank = normalizedType === "parte" ? 1 : normalizedType === "livro" ? 2 : normalizedType === "titulo" ? 3 : normalizedType === "capitulo" ? 4 : normalizedType === "secao" ? 5 : 6;
+  return { label: plainLabel, rank };
+}
+
+function nextStructureLevels(current: string[], marker: StructureMarker) {
+  const next = current.slice(0, marker.rank - 1);
+  next[marker.rank - 1] = marker.label;
+  return next;
 }
 
 /** Parses one article and its children. Text is kept per heading; no parent text is copied into child references. */
 export function parseLegislativeDocument(paragraphs: string[]): LegislativeDocumentParse {
   const references: LegislativeDocumentReference[] = [];
   const rejected: string[] = [];
+  const structureMarkers: string[] = [];
   let context: Context = {};
-  let current: { context: Context; identification: string; lines: string[] } | null = null;
-  const flush = () => { if (!current) return; const importedBody = current.lines.join("\n\n").trim(); const legislation = preserveVisibleIdentifier(importedBody, current.identification); if (!legislation) rejected.push(`${current.identification}: sem texto legislativo.`); else references.push({ ordem: orderOf(current.context), identification: current.identification, legislation }); current = null; };
+  let structureLevels: string[] = [];
+  let current: { context: Context; identification: string; lines: string[]; structureTrail: string[] } | null = null;
+  const flush = () => { if (!current) return; const importedBody = current.lines.join("\n\n").trim(); const legislation = preserveVisibleIdentifier(importedBody, current.identification); if (!legislation) rejected.push(`${current.identification}: sem texto legislativo.`); else references.push({ ordem: orderOf(current.context), identification: current.identification, legislation, ...(current.structureTrail.length ? { structureTrail: current.structureTrail } : {}) }); current = null; };
   for (const paragraph of paragraphs) {
     const plainParagraph = decode(paragraph.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "")).trim();
+    const marker = documentStructureMarker(paragraph);
+    if (marker) {
+      flush();
+      structureLevels = nextStructureLevels(structureLevels, marker);
+      structureMarkers.push(marker.label);
+      continue;
+    }
     const next = heading(paragraph, context);
     if (next) {
       flush();
@@ -112,14 +173,14 @@ export function parseLegislativeDocument(paragraphs: string[]): LegislativeDocum
       // faz parte do HTML legislativo salvo. No DOCX, o parágrafo seguinte é o
       // texto normativo e conserva o seu próprio “Art.”/“§”, quando houver.
       // Assim não repetimos o Título 1 dentro da leitura contínua.
-      current = { context, identification: plainParagraph.replace(/^#{1,6}\s*/, "").trim(), lines: [] };
+      current = { context, identification: plainParagraph.replace(/^#{1,6}\s*/, "").trim(), lines: [], structureTrail: structureLevels.filter(Boolean) };
       continue;
     }
-    if (!current) { rejected.push(`${plainParagraph.slice(0, 80)}: texto fora de um título estrutural.`); continue; }
+    if (!current) { rejected.push(`${plainParagraph.slice(0, 80)}: texto fora de um Título 1 de dispositivo.`); continue; }
     current.lines.push(paragraph);
   }
   flush();
   const unique = new Map<string, LegislativeDocumentReference>();
   for (const reference of references) { if (unique.has(reference.ordem)) rejected.push(`${reference.identification}: Ordem repetida (${reference.ordem}).`); else unique.set(reference.ordem, reference); }
-  return { references: [...unique.values()], rejected };
+  return { references: [...unique.values()], rejected, structureMarkers };
 }

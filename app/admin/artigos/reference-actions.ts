@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { archiveLegislativeReference, changeLegislativeReferenceOrder, clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, resolveLegislativeReferenceShadow, saveLegislativeReference, seedLegislativeReferences, setLegislativeReferenceInactive } from "@/lib/admin-legislative-references";
-import { setAdminLegislativeReferenceStructureAssociation } from "@/lib/admin-legislative-reference-structures";
-import { LegislativeStructureReleaseError, setAdminLegislativeStructureRelease } from "@/lib/admin-legislative-structure-releases";
+import { confirmSuggestedLegislativeReferenceStructureAssociations, setAdminLegislativeReferenceStructureAssociation } from "@/lib/admin-legislative-reference-structures";
+import { confirmAndReleaseLegislativeStructure, LegislativeStructureReleaseError, setAdminLegislativeStructureRelease } from "@/lib/admin-legislative-structure-releases";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -14,7 +14,6 @@ export async function prepareLegislativeReferences(formData: FormData) {
   revalidatePath("/admin/artigos");
   redirect(`/admin/artigos?aba=artigos&lei=${encodeURIComponent(slug)}&preparacao=concluida`);
 }
-
 export async function importQuestionLegislation(formData: FormData) {
   const slug = value(formData, "slug").toLowerCase();
   const result = await importQuestionLegislationToReferences(slug);
@@ -104,6 +103,16 @@ export async function savePreparedLegislativeReferenceStructureAssociation(formD
   redirect(`/admin/artigos/${encodeURIComponent(slug)}/${encodeURIComponent(ordem)}?aba=artigo&estrutura_referencia=${result.structureId === null ? "removida" : "salva"}`);
 }
 
+/** Confirma em lote somente as sugestões unânimes; exceções permanecem para edição individual. */
+export async function confirmSuggestedLegislativeReferenceStructures(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  const result = await confirmSuggestedLegislativeReferenceStructureAssociations({ lawSlug: slug, structureId: value(formData, "structure_id") });
+  revalidatePath("/admin/artigos");
+  revalidatePath("/admin/artigos/legisbot-preview");
+  redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&associacoes_confirmadas=${result.confirmed}&associacoes_ignoradas=${result.skipped}`);
+}
+
+
 export async function resolvePreparedLegislativeShadow(formData: FormData) {
   const slug = value(formData, "slug").toLowerCase();
   const ordem = value(formData, "ordem");
@@ -117,12 +126,27 @@ export async function setLegislativeStructureRelease(formData: FormData) {
   const slug = value(formData, "slug").toLowerCase();
   const structureId = value(formData, "structure_id");
   const action = value(formData, "release_action");
+  let result: Awaited<ReturnType<typeof setAdminLegislativeStructureRelease>>;
   try {
-    const result = await setAdminLegislativeStructureRelease({ lawSlug: slug, structureId, action, integrityFingerprint: value(formData, "integrity_fingerprint") });
+    result = await setAdminLegislativeStructureRelease({ lawSlug: slug, structureId, action, integrityFingerprint: value(formData, "integrity_fingerprint") });
     revalidatePath("/admin/artigos/legisbot-preview");
-    redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao=${result.changed ? result.status === "released" ? "liberada" : "bloqueada" : "sem_alteracao"}`);
   } catch (error) {
     const message = error instanceof LegislativeStructureReleaseError ? error.code : "database";
     redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao_erro=${encodeURIComponent(message)}`);
   }
+  redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao=${result.changed ? result.status === "released" ? "liberada" : "bloqueada" : "sem_alteracao"}`);
+}
+
+export async function confirmAndReleaseLegislativeStructureAction(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  const structureId = value(formData, "structure_id");
+  let result: Awaited<ReturnType<typeof confirmAndReleaseLegislativeStructure>>;
+  try {
+    result = await confirmAndReleaseLegislativeStructure({ lawSlug: slug, structureId, referenceIds: formData.getAll("reference_id") });
+    revalidatePath("/admin/artigos/legisbot-preview");
+  } catch (error) {
+    const code = error instanceof LegislativeStructureReleaseError ? error.code : "database";
+    redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&estrutura=${encodeURIComponent(structureId)}&confirmacao_erro=${encodeURIComponent(code)}`);
+  }
+  redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&estrutura=${encodeURIComponent(structureId)}&confirmacao_liberada=${result.associated}`);
 }

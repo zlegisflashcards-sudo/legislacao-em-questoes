@@ -301,7 +301,7 @@ export async function clearLegislativeReferences(lawSlug: string) {
   return { removed: existing.count ?? 0 };
 }
 
-async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8Array) {
+async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8Array, rawStructureId?: unknown) {
   const slug = text(lawSlug, 160).toLowerCase();
   if (!slug) throw new Error("Escolha uma legislação antes de importar o documento.");
   const parsed = parseLegislativeDocument(legislativeDocumentParagraphs(name, bytes));
@@ -309,20 +309,61 @@ async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8
   const db = getSupabaseServerClient();
   const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
-  const stored = await db.from("legislative_references").select("ordem,legislacao").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem)).or("situacao.is.null,situacao.neq.arquivada");
+  const structureId = Number(rawStructureId);
+  const selectedStructureId = Number.isInteger(structureId) && structureId > 0 ? structureId : null;
+  if (rawStructureId && !selectedStructureId) throw new Error("A estrutura selecionada é inválida.");
+  if (selectedStructureId) {
+    const structure = await db.from("law_structure").select("id").eq("id", selectedStructureId).eq("lei_id", law.data.id).eq("ativo", true).maybeSingle();
+    if (structure.error || !structure.data) throw new Error("A estrutura selecionada não pertence a esta lei ou não está ativa.");
+  }
+  const structureResult = parsed.references.some((reference) => reference.structureTrail?.length)
+    ? await db.from("law_structure").select("id,parent_id,nome,ordem").eq("lei_id", law.data.id).eq("ativo", true).order("ordem").order("id")
+    : { data: [], error: null };
+  if (structureResult.error) throw new Error("Não foi possível consultar as estruturas cadastradas da lei.");
+  const structures = (structureResult.data ?? []) as Array<{ id: number; parent_id: number | null; nome: string; ordem: number }>;
+  const normalizeStructureName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, " ").trim().toLowerCase();
+  const byId = new Map(structures.map((structure) => [Number(structure.id), structure]));
+  const pathOf = (structure: { id: number; parent_id: number | null; nome: string }) => {
+    const path: string[] = [];
+    let current: { id: number; parent_id: number | null; nome: string } | undefined = structure;
+    while (current) { path.unshift(normalizeStructureName(current.nome)); current = current.parent_id === null ? undefined : byId.get(Number(current.parent_id)); }
+    return path;
+  };
+  const structureForTrail = (trail: string[] | undefined) => {
+    if (!trail?.length) return { id: selectedStructureId, status: selectedStructureId ? "selecionada" : "sem_marcador" } as const;
+    const markers = trail.map(normalizeStructureName);
+    const matches = structures.filter((structure) => {
+      const path = pathOf(structure);
+      let cursor = 0;
+      for (const marker of markers) { cursor = path.indexOf(marker, cursor); if (cursor < 0) return false; cursor += 1; }
+      return path.at(-1) === markers.at(-1);
+    });
+    return matches.length === 1 ? { id: Number(matches[0].id), status: "documento" } as const : { id: null, status: matches.length ? "ambiguo" : "nao_encontrado" } as const;
+  };
+  const stored = await db.from("legislative_references").select("ordem,legislacao,structure_id").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem)).or("situacao.is.null,situacao.neq.arquivada");
   if (stored.error) throw new Error("Não foi possível verificar a base legislativa.");
-  const existing = new Map((stored.data ?? []).map((row) => [String(row.ordem), typeof row.legislacao === "string" && row.legislacao.trim().length > 0]));
-  const candidates = parsed.references.map((reference) => ({ ...reference, operation: existing.has(reference.ordem) ? existing.get(reference.ordem) ? "preservar" as const : "preencher" as const : "criar" as const }));
-  return { slug, lawId: Number(law.data.id), references: candidates, rejected: parsed.rejected };
+  const existing = new Map((stored.data ?? []).map((row) => [String(row.ordem), {
+    hasLegislation: typeof row.legislacao === "string" && row.legislacao.trim().length > 0,
+    structureId: typeof row.structure_id === "number" ? row.structure_id : null,
+  }]));
+  const candidates = parsed.references.map((reference) => {
+    const association = structureForTrail(reference.structureTrail);
+    return { ...reference, structureId: association.id, structureStatus: association.status, operation: existing.has(reference.ordem) ? existing.get(reference.ordem)?.hasLegislation ? "preservar" as const : "preencher" as const : "criar" as const };
+  });
+  return { slug, lawId: Number(law.data.id), structureId: selectedStructureId, existing, references: candidates, rejected: parsed.rejected };
 }
 
-export async function previewLegislativeDocumentImport(input: { lawSlug: string; name: string; bytes: Uint8Array }) {
+export async function previewLegislativeDocumentImport(input: { lawSlug: string; name: string; bytes: Uint8Array; structureId?: unknown }) {
   await exigirAdministrador();
-  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes);
+  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes, input.structureId);
   // A amostra é apenas de leitura: o HTML vem do parser e é sanitizado no
   // servidor antes de seguir para o componente administrativo.
   return {
-    ...preview,
+    slug: preview.slug,
+    lawId: preview.lawId,
+    structureId: preview.structureId,
+    references: preview.references,
+    rejected: preview.rejected,
     sample: preview.references.slice(0, 20).map((reference) => ({
       ...reference,
       displayLegislation: sanitizeLegalHtmlCore(reference.legislation),
@@ -330,11 +371,11 @@ export async function previewLegislativeDocumentImport(input: { lawSlug: string;
   };
 }
 
-export async function importLegislativeDocument(input: { lawSlug: string; name: string; bytes: Uint8Array; expected: unknown }) {
+export async function importLegislativeDocument(input: { lawSlug: string; name: string; bytes: Uint8Array; expected: unknown; structureId?: unknown }) {
   await exigirAdministrador();
-  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes);
+  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes, input.structureId);
   const expected = Array.isArray(input.expected) ? input.expected : [];
-  const current = preview.references.map(({ ordem, identification, legislation, operation }) => ({ ordem, identification, legislation, operation }));
+  const current = preview.references.map(({ ordem, identification, legislation, operation, structureId, structureStatus }) => ({ ordem, identification, legislation, operation, structureId, structureStatus }));
   if (JSON.stringify(expected) !== JSON.stringify(current)) throw new Error("O documento ou a base mudaram desde a prévia. Gere uma nova prévia.");
   const db = getSupabaseServerClient();
   const inventory = await db.from("legislative_reference_inventory").upsert(preview.references.map((reference) => ({
@@ -351,11 +392,12 @@ export async function importLegislativeDocument(input: { lawSlug: string; name: 
   for (const reference of preview.references) {
     if (reference.operation === "preservar") { preserved += 1; continue; }
     if (reference.operation === "criar") {
-      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada" }).select("id").maybeSingle();
+      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", ...(reference.structureId ? { structure_id: reference.structureId } : {}) }).select("id").maybeSingle();
       if (inserted.error || !inserted.data) throw new Error("Não foi possível criar uma referência do documento.");
       created += 1;
     } else {
-      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", lei_revogadora: null, revogado_em: null }).eq("lei_id", preview.lawId).eq("ordem", reference.ordem).is("legislacao", null).select("id").maybeSingle();
+      const existing = preview.existing.get(reference.ordem);
+      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", lei_revogadora: null, revogado_em: null, ...(reference.structureId && !existing?.structureId ? { structure_id: reference.structureId } : {}) }).eq("lei_id", preview.lawId).eq("ordem", reference.ordem).is("legislacao", null).select("id").maybeSingle();
       if (updated.error) throw new Error("Não foi possível preencher uma referência do documento.");
       if (updated.data) filled += 1; else preserved += 1;
     }

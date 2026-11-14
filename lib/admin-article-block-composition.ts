@@ -77,6 +77,22 @@ export async function archiveArticleBlocks(input: { lawSlug: unknown; referenceI
   return { archived: ids.length };
 }
 
+/** Marks selected blocks as inactive for the interactive reading without changing their content or links. */
+export async function taxArticleBlocks(input: { lawSlug: unknown; referenceIds: unknown }) {
+  await exigirAdministrador();
+  const slug = value(input.lawSlug).toLowerCase();
+  const ids = Array.isArray(input.referenceIds) ? [...new Set(input.referenceIds.filter((id): id is string => typeof id === "string" && UUID.test(id)))] : [];
+  if (!slug || !ids.length || ids.length > 20) throw new Error("Selecione de 1 a 20 blocos da lei para taxar.");
+  const db = getSupabaseServerClient();
+  const selected = await db.from("legislative_references").select("id,lei_id").eq("slug", slug).in("id", ids).or("situacao.is.null,situacao.neq.arquivada");
+  if (selected.error || (selected.data ?? []).length !== ids.length) throw new Error("Um ou mais blocos não estão mais disponíveis nesta lei. Atualize a seleção antes de continuar.");
+  const lawIds = new Set((selected.data ?? []).map((row) => Number(row.lei_id)));
+  if (lawIds.size !== 1) throw new Error("Os blocos selecionados não pertencem à mesma lei.");
+  const taxed = await db.from("legislative_references").update({ situacao: "revogada", lei_revogadora: null, revogado_em: new Date().toISOString() }).eq("slug", slug).in("id", ids).select("id");
+  if (taxed.error || (taxed.data ?? []).length !== ids.length) throw new Error("Não foi possível taxar todos os blocos selecionados da base.");
+  return { taxed: ids.length };
+}
+
 /** The RPC is deliberately absent until the local migration is reviewed and applied. */
 export async function applyArticleBlockComposition(input: { operation: unknown; expected: unknown; commentTreatment: unknown }) {
   const user = await exigirAdministrador();

@@ -6,6 +6,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 import { resolveContinuousReadingIntegrity } from "@/lib/legisbot/continuous-reading-core";
 import { continuousReadingStructurePath, resolveContinuousReadingReferenceStructureAssociations } from "@/lib/legisbot/continuous-reading-structure-core";
+import { getAdminLegislativeStructureIntegrity } from "@/lib/admin-legislative-structure-integrity";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -131,4 +132,43 @@ export async function setAdminLegislativeReferenceStructureAssociation(input: { 
   });
   if (audit.error) console.error("Falha ao auditar associação estrutural da referência", { referenceId, code: audit.error.code });
   return { id: String(updated.data.id), structureId: updated.data.structure_id === null ? null : Number(updated.data.structure_id) };
+}
+
+/**
+ * Confirma em lote somente sugestões unânimes calculadas pela resolução já
+ * existente. Questões servem como evidência; nenhuma associação ambígua ou
+ * ausência de evidência é gravada automaticamente.
+ */
+export async function confirmSuggestedLegislativeReferenceStructureAssociations(input: { lawSlug: unknown; structureId: unknown }) {
+  const user = await requireAdmin();
+  const slug = typeof input.lawSlug === "string" ? input.lawSlug.trim().toLowerCase() : "";
+  const structureId = typeof input.structureId === "number" ? input.structureId : typeof input.structureId === "string" && /^\d+$/.test(input.structureId) ? Number(input.structureId) : NaN;
+  if (!slug || !Number.isSafeInteger(structureId) || structureId <= 0) throw new Error("Lei ou estrutura legislativa inválida.");
+  const diagnostic = await getAdminLegislativeStructureIntegrity(slug);
+  if (!diagnostic || !diagnostic.structureNodes.some((structure) => structure.id === structureId)) throw new Error("A estrutura selecionada não pertence a esta lei.");
+  const candidateIds = diagnostic.referenceAssociations
+    .filter((association) => association.currentStructureId === null && association.suggestionStatus === "associated" && association.suggestedStructureId === structureId)
+    .map((association) => association.referenceId);
+  if (!candidateIds.length) return { confirmed: 0, skipped: 0 };
+
+  const updated = await getSupabaseServerClient().from("legislative_references")
+    .update({ structure_id: structureId })
+    .eq("lei_id", diagnostic.law.id)
+    .is("structure_id", null)
+    .in("id", candidateIds)
+    .select("id");
+  throwIfStructureColumnIsMissing(updated.error);
+  if (updated.error) throw new Error("Não foi possível confirmar as associações estruturais sugeridas.");
+  const confirmedIds = (updated.data ?? []).map((row) => String(row.id));
+  const audit = await getSupabaseServerClient().rpc("admin_comercial_auditar", {
+    p_ator_user_id: user.id,
+    p_acao: "atualizar",
+    p_entidade: "referencia_legislativa_estrutura",
+    p_entidade_id: String(structureId),
+    p_anterior: { structure_id: null, referencias_sugeridas: candidateIds.length },
+    p_posterior: { structure_id: structureId, referencias_confirmadas: confirmedIds.length },
+    p_detalhes: { origem: "sugestao_estrutural_por_questoes", lei_id: diagnostic.law.id, reference_ids: confirmedIds },
+  });
+  if (audit.error) console.error("Falha ao auditar confirmação em lote da associação estrutural", { structureId, code: audit.error.code });
+  return { confirmed: confirmedIds.length, skipped: candidateIds.length - confirmedIds.length };
 }

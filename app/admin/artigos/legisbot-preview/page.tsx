@@ -8,6 +8,7 @@ import { getAdministrativeLegislativePreview } from "@/lib/admin-legislative-pre
 import { sanitizeLegalHtmlCore } from "@/lib/legisbot/sanitize-legal-html-core";
 import { getAdminLegislativeStructureReleaseDashboard } from "@/lib/admin-legislative-structure-releases";
 import { LegislativeStructureReleaseDashboard } from "@/components/admin/legislative-structure-release-dashboard";
+import { LegislativeStructureConfirmationPreview } from "@/components/admin/legislative-structure-confirmation-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ function statusLabel(status: "prepared" | "pending" | "revoked") {
   return status === "prepared" ? "Legislação preparada" : status === "revoked" ? "Exibição taxada e cinza" : "Legislação pendente";
 }
 
-export default async function LegisBotPreviewPage({ searchParams }: { searchParams: Promise<{ lei?: string; editar?: string; referencia?: string; sombra?: string; filtro?: string; liberacao?: string; liberacao_erro?: string }> }) {
+export default async function LegisBotPreviewPage({ searchParams }: { searchParams: Promise<{ lei?: string; editar?: string; referencia?: string; sombra?: string; filtro?: string; liberacao?: string; liberacao_erro?: string; associacoes_confirmadas?: string; associacoes_ignoradas?: string; estrutura?: string; incluir?: string; confirmacao_liberada?: string; confirmacao_erro?: string }> }) {
   await exigirAdministrador();
   const query = await searchParams;
   const slug = query.lei?.trim().toLowerCase() ?? "";
@@ -41,6 +42,9 @@ export default async function LegisBotPreviewPage({ searchParams }: { searchPara
     const studentReady = readiness.every((item) => item.ready);
     const releaseDashboard = await getAdminLegislativeStructureReleaseDashboard(slug);
     const lawAvailable = Boolean(releaseDashboard?.law.ativo && releaseDashboard.law.status_publicacao === "ativa");
+    const selectedStructureId = /^\d+$/.test(query.estrutura ?? "") ? Number(query.estrutura) : null;
+    const selectedStructure = selectedStructureId === null ? null : releaseDashboard?.structures.find((item) => item.structureId === selectedStructureId) ?? null;
+    const includedIds = [...new Set((query.incluir ?? "").split(/[\s,;]+/).filter((value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)))].slice(0, 100);
     return <main className={`${styles.page} admin-shell`}><PreviewShell slug={slug}>
       <section className={styles.shell}>
         <header className={styles.hero}>
@@ -51,9 +55,13 @@ export default async function LegisBotPreviewPage({ searchParams }: { searchPara
         </header>
         <section className={`${styles.studentReadiness} ${studentReady ? styles.studentReadinessReady : ""}`} aria-live="polite"><strong>{studentReady ? "Pronta para ser a Lei Interativa padrão do aluno" : "O que falta para esta ser a Lei Interativa padrão do aluno"}</strong>{studentReady ? <div className={styles.studentReadinessActions}><p>A leitura tem cobertura editorial suficiente: não há artigos sombra, questões órfãs ou Ordens sem posição.</p><Link className="admin-button secondary" href={`/legisbot/${encodeURIComponent(slug)}`} target="_blank" rel="noopener noreferrer">Abrir visão do aluno ↗</Link></div> : <ul>{readiness.filter((item) => !item.ready).map((item) => <li key={item.text}>{item.text}</li>)}</ul>}</section>
         {query.referencia === "salva" ? <p className="admin-alert success">A referência foi salva. A prévia foi atualizada sem alterar nenhuma questão.</p> : null}
+        {query.associacoes_confirmadas ? <p className="admin-alert success">{query.associacoes_confirmadas} associação(ões) estrutural(is) sugerida(s) foram confirmadas. {query.associacoes_ignoradas && query.associacoes_ignoradas !== "0" ? `${query.associacoes_ignoradas} não foram alterada(s), pois mudaram antes da confirmação.` : "Você pode ajustar qualquer exceção na edição individual do bloco."}</p> : null}
         {query.liberacao === "liberada" ? <p className="admin-alert success">A estrutura foi liberada manualmente. A Lei Interativa pública ainda não utiliza liberações por estrutura nesta etapa.</p> : query.liberacao === "bloqueada" ? <p className="admin-alert success">A estrutura foi bloqueada manualmente.</p> : query.liberacao === "sem_alteracao" ? <p className="admin-alert">A estrutura já possuía esse estado de liberação.</p> : null}
         {query.liberacao_erro === "not_ready" ? <p className="admin-alert error">A estrutura não está pronta. Atualize o diagnóstico e resolva as pendências antes de liberar.</p> : query.liberacao_erro === "blocked_descendant" ? <p className="admin-alert error">A liberação foi recusada porque existe um descendente bloqueado explicitamente.</p> : query.liberacao_erro === "law_unavailable" ? <p className="admin-alert error">A lei não está ativa para disponibilização pública.</p> : query.liberacao_erro === "migration_pending" ? <p className="admin-alert error">A migration de liberação por estrutura ainda não foi aplicada.</p> : query.liberacao_erro ? <p className="admin-alert error">Não foi possível concluir a operação de liberação. O estado não foi confirmado.</p> : null}
+        {query.confirmacao_liberada ? <p className="admin-alert success">{query.confirmacao_liberada} bloco(s) foram associados e a estrutura foi liberada em uma única operação.</p> : null}
+        {query.confirmacao_erro === "not_ready" ? <p className="admin-alert error">A confirmação foi recusada porque ainda há pendências impeditivas no recorte.</p> : query.confirmacao_erro === "stale_integrity" ? <p className="admin-alert error">Os dados mudaram desde a prévia. Atualize a confirmação antes de tentar novamente.</p> : query.confirmacao_erro === "migration_pending" ? <p className="admin-alert error">A migration da confirmação transacional ainda não foi aplicada.</p> : query.confirmacao_erro ? <p className="admin-alert error">A confirmação não foi concluída. Nenhum vínculo ou liberação foi gravado.</p> : null}
         {releaseDashboard ? <LegislativeStructureReleaseDashboard slug={slug} migrationAvailable={releaseDashboard.migrationAvailable} rows={releaseDashboard.structures} lawAvailable={lawAvailable} /> : null}
+        {releaseDashboard && selectedStructure ? <LegislativeStructureConfirmationPreview slug={slug} structure={{ id: selectedStructure.structureId, label: selectedStructure.path.join(" › ") || selectedStructure.name, activeQuestionCount: selectedStructure.activeQuestionCount, preparedReferenceCount: selectedStructure.preparedReferenceCount }} references={releaseDashboard.referenceAssociations} includedIds={includedIds} orphanQuestions={selectedStructure.orphanQuestionCount} shadowArticles={preview.shadowArticles.length} possibleMissingArticles={selectedStructure.articleContinuity?.possibleMissingArticles ?? []} migrationAvailable={releaseDashboard.confirmationAvailable} /> : null}
         {query.sombra === "criado" ? <p className="admin-alert success">Bloco legislativo criado a partir do texto do documento oficial.</p> : query.sombra === "revogado" ? <p className="admin-alert success">Dispositivo registrado como revogado; o texto oficial foi preservado para consulta.</p> : null}
         <form className={styles.previewFilter}><input type="hidden" name="lei" value={slug}/><label>Exibir<select name="filtro" defaultValue={filter}><option value="todas">Todos os blocos legislativos</option><option value="sombra">Artigos sombra</option><option value="orfas">Questões órfãs</option></select></label><button className="admin-button secondary">Aplicar filtro</button></form>
         {preview.unpositionedQuestions.length && filter !== "orfas" ? <p className="admin-alert"><strong>{preview.unpositionedQuestions.length} questão(ões) têm Ordem não interpretável:</strong> elas não podem ser posicionadas automaticamente na leitura. Revise-as na Gestão de Questões.</p> : null}
