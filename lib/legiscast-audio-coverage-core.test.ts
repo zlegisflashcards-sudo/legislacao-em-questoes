@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { attachConfirmedLegiscastAudioCoverage, resolveLegiscastTrackForStructure } from "./legiscast-audio-coverage-core";
 
 describe("cobertura segura do áudio LegisCast", () => {
-  it("prioriza o áudio ativo diretamente vinculado", () => {
-    expect(resolveLegiscastTrackForStructure({ structureId: 2, tracks: [{ id: "parent", structureId: 1, active: true, coveredStructureIds: [2] }, { id: "direct", structureId: 2, active: true }] })).toMatchObject({ source: "direct", track: { id: "direct" } });
+  it("não esconde uma sobreposição entre áudio direto e cobertura editorial", () => {
+    expect(resolveLegiscastTrackForStructure({ structureId: 2, tracks: [{ id: "parent", structureId: 1, active: true, coveredStructureIds: [2] }, { id: "direct", structureId: 2, active: true }] })).toEqual({ pending: "ambiguous", source: "direct", trackIds: ["direct", "parent"] });
   });
   it("aceita cobertura editorial somente quando explícita", () => {
     expect(resolveLegiscastTrackForStructure({ structureId: 2, tracks: [{ id: "parent", structureId: 1, active: true, coveredStructureIds: [2] }] })).toMatchObject({ source: "editorial" });

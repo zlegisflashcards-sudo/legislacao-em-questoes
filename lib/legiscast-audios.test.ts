@@ -196,6 +196,18 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).toContain("Áudio desatualizado");
   });
 
+  it("calcula duplicidades no servidor e as separa das sobreposições editoriais", () => {
+    expect(admin).toContain("findLegiscastAudioConflicts");
+    expect(admin).toContain("duplicateConflicts");
+    expect(adminClient).toContain("Possível duplicidade");
+    expect(adminClient).toContain("Sobreposição de cobertura");
+    expect(adminClient).toContain("Com duplicidade");
+    expect(adminClient).toContain("Nenhum áudio foi alterado.");
+    expect(adminClient).toContain("setDeletingAudio(audio)");
+    expect(adminClient).toContain("<DeleteAudioConfirmation");
+    expect(adminClient).toContain('audioOperation("delete", deletingAudio.id)');
+  });
+
   it("persiste a data da primeira postagem por faixa, sem confundi-la com edição", () => {
     expect(publicationDateMigration).toContain("add column if not exists publicado_em date");
     expect(publicationDateMigration).toContain("set publicado_em = created_at::date");
@@ -237,7 +249,11 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).not.toContain('name="pdf_page"');
     expect(adminClient).not.toContain("Página onde esta estrutura começa no PDF.");
     expect(adminClient).not.toContain('operation: "update-structure-pdf-page"');
-    expect(adminClient).toContain("Sem faixas vinculadas.");
+    expect(adminClient).toContain("expandedAudioGroup");
+    expect(adminClient).toContain("toggleAudioGroup");
+    expect(adminClient).toContain('aria-expanded={expandedAudioGroup === groupId}');
+    expect(adminClient).toContain("Ver áudio");
+    expect(adminClient).toContain("Ocultar áudio");
   });
 
   it("navega do sumário estrutural para o PDF sem recarregar áudio ou documento", () => {

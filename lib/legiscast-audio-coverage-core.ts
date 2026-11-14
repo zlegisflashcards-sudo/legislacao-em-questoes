@@ -34,9 +34,9 @@ export function attachConfirmedLegiscastAudioCoverage(
 }
 
 /**
- * Prioriza a faixa direta. Uma faixa de outra estrutura só é retornada quando
- * a cobertura editorial inclui expressamente o destino; `structure_id` por si
- * só identifica o destino principal, não a sua abrangência.
+ * Uma estrutura recebe uma única faixa aplicável. A cobertura de outro áudio
+ * não é descartada só por existir uma faixa direta: isso esconderia uma
+ * sobreposição editorial que precisa ser corrigida antes da publicação.
  */
 export function resolveLegiscastTrackForStructure(input: {
   structureId: number | null;
@@ -48,9 +48,13 @@ export function resolveLegiscastTrackForStructure(input: {
   }
   const structureId = input.structureId;
   const direct = input.tracks.filter((track) => track.active && track.structureId === structureId);
-  if (direct.length === 1) return { track: direct[0], source: "direct" };
-  if (direct.length > 1) return { pending: "ambiguous", source: "direct", trackIds: direct.map((track) => track.id).sort() };
   const editorial = input.tracks.filter((track) => track.active && track.structureId !== null && track.coveredStructureIds?.includes(structureId));
-  if (editorial.length === 1) return { track: editorial[0], source: "editorial" };
-  return editorial.length > 1 ? { pending: "ambiguous", source: "editorial", trackIds: editorial.map((track) => track.id).sort() } : null;
+  const candidates = [...new Map([...direct, ...editorial].map((track) => [track.id, track])).values()];
+  if (candidates.length > 1) return {
+    pending: "ambiguous",
+    source: direct.length ? "direct" : "editorial",
+    trackIds: candidates.map((track) => track.id).sort(),
+  };
+  if (!candidates.length) return null;
+  return { track: candidates[0], source: direct.some((track) => track.id === candidates[0].id) ? "direct" : "editorial" };
 }

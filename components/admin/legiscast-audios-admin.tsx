@@ -8,6 +8,8 @@ import {
 } from "@/lib/legiscast-audio-processing";
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 import { filterLegiscastAdminLaws } from "@/lib/legiscast-audios-admin-form";
+import { attachConfirmedLegiscastAudioCoverage } from "@/lib/legiscast-audio-coverage-core";
+import { resolveLegiscastStudyUnits } from "@/lib/legiscast-study-units-core";
 import { LawSearchSelect } from "@/components/law-search-select";
 
 export type LegiscastAdminLaw = { id: number; slug: string; titulo: string; houve_alteracao_legislativa?: boolean; ultima_alteracao_data?: string | null };
@@ -33,7 +35,9 @@ type Audio = {
   mp3_available?: boolean;
   final_size_bytes?: number | null;
   publicado_em?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
+  storage_path?: string | null;
   leis?: { titulo?: string } | null;
 };
 type Coverage = {
@@ -62,6 +66,12 @@ type LegiscastCoverage = {
   notApplicable: number;
   missing: number;
   outdated: number;
+};
+type DuplicateConflict = {
+  kind: "direct-duplicate" | "coverage-overlap";
+  leiId: number;
+  structureId: number;
+  audioIds: string[];
 };
 type AuthorizeResponse = {
   jobId: string;
@@ -112,6 +122,9 @@ function formatUpdatedAt(value?: string | null) {
 function formatPublicationDate(value?: string | null) {
   const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : "—";
+}
+function storageFileName(value?: string | null) {
+  return value?.split("/").filter(Boolean).at(-1) ?? "—";
 }
 function tracksForLaw(audios: Audio[], lawId: number) {
   return audios
@@ -236,9 +249,16 @@ function DeleteAudioConfirmation({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-end bg-slate-950/40 p-3 sm:place-items-center">
+    <div
+      className="fixed inset-0 z-[60] grid place-items-end bg-slate-950/40 p-3 sm:place-items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="legiscast-delete-audio-title"
+    >
       <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl">
-        <strong>Excluir definitivamente a faixa “{title}”?</strong>
+        <strong id="legiscast-delete-audio-title">
+          Excluir definitivamente a faixa “{title}”?
+        </strong>
         <p className="mt-2 text-sm text-slate-600">
           O áudio publicado será removido. O histórico de processamento será
           preservado.
@@ -265,6 +285,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const [laws, setLaws] = useState<Law[]>(lawContext ? [lawContext] : []);
   const [audios, setAudios] = useState<Audio[]>([]);
   const [coverages, setCoverages] = useState<Coverage[]>([]);
+  const [duplicateConflicts, setDuplicateConflicts] = useState<DuplicateConflict[]>([]);
   const [coverageAvailable, setCoverageAvailable] = useState(false);
   const [structures, setStructures] = useState<Structure[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -278,6 +299,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const [editingAudio, setEditingAudio] = useState<Audio | null>(null);
   const [previewAudioId, setPreviewAudioId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [expandedAudioGroup, setExpandedAudioGroup] = useState<string | null>(null);
+  const [structureFilter, setStructureFilter] = useState<"all" | "duplicates">("all");
   const [deletingAudio, setDeletingAudio] = useState<Audio | null>(null);
   const [coverageAudio, setCoverageAudio] = useState<Audio | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -292,6 +315,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
     setLaws(Array.isArray(body.laws) ? (body.laws as Law[]) : []);
     setAudios(Array.isArray(body.audios) ? (body.audios as Audio[]) : []);
     setCoverages(Array.isArray(body.coverages) ? (body.coverages as Coverage[]) : []);
+    setDuplicateConflicts(Array.isArray(body.duplicateConflicts) ? (body.duplicateConflicts as DuplicateConflict[]) : []);
     setCoverageAvailable(body.coverageAvailable === true);
     setStructures(
       Array.isArray(body.structures) ? (body.structures as Structure[]) : [],
@@ -549,14 +573,47 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       .toLocaleLowerCase("pt-BR")
       .includes(lawSearch.toLocaleLowerCase("pt-BR")),
   );
-  const selectedTracks = selectedLaw
-    ? tracksForLaw(audios, selectedLaw.id)
-    : [];
+  const selectedTracks = useMemo(
+    () => selectedLaw ? tracksForLaw(audios, selectedLaw.id) : [],
+    [audios, selectedLaw],
+  );
   const coverageForAudio = (audioId: string) => coverages.filter((coverage) => coverage.audio_id === audioId);
   const selectedCoverage = useMemo(
     () => selectedLaw ? legiscastCoverageForLaw(structures, audios, coverages, selectedLaw) : null,
     [audios, coverages, selectedLaw, structures],
   );
+  const selectedStudyPlan = useMemo(() => {
+    if (!selectedLaw) return null;
+    const lawStructures = structuresForLaw(structures, selectedLaw.id).map((structure) => ({ id: structure.id, parentId: structure.parent_id, ordem: structure.ordem, name: structure.nome }));
+    const tracks = attachConfirmedLegiscastAudioCoverage(
+      selectedTracks.map((audio) => ({ id: audio.id, structureId: audio.structure_id, active: audio.ativo })),
+      coverages.filter((coverage) => coverage.lei_id === selectedLaw.id).map((coverage) => ({ audioId: coverage.audio_id, structureId: coverage.structure_id })),
+    );
+    return resolveLegiscastStudyUnits({ structures: lawStructures, tracks, notApplicableStructureIds: structuresForLaw(structures, selectedLaw.id).filter((structure) => structure.audio_not_applicable).map((structure) => structure.id) });
+  }, [coverages, selectedLaw, selectedTracks, structures]);
+  const coverageConflictsByStructure = useMemo(() => new Map((selectedStudyPlan?.conflicts ?? []).map((conflict) => [conflict.structureId, conflict])), [selectedStudyPlan]);
+  const duplicateConflictsForLaw = useMemo(
+    () => selectedLaw ? duplicateConflicts.filter((conflict) => conflict.leiId === selectedLaw.id) : [],
+    [duplicateConflicts, selectedLaw],
+  );
+  const duplicateConflictsByStructure = useMemo(() => {
+    const conflicts = new Map<number, DuplicateConflict[]>();
+    for (const conflict of duplicateConflictsForLaw) {
+      conflicts.set(conflict.structureId, [...(conflicts.get(conflict.structureId) ?? []), conflict]);
+    }
+    return conflicts;
+  }, [duplicateConflictsForLaw]);
+  const visibleStructureOptions = useMemo(
+    () => selectedLaw
+      ? structureOptions(structures, selectedLaw.id).filter(({ structure }) => structureFilter === "all" || duplicateConflictsByStructure.has(structure.id))
+      : [],
+    [duplicateConflictsByStructure, selectedLaw, structureFilter, structures],
+  );
+  const toggleAudioGroup = (groupId: string) => {
+    setExpandedAudioGroup((current) => current === groupId ? null : groupId);
+    setPreviewAudioId(null);
+    setPreviewUrl("");
+  };
   const uploadStructure = structures.find(
     (structure) => String(structure.id) === uploadStructureId,
   );
@@ -692,18 +749,49 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
               <div className="flex h-3 overflow-hidden rounded-full bg-slate-200" aria-label={`${selectedCoverage.withAudio + selectedCoverage.notApplicable} cobertos, ${selectedCoverage.missing} sem áudio e ${selectedCoverage.outdated} desatualizados`}><CoverageBar value={selectedCoverage.withAudio + selectedCoverage.notApplicable} total={selectedCoverage.total} tone="emerald" /><CoverageBar value={selectedCoverage.missing} total={selectedCoverage.total} tone="amber" /><CoverageBar value={selectedCoverage.outdated} total={selectedCoverage.total} tone="red" /></div>
               <div className="grid gap-2 text-sm sm:grid-cols-3"><span className="rounded-lg bg-emerald-100 px-3 py-2 font-bold text-emerald-800">Cobertura · {selectedCoverage.total ? Math.round(((selectedCoverage.withAudio + selectedCoverage.notApplicable) / selectedCoverage.total) * 100) : 0}% · {selectedCoverage.withAudio + selectedCoverage.notApplicable}</span><span className="rounded-lg bg-amber-100 px-3 py-2 font-bold text-amber-800">Faltam · {selectedCoverage.total ? Math.round((selectedCoverage.missing / selectedCoverage.total) * 100) : 0}% · {selectedCoverage.missing}</span><span className="rounded-lg bg-red-100 px-3 py-2 font-bold text-red-800">Desatualizados · {selectedCoverage.total ? Math.round((selectedCoverage.outdated / selectedCoverage.total) * 100) : 0}% · {selectedCoverage.outdated}</span></div>
             </section> : null}
-            {structureOptions(structures, selectedLaw.id).map(
+            {duplicateConflictsForLaw.length ? <section className="grid gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4" role="alert" aria-label="Avisos de duplicidade de áudio">
+              <div>
+                <h5 className="font-black text-amber-950">⚠ Avisos de cobertura do LegisCast</h5>
+                <p className="mt-1 text-sm text-amber-950">{duplicateConflictsForLaw.filter((conflict) => conflict.kind === "direct-duplicate").length} possível(is) duplicidade(s) direta(s) e {duplicateConflictsForLaw.filter((conflict) => conflict.kind === "coverage-overlap").length} sobreposição(ões) editorial(is) encontradas. Nenhum áudio foi alterado.</p>
+              </div>
+              <details className="rounded-lg border border-amber-200 bg-white p-3">
+                <summary className="cursor-pointer font-bold text-amber-950">Ver detalhes dos conflitos</summary>
+                <div className="mt-3 grid gap-3">
+                  {duplicateConflictsForLaw.map((conflict) => {
+                    const structure = structures.find((item) => item.id === conflict.structureId);
+                    return <article key={`${conflict.kind}:${conflict.structureId}`} className="grid gap-2 rounded-lg border border-amber-200 p-3 text-sm">
+                      <div><strong>{conflict.kind === "direct-duplicate" ? "Possível duplicidade" : "Sobreposição de cobertura"}</strong><p>{selectedLaw.titulo} · {structure ? `${structure.tipo}: ${structure.nome}` : "Estrutura não encontrada"} · {conflict.audioIds.length} áudios ativos</p></div>
+                      {conflict.audioIds.map((audioId) => {
+                        const audio = selectedTracks.find((item) => item.id === audioId);
+                        return <div key={audioId} className="rounded border border-slate-200 bg-slate-50 p-2">
+                          <strong>{audio ? audioDisplayTitle(audio, structures) : "Áudio não encontrado"}</strong>
+                          <p className="text-xs text-slate-600">Arquivo: {storageFileName(audio?.storage_path)} · ID: {audioId} · {formatDuration(audio?.duracao_segundos)} · {audio?.ativo ? "Ativo" : "Inativo"} · criado em {formatUpdatedAt(audio?.created_at)}</p>
+                          {audio ? <div className="mt-2 flex flex-wrap gap-2"><button type="button" className="admin-button" disabled={actionId === audio.id} onClick={() => void audioOperation("preview", audio.id)}>Ouvir</button><button type="button" className="admin-button text-red-700" onClick={() => setDeletingAudio(audio)}>Excluir</button></div> : null}
+                          {previewAudioId === audioId && previewUrl ? <audio className="mt-2 w-full" controls src={previewUrl} /> : null}
+                        </div>;
+                      })}
+                    </article>;
+                  })}
+                </div>
+              </details>
+            </section> : null}
+            <label className="grid w-fit gap-1 text-sm font-bold text-slate-700">Filtrar estruturas<select value={structureFilter} onChange={(event) => setStructureFilter(event.target.value === "duplicates" ? "duplicates" : "all")}><option value="all">Todos</option><option value="duplicates">Com duplicidade</option></select><small className="font-normal text-slate-500">Inclui sobreposições editoriais explícitas.</small></label>
+            {visibleStructureOptions.map(
               ({ structure, depth }) => {
                 const tracks = tracksCoveringStructure(selectedTracks, coverages, structure.id);
                 const audioStatus = audioStatusForTracks(tracks, selectedLaw);
+                const groupId = `structure:${structure.id}`;
+                const conflicts = duplicateConflictsByStructure.get(structure.id) ?? [];
+                const directConflict = conflicts.find((conflict) => conflict.kind === "direct-duplicate");
+                const coverageConflict = conflicts.find((conflict) => conflict.kind === "coverage-overlap");
                 return (
                   <div
                     key={structure.id}
                     className="grid gap-2"
                     style={{ marginLeft: `${depth * 12}px` }}
                   >
-                    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <button type="button" className="min-w-0 text-left" aria-expanded={expandedAudioGroup === groupId} aria-controls={`legiscast-${structure.id}`} onClick={() => toggleAudioGroup(groupId)}>
                         <h5 className="font-bold text-slate-800">
                           {structure.tipo}: {structure.nome}
                         </h5>
@@ -711,8 +799,12 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <span className={audioStatus === "current" ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : audioStatus === "outdated" ? "rounded-full bg-red-100 px-2 py-1 text-red-800" : structure.audio_not_applicable ? "rounded-full bg-slate-200 px-2 py-1 text-slate-600" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
                             {audioStatus === "current" ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Com áudio` : audioStatus === "outdated" ? `⚠ ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Desatualizado` : structure.audio_not_applicable ? "Áudio não se aplica" : "Sem áudio"}
                           </span>
+                          {directConflict ? <span className="rounded-full bg-amber-200 px-2 py-1 text-amber-950">⚠ {directConflict.audioIds.length} áudios diretos</span> : null}
+                          {coverageConflict ? <span className="rounded-full bg-orange-200 px-2 py-1 text-orange-950">⚠ Sobreposição editorial · {coverageConflict.audioIds.length} áudios</span> : null}
                         </div>
-                      </div>
+                        {directConflict ? <p className="mt-2 text-xs font-bold text-amber-900">⚠ Possível duplicidade: esta estrutura possui {directConflict.audioIds.length} áudios ativos vinculados.</p> : null}
+                        {tracks.length ? <span className="mt-2 block text-xs font-bold text-blue-700">{expandedAudioGroup === groupId ? "Ocultar áudio" : tracks.length === 1 ? "Ver áudio" : `Ver ${tracks.length} áudios`}</span> : null}
+                      </button>
                       {audioStatus === "current" ? <span className="flex items-center gap-2 text-xs font-bold text-emerald-800" role="status"><span aria-hidden="true">✓</span> Com áudio</span> : audioStatus === "outdated" ? <span className="flex items-center gap-2 text-xs font-bold text-red-800" role="status"><span aria-hidden="true">⚠</span> Áudio desatualizado</span> : <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
                         <input
                           type="checkbox"
@@ -723,6 +815,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                         Áudio não se aplica
                       </label>}
                     </div>
+                    {expandedAudioGroup === groupId ? <div id={`legiscast-${structure.id}`} className="grid gap-2">
                     {tracks.map((audio) => (
                       <article
                         key={audio.id}
@@ -825,40 +918,9 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                             </button>
                           </div>
                         ) : null}
-                        {deletingAudio?.id === audio.id ? (
-                          <div className="rounded bg-red-50 p-3 text-sm">
-                            Excluir definitivamente a faixa “
-                            {audioDisplayTitle(audio, structures)}”?
-                            <br />O áudio publicado será removido. O histórico
-                            de processamento será preservado.
-                            <div className="mt-2 flex gap-2">
-                              <button
-                                type="button"
-                                className="admin-button"
-                                onClick={() => setDeletingAudio(null)}
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                className="admin-button"
-                                disabled={actionId === audio.id}
-                                onClick={() =>
-                                  void audioOperation("delete", audio.id)
-                                }
-                              >
-                                Excluir áudio
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
                       </article>
                     ))}
-                    {!tracks.length ? (
-                      <p className="text-sm text-slate-500">
-                        Sem faixas vinculadas.
-                      </p>
-                    ) : null}
+                    </div> : null}
                   </div>
                 );
               },
@@ -866,10 +928,11 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
             {selectedTracks.filter((audio) => audio.structure_id === null)
               .length ? (
               <div className="grid gap-2">
-                <h5 className="font-bold text-slate-700">
-                  Faixas da lei inteira
-                </h5>
-                {selectedTracks
+                <button type="button" className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-left" aria-expanded={expandedAudioGroup === "law-root"} aria-controls="legiscast-law-root" onClick={() => toggleAudioGroup("law-root")}>
+                  <h5 className="font-bold text-slate-700">{lawRootLabel(selectedLaw)}</h5>
+                  <span className="mt-2 block text-xs font-bold text-blue-700">{expandedAudioGroup === "law-root" ? "Ocultar áudio" : selectedTracks.filter((audio) => audio.structure_id === null).length === 1 ? "Ver áudio" : `Ver ${selectedTracks.filter((audio) => audio.structure_id === null).length} áudios`}</span>
+                </button>
+                {expandedAudioGroup === "law-root" ? <div id="legiscast-law-root" className="grid gap-2">{selectedTracks
                   .filter((audio) => audio.structure_id === null)
                   .map((audio) => (
                     <article
@@ -953,7 +1016,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                         />
                       ) : null}
                     </article>
-                  ))}
+                  ))}</div> : null}
               </div>
             ) : null}
             {!selectedTracks.length ? <div className="law-center-empty rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5"><h3>Nenhuma faixa cadastrada</h3><p className="text-sm text-slate-500">Use o formulário desta página para enviar o primeiro áudio da lei. A estrutura pode ser vinculada agora ou depois.</p></div> : null}
@@ -1065,19 +1128,29 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
               <button type="button" className="admin-button" onClick={() => setCoverageAudio(null)}>Fechar</button>
             </div>
             <p className="rounded-lg bg-slate-50 p-3 text-sm"><strong>Estrutura principal:</strong> {structureName(structures, coverageAudio.structure_id)}.</p>
+            {selectedStudyPlan ? <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm"><strong>Unidade de estudo resultante:</strong> {selectedStudyPlan.units.find((unit) => unit.audioId === coverageAudio.id)?.structureIds.length ?? 0} estrutura(s) nesta única faixa. Coberturas de outros áudios não podem se sobrepor.</p> : null}
             <div className="grid gap-2">
               {structureOptions(structures, coverageAudio.lei_id).map(({ structure, depth }) => {
                 const direct = coverageAudio.structure_id === structure.id;
                 const selected = coverageForAudio(coverageAudio.id).some((coverage) => coverage.structure_id === structure.id);
+                const conflict = coverageConflictsByStructure.get(structure.id);
                 const actionKey = `coverage:${coverageAudio.id}:${structure.id}`;
                 return <label key={structure.id} className="flex items-start gap-2 rounded border border-slate-200 p-3" style={{ marginLeft: `${depth * 12}px` }}>
                   <input type="checkbox" checked={direct || selected} disabled={direct || actionId === actionKey} onChange={(event) => void setAudioCoverage(coverageAudio, structure, event.target.checked ? "add" : "remove")} />
-                  <span><strong>{structure.tipo}: {structure.nome}</strong>{direct ? <small className="ml-2 text-slate-500">vínculo direto</small> : null}</span>
+                  <span><strong>{structure.tipo}: {structure.nome}</strong>{direct ? <small className="ml-2 text-slate-500">vínculo direto</small> : null}{conflict ? <small className="ml-2 text-red-700">conflito com {conflict.audioIds.filter((id) => id !== coverageAudio.id).join(", ")}</small> : null}</span>
                 </label>;
               })}
             </div>
           </section>
         </div>
+      ) : null}
+      {deletingAudio ? (
+        <DeleteAudioConfirmation
+          title={audioDisplayTitle(deletingAudio, structures)}
+          busy={actionId === deletingAudio.id}
+          onCancel={() => setDeletingAudio(null)}
+          onConfirm={() => void audioOperation("delete", deletingAudio.id)}
+        />
       ) : null}
     </section>
   );

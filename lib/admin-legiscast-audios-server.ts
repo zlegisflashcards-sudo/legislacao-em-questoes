@@ -4,6 +4,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { createLegiscastOriginalUploadUrl, getLegiscastGcpAuthClient, getLegiscastOriginalBucketName, getLegiscastOriginalMetadata, runLegiscastCloudRunJob } from "@/lib/gcp-legiscast-originals-server";
 import { LEGISCAST_MAX_ATTEMPTS, LEGISCAST_ORIGINAL_MAX_BYTES, LEGISCAST_ORIGINAL_UPLOAD_TTL_MS, extensionOfLegiscastAudio, isAcceptedLegiscastOriginal } from "@/lib/legiscast-audio-processing";
+import { findLegiscastAudioConflicts } from "@/lib/legiscast-audio-duplicates-core";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 type Operation = { jobId: string; originalPath: string; expiresAt: number };
@@ -102,7 +103,16 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
     : { data: [], error: null };
   if (mp3Jobs.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar as versões MP3 do LegisCast.");
   const mp3ByFinalPath = new Set((mp3Jobs.data ?? []).map((job) => job.final_path));
-  return { laws: laws.data ?? [], audios: (audios.data ?? []).map((audio) => ({ ...audio, mp3_available: mp3ByFinalPath.has(audio.storage_path) })), structures: structures.data ?? [], coverages: coverage.error ? [] : coverage.data ?? [], coverageAvailable: !coverage.error, jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
+  const audioRows = audios.data ?? [];
+  const coverageRows = coverage.error ? [] : coverage.data ?? [];
+  const duplicateConflicts = findLegiscastAudioConflicts(audioRows.map((audio) => ({
+    id: audio.id,
+    leiId: audio.lei_id,
+    structureId: audio.structure_id,
+    active: audio.ativo,
+    coveredStructureIds: coverageRows.filter((entry) => entry.audio_id === audio.id).map((entry) => entry.structure_id),
+  })));
+  return { laws: laws.data ?? [], audios: audioRows.map((audio) => ({ ...audio, mp3_available: mp3ByFinalPath.has(audio.storage_path) })), structures: structures.data ?? [], coverages: coverageRows, duplicateConflicts, coverageAvailable: !coverage.error, jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
 }
 
 export async function updateAdminLegiscastStructurePdfPage(input: StructurePdfPageInput) { await requireAdmin(); const structureId = positiveInteger(input.structureId) as number; const lawId = positiveInteger(input.lawId, true); const pdfPage = positivePdfPage(input.pdfPage); const db = getSupabaseServerClient(); let request = db.from("law_structure").update({ pdf_page: pdfPage, updated_at: new Date().toISOString() }).eq("id", structureId); if (lawId !== null) request = request.eq("lei_id", lawId); const result = await request.select("id").maybeSingle(); if (result.error) throw new AdminLegiscastAudioError(503, "Não foi possível atualizar a página da estrutura."); if (!result.data) throw new AdminLegiscastAudioError(404, "Estrutura não encontrada."); return { id: structureId, pdfPage }; }
