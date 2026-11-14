@@ -62,6 +62,30 @@ export function continuousReadingStructureDescendantIds(structureId: number, str
 }
 
 /**
+ * Produz uma lista plana na mesma ordem em que a árvore aparece no sumário:
+ * cada pai vem antes dos seus filhos, e irmãos seguem `ordem`/`id`.
+ * Nós legados sem pai válido também continuam visíveis ao final, em ordem
+ * estável, para que a administração possa corrigi-los sem perder acesso.
+ */
+export function orderContinuousReadingStructures<T extends ContinuousReadingStructureNode>(structures: readonly T[]) {
+  const byId = new Map(structures.map((node) => [node.id, node]));
+  const children = new Map<number | null, T[]>();
+  for (const node of structures) children.set(node.parentId, [...(children.get(node.parentId) ?? []), node]);
+  const compare = (left: T, right: T) => left.ordem - right.ordem || left.id - right.id;
+  const ordered: T[] = [];
+  const visited = new Set<number>();
+  const visit = (node: T) => {
+    if (visited.has(node.id)) return;
+    visited.add(node.id);
+    ordered.push(node);
+    for (const child of (children.get(node.id) ?? []).slice().sort(compare)) visit(child);
+  };
+  for (const root of structures.filter((node) => node.parentId === null || !byId.has(node.parentId)).slice().sort(compare)) visit(root);
+  for (const node of structures.slice().sort(compare)) visit(node);
+  return ordered;
+}
+
+/**
  * Não elege a primeira questão como dona da estrutura de um bloco.
  * O vínculo só é seguro quando todas as evidências estruturais apontam para
  * o mesmo nó. A ausência ou divergência permanece explícita para revisão.

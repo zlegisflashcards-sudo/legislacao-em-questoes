@@ -5,7 +5,7 @@ import { assertLegislativeReferenceStructureLaw, LegislativeReferenceStructureLi
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { listManualQuestionReferenceTargets } from "@/lib/question-legislative-reference-links";
 import { resolveContinuousReadingIntegrity } from "@/lib/legisbot/continuous-reading-core";
-import { continuousReadingStructurePath, resolveContinuousReadingReferenceStructureAssociations } from "@/lib/legisbot/continuous-reading-structure-core";
+import { continuousReadingStructurePath, orderContinuousReadingStructures, resolveContinuousReadingReferenceStructureAssociations } from "@/lib/legisbot/continuous-reading-structure-core";
 import { getAdminLegislativeStructureIntegrity } from "@/lib/admin-legislative-structure-integrity";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -92,7 +92,7 @@ export async function getAdminLegislativeReferenceStructureAssociation(input: { 
       candidateStructureIds: association.candidateStructureIds,
       candidateLabels: association.candidateStructureIds.map((id) => labelForStructure(id, structures)).filter((label): label is string => Boolean(label)),
     },
-    options: structures.map((structure) => ({ id: structure.id, label: labelForStructure(structure.id, structures) ?? structure.nome })),
+    options: orderContinuousReadingStructures(structures).map((structure) => ({ id: structure.id, label: labelForStructure(structure.id, structures) ?? structure.nome })),
   };
 }
 

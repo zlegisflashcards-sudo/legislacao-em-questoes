@@ -9,6 +9,7 @@ describe("administração da associação estrutural das referências", () => {
     expect(server).toContain("structureId: item.structure_id");
     expect(server).toContain("suggestionStatus");
     expect(server).toContain("currentStructureId: reference.structure_id");
+    expect(server).toContain("orderContinuousReadingStructures(structures)");
   });
 
   it("valida lei no servidor e no banco, preservando bloco sem estrutura", () => {

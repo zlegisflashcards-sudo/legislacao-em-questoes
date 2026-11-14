@@ -5,6 +5,7 @@ import {
   continuousReadingStructurePath,
   hasContinuousReadingStructures,
   orderContinuousReadingReferences,
+  orderContinuousReadingStructures,
   resolveContinuousReadingReferenceStructureAssociations,
 } from "./continuous-reading-structure-core";
 
@@ -80,5 +81,16 @@ describe("estrutura da leitura contínua", () => {
       { id: "b", ordem: "0002.0.00.0.00.0" },
       { id: "a", ordem: "0001.0.00.0.00.0" },
     ]).map((reference) => reference.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("ordena o seletor editorial pela árvore, e não pela ordem plana de cadastro", () => {
+    const unordered = [
+      { id: 12, parentId: 10, ordem: 2 },
+      { id: 20, parentId: null, ordem: 2 },
+      { id: 11, parentId: 10, ordem: 1 },
+      { id: 10, parentId: null, ordem: 1 },
+      { id: 30, parentId: 999, ordem: 3 },
+    ];
+    expect(orderContinuousReadingStructures(unordered).map((node) => node.id)).toEqual([10, 11, 12, 20, 30]);
   });
 });
