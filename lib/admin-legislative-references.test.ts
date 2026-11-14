@@ -34,6 +34,17 @@ describe("base legislativa persistente", () => {
     expect(service).toContain("formatLegalReferenceFromOrder");
   });
 
+  it("filtra referências por estrutura no banco antes da paginação, inclusive sem estrutura", () => {
+    const service = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    const page = readFileSync("app/admin/artigos/page.tsx", "utf8");
+    expect(service).toContain('request = request.is("structure_id", null)');
+    expect(service).toContain('request = request.eq("structure_id", input.structureFilter)');
+    expect(service).toContain("range(offset, offset + PAGE_SIZE)");
+    expect(page).toContain("Sem estrutura");
+    expect(page).toContain('name="estrutura"');
+    expect(page).toContain("structureParam");
+  });
+
   it("importa apenas textos existentes e não escolhe legislação divergente", () => {
     const service = readFileSync("lib/admin-legislative-references.ts", "utf8");
     const page = readFileSync("app/admin/artigos/page.tsx", "utf8");

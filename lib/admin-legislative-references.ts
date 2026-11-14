@@ -63,6 +63,7 @@ export type LegislativeReference = {
   preparedAt: string | null;
   status: "pendente" | "preparada" | "revogada";
   revokingLaw: string | null;
+  structureId: number | null;
   updatedAt: string;
 };
 
@@ -166,11 +167,23 @@ function mapReference(row: Record<string, unknown>, lawShortName?: string | null
     preparedAt: row.preparado_em ? String(row.preparado_em) : null,
     status: row.situacao === "revogada" ? "revogada" : row.situacao === "preparada" || Boolean(row.legislacao) ? "preparada" : "pendente",
     revokingLaw: row.lei_revogadora ? String(row.lei_revogadora) : null,
+    structureId: typeof row.structure_id === "number" && Number.isInteger(row.structure_id) ? row.structure_id : null,
     updatedAt: String(row.updated_at),
   };
 }
 
-export async function listLegislativeReferences(input: { lawSlug?: string; query?: string; page?: number; orderDirection?: "asc" | "desc" } = {}) {
+/**
+ * Lists the persisted legislative base with every filter applied in Postgres
+ * before the page window is selected. `unassigned` intentionally means a
+ * null editorial structure link; it is not inferred from questions.
+ */
+export async function listLegislativeReferences(input: {
+  lawSlug?: string;
+  query?: string;
+  page?: number;
+  orderDirection?: "asc" | "desc";
+  structureFilter?: number | "unassigned";
+} = {}) {
   await exigirAdministrador();
   const lawSlug = text(input.lawSlug, 160).toLowerCase();
   const query = text(input.query, 120).replace(/[,%()]/g, " ");
@@ -178,11 +191,15 @@ export async function listLegislativeReferences(input: { lawSlug?: string; query
   const offset = (page - 1) * PAGE_SIZE;
   const db = getSupabaseServerClient();
   let request = db.from("legislative_references")
-    .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,situacao,lei_revogadora,updated_at")
+    .select("id,lei_id,slug,ordem,identificacao,legislacao,preparado_em,situacao,lei_revogadora,structure_id,updated_at")
     .or("situacao.is.null,situacao.neq.arquivada")
     .order("ordem", { ascending: input.orderDirection !== "desc" })
     .range(offset, offset + PAGE_SIZE);
   if (lawSlug) request = request.eq("slug", lawSlug);
+  if (input.structureFilter === "unassigned") request = request.is("structure_id", null);
+  if (typeof input.structureFilter === "number" && Number.isInteger(input.structureFilter) && input.structureFilter > 0) {
+    request = request.eq("structure_id", input.structureFilter);
+  }
   if (query) request = request.or(`slug.ilike.%${query}%,ordem.ilike.%${query}%,identificacao.ilike.%${query}%`);
   const result = await request;
   if (result.error) throw new Error("Não foi possível carregar a base legislativa.");
