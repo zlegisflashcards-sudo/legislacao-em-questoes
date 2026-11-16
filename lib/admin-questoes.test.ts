@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { QUESTION_LONG_CONTENT_MAX_LENGTH, lawDisplayName, nextQuestionOrder, parseQuestionDraft, questionDeckDefaults } from "./admin-questoes";
+import { QUESTION_LONG_CONTENT_MAX_LENGTH, lawDisplayName, nextQuestionOrder, parseQuestionDraft, questionDeckDefaults, totalArticlesFromReferenceOrders } from "./admin-questoes";
 
 const base = { pergunta: "A Constituição é a lei fundamental?", resposta: "Certo", ordem: 1 };
 
@@ -45,6 +45,16 @@ describe("administração de Legis Questões", () => {
     expect(nextQuestionOrder(7)).toBe(8);
     expect(lawDisplayName({ codigo: "L6513/MA", titulo: "Lei Estadual" })).toBe("L6513/MA — Lei Estadual");
     expect(lawDisplayName({ titulo: "Constituição Federal", nome_curto: "CF" })).toBe("CF — Constituição Federal");
+  });
+
+  it("calcula o total Anki pela maior numeração de artigo da Central", () => {
+    expect(totalArticlesFromReferenceOrders([
+      { ordem: "0015.a.02.0.00.0" },
+      { ordem: "0002.0.00.0.00.0" },
+      { ordem: "0015.0.01.0.00.0" },
+      { ordem: "ordem-editorial" },
+    ])).toBe(15);
+    expect(totalArticlesFromReferenceOrders([{ ordem: "ordem-editorial" }])).toBeNull();
   });
 
   it("mantém autenticação administrativa e usa exclusivamente o schema principal", () => {

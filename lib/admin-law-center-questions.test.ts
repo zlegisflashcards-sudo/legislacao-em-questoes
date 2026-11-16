@@ -108,7 +108,7 @@ describe("Questões na Central da Lei", () => {
     const create = server.slice(server.indexOf("export async function createAdminQuestion"), server.indexOf("export async function updateAdminQuestion"));
     expect(create).toContain("const current = await law(String(body.law_slug))");
     expect(create).toContain("Informe a estrutura para esta lei.");
-    expect(create).toContain("Informe o Total de artigos para exportação Anki.");
+    expect(create).toContain("Não foi possível determinar o Total de artigos pela Central desta lei.");
     expect(create).toContain("await validateStructure(current.id, d.structure_id)");
     expect(create).toContain("values(current, d)");
     expect(central).toContain("law_slug: law.slug");
@@ -134,7 +134,7 @@ describe("Questões na Central da Lei", () => {
     expect(editor).toContain("const hasQuestionText = Boolean(plainQuestionText(value.pergunta))");
     expect(editor).toContain("Informe a assertiva antes de cadastrar a questão.");
     expect(editor).toContain("Informe a estrutura antes de cadastrar a questão.");
-    expect(editor).toContain("Informe o Total de artigos para a exportação Anki.");
+    expect(editor).toContain("Será calculado automaticamente pelos blocos legislativos da Central.");
   });
 
   it("mantém os fluxos Anki e Recortes pelos componentes da Central", () => {

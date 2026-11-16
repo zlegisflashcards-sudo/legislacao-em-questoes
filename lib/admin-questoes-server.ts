@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { parseQuestionDraft, questionDeckDefaults, type QuestionDraft } from "@/lib/admin-questoes";
+import { parseQuestionDraft, questionDeckDefaults, totalArticlesFromReferenceOrders, type QuestionDraft } from "@/lib/admin-questoes";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
 import { parseBulkQuestionEdit, parseBulkQuestionTextReplacement, replaceCompleteQuestionText, type BulkQuestionEditScope } from "@/lib/admin-question-bulk-edit";
 import { parseBulkQuestionPasteDrafts } from "@/lib/admin-question-bulk-create";
@@ -489,19 +489,33 @@ export async function getLawQuestionShadowDraft(lawSlug: string, unitId: unknown
   if (result.error) fail("carregar_sombra_para_questao", result.error); const structureMatch = result.data?.identity_key.match(/^automatic-structure:(\d+)$/); if (!result.data || result.data.decision || !structureMatch) throw new AdminQuestoesError(422, "Esta Questão Sombra não possui um bloco estrutural disponível.");
   const [nodes, deckDefaults] = await Promise.all([
     structure(current.id),
-    getLawQuestionDeckDefaults(current.id),
+    getLawQuestionDeckDefaults(current),
   ]);
   const structureId = Number(structureMatch[1]); if (!nodes.some((node) => node.id === structureId)) throw new AdminQuestoesError(422, "O bloco estrutural desta Questão Sombra não está mais ativo.");
   return { unit_id: result.data.id, data: { ...blankShadowQuestion("", "", ""), ...deckDefaults, structure_id: structureId }, structure_warning: "O bloco estrutural já foi preenchido. Informe Assunto, Ordem e legislação antes de salvar a questão." };
 }
 function blankShadowQuestion(ordem: string, assunto: string, legislacao: string): QuestionDraft { return { structure_id: null, pergunta: "", resposta: "Certo", justificativa: "", assunto, legislacao, ordem, titulo: "", total_artigos: null, capitulo: "", secao: "", subsecao: "", artigo: "" }; }
-async function getLawQuestionDeckDefaults(leiId: number) {
-  const rows = await collectPages(async (from, to) => {
-    const result = await db().from("questions").select("titulo,total_artigos").eq("lei_id", leiId).eq("ativo", true).order("id").range(from, to);
-    if (result.error) fail("carregar_padrao_baralho", result.error);
-    return result.data ?? [];
-  }, questionExportPageSize);
-  return questionDeckDefaults(rows);
+async function getLawQuestionDeckDefaults(current: Law) {
+  const [rows, references] = await Promise.all([
+    collectPages(async (from, to) => {
+      const result = await db().from("questions").select("titulo,total_artigos").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
+      if (result.error) fail("carregar_padrao_baralho", result.error);
+      return result.data ?? [];
+    }, questionExportPageSize),
+    collectPages(async (from, to) => {
+      const result = await db().from("legislative_references").select("ordem").eq("lei_id", current.id).or("situacao.is.null,situacao.neq.arquivada").order("ordem").order("id").range(from, to);
+      if (result.error) fail("carregar_total_artigos_central", result.error);
+      return result.data ?? [];
+    }, questionExportPageSize),
+  ]);
+  const defaults = questionDeckDefaults(rows);
+  return { ...defaults, total_artigos: totalArticlesFromReferenceOrders(references) ?? defaults.total_artigos };
+}
+
+/** Valores exibidos antes de criar ou duplicar uma questão; não grava nada. */
+export async function getAdminLawQuestionDeckDefaults(lawSlug: string) {
+  await requireAdmin();
+  return getLawQuestionDeckDefaults(await law(lawSlug));
 }
 export async function getLegisBotQuestionDraft(lawSlug: string, commentId: unknown) {
   await requireAdmin();
@@ -525,7 +539,7 @@ export async function getLegisBotQuestionDraft(lawSlug: string, commentId: unkno
   };
 }
 export async function getAdminQuestion(lawSlug: string, questionId: unknown) { await requireAdmin(); const current = await law(lawSlug); const result = await db().from("questions").select(questionFields).eq("id", qid(questionId)).eq("lei_id", current.id).maybeSingle(); if (result.error) fail("carregar_questao", result.error); if (!result.data) throw new AdminQuestoesError(404, "Questão não encontrada para a lei selecionada."); return { law: current, question: result.data }; }
-export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const d = draft(body.data); const nodes = await structure(current.id); if (nodes.length && d.structure_id === null) throw new AdminQuestoesError(400, "Informe a estrutura para esta lei."); if (d.total_artigos === null || d.total_artigos < 1) throw new AdminQuestoesError(400, "Informe o Total de artigos para exportação Anki."); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); const legisBotId = body.legisbot_id === null || body.legisbot_id === undefined || body.legisbot_id === "" ? null : Number(body.legisbot_id); if (legisBotId !== null && Number.isSafeInteger(legisBotId)) { const converted = await db().from("legisbot_comentarios").update({ context_kind: "comment", status: "pendente", comentario: null, precisa_revisao: false }).eq("id", legisBotId).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem).eq("context_kind", "shadow_question"); if (converted.error) fail("converter_sombra_legisbot", converted.error); } return r.data; }
+export async function createAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); let d = draft(body.data); if (d.total_artigos === null) d = { ...d, total_artigos: (await getLawQuestionDeckDefaults(current)).total_artigos }; const nodes = await structure(current.id); if (nodes.length && d.structure_id === null) throw new AdminQuestoesError(400, "Informe a estrutura para esta lei."); if (d.total_artigos === null || d.total_artigos < 1) throw new AdminQuestoesError(400, "Não foi possível determinar o Total de artigos pela Central desta lei. Cadastre ou corrija os blocos legislativos antes de criar a questão."); await validateStructure(current.id, d.structure_id); await rejectDuplicateQuestion(current.id, d); const r = await db().from("questions").insert({ ...values(current, d), ativo: true }).select(questionFields).single(); if (r.error || !r.data) fail("criar_questao", r.error); const legisBotId = body.legisbot_id === null || body.legisbot_id === undefined || body.legisbot_id === "" ? null : Number(body.legisbot_id); if (legisBotId !== null && Number.isSafeInteger(legisBotId)) { const converted = await db().from("legisbot_comentarios").update({ context_kind: "comment", status: "pendente", comentario: null, precisa_revisao: false }).eq("id", legisBotId).eq("slug", current.slug.toUpperCase()).eq("ordem", d.ordem).eq("context_kind", "shadow_question"); if (converted.error) fail("converter_sombra_legisbot", converted.error); } return r.data; }
 
 type BulkQuestionCreationPreview = { count: number; structure_id: number | null; structure_label: string; titulo: string; total_artigos: number; sample: Array<Pick<QuestionDraft, "pergunta" | "resposta" | "assunto" | "ordem">> };
 

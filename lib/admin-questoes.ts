@@ -1,4 +1,5 @@
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
+import { parseQuestionOrder } from "@/lib/question-structure-consistency";
 
 export const QUESTION_ANSWERS = ["Certo", "Errado"] as const;
 export const QUESTION_LONG_CONTENT_MAX_LENGTH = 60_000;
@@ -121,4 +122,19 @@ export function questionDeckDefaults(rows: QuestionDeckDefaultsSource[]): Pick<Q
     titulo: mostFrequentDeckValue(rows.map((row) => typeof row.titulo === "string" ? row.titulo.trim() || null : null)),
     total_artigos: mostFrequentDeckValue(rows.map((row) => typeof row.total_artigos === "number" && row.total_artigos > 0 ? row.total_artigos : null)),
   };
+}
+
+/**
+ * O total do Anki é a maior numeração de artigo presente na legislação
+ * canônica. Artigos com letra (por exemplo, 15-A) pertencem ao artigo 15 e
+ * parágrafos/incisos não aumentam esse total. Ordens não canônicas ficam fora
+ * do cálculo para que uma chave editorial não vire um total inventado.
+ */
+export function totalArticlesFromReferenceOrders(rows: Array<{ ordem?: string | null }>) {
+  const articles = rows
+    .map((row) => parseQuestionOrder(row.ordem)?.artigo)
+    .filter((article): article is string => Boolean(article && /^\d+$/.test(article)))
+    .map(Number)
+    .filter((article) => Number.isSafeInteger(article) && article > 0);
+  return articles.length ? Math.max(...articles) : null;
 }

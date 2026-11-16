@@ -17,7 +17,7 @@ export function adminQuestionFormFrom(question: AdminQuestionForm): AdminQuestio
   return { structure_id: question.structure_id, pergunta: question.pergunta, resposta: question.resposta, justificativa: question.justificativa, assunto: question.assunto, legislacao: question.legislacao, ordem: question.ordem, titulo: question.titulo, total_artigos: question.total_artigos, capitulo: question.capitulo, secao: question.secao, subsecao: question.subsecao, artigo: question.artigo };
 }
 
-export function AdminQuestionEditor({ lawName, questionId = null, nodes, value, original, editing, saving, error, onChange, onSubmit, onCancel, onPrevious, onNext, onDuplicate, onMove, onDelete, showPreview = false }: { lawName: string; questionId?: string | null; nodes: AdminQuestionStructureNode[]; value: AdminQuestionForm; original: AdminQuestionForm | null; editing: boolean; saving: boolean; error?: string; onChange: (value: AdminQuestionForm) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel?: () => void; onPrevious?: () => void; onNext?: () => void; onDuplicate?: () => void; onMove?: () => void; onDelete?: () => void; showPreview?: boolean }) {
+export function AdminQuestionEditor({ lawName, questionId = null, nodes, value, original, editing, saving, error, notice, onChange, onSubmit, onCancel, onPrevious, onNext, onDuplicate, onMove, onDelete, showPreview = false }: { lawName: string; questionId?: string | null; nodes: AdminQuestionStructureNode[]; value: AdminQuestionForm; original: AdminQuestionForm | null; editing: boolean; saving: boolean; error?: string; notice?: string; onChange: (value: AdminQuestionForm) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel?: () => void; onPrevious?: () => void; onNext?: () => void; onDuplicate?: () => void; onMove?: () => void; onDelete?: () => void; showPreview?: boolean }) {
   const options = useMemo(() => {
     const visit = (parentId: number | null, prefix: string): Array<{ id: number; label: string }> => nodes.filter((node) => node.parent_id === parentId).sort(compareQuestionStructureNames).flatMap((node) => [{ id: node.id, label: `${prefix}${node.nome}` }, ...visit(node.id, `${prefix}— `)]);
     return visit(null, "");
@@ -27,13 +27,17 @@ export function AdminQuestionEditor({ lawName, questionId = null, nodes, value, 
   const hasQuestionText = Boolean(plainQuestionText(value.pergunta));
   const requiresStructure = !editing && nodes.length > 0;
   const hasStructure = !requiresStructure || value.structure_id !== null;
-  const hasTotalArticles = editing || (typeof value.total_artigos === "number" && value.total_artigos > 0);
+  // Em uma nova questão, a Central calcula este valor pela legislação da lei.
+  // Um valor preenchido ainda precisa ser válido; deixar em branco não deve
+  // impedir a cópia de uma questão antiga que não carregava este legado.
+  const hasTotalArticles = editing || value.total_artigos === null || (typeof value.total_artigos === "number" && value.total_artigos > 0);
   const legislationWithinLimit = (value.legislacao ?? "").trim().length <= QUESTION_LONG_CONTENT_MAX_LENGTH;
   const canSubmit = hasQuestionText && hasStructure && hasTotalArticles && legislationWithinLimit;
 
   return <article className="commercial-card question-editor-card">
     <header><div><p className="question-editor-eyebrow">{lawName}</p><h2 id="admin-question-editor-title">{editing ? "Editar questão" : "Cadastrar questão"}</h2><p>{dirty ? "Alterações não salvas" : editing ? "Alterações salvas" : "Preencha os dados da nova questão"}</p></div>{questionId ? <div className="mt-3 grid gap-1 sm:min-w-[26rem]"><label className="text-xs font-black uppercase tracking-wide text-slate-600" htmlFor="question-uuid">UUID da questão</label><div className="flex min-w-0 gap-2"><input id="question-uuid" className="min-w-0 flex-1 font-mono text-xs" value={questionId} readOnly aria-readonly="true" onFocus={(event) => event.currentTarget.select()} /><CopyButton value={questionId} label="Copiar UUID" /></div></div> : null}</header>
 	    {error ? <p className="admin-alert error" role="alert">{error}</p> : null}
+	    {notice ? <p className="admin-alert" role="status">{notice}</p> : null}
 	    {editing && (onPrevious || onNext || onDuplicate || onMove || onDelete) ? <nav className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 sm:px-6" aria-label="Ações da questão"><button type="button" className="admin-button secondary" disabled={saving || !onPrevious} onClick={onPrevious}>← Questão anterior</button><button type="button" className="admin-button secondary" disabled={saving || !onNext} onClick={onNext}>Próxima questão →</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onDuplicate}>Duplicar</button><button type="button" className="admin-button secondary" disabled={saving} onClick={onMove}>Mover para outra estrutura</button><button type="button" className="admin-button danger ml-auto" disabled={saving} onClick={onDelete}>Excluir questão</button></nav> : null}
 	    <form onSubmit={onSubmit} className="question-editor-form">
       <section><h3>Estrutura da questão</h3><div className="question-structure-grid">
@@ -52,7 +56,7 @@ export function AdminQuestionEditor({ lawName, questionId = null, nodes, value, 
       <section><h3>Campos complementares e legados</h3><div className="question-structure-grid">
         <label>Artigo<input value={value.artigo ?? ""} onChange={(event) => update("artigo", event.target.value)} /></label>
         <label>Título legado<input value={value.titulo ?? ""} onChange={(event) => update("titulo", event.target.value)} /></label>
-        <label>Total de artigos<input type="number" min="1" value={value.total_artigos ?? ""} onChange={(event) => update("total_artigos", event.target.value === "" ? null : Number(event.target.value))} />{!hasTotalArticles ? <small className="text-amber-700">Informe o Total de artigos para a exportação Anki.</small> : null}</label>
+        <label>Total de artigos<input type="number" min="1" value={value.total_artigos ?? ""} onChange={(event) => update("total_artigos", event.target.value === "" ? null : Number(event.target.value))} />{value.total_artigos === null ? <small className="text-slate-600">Será calculado automaticamente pelos blocos legislativos da Central.</small> : !hasTotalArticles ? <small className="text-amber-700">Informe um Total de artigos válido para a exportação Anki.</small> : null}</label>
         <label>Capítulo legado<input value={value.capitulo ?? ""} onChange={(event) => update("capitulo", event.target.value)} /></label>
         <label>Seção legada<input value={value.secao ?? ""} onChange={(event) => update("secao", event.target.value)} /></label>
         <label>Subseção legada<input value={value.subsecao ?? ""} onChange={(event) => update("subsecao", event.target.value)} /></label>

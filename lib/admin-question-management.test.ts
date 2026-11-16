@@ -6,6 +6,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 const server = read("lib/admin-questoes-server.ts");
 const route = read("app/api/admin/questoes/route.ts");
 const central = read("components/admin/admin-law-questions.tsx");
+const editor = read("components/admin/admin-question-editor.tsx");
 const structureAdmin = read("components/admin/law-structure-admin.tsx");
 const migration = read("supabase/migrations/20260916130000_add_admin_content_deletion.sql");
 const bulkMigration = read("supabase/migrations/20260916140000_add_admin_bulk_content_deletion.sql");
@@ -22,6 +23,19 @@ describe("gestão definitiva de questões e estruturas", () => {
     expect(sameStructureQuestionStatement({ pergunta: "<p>Questão <strong>igual</strong></p>" }, { pergunta: "Questão igual" })).toBe(true);
     expect(server).not.toContain('request = d.structure_id === null ? request.is("structure_id", null) : request.eq("structure_id", d.structure_id)');
     expect(server).toContain("mesmo enunciado nesta lei");
+  });
+  it("mostra a cópia como aviso e mantém o bloqueio somente para a mesma lei", () => {
+    expect(central).toContain("setEditorNotice");
+    expect(central).toContain("Você pode manter a Ordem");
+    expect(editor).toContain('role="status"');
+    expect(editor).toContain("notice ? <p className=\"admin-alert\"");
+  });
+  it("preenche o Total de artigos pela Central ao criar ou duplicar", () => {
+    expect(central).toContain("initialDeckDefaults");
+    expect(central).toContain("current.total_artigos ?? initialDeckDefaults.total_artigos");
+    expect(editor).toContain("Será calculado automaticamente pelos blocos legislativos da Central.");
+    expect(server).toContain('from("legislative_references").select("ordem")');
+    expect(server).toContain("totalArticlesFromReferenceOrders(references)");
   });
   it("agrupa a assertiva inteira por lei, sem usar assunto, ordem ou estrutura como identidade", () => {
     const groups = groupDuplicateQuestionStatements([
