@@ -9,10 +9,15 @@ import {
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 import { filterLegiscastAdminLaws } from "@/lib/legiscast-audios-admin-form";
 import { attachConfirmedLegiscastAudioCoverage } from "@/lib/legiscast-audio-coverage-core";
+import {
+  legiscastStructureFreshness,
+  legiscastTrackFreshness,
+  legislativeChangeDateForLegiscast,
+} from "@/lib/legiscast-audio-freshness";
 import { resolveLegiscastStudyUnits } from "@/lib/legiscast-study-units-core";
 import { LawSearchSelect } from "@/components/law-search-select";
 
-export type LegiscastAdminLaw = { id: number; slug: string; titulo: string; houve_alteracao_legislativa?: boolean; ultima_alteracao_data?: string | null };
+export type LegiscastAdminLaw = { id: number; slug: string; titulo: string; houve_alteracao_legislativa?: boolean; ultima_alteracao_referencia?: string | null; ultima_alteracao_data?: string | null };
 type Law = LegiscastAdminLaw;
 type Structure = {
   id: number;
@@ -37,6 +42,11 @@ type Audio = {
   publicado_em?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  situacao_atualizacao_manual?: "atual" | "desatualizado" | null;
+  situacao_atualizacao_em?: string | null;
+  situacao_atualizacao_motivo?: string | null;
+  situacao_atualizacao_alteracao_referencia?: string | null;
+  situacao_atualizacao_alteracao_data?: string | null;
   storage_path?: string | null;
   leis?: { titulo?: string } | null;
 };
@@ -175,16 +185,22 @@ function structuresForLaw(structures: Structure[], lawId: number) {
         first.ordem - second.ordem || first.nome.localeCompare(second.nome),
     );
 }
-function legislativeChangeDate(law: Law) {
-  return law.houve_alteracao_legislativa === true && /^\d{4}-\d{2}-\d{2}$/.test(String(law.ultima_alteracao_data ?? ""))
-    ? String(law.ultima_alteracao_data)
-    : null;
-}
 function audioStatusForTracks(tracks: Audio[], law: Law) {
-  if (!tracks.length) return "none" as const;
-  const changeDate = legislativeChangeDate(law);
-  if (!changeDate || tracks.some((audio) => typeof audio.publicado_em === "string" && audio.publicado_em >= changeDate)) return "current" as const;
-  return "outdated" as const;
+  return legiscastStructureFreshness(tracks, law);
+}
+function legislativeChangeLabel(law: Law) {
+  const date = legislativeChangeDateForLegiscast(law);
+  if (!date) return "Nenhuma alteração legislativa cadastrada na lei.";
+  const reference = law.ultima_alteracao_referencia?.trim() || "Alteração legislativa sem identificação";
+  return `${reference} · ${formatPublicationDate(date)}`;
+}
+function manualFreshnessLabel(audio: Audio) {
+  if (!audio.situacao_atualizacao_manual) return null;
+  const status = audio.situacao_atualizacao_manual === "desatualizado" ? "Marcado como desatualizado" : "Revisão confirmada";
+  const date = formatUpdatedAt(audio.situacao_atualizacao_em);
+  const reference = audio.situacao_atualizacao_alteracao_referencia?.trim();
+  const changeDate = formatPublicationDate(audio.situacao_atualizacao_alteracao_data);
+  return `${status} em ${date}${reference ? ` · ${reference}${changeDate !== "—" ? ` (${changeDate})` : ""}` : ""}`;
 }
 function tracksCoveringStructure(tracks: Audio[], coverages: Coverage[], structureId: number) {
   return tracks.filter((audio) => audio.structure_id === structureId || coverages.some((coverage) => coverage.audio_id === audio.id && coverage.structure_id === structureId));
@@ -297,6 +313,45 @@ function DeleteAudioConfirmation({
   );
 }
 
+function FreshnessConfirmation({
+  audio,
+  law,
+  action,
+  busy,
+  onCancel,
+  onConfirm,
+  onClear,
+}: {
+  audio: Audio;
+  law: Law;
+  action: "mark_outdated" | "mark_current";
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+  onClear: () => void;
+}) {
+  const markingOutdated = action === "mark_outdated";
+  return <div className="fixed inset-0 z-[60] grid place-items-end bg-slate-950/40 p-3 sm:place-items-center" role="dialog" aria-modal="true" aria-labelledby="legiscast-freshness-title">
+    <form className="grid w-full max-w-lg gap-3 rounded-lg bg-white p-4 shadow-xl" onSubmit={(event) => { event.preventDefault(); onConfirm(String(new FormData(event.currentTarget).get("reason") ?? "")); }}>
+      <div>
+        <h3 id="legiscast-freshness-title" className="font-black">{markingOutdated ? "Marcar áudio como desatualizado" : "Confirmar revisão do áudio"}</h3>
+        <p className="mt-1 text-sm text-slate-600">A marcação não desativa, substitui ou exclui a faixa. Ela só controla a situação editorial da cobertura.</p>
+      </div>
+      <dl className="grid gap-2 rounded-lg bg-slate-50 p-3 text-sm">
+        <div><dt className="font-bold text-slate-700">Incluído em</dt><dd>{formatUpdatedAt(audio.created_at)}</dd></div>
+        <div><dt className="font-bold text-slate-700">Publicado em</dt><dd>{formatPublicationDate(audio.publicado_em)}</dd></div>
+        <div><dt className="font-bold text-slate-700">Última alteração incorporada</dt><dd>{legislativeChangeLabel(law)}</dd></div>
+      </dl>
+      <label className="grid gap-1 text-sm font-bold">Motivo ou observação (opcional)<textarea name="reason" maxLength={2000} defaultValue={audio.situacao_atualizacao_motivo ?? ""} placeholder={markingOutdated ? "Ex.: alteração ainda não gravada nesta faixa." : "Ex.: áudio revisado conforme a alteração indicada."} /></label>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="admin-button" onClick={onCancel}>Cancelar</button>
+        {audio.situacao_atualizacao_manual ? <button type="button" className="admin-button" disabled={busy} onClick={onClear}>Usar cálculo automático</button> : null}
+        <button className="admin-button primary" disabled={busy}>{busy ? "Salvando…" : markingOutdated ? "Marcar desatualizado" : "Confirmar revisão"}</button>
+      </div>
+    </form>
+  </div>;
+}
+
 export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: LegiscastAdminLaw | null } = {}) {
   const [laws, setLaws] = useState<Law[]>(lawContext ? [lawContext] : []);
   const [audios, setAudios] = useState<Audio[]>([]);
@@ -319,6 +374,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
   const [structureFilter, setStructureFilter] = useState<"all" | "duplicates">("all");
   const [deletingAudio, setDeletingAudio] = useState<Audio | null>(null);
   const [coverageAudio, setCoverageAudio] = useState<Audio | null>(null);
+  const [freshnessAudio, setFreshnessAudio] = useState<Audio | null>(null);
+  const [freshnessAction, setFreshnessAction] = useState<"mark_outdated" | "mark_current">("mark_outdated");
   const [actionId, setActionId] = useState<string | null>(null);
   async function load() {
     const endpoint = lawContext ? `/api/admin/legiscast-audios?law_slug=${encodeURIComponent(lawContext.slug)}` : "/api/admin/legiscast-audios";
@@ -566,6 +623,32 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a cobertura editorial.");
+    } finally {
+      setActionId(null);
+    }
+  }
+  function openFreshness(audio: Audio, action: "mark_outdated" | "mark_current") {
+    setFreshnessAudio(audio);
+    setFreshnessAction(action);
+  }
+  async function setAudioFreshness(audio: Audio, action: "mark_outdated" | "mark_current" | "clear", reason = "") {
+    const actionKey = `freshness:${audio.id}`;
+    setActionId(actionKey);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/legiscast-audios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "update-freshness", audioId: audio.id, action, reason }),
+      });
+      const body = await readResponse(response);
+      if (!response.ok) throw new Error(apiError(body, "Não foi possível atualizar a situação deste áudio."));
+      setFreshnessAudio(null);
+      setMessage(action === "mark_outdated" ? "Áudio marcado como desatualizado." : action === "mark_current" ? "Revisão do áudio confirmada." : "Controle manual removido; a situação voltou ao cálculo automático.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a situação deste áudio.");
     } finally {
       setActionId(null);
     }
@@ -832,8 +915,10 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                       </label>}
                     </div>
                     {expandedAudioGroup === groupId ? <div id={`legiscast-${structure.id}`} className="grid gap-2">
-                    {tracks.map((audio) => (
-                      <article
+                    {tracks.map((audio) => {
+                      const freshness = legiscastTrackFreshness(audio, selectedLaw);
+                      const manualLabel = manualFreshnessLabel(audio);
+                      return <article
                         key={audio.id}
                         className="grid gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3"
                       >
@@ -848,9 +933,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <p className="text-xs text-slate-500">
                             {formatDuration(audio.duracao_segundos)} ·{" "}
                             {formatSize(audio.final_size_bytes)} ·{" "}
-                            {audio.ativo ? "Ativo" : "Inativo"} · publicado em {" "}
+                            {audio.ativo ? "Ativo" : "Inativo"} · incluído em {" "}
+                            {formatUpdatedAt(audio.created_at)} · publicado em {" "}
                             {formatPublicationDate(audio.publicado_em)} · atualizado em{" "}
                             {formatUpdatedAt(audio.updated_at)}
+                          </p>
+                          <p className={freshness === "outdated" ? "mt-1 text-xs font-bold text-red-700" : freshness === "inactive" ? "mt-1 text-xs font-bold text-slate-600" : "mt-1 text-xs font-bold text-emerald-700"}>
+                            {freshness === "outdated" ? "⚠ Áudio desatualizado" : freshness === "inactive" ? "Áudio inativo" : "✓ Áudio atual"}
+                            {manualLabel ? ` · ${manualLabel}` : ""}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -910,6 +1000,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           <button
                             type="button"
                             className="admin-button"
+                            disabled={actionId === `freshness:${audio.id}`}
+                            onClick={() => openFreshness(audio, freshness === "outdated" ? "mark_current" : "mark_outdated")}
+                          >
+                            {freshness === "outdated" ? "Confirmar revisão" : "Marcar desatualizado"}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-button"
                             onClick={() => setDeletingAudio(audio)}
                           >
                             Excluir
@@ -934,8 +1032,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                             </button>
                           </div>
                         ) : null}
-                      </article>
-                    ))}
+                      </article>;
+                    })}
                     </div> : null}
                   </div>
                 );
@@ -950,8 +1048,10 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                 </button>
                 {expandedAudioGroup === "law-root" ? <div id="legiscast-law-root" className="grid gap-2">{selectedTracks
                   .filter((audio) => audio.structure_id === null)
-                  .map((audio) => (
-                    <article
+                  .map((audio) => {
+                    const freshness = legiscastTrackFreshness(audio, selectedLaw);
+                    const manualLabel = manualFreshnessLabel(audio);
+                    return <article
                       key={audio.id}
                       className="rounded-lg border border-slate-200 p-3"
                     >
@@ -962,8 +1062,9 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                         {audio.descricao || "Sem descrição"} ·{" "}
                         {formatDuration(audio.duracao_segundos)} ·{" "}
                         {formatSize(audio.final_size_bytes)} ·{" "}
-                        {audio.ativo ? "Ativo" : "Inativo"}
+                        {audio.ativo ? "Ativo" : "Inativo"} · incluído em {formatUpdatedAt(audio.created_at)} · publicado em {formatPublicationDate(audio.publicado_em)}
                       </p>
+                      <p className={freshness === "outdated" ? "mt-1 text-xs font-bold text-red-700" : freshness === "inactive" ? "mt-1 text-xs font-bold text-slate-600" : "mt-1 text-xs font-bold text-emerald-700"}>{freshness === "outdated" ? "⚠ Áudio desatualizado" : freshness === "inactive" ? "Áudio inativo" : "✓ Áudio atual"}{manualLabel ? ` · ${manualLabel}` : ""}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -1019,6 +1120,14 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                         <button
                           type="button"
                           className="admin-button"
+                          disabled={actionId === `freshness:${audio.id}`}
+                          onClick={() => openFreshness(audio, freshness === "outdated" ? "mark_current" : "mark_outdated")}
+                        >
+                          {freshness === "outdated" ? "Confirmar revisão" : "Marcar desatualizado"}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-button"
                           onClick={() => setDeletingAudio(audio)}
                         >
                           Excluir
@@ -1031,8 +1140,8 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                           src={previewUrl}
                         />
                       ) : null}
-                    </article>
-                  ))}</div> : null}
+                    </article>;
+                  })}</div> : null}
               </div>
             ) : null}
             {!selectedTracks.length ? <div className="law-center-empty rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5"><h3>Nenhuma faixa cadastrada</h3><p className="text-sm text-slate-500">Use o formulário desta página para enviar o primeiro áudio da lei. A estrutura pode ser vinculada agora ou depois.</p></div> : null}
@@ -1159,6 +1268,17 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
             </div>
           </section>
         </div>
+      ) : null}
+      {freshnessAudio && selectedLaw ? (
+        <FreshnessConfirmation
+          audio={freshnessAudio}
+          law={selectedLaw}
+          action={freshnessAction}
+          busy={actionId === `freshness:${freshnessAudio.id}`}
+          onCancel={() => setFreshnessAudio(null)}
+          onConfirm={(reason) => void setAudioFreshness(freshnessAudio, freshnessAction, reason)}
+          onClear={() => void setAudioFreshness(freshnessAudio, "clear")}
+        />
       ) : null}
       {deletingAudio ? (
         <DeleteAudioConfirmation

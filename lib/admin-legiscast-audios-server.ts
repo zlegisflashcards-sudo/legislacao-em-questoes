@@ -12,6 +12,7 @@ type AuthorizeInput = { lawId: unknown; structureId?: unknown; titulo: unknown; 
 type ConfirmInput = { jobId: unknown; operationToken: unknown };
 type RetryInput = { jobId: unknown };
 type AudioInput = { audioId: unknown; titulo?: unknown; descricao?: unknown; ordem?: unknown; ativo?: unknown; structureId?: unknown };
+type AudioFreshnessInput = { audioId: unknown; action: unknown; reason?: unknown };
 type AudioCoverageInput = { audioId: unknown; structureId: unknown; action: unknown };
 type StructurePdfPageInput = { structureId: unknown; lawId?: unknown; pdfPage?: unknown };
 type StructureAudioNotApplicableInput = { structureId: unknown; lawId?: unknown; audioNotApplicable?: unknown };
@@ -57,6 +58,7 @@ function logLegiscastUploadAuthorizationFailure(error: unknown) {
 async function requireAdmin() { const user = await obterAdministrador(); if (!user) throw new AdminLegiscastAudioError(401, "Autenticação administrativa obrigatória."); return user; }
 function positiveInteger(value: unknown, optional = false) { if ((value === null || value === undefined || value === "") && optional) return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 0) throw new AdminLegiscastAudioError(400, "Número inválido."); return parsed; }
 function positivePdfPage(value: unknown) { if (value === null || value === undefined || value === "") return null; const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < 1) throw new AdminLegiscastAudioError(400, "A página do PDF deve ser um número inteiro maior ou igual a 1."); return parsed; }
+function freshnessReason(value: unknown) { const reason = String(value ?? "").trim(); if (reason.length > 2000) throw new AdminLegiscastAudioError(400, "O motivo da atualização deve ter no máximo 2.000 caracteres."); return reason || null; }
 function booleanValue(value: unknown) { if (typeof value !== "boolean") throw new AdminLegiscastAudioError(400, "A marcação de áudio não se aplica é inválida."); return value; }
 function signingKey() { const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!key) throw new AdminLegiscastAudioError(500, "Configuração do servidor indisponível."); return key; }
 function sign(value: string) { return createHmac("sha256", signingKey()).update(value).digest("base64url"); }
@@ -76,21 +78,33 @@ function fields(input: AuthorizeInput) {
   const structureId = positiveInteger(input.structureId, true); return { lawId, structureId, title, description, order, active, mime, sizeBytes, extension: extensionOfLegiscastAudio(fileName) };
 }
 function statusLabel(status: string) { return ({ pendente: "Na fila", processando: "Processando", concluido: "Concluído", erro: "Erro", cancelado: "Cancelado" } as Record<string, string>)[status] ?? status; }
+const adminLegiscastAudioColumns = "id,lei_id,structure_id,titulo,descricao,duracao_segundos,ordem,ativo,storage_path,publicado_em,created_at,updated_at,leis(titulo,slug)";
+function isMissingLegiscastFreshnessSchema(error: { code?: string | null; message?: string | null } | null) { return error?.code === "42703" || /situacao_atualizacao_(?:manual|em|motivo|alteracao)/i.test(String(error?.message ?? "")); }
+type AdminLegiscastAudioResult = { data: Array<{ id: string; lei_id: number; structure_id: number | null; ativo: boolean; storage_path: string; [key: string]: unknown }> | null; error: { code?: string | null; message?: string | null } | null };
 
 export async function listAdminLegiscastAudios(lawSlug?: string | null) {
   await requireAdmin(); const db = getSupabaseServerClient(); const normalizedSlug = String(lawSlug ?? "").trim();
   if (normalizedSlug && !/^[a-z0-9-]{1,160}$/.test(normalizedSlug)) throw new AdminLegiscastAudioError(400, "Lei inválida.");
-  let lawsRequest = db.from("leis").select("id,slug,titulo,houve_alteracao_legislativa,ultima_alteracao_data").eq("ativo", true).order("titulo");
+  let lawsRequest = db.from("leis").select("id,slug,titulo,houve_alteracao_legislativa,ultima_alteracao_referencia,ultima_alteracao_data").eq("ativo", true).order("titulo");
   if (normalizedSlug) lawsRequest = lawsRequest.eq("slug", normalizedSlug);
   const laws = await lawsRequest;
   if (laws.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar os áudios do LegisCast.");
   if (normalizedSlug && !laws.data?.length) throw new AdminLegiscastAudioError(404, "Lei ativa não encontrada.");
   const lawId = normalizedSlug ? Number(laws.data?.[0]?.id) : null;
-  let audiosRequest = db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,ordem,ativo,storage_path,publicado_em,created_at,updated_at,leis(titulo,slug)").order("created_at", { ascending: false });
+  const audioRequest = (withFreshness: boolean) => {
+    let request = withFreshness
+      ? db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,ordem,ativo,storage_path,publicado_em,created_at,updated_at,situacao_atualizacao_manual,situacao_atualizacao_em,situacao_atualizacao_motivo,situacao_atualizacao_alteracao_referencia,situacao_atualizacao_alteracao_data,leis(titulo,slug)").order("created_at", { ascending: false })
+      : db.from("legiscast_audios").select(adminLegiscastAudioColumns).order("created_at", { ascending: false });
+    if (lawId !== null) request = request.eq("lei_id", lawId);
+    return request;
+  };
+  const audiosRequest = audioRequest(true);
   let jobsRequest = db.from("legiscast_audio_jobs").select("id,lei_id,structure_id,titulo,status,original_size_bytes,final_path,final_size_bytes,mp3_path,mp3_size_bytes,duracao_segundos,erro_codigo,erro_mensagem,tentativas,created_at,leis(titulo,slug)").order("created_at", { ascending: false }).limit(30);
   let structuresRequest = db.from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page,audio_not_applicable").eq("ativo", true).order("ordem");
-  if (lawId !== null) { audiosRequest = audiosRequest.eq("lei_id", lawId); jobsRequest = jobsRequest.eq("lei_id", lawId); structuresRequest = structuresRequest.eq("lei_id", lawId); }
-  const [audios, jobs, structures] = await Promise.all([audiosRequest, jobsRequest, structuresRequest]);
+  if (lawId !== null) { jobsRequest = jobsRequest.eq("lei_id", lawId); structuresRequest = structuresRequest.eq("lei_id", lawId); }
+  const [rawAudios, jobs, structures] = await Promise.all([audiosRequest, jobsRequest, structuresRequest]);
+  let audios = rawAudios as unknown as AdminLegiscastAudioResult;
+  if (audios.error && isMissingLegiscastFreshnessSchema(audios.error)) audios = await audioRequest(false) as unknown as AdminLegiscastAudioResult;
   if (audios.error || jobs.error || structures.error) throw new AdminLegiscastAudioError(503, "Não foi possível carregar os áudios do LegisCast.");
   // A migration de cobertura pode ainda não estar aplicada. Nesse intervalo a
   // administração e o LegisCast preservam exatamente a cobertura direta.
@@ -136,6 +150,28 @@ export async function updateAdminLegiscastAudioCoverage(input: AudioCoverageInpu
       throw new AdminLegiscastAudioError(503, "As coberturas editoriais ainda não estão disponíveis. A migration correspondente precisa ser aplicada.");
     }
     throw new AdminLegiscastAudioError(400, action === "add" ? "Não foi possível confirmar a cobertura desta estrutura." : "Não foi possível remover a cobertura desta estrutura.");
+  }
+  return result.data;
+}
+
+export async function updateAdminLegiscastAudioFreshness(input: AudioFreshnessInput) {
+  const actor = await requireAdmin();
+  const { db, audio } = await audioForAdmin(input.audioId);
+  const action = String(input.action ?? "");
+  if (action !== "mark_outdated" && action !== "mark_current" && action !== "clear") {
+    throw new AdminLegiscastAudioError(400, "Ação de atualização do áudio inválida.");
+  }
+  const result = await db.rpc("admin_set_legiscast_audio_freshness", {
+    p_actor_user_id: actor.id,
+    p_audio_id: audio.id,
+    p_action: action,
+    p_reason: freshnessReason(input.reason),
+  });
+  if (result.error) {
+    if (result.error.code === "PGRST202" || result.error.code === "42P01" || result.error.code === "42883") {
+      throw new AdminLegiscastAudioError(503, "O controle de atualização do LegisCast ainda não está disponível. A migration correspondente precisa ser aplicada.");
+    }
+    throw new AdminLegiscastAudioError(400, "Não foi possível registrar a situação de atualização deste áudio.");
   }
   return result.data;
 }

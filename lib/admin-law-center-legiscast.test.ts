@@ -31,7 +31,7 @@ describe("LegisCast na Central da Lei", () => {
     expect(route).toContain("listAdminLegiscastAudios(lawSlug)");
     expect(server).toContain("listAdminLegiscastAudios(lawSlug?: string | null)");
     expect(server).toContain('lawsRequest.eq("slug", normalizedSlug)');
-    expect(server).toContain('audiosRequest = audiosRequest.eq("lei_id", lawId)');
+    expect(server).toContain('request = request.eq("lei_id", lawId)');
     expect(server).toContain('jobsRequest = jobsRequest.eq("lei_id", lawId)');
     expect(server).toContain('structuresRequest = structuresRequest.eq("lei_id", lawId)');
   });
