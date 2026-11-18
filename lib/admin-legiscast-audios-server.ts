@@ -111,6 +111,16 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
   let coverageRequest = db.from("legiscast_audio_structure_coverage").select("audio_id,lei_id,structure_id,created_at,created_by");
   if (lawId !== null) coverageRequest = coverageRequest.eq("lei_id", lawId);
   const coverage = await coverageRequest;
+  // A data é armazenada no bloco, não no áudio: assim uma nova gravação volta
+  // automaticamente a ser atual e uma alteração posterior volta a sinalizar a
+  // faixa anterior. Em bases durante a transição da migration, preservamos o
+  // cálculo anterior sem interromper o acervo administrativo.
+  let blockChangesRequest = db.from("legislative_references")
+    .select("lei_id,structure_id,legislacao_atualizada_em")
+    .not("legislacao_atualizada_em", "is", null)
+    .or("situacao.is.null,situacao.neq.arquivada");
+  if (lawId !== null) blockChangesRequest = blockChangesRequest.eq("lei_id", lawId);
+  const blockChanges = await blockChangesRequest;
   const audioPaths = (audios.data ?? []).map((audio) => audio.storage_path);
   const mp3Jobs = audioPaths.length
     ? await db.from("legiscast_audio_jobs").select("final_path").eq("status", "concluido").not("mp3_path", "is", null).in("final_path", audioPaths)
@@ -119,6 +129,7 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
   const mp3ByFinalPath = new Set((mp3Jobs.data ?? []).map((job) => job.final_path));
   const audioRows = audios.data ?? [];
   const coverageRows = coverage.error ? [] : coverage.data ?? [];
+  const blockChangeRows = blockChanges.error ? [] : blockChanges.data ?? [];
   const duplicateConflicts = findLegiscastAudioConflicts(audioRows.map((audio) => ({
     id: audio.id,
     leiId: audio.lei_id,
@@ -126,7 +137,7 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
     active: audio.ativo,
     coveredStructureIds: coverageRows.filter((entry) => entry.audio_id === audio.id).map((entry) => entry.structure_id),
   })));
-  return { laws: laws.data ?? [], audios: audioRows.map((audio) => ({ ...audio, mp3_available: mp3ByFinalPath.has(audio.storage_path) })), structures: structures.data ?? [], coverages: coverageRows, duplicateConflicts, coverageAvailable: !coverage.error, jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
+  return { laws: laws.data ?? [], audios: audioRows.map((audio) => ({ ...audio, mp3_available: mp3ByFinalPath.has(audio.storage_path) })), structures: structures.data ?? [], coverages: coverageRows, blockChanges: blockChangeRows, blockFreshnessAvailable: !blockChanges.error, duplicateConflicts, coverageAvailable: !coverage.error, jobs: (jobs.data ?? []).map((job) => ({ ...job, statusLabel: statusLabel(job.status) })), originalMaxBytes: LEGISCAST_ORIGINAL_MAX_BYTES, finalMaxBytes: 50 * 1024 * 1024 };
 }
 
 export async function updateAdminLegiscastStructurePdfPage(input: StructurePdfPageInput) { await requireAdmin(); const structureId = positiveInteger(input.structureId) as number; const lawId = positiveInteger(input.lawId, true); const pdfPage = positivePdfPage(input.pdfPage); const db = getSupabaseServerClient(); let request = db.from("law_structure").update({ pdf_page: pdfPage, updated_at: new Date().toISOString() }).eq("id", structureId); if (lawId !== null) request = request.eq("lei_id", lawId); const result = await request.select("id").maybeSingle(); if (result.error) throw new AdminLegiscastAudioError(503, "Não foi possível atualizar a página da estrutura."); if (!result.data) throw new AdminLegiscastAudioError(404, "Estrutura não encontrada."); return { id: structureId, pdfPage }; }

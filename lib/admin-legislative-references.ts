@@ -533,13 +533,20 @@ export async function saveLegislativeReference(input: { id: string; identificati
   if (!legislation) throw new Error("O texto legislativo é obrigatório; não são permitidos blocos vazios.");
   const status = input.status === "revogada" ? "revogada" : "preparada";
   const revokingLaw = text(input.revokingLaw, 500);
-  const result = await getSupabaseServerClient().from("legislative_references").update({
+  const db = getSupabaseServerClient();
+  const current = await db.from("legislative_references").select("id,legislacao").eq("id", input.id).maybeSingle();
+  if (current.error || !current.data) throw new Error("Não foi possível localizar a referência legislativa.");
+  // A desatualização do LegisCast só é disparada por conteúdo legal alterado.
+  // Alterações de identificação, situação ou metadados não mudam essa data.
+  const legislationChanged = sanitizarHtmlLegislacao(String(current.data.legislacao ?? "")) !== legislation;
+  const result = await db.from("legislative_references").update({
     identificacao: identification,
     legislacao: legislation || null,
     preparado_em: legislation ? new Date().toISOString() : null,
     situacao: status,
     lei_revogadora: status === "revogada" ? revokingLaw : null,
     revogado_em: status === "revogada" ? new Date().toISOString() : null,
+    ...(legislationChanged ? { legislacao_atualizada_em: new Date().toISOString() } : {}),
   }).eq("id", input.id).select("id").maybeSingle();
   if (result.error || !result.data) throw new Error("Não foi possível salvar a referência legislativa.");
 }

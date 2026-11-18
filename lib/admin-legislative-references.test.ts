@@ -91,4 +91,14 @@ describe("base legislativa persistente", () => {
     expect(source).toContain("!existing?.structureId ? { structure_id: reference.structureId } : {}");
     expect(route).toContain('const structureId = String(form.get("structure_id") ?? "")');
   });
+
+  it("registra alteração de conteúdo para atualizar o estado editorial do áudio", () => {
+    const source = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    const migration = readFileSync("supabase/migrations/20261118223915_add_legislative_reference_change_timestamp.sql", "utf8");
+    expect(source).toContain("const legislationChanged");
+    expect(source).toContain("legislacao_atualizada_em");
+    expect(source).toContain("Alterações de identificação, situação ou metadados não mudam essa data");
+    expect(migration).toContain("add column if not exists legislacao_atualizada_em timestamptz");
+    expect(migration).toContain("legislative_references_legislacao_atualizada_idx");
+  });
 });

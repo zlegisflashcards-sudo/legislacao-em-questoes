@@ -42,4 +42,12 @@ describe("controle editorial de desatualização do LegisCast", () => {
     expect(server).toContain("audioRequest(false)");
     expect(server).toContain("situacao_atualizacao_manual");
   });
+
+  it("considera a alteração efetiva do texto do bloco na mesma estrutura ou cobertura", () => {
+    expect(server).toContain('select("lei_id,structure_id,legislacao_atualizada_em")');
+    expect(server).toContain("blockFreshnessAvailable");
+    expect(client).toContain("blockChanges");
+    expect(client).toContain("audioBlockChange");
+    expect(client).toContain("bloco alterado em");
+  });
 });
