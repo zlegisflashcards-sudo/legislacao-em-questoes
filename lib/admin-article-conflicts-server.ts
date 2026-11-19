@@ -116,6 +116,19 @@ async function lawMap() {
   }]));
 }
 
+async function lawsWithActiveStructure(lawIds: number[]) {
+  const ids = [...new Set(lawIds.filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return new Set<number>();
+  const result = await getSupabaseServerClient()
+    .from("law_structure")
+    .select("lei_id")
+    .in("lei_id", ids)
+    .eq("ativo", true);
+  if (result.error)
+    throw new AdminArticleConflictError(503, "Não foi possível consultar a estrutura das leis.");
+  return new Set((result.data ?? []).map((row) => Number(row.lei_id)));
+}
+
 /**
  * Usa a mesma resolução da leitura contínua: uma questão só está vinculada
  * quando encontra um bloco legislativo preparado por ordem ou vínculo manual.
@@ -245,6 +258,9 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const byContext = new Map<string, LegisBotConflictQuestion[]>();
   for (const question of activeRows) { const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`; byContext.set(key, [...(byContext.get(key) ?? []), question]); }
   const lawsForValidation = await lawMap();
+  const lawIdsWithStructure = await lawsWithActiveStructure(
+    activeRows.map((question) => Number(question.lei_id)),
+  );
   for (const [key, questions] of byContext) {
     const lawShortName = lawsForValidation.get(questions[0].slug.toUpperCase())?.shortName;
     const provenance = questionConflictProvenance(questions, lawShortName);
@@ -297,7 +313,16 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     ].filter((value): value is string => Boolean(value)));
     return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && matchesOrphanSelectedType(matchingTypes, orphanReviewType(status).code);
   });
-  const unstructuredQuestions = activeRows.filter((question) => question.structure_id === null);
+  // Sem nenhum bloco cadastrado, a própria lei é a raiz lógica da árvore.
+  // O structure_id continua nulo: não criamos nem movemos registros apenas
+  // para representar essa raiz já presente nos dados da questão.
+  const implicitLawRoots = [...new Set(activeRows
+    .filter((question) => question.structure_id === null && !lawIdsWithStructure.has(Number(question.lei_id)))
+    .map((question) => question.slug.toLocaleLowerCase("pt-BR")))]
+    .map((slug) => ({ slug, title: lawsForValidation.get(slug.toUpperCase())?.title ?? slug }));
+  const unstructuredQuestions = activeRows.filter((question) =>
+    question.structure_id === null && lawIdsWithStructure.has(Number(question.lei_id)),
+  );
   const filteredUnstructured = unstructuredQuestions.filter((question) =>
     (!law || question.slug.toLocaleLowerCase("pt-BR") === law) &&
     matchesSelectedTypes(new Set(["sem_estrutura"])),
@@ -450,6 +475,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   return {
     items,
     structuralSuggestions,
+    implicitLawRoots,
     subjectWarnings,
     subjectWarningTotal,
     page,

@@ -61,7 +61,7 @@ export function AdminLawQuestions({ law, initialStructure, initialStructureSumma
     return nodes.filter((node) => visible.has(node.id));
   }, [nodes, selectedScope]);
   const structureMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const structurePath = (target: number | null) => { const names: string[] = []; for (let node = target ? structureMap.get(target) : undefined; node; node = node.parent_id ? structureMap.get(node.parent_id) : undefined) names.unshift(node.nome); return names.join(" › "); };
+  const structurePath = (target: number | null) => { if (target === null && !nodes.length) return law.titulo; const names: string[] = []; for (let node = target ? structureMap.get(target) : undefined; node; node = node.parent_id ? structureMap.get(node.parent_id) : undefined) names.unshift(node.nome); return names.join(" › "); };
   const selectedStructurePath = structureId ? structurePath(structureId).split(" › ").filter(Boolean) : [];
   const resultIds = results.map((item) => item.id); const previousId = editingId ? questionResultNeighbor(resultIds, editingId, -1) : null; const nextId = editingId ? questionResultNeighbor(resultIds, editingId, 1) : null;
 

@@ -213,7 +213,11 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("resolveContinuousReadingIntegrity");
     expect(server).toContain('"sem_bloco_artigo"');
     expect(server).toContain('"sem_estrutura"');
-    expect(server).toContain('const unstructuredQuestions = activeRows.filter((question) => question.structure_id === null);');
+    expect(server).toContain("async function lawsWithActiveStructure");
+    expect(server).toContain("const lawIdsWithStructure = await lawsWithActiveStructure");
+    expect(server).toContain("a própria lei é a raiz lógica da árvore");
+    expect(server).toContain("question.structure_id === null && lawIdsWithStructure.has");
+    expect(server).toContain("implicitLawRoots");
     expect(server).toContain('reviewTypes: [status === "unstructured" ? "Questão sem estrutura"');
     expect(server).toContain('reviewTypes: [status === "unstructured" ? "Questão sem estrutura" : orphanReviewType(status).label]');
     expect(server).toContain('if (status === "missing") return { code: "sem_bloco_artigo", label: "Sem bloco de artigo", editorial: true }');
@@ -224,6 +228,7 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Vincular ao bloco");
     expect(list).toContain("Isso não impede a conferência ou o uso da questão.");
     expect(list).toContain("A leitura contínua e os destinos do LegisBot aguardam");
+    expect(list).toContain("Lei completa como estrutura raiz.");
   });
 
   it("sinaliza duplicidade de assertiva da edição sem bloquear o salvamento nem alterar os registros", () => {
