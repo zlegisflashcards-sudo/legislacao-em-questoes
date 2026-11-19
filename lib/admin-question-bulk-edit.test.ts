@@ -79,3 +79,21 @@ describe("edição em lote de questões", () => {
     expect(client).toContain("Exemplos de alteração");
   });
 });
+
+describe("conflito recuperável de prévia em lote", () => {
+  it.each(["applyBulkQuestionEdit", "applyBulkQuestionTextReplacement"])("%s mantém fingerprint e aceita PT409 e 40001 legado", (name) => {
+    const start = server.indexOf(`export async function ${name}(`);
+    const body = server.slice(start, server.indexOf("\n}", start) + 2);
+    expect(body).toContain("JSON.stringify(expected) !== JSON.stringify(resolved.preview.expected)");
+    expect(body).toContain('["PT409", "40001"].includes(result.error.code ?? "") ? 409');
+  });
+  it.each([["applyBulkEdit", "setBulkEditPreview"], ["applyBulkTextReplacement", "setBulkReplacePreview"]])("%s descarta prévia somente em conflito HTTP 409", (name, setter) => {
+    const handler = client.split("\n").find((line) => line.includes(`async function ${name}(`));
+    expect(handler).toContain(`caught instanceof AdminQuestionRequestError && caught.status === 409) ${setter}(null)`);
+    expect(handler?.split("catch (caught)")[1]).not.toContain("await post");
+  });
+  it("preserva status HTTP no erro do cliente", () => {
+    expect(client).toContain("public status: number");
+    expect(client).toMatch(/throw new AdminQuestionRequestError\([^;]+response.status\)/);
+  });
+});
