@@ -568,13 +568,20 @@ function validateLawData(raw: unknown, update = false) {
   const allowed = update ? [...commonAllowed, "acesso_gratuito"] : commonAllowed;
   const data = update ? allowedUpdate(raw, allowed) : asObject(raw);
   rejectUnknownKeys(data, allowed);
+  // A tela Dados da lei envia o cadastro inteiro. A API ainda admite alterações
+  // parciais para os fluxos administrativos legados, sem permitir que a tela
+  // completa contorne seus campos obrigatórios.
+  const completeFormKeys = ["nome_curto", "codigo", "categoria", "total_artigos", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "situacao_atualizacao"] as const;
+  const completeLawForm = !update || completeFormKeys.every((key) => key in data);
   const result: JsonObject = {};
   if (!update || "slug" in data) result.slug = slug(data.slug);
   if (!update || "titulo" in data) result.titulo = requiredString(data.titulo, "Título", 300);
   if (!update || "tipo_conteudo" in data) result.tipo_conteudo = enumValue(data.tipo_conteudo ?? "legislacao", ["legislacao", "doutrina"], "Tipo de conteúdo");
   for (const key of ["nome_curto", "descricao", "codigo", "categoria", "thumbnail_url"] as const) {
     if (!update || key in data) {
-      const value = optionalString(data[key], key, key === "descricao" ? 4000 : 500);
+      const value = completeLawForm && (key === "nome_curto" || key === "codigo" || key === "categoria")
+        ? requiredString(data[key], key === "categoria" ? "Tipo de lei" : key === "nome_curto" ? "Nome curto" : "Código", 500)
+        : optionalString(data[key], key, key === "descricao" ? 4000 : 500);
       result[key] = update ? value : value ?? null;
     }
   }
@@ -584,19 +591,31 @@ function validateLawData(raw: unknown, update = false) {
   if (!update) result.ativo = result.status_publicacao !== "inativa";
   if (update && "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito, "Acesso gratuito");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
+  if (completeLawForm && !("total_artigos" in data)) throw new CommercialValidationError("Total de artigos para Anki é obrigatório.");
   if ("total_artigos" in data) {
     const value = data.total_artigos;
-    if (value === null || value === "") result.total_artigos = null;
+    if (value === null || value === "") {
+      if (completeLawForm) throw new CommercialValidationError("Total de artigos para Anki é obrigatório.");
+      result.total_artigos = null;
+    }
     else {
       if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new CommercialValidationError("Total de artigos para Anki deve ser um número inteiro maior que zero.");
       result.total_artigos = value;
     }
   }
-  if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = optionalString(data.norma_originaria_referencia, "Norma originária", 500) ?? null;
-  if (!update || "norma_originaria_data" in data) result.norma_originaria_data = optionalIsoDate(data.norma_originaria_data, "Data da norma originária") ?? null;
-  if (!update || "houve_alteracao_legislativa" in data) result.houve_alteracao_legislativa = booleanValue(data.houve_alteracao_legislativa ?? false, "Alteração legislativa");
-  if (!update || "ultima_alteracao_referencia" in data) result.ultima_alteracao_referencia = optionalString(data.ultima_alteracao_referencia, "Última alteração", 500) ?? null;
-  if (!update || "ultima_alteracao_data" in data) result.ultima_alteracao_data = optionalIsoDate(data.ultima_alteracao_data, "Data da última alteração") ?? null;
+  const normaOriginaria = optionalString(data.norma_originaria_referencia, "Norma originária", 500);
+  if (completeLawForm && !normaOriginaria) throw new CommercialValidationError("Norma originária é obrigatória.");
+  if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = normaOriginaria ?? null;
+  const dataNormaOriginaria = optionalIsoDate(data.norma_originaria_data, "Data da norma originária");
+  if (completeLawForm && !dataNormaOriginaria) throw new CommercialValidationError("Data da norma originária é obrigatória.");
+  if (!update || "norma_originaria_data" in data) result.norma_originaria_data = dataNormaOriginaria ?? null;
+  const houveAlteracao = !update || "houve_alteracao_legislativa" in data ? booleanValue(data.houve_alteracao_legislativa ?? false, "Alteração legislativa") : null;
+  if (!update || "houve_alteracao_legislativa" in data) result.houve_alteracao_legislativa = houveAlteracao;
+  const ultimaAlteracao = optionalString(data.ultima_alteracao_referencia, "Última alteração", 500);
+  const dataUltimaAlteracao = optionalIsoDate(data.ultima_alteracao_data, "Data da última alteração");
+  if (completeLawForm && houveAlteracao && (!ultimaAlteracao || !dataUltimaAlteracao)) throw new CommercialValidationError("Informe a identificação e a data da última alteração incorporada.");
+  if (!update || "ultima_alteracao_referencia" in data) result.ultima_alteracao_referencia = ultimaAlteracao ?? null;
+  if (!update || "ultima_alteracao_data" in data) result.ultima_alteracao_data = dataUltimaAlteracao ?? null;
   if (!update || "situacao_atualizacao" in data) result.situacao_atualizacao = enumValue(data.situacao_atualizacao ?? "nao_verificado", LAW_UPDATE_STATUSES, "Situação de atualização");
   if (update && "situacao_conferencia" in data) {
     const value = data.situacao_conferencia;

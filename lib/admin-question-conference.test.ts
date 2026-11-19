@@ -125,6 +125,17 @@ describe("modo conferência administrativo", () => {
     expect(questionsPage).toContain("stopPropagation");
   });
 
+  it("permite marcar apenas a estrutura aberta diretamente no modo conferência", () => {
+    expect(client).toContain("Marcar estrutura como conferida");
+    expect(client).toContain("✓ Estrutura conferida");
+    expect(client).toContain(
+      "as subestruturas não são marcadas automaticamente",
+    );
+    expect(client).toContain("toggleCurrentStructureReview");
+    expect(questionsPage).toContain("structureReview={!conferenceList && structureId");
+    expect(questionsPage).toContain("onToggle: () => toggleStructureReview(structure)");
+  });
+
   it("persiste a marcação da lei sem estrutura separadamente", () => {
     expect(server).toContain('db().from("admin_question_law_reviews")');
     expect(server).toContain(

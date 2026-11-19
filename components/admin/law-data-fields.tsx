@@ -7,6 +7,7 @@ import { PUBLICATION_STATUSES, publicationStatusFromActive } from "@/lib/publica
 export type AdminLawData = Record<string, unknown>;
 
 const text = (value: unknown) => value == null ? "" : String(value);
+function RequiredMark() { return <><span aria-hidden="true" className="ml-1 text-red-600">*</span><span className="sr-only"> obrigatório</span></>; }
 const lawCategories = [
   { value: "Constituições", label: "Constituições — verde" },
   { value: "Códigos", label: "Códigos — amarelo" },
@@ -30,15 +31,15 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
     <section className="law-data-section" aria-labelledby="law-data-identification">
       <header><div><h3 id="law-data-identification">Dados básicos</h3><p>Identificação e informações de exibição.</p></div></header>
       <div className="law-data-fields-grid">
-        <label>Tipo de conteúdo<select name="tipo_conteudo" value={contentType} onChange={(event) => setContentType(event.target.value)}><option value="legislacao">Legislação</option><option value="doutrina">Doutrina</option></select></label>
+        <label>Tipo de conteúdo<RequiredMark /><select name="tipo_conteudo" value={contentType} onChange={(event) => setContentType(event.target.value)} required><option value="legislacao">Legislação</option><option value="doutrina">Doutrina</option></select></label>
         {contentType === "doutrina" ? <p className="admin-alert law-data-wide">Doutrina é cadastrada por importação estruturada para preservar UUIDs e tópicos. <Link href="/admin/doutrina/importar">Abrir importação de doutrina</Link>.</p> : null}
-        <label>Slug<input name="slug" defaultValue={text(law?.slug)} placeholder="slug-da-lei" required /></label>
-        <label>Título<input name="titulo" defaultValue={text(law?.titulo)} placeholder="Título" required /></label>
-        <label>Nome curto<input name="nome_curto" defaultValue={text(law?.nome_curto)} placeholder="Nome curto" /></label>
-        <label>Código<input name="codigo" defaultValue={text(law?.codigo)} placeholder="Código" /></label>
-        <label>Tipo de lei<select name="categoria" defaultValue={text(law?.categoria)}><option value="">Selecione o tipo</option>{lawCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
-        <label>Ordem<input name="ordem" type="number" min="0" defaultValue={text(law?.ordem) || "0"} required /></label>
-        <label>Total de artigos para Anki<input name="total_artigos" type="number" min="1" defaultValue={text(law?.total_artigos)} placeholder="Ex.: 312" /><span>Valor único usado em todos os cards exportados desta lei.</span></label>
+        <label>Slug<RequiredMark /><input name="slug" defaultValue={text(law?.slug)} placeholder="slug-da-lei" required /></label>
+        <label>Título<RequiredMark /><input name="titulo" defaultValue={text(law?.titulo)} placeholder="Título" required /></label>
+        <label>Nome curto<RequiredMark /><input name="nome_curto" defaultValue={text(law?.nome_curto)} placeholder="Nome curto" required /></label>
+        <label>Código<RequiredMark /><input name="codigo" defaultValue={text(law?.codigo)} placeholder="Código" required /></label>
+        <label>Tipo de lei<RequiredMark /><select name="categoria" defaultValue={text(law?.categoria)} required><option value="">Selecione o tipo</option>{lawCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+        <label>Ordem<RequiredMark /><input name="ordem" type="number" min="0" defaultValue={text(law?.ordem) || "0"} required /></label>
+        <label>Total de artigos para Anki<RequiredMark /><input name="total_artigos" type="number" min="1" defaultValue={text(law?.total_artigos)} placeholder="Ex.: 312" required /><span>Valor único usado em todos os cards exportados desta lei.</span></label>
         <label className="law-data-wide">URL da miniatura<input name="thumbnail_url" defaultValue={text(law?.thumbnail_url)} placeholder="URL da miniatura" /></label>
         <label className="law-data-wide">Descrição<textarea name="descricao" defaultValue={text(law?.descricao)} placeholder="Descrição" /></label>
       </div>
@@ -57,16 +58,16 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
       <header><div><h3 id="law-data-update">Atualização legislativa</h3><p>Referências e datas da norma originária e de suas alterações.</p></div></header>
       <div className="law-data-update-grid">
         <div className="law-data-reference-pair">
-          <label>Norma originária<input name="norma_originaria_referencia" defaultValue={text(law?.norma_originaria_referencia)} placeholder="Ex.: Lei nº 10.230/2015" /></label>
-          <label>Data da norma originária<input name="norma_originaria_data" type="date" defaultValue={text(law?.norma_originaria_data)} /></label>
+          <label>Norma originária<RequiredMark /><input name="norma_originaria_referencia" defaultValue={text(law?.norma_originaria_referencia)} placeholder="Ex.: Lei nº 10.230/2015" required /></label>
+          <label>Data da norma originária<RequiredMark /><input name="norma_originaria_data" type="date" defaultValue={text(law?.norma_originaria_data)} required /></label>
         </div>
         <div className="law-data-status-grid">
-          <label>Houve alteração legislativa?<select name="houve_alteracao_legislativa" value={hasChange ? "true" : "false"} onChange={(event) => setHasChange(event.target.value === "true")}><option value="false">Não</option><option value="true">Sim</option></select></label>
-          <label>Situação de atualização<select name="situacao_atualizacao" defaultValue={["nao_verificado", "atualizado", "desatualizado"].includes(text(law?.situacao_atualizacao)) ? text(law?.situacao_atualizacao) : "nao_verificado"}><option value="nao_verificado">Não verificado</option><option value="atualizado">Atualizado</option><option value="desatualizado">Desatualizado</option></select></label>
+          <label>Houve alteração legislativa?<RequiredMark /><select name="houve_alteracao_legislativa" value={hasChange ? "true" : "false"} onChange={(event) => setHasChange(event.target.value === "true")} required><option value="false">Não</option><option value="true">Sim</option></select></label>
+          <label>Situação de atualização<RequiredMark /><select name="situacao_atualizacao" defaultValue={["nao_verificado", "atualizado", "desatualizado"].includes(text(law?.situacao_atualizacao)) ? text(law?.situacao_atualizacao) : "nao_verificado"} required><option value="nao_verificado">Não verificado</option><option value="atualizado">Atualizado</option><option value="desatualizado">Desatualizado</option></select></label>
         </div>
         {hasChange ? <div className="law-data-reference-pair law-data-last-update">
-          <label>Última alteração incorporada<input name="ultima_alteracao_referencia" defaultValue={text(law?.ultima_alteracao_referencia)} required /></label>
-          <label>Data da última alteração<input name="ultima_alteracao_data" type="date" defaultValue={text(law?.ultima_alteracao_data)} required /></label>
+          <label>Última alteração incorporada<RequiredMark /><input name="ultima_alteracao_referencia" defaultValue={text(law?.ultima_alteracao_referencia)} required /></label>
+          <label>Data da última alteração<RequiredMark /><input name="ultima_alteracao_data" type="date" defaultValue={text(law?.ultima_alteracao_data)} required /></label>
         </div> : <>
           <input type="hidden" name="ultima_alteracao_referencia" value="" />
           <input type="hidden" name="ultima_alteracao_data" value="" />

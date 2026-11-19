@@ -87,6 +87,22 @@ describe("validação da administração comercial", () => {
     expect(lawDataFields).toContain("Situação de conferência");
   });
 
+  it("exige o cadastro editorial completo quando a tela Dados da lei envia todos os campos", () => {
+    const validation = server.slice(server.indexOf("function validateLawData"), server.indexOf("function validateMaterialData"));
+    expect(lawDataFields).toContain('name="nome_curto"');
+    expect(lawDataFields).toContain('name="codigo"');
+    expect(lawDataFields).toContain('name="categoria"');
+    expect(lawDataFields).toContain('name="total_artigos"');
+    expect(lawDataFields).toContain('name="norma_originaria_referencia"');
+    expect(lawDataFields).toContain('name="norma_originaria_data"');
+    expect(lawDataFields).toContain("function RequiredMark");
+    expect(lawDataFields).toContain('className="ml-1 text-red-600"');
+    expect(validation).toContain("const completeLawForm");
+    expect(validation).toContain("Total de artigos para Anki é obrigatório.");
+    expect(validation).toContain("Norma originária é obrigatória.");
+    expect(validation).toContain("Informe a identificação e a data da última alteração incorporada.");
+  });
+
   it("aceita URLs normais do YouTube e as normaliza para o player", () => {
     for (const url of [
       "https://www.youtube.com/watch?v=LDa1zANCIQY",

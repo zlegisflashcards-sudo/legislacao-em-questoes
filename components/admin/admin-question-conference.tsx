@@ -119,6 +119,7 @@ export function AdminQuestionConference({
   nodes,
   structureId,
   structureName,
+  structureReview,
   customList,
   onClose,
   onChanged,
@@ -127,6 +128,11 @@ export function AdminQuestionConference({
   nodes: AdminQuestionStructureNode[];
   structureId: number | null;
   structureName: string;
+  structureReview?: {
+    reviewed: boolean;
+    saving: boolean;
+    onToggle: () => Promise<boolean>;
+  };
   customList?: { id: string; nome: string };
   onClose: () => void;
   onChanged: () => void;
@@ -331,6 +337,21 @@ export function AdminQuestionConference({
     setForm(null);
     setOriginal(null);
     next();
+  }
+  async function toggleCurrentStructureReview() {
+    if (!structureReview) return;
+    setError("");
+    const wasReviewed = structureReview.reviewed;
+    const saved = await structureReview.onToggle();
+    if (saved) {
+      setNotice(
+        wasReviewed
+          ? "Marcação de conferência removida desta estrutura."
+          : "Estrutura marcada como conferida.",
+      );
+    } else {
+      setError("Não foi possível salvar a marcação de conferência.");
+    }
   }
   async function move(direction: -1 | 1) {
     if (saving || currentIndex < 0) return;
@@ -991,6 +1012,21 @@ export function AdminQuestionConference({
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {structureReview ? (
+            <button
+              type="button"
+              className={`admin-button ${structureReview.reviewed ? "secondary" : "primary"}`}
+              disabled={saving || structureReview.saving}
+              title="Registra somente esta estrutura; as subestruturas não são marcadas automaticamente."
+              onClick={() => void toggleCurrentStructureReview()}
+            >
+              {structureReview.saving
+                ? "Salvando…"
+                : structureReview.reviewed
+                  ? "✓ Estrutura conferida"
+                  : "Marcar estrutura como conferida"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="admin-button secondary"
