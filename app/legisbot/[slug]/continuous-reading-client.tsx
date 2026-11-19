@@ -14,6 +14,7 @@ type Priority = "muito_alta" | "alta" | "media" | "baixa" | "nao_mapeado";
 type Reference = { id: string; slug: string; ordem: string; identificacao: string; sourceQuestionId: string | null; prepared: boolean; hierarchy: HierarchyNode[]; priority: Priority; recent: boolean; linkedQuestions: number; inactive: boolean };
 type StructureCatalogItem = { id: number; parentId: number | null; type: string; name: string; order: number; status: "accessible" | "pending" | "blocked" };
 type StudyUnit = { id: string; kind: "audio" | "text"; audioId: string | null; titleStructureId: number; structureIds: number[] };
+type StructureAudioCoverage = { kind: "direct" | "covered"; sourceName: string };
 type Block = Reference & { legislation: string };
 type BlockText = Pick<Block, "id" | "legislation">;
 type TocNode = { key: string; structure: StructureCatalogItem; reference: Reference | null; children: TocNode[]; referenceIds: string[] };
@@ -84,22 +85,31 @@ function structureTree(structures: StructureCatalogItem[], references: Reference
   return roots;
 }
 
-function StructureItems({ nodes, activeId, onNavigate, collapsed, onToggle }: { nodes: TocNode[]; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
+function StructureItems({ nodes, activeId, onNavigate, collapsed, onToggle, audioCoverageByStructureId }: { nodes: TocNode[]; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void; audioCoverageByStructureId: ReadonlyMap<number, StructureAudioCoverage> }) {
   return <ol>{nodes.map((node) => {
     const active = Boolean(activeId && node.referenceIds.includes(activeId));
     const enabled = node.structure.status === "accessible" && node.reference;
+    const audioCoverage = audioCoverageByStructureId.get(node.structure.id) ?? null;
     return <li key={node.key} className={styles.tocSection}>
-      <div className={styles.tocLine}>{node.children.length ? <button type="button" aria-label={collapsed.has(node.key) ? `Expandir ${node.structure.name}` : `Recolher ${node.structure.name}`} aria-expanded={!collapsed.has(node.key)} onClick={() => onToggle(node.key)}>{collapsed.has(node.key) ? "+" : "−"}</button> : <span className={styles.tocToggleSpacer} aria-hidden="true" />}{enabled ? <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference!.id)}`} onClick={() => onNavigate(node.reference!)}>{node.structure.name}</a> : <span className={node.structure.status === "blocked" ? styles.tocBlocked : styles.tocPending}>{node.structure.name}<small>{node.structure.status === "blocked" ? "Bloqueada" : "Pendente"}</small></span>}</div>
-      {node.children.length && !collapsed.has(node.key) ? <StructureItems nodes={node.children} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} /> : null}
+      <div className={styles.tocLine}>{node.children.length ? <button type="button" aria-label={collapsed.has(node.key) ? `Expandir ${node.structure.name}` : `Recolher ${node.structure.name}`} aria-expanded={!collapsed.has(node.key)} onClick={() => onToggle(node.key)}>{collapsed.has(node.key) ? "+" : "−"}</button> : <span className={styles.tocToggleSpacer} aria-hidden="true" />}{enabled ? <a className={active ? styles.tocActive : undefined} aria-current={active ? "location" : undefined} href={`#${continuousBlockAnchor(node.reference!.id)}`} onClick={() => onNavigate(node.reference!)}><span>{node.structure.name}</span>{audioCoverage ? <small className={`${styles.tocAudioBadge} ${audioCoverage.kind === "direct" ? styles.tocAudioDirect : styles.tocAudioCovered}`} title={audioCoverage.kind === "direct" ? "Esta estrutura possui faixa própria do LegisCast" : `Esta estrutura é abrangida pelo áudio de ${audioCoverage.sourceName}`}>{audioCoverage.kind === "direct" ? "🎧 Áudio" : "↳ Áudio"}</small> : null}</a> : <span className={node.structure.status === "blocked" ? styles.tocBlocked : styles.tocPending}>{node.structure.name}<small>{node.structure.status === "blocked" ? "Bloqueada" : "Pendente"}</small></span>}</div>
+      {node.children.length && !collapsed.has(node.key) ? <StructureItems nodes={node.children} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} audioCoverageByStructureId={audioCoverageByStructureId} /> : null}
     </li>;
   })}</ol>;
 }
 
-function TableOfContents({ structures, references, lawTitle, rootHref, activeId, onNavigate, collapsed, onToggle }: { structures: StructureCatalogItem[]; references: Reference[]; lawTitle: string; rootHref: string; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
+function TableOfContents({ structures, references, studyUnits, lawTitle, rootHref, activeId, onNavigate, collapsed, onToggle }: { structures: StructureCatalogItem[]; references: Reference[]; studyUnits: StudyUnit[]; lawTitle: string; rootHref: string; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
   const nodes = structureTree(structures, references);
+  const audioCoverageByStructureId = new Map<number, StructureAudioCoverage>();
+  const structureNames = new Map(structures.map((structure) => [structure.id, structure.name]));
+  for (const unit of studyUnits) {
+    if (unit.kind !== "audio") continue;
+    const sourceName = structureNames.get(unit.titleStructureId) ?? "outra estrutura";
+    for (const structureId of unit.structureIds) audioCoverageByStructureId.set(structureId, { kind: structureId === unit.titleStructureId ? "direct" : "covered", sourceName });
+  }
   return <div className={styles.tocLawRoot}>
     <a href={rootHref} className={styles.tocLawRootLink} title="Voltar ao início da lei">{lawTitle}</a>
-    {nodes.length ? <StructureItems nodes={nodes} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} /> : <p>Sem subdivisões estruturais cadastradas.</p>}
+    {audioCoverageByStructureId.size ? <p className={styles.tocAudioLegend}><span>🎧 faixa própria</span><span>↳ estrutura abrangida</span></p> : null}
+    {nodes.length ? <StructureItems nodes={nodes} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} audioCoverageByStructureId={audioCoverageByStructureId} /> : <p>Sem subdivisões estruturais cadastradas.</p>}
   </div>;
 }
 
@@ -629,9 +639,9 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
         {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
-        {mobileTocOpen && hasStructureNavigation ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Escolha uma estrutura disponível.</p></div><button type="button" aria-label="Fechar sumário" autoFocus onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
+        {mobileTocOpen && hasStructureNavigation ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Escolha uma estrutura disponível.</p></div><button type="button" aria-label="Fechar sumário" autoFocus onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
         <div className={`${styles.layout} ${hasStructureNavigation ? (desktopTocOpen ? "" : styles.layoutTocClosed) : styles.layoutNoToc}`}>
-        {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
+        {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
         <section ref={contentRef} className={styles.content} aria-label="Texto da legislação">
           {!adminPreview ? <header ref={playerHeaderRef} className={`${styles.stickyStructureHeader} ${playerCondensed ? styles.stickyStructureHeaderCompact : ""}`}>
             {hasStructureNavigation ? <div className={styles.headerMobileToc}>

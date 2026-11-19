@@ -390,6 +390,12 @@
   color: #1d4ed8;
   outline: none;
 }
+.toc a:has(.tocAudioBadge) { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.toc a:has(.tocAudioBadge) > span { min-width: 0; }
+.tocAudioLegend { display: flex; flex-wrap: wrap; gap: 5px 9px; margin: -5px 0 5px; color: #64748b; font-size: .68rem; line-height: 1.3; }
+.tocAudioBadge { flex: none; margin-top: 1px; border-radius: 999px; padding: 2px 5px; font-size: .62rem; font-weight: 800; line-height: 1.2; white-space: nowrap; }
+.tocAudioDirect { background: #e0f2fe; color: #075985; }
+.tocAudioCovered { background: #eef2ff; color: #4338ca; }
 .tocSection > span { display: grid; gap: 2px; border-radius: 9px; padding: 7px 9px; font-size: .84rem; line-height: 1.35; }
 .tocSection > span small { font-size: .68rem; font-weight: 800; }
 .tocPending { background: #fffbeb; color: #92400e; }
@@ -1059,6 +1065,8 @@
   .mobileTocPanel ol { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
   .mobileTocPanel ol ol { margin-left: 12px; padding-left: 9px; border-left: 1px solid #dbe6f6; }
   .mobileTocPanel a { display: block; border-radius: 9px; padding: 9px; color: #475569; text-decoration: none; }
+  .mobileTocPanel a:has(.tocAudioBadge) { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+  .mobileTocPanel a:has(.tocAudioBadge) > span { min-width: 0; }
   .mobileTocPanel a.tocActive { background: #eff6ff; color: #1d4ed8; }
   .mobileTocPanel .tocSection > span { padding: 9px; }
 

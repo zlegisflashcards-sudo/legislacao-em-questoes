@@ -39,8 +39,17 @@ export default async function ContinuousLegisBotPage({ params, searchParams }: {
   // `redirect` lança NEXT_REDIRECT; ele deve permanecer fora do catch de I/O.
   if (reference) redirect(`/legisbot/${encodeURIComponent(model.law.slug)}#${continuousBlockAnchor(reference.id)}`);
   try {
-    const initialStructureId = model.publicAccess.mode === "partial" ? model.publicAccess.firstAccessibleStructureId : null;
-    const initialStudyUnitId = model.studyUnits[0]?.id ?? null;
+    const initialStudyUnit = model.studyUnits[0] ?? null;
+    // Mesmo com o modo parcial desativado, a leitura começa pela primeira
+    // unidade editorial. Manter sua estrutura-título aqui permite ao player
+    // resolver a faixa direta/editorial daquela unidade; isso não muda o
+    // escopo público da legislação nem concede acesso a áudio sem permissão.
+    const initialStructureId = model.publicAccess.mode === "partial"
+      ? model.publicAccess.firstAccessibleStructureId
+      : initialStudyUnit?.titleStructureId ?? null;
+    const initialStudyUnitId = initialStructureId === null
+      ? initialStudyUnit?.id ?? null
+      : model.studyUnits.find((unit) => unit.structureIds.includes(initialStructureId))?.id ?? initialStudyUnit?.id ?? null;
     const initialBlocks = await getContinuousReadingBlocks(model, 0, 30, initialStructureId, initialStudyUnitId);
     return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} partialMode={model.publicAccess.mode === "partial"} initialStructureId={initialStructureId} initialStudyUnitId={initialStudyUnitId} initialBlocks={initialBlocks} initialTab={initialTab(first(query.tab) || first(query.aba))} />{studyNav}</div>;
   } catch (error) {
