@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 const client = readFileSync("app/legisbot/[slug]/continuous-reading-client.tsx", "utf8");
 const styles = readFileSync("app/legisbot/[slug]/continuous-reading.module.css", "utf8");
 const page = readFileSync("app/legisbot/[slug]/page.tsx", "utf8");
+const authorizedClient = readFileSync("app/legisbot/[slug]/continuous-reading-authorized-client.tsx", "utf8");
+const readingRoute = readFileSync("app/api/legisbot/[slug]/reading/route.ts", "utf8");
+const referencesRoute = readFileSync("app/api/legisbot/[slug]/references/route.ts", "utf8");
 const server = readFileSync("lib/legisbot/continuous-reading-server.ts", "utf8");
 const adminPreview = readFileSync("app/admin/artigos/legisbot-preview/page.tsx", "utf8");
 
@@ -108,11 +111,16 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("Este dispositivo não está disponível nesta versão da legislação");
   });
 
-  it("deixa o redirect de aprofundamento fora dos catches de consulta", () => {
-    expect(page).toContain("model = await getContinuousReadingModel(slug)");
-    expect(page).toContain("if (reference) redirect(");
-    expect(page).toContain("// `redirect` lança NEXT_REDIRECT; ele deve permanecer fora do catch de I/O.");
-    expect(page.indexOf("if (reference) redirect(")).toBeLessThan(page.indexOf("const initialBlocks = await getContinuousReadingBlocks"));
+  it("entrega catálogo e blocos somente após autorização comercial", () => {
+    expect(page).toContain("ContinuousReadingAuthorizedClient");
+    expect(page).not.toContain("getContinuousReadingModel");
+    expect(authorizedClient).toContain("supabase.auth.getSession()");
+    expect(authorizedClient).toContain("/conta?modo=login&retorno=");
+    expect(authorizedClient).toContain("/api/legisbot/${encodeURIComponent(slug)}/reading");
+    expect(readingRoute).toContain("await authorizeLawStudy(request, slug)");
+    expect(readingRoute).toContain("const initialBlocks = model.integrity.readingAvailable");
+    expect(referencesRoute).toContain("await authorizeLawStudy(request, slug)");
+    expect(client).toContain("Authorization: `Bearer ${highlightAccessToken}`");
   });
 
   it("mantém os destaques salvos no bloco da leitura contínua", () => {

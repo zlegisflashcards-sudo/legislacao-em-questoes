@@ -40,10 +40,15 @@ export function buildAdministrativePreviewItems(lawSlug: string, references: Pre
     const itemKey = key(lawSlug, ordem);
     let item = items.get(coveredBy.get(itemKey) ?? itemKey);
     if (!item) {
-      const parsed = parseQuestionOrder(ordem);
-      const parentKey = parsed && (parsed.inciso || parsed.letraInciso)
-        ? legisBotOrderCandidates(ordem).slice(1).map((candidate) => key(lawSlug, candidate)).find((candidate) => items.get(candidate)?.status === "prepared")
-        : undefined;
+      // Um bloco editorial pode conter o artigo inteiro. Neste caso, as
+      // questões de parágrafos, incisos e alíneas devem aparecer no contador
+      // do artigo-pai. A resolução segue a mesma Ordem canônica já usada pela
+      // leitura: primeiro preserva um bloco exato; só então procura o
+      // ancestral preparado mais próximo. Não há inferência pelo texto.
+      const parentKey = legisBotOrderCandidates(ordem)
+        .slice(1)
+        .map((candidate) => key(lawSlug, candidate))
+        .find((candidate) => items.get(candidate)?.status === "prepared");
       if (parentKey) item = items.get(parentKey);
     }
     if (!item) continue;

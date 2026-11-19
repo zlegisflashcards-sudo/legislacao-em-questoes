@@ -27,7 +27,7 @@ function SafeHtml({ value }: { value: string }) {
   return <div className="legis-questoes-html" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export function LegisBotArticleQuestions({ slug, ordem, recorteId }: { slug: string; ordem: string; recorteId?: string | null }) {
+export function LegisBotArticleQuestions({ slug, ordem, referenceId, recorteId }: { slug: string; ordem: string; referenceId?: string | null; recorteId?: string | null }) {
   const [questions, setQuestions] = useState<ArticleQuestion[]>([]);
   const [index, setIndex] = useState(0);
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -41,7 +41,7 @@ export function LegisBotArticleQuestions({ slug, ordem, recorteId }: { slug: str
         const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
         if (!token) throw new Error("Entre na sua conta para acessar as questões deste artigo.");
-        const query = new URLSearchParams({ ordem });
+        const query = new URLSearchParams(referenceId ? { reference_id: referenceId } : { ordem });
         if (recorteId) query.set("recorte_id", recorteId);
         const response = await fetch(`/api/questoes/${encodeURIComponent(slug.toLowerCase())}/estudar?${query}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -63,7 +63,7 @@ export function LegisBotArticleQuestions({ slug, ordem, recorteId }: { slug: str
       }
     })();
     return () => { active = false; };
-  }, [ordem, recorteId, slug]);
+  }, [ordem, recorteId, referenceId, slug]);
 
   if (loading) return <p className="legisbot-questions-state" role="status">Carregando questões deste artigo…</p>;
   if (error) return <p className="legisbot-questions-state is-error" role="alert">{error}</p>;

@@ -3,6 +3,7 @@ import {
   continuousBlockAnchor,
   continuousLegisBotHref,
   continuousLegisBotQuestionHref,
+  continuousQuestionIdsForReference,
   referenceIdFromHash,
   resolveContinuousReadingIntegrity,
   resolveLegacyReferenceId,
@@ -63,6 +64,16 @@ describe("links Anki da leitura contínua", () => {
     const parentReference = reference(referenceId, "0027.b.01.c.00.0");
     const integrity = resolveContinuousReadingIntegrity({ lawSlug: "l10826", questions: [structuredQuestion], references: [parentReference] });
     expect(integrity.resolutions).toMatchObject([{ status: "hierarchy", referenceId, ordem: "0027.b.01.c.00.0" }]);
+  });
+
+  it("inclui no artigo inteiro as questões dos dispositivos filhos que ele representa", () => {
+    const questions = [
+      { id: "q-caput", slug: "l10826", ordem: "0001.0.00.0.00.0", structureId: null },
+      { id: "q-paragrafo", slug: "l10826", ordem: "0001.0.04.0.00.0", structureId: null },
+      { id: "q-inciso", slug: "l10826", ordem: "0001.0.04.0.01.0", structureId: null },
+    ];
+    const integrity = resolveContinuousReadingIntegrity({ lawSlug: "l10826", questions, references: [reference()] });
+    expect([...continuousQuestionIdsForReference(referenceId, integrity.resolutions)]).toEqual(["q-caput", "q-paragrafo", "q-inciso"]);
   });
 
   it("expõe órfã, vínculo inválido, ambiguidade e bloco não preparado sem escolher destino", () => {

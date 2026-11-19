@@ -37,4 +37,17 @@ describe("prévia administrativa da legislação", () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({ ordem: "0005.0.00.0.00.0", questionCount: 1, status: "prepared" });
   });
+
+  it("conta questões de parágrafos no artigo inteiro quando não existe bloco filho", () => {
+    const result = buildAdministrativePreviewItems("ctb", [{
+      id: "art-1", slug: "ctb", ordem: "0001.0.00.0.00.0", identificacao: "Art. 1º, CTB", legislacao: "Art. 1º com seus parágrafos", situacao: "preparada", lei_revogadora: null,
+    }], [
+      { id: "q-caput", ordem: "0001.0.00.0.00.0", assunto: "Art. 1º, CTB" },
+      { id: "q-paragrafo", ordem: "0001.0.04.0.00.0", assunto: "Art. 1º, § 4º, CTB" },
+      { id: "q-inciso", ordem: "0001.0.04.0.01.0", assunto: "Art. 1º, § 4º, I, CTB" },
+    ]);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ ordem: "0001.0.00.0.00.0", questionCount: 3 });
+    expect(result.items[0]?.questionIds).toEqual(["q-caput", "q-paragrafo", "q-inciso"]);
+  });
 });

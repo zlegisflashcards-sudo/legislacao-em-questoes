@@ -7,6 +7,8 @@ import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
 import { PreparationNotice } from "@/app/legisbot/[slug]/preparation-notice";
 
 export type LegisBotOverlayArticle = {
+  /** UUID do bloco editorial, quando a abertura parte da Lei Interativa. */
+  referenceId?: string | null;
   ordem?: string | null;
   titulo?: string | null;
   assunto?: string | null;
@@ -89,5 +91,5 @@ export function LegisBotOverlay({ slug, question, articles, initialTab, publicCo
     onHighlightsChange?.(activeArticle.ordem ?? "", items);
   }, [activeArticle.ordem, onHighlightsChange]);
 
-  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}>{availability.status === "preparing" ? <PreparationNotice lawName={availability.lawName || "Lei Interativa"} embedded onClose={onClose} /> : <LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} articleRecent={activeArticle.artigo_recente === true} showArticleQuestions={Boolean(activeArticle.ordem)} questionsRecorteId={recorteId} onPersonalHighlightsChange={handleHighlightsChange} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} />}</aside></div>;
+  return <div className="lf-legisbot-overlay" role="presentation"><aside ref={panelRef} className="lf-legisbot-panel" role="dialog" aria-modal="true" aria-label="LegisBot" onKeyDown={trapFocus}>{availability.status === "preparing" ? <PreparationNotice lawName={availability.lawName || "Lei Interativa"} embedded onClose={onClose} /> : <LegisBotPageClient slug={slug} ordem={activeArticle.ordem ?? ""} dadosIniciais={{ titulo: activeArticle.titulo ?? "", assunto: activeArticle.assunto ?? "", legislacao: activeArticle.legislacao ?? "" }} initialCommunityCount={0} initialTab={initialTab} embedded publicComment={activeArticle.comentario ?? (activeArticle === question ? publicComment : null)} mappingIncidence={activeArticle.incidencia} articleRecent={activeArticle.artigo_recente === true} showArticleQuestions={Boolean(activeArticle.ordem)} questionsReferenceId={activeArticle.referenceId} questionsRecorteId={recorteId} onPersonalHighlightsChange={handleHighlightsChange} onPreviousArticle={previousArticle ? () => setActiveArticle(previousArticle) : undefined} onNextArticle={nextArticle ? () => setActiveArticle(nextArticle) : undefined} onClose={onClose} />}</aside></div>;
 }

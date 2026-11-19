@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-const fixture = vi.hoisted(() => ({ free: false, releases: [] as Array<{ produto_id: string | null }>, links: [] as Array<{ produto_id: string; recorte_id: string | null }> }));
+const fixture = vi.hoisted(() => ({ free: false, releases: [] as Array<{ produto_id: string | null }>, links: [] as Array<{ produto_id: string; recorte_id: string | null }>, lawSlugs: [] as string[] }));
 const questionReads = vi.hoisted(() => vi.fn(async () => [{ id: "questao-privada" }]));
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServerClient: () => ({
     auth: { getUser: async () => ({ data: { user: { id: "user" } }, error: null }) },
     from: (table: string) => {
       const query = {
-        select: () => query, eq: () => query,
+        select: () => query, eq: (column: string, value: unknown) => {
+          if (table === "leis" && column === "slug" && typeof value === "string") fixture.lawSlugs.push(value);
+          return query;
+        },
         in: async () => ({ data: fixture.links, error: null }),
         maybeSingle: async () => ({ data: table === "alunos" ? { id: "student" } : { id: 1, titulo: "Lei", acesso_gratuito: fixture.free }, error: null }),
         single: async () => ({ data: { deve_trocar_senha: false }, error: null }),
@@ -26,7 +29,7 @@ import { GET } from "../app/api/questoes/[slug]/route";
 const request = () => new Request("http://localhost/api/questoes/lei", { headers: { Authorization: "Bearer teste" } });
 
 describe("autorização da lei integral na API legada (banco simulado)", () => {
-  beforeEach(() => { fixture.free = false; fixture.releases = []; fixture.links = []; questionReads.mockClear(); });
+  beforeEach(() => { fixture.free = false; fixture.releases = []; fixture.links = []; fixture.lawSlugs = []; questionReads.mockClear(); });
 
   it("nega acesso sem liberação", async () => {
     await expect(authorizeLawStudy(request(), "lei")).rejects.toMatchObject({ status: 404 });
@@ -48,6 +51,11 @@ describe("autorização da lei integral na API legada (banco simulado)", () => {
     fixture.releases = [{ produto_id: "produto" }];
     fixture.links = [{ produto_id: "produto", recorte_id: null }];
     await expect(authorizeLawStudy(request(), "lei")).resolves.toMatchObject({ lawId: 1 });
+  });
+  it("normaliza o slug em caixa alta antes de buscar a lei", async () => {
+    fixture.free = true;
+    await expect(authorizeLawStudy(request(), "CTB")).resolves.toMatchObject({ lawId: 1 });
+    expect(fixture.lawSlugs).toContain("ctb");
   });
   it("mantém a opção preexistente de doutrina sem herdar gratuidade", async () => {
     fixture.free = true;

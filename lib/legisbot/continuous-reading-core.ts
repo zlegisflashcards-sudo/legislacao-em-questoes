@@ -176,3 +176,10 @@ export function resolveQuestionReferenceId(input: {
   const reference = input.references.find((candidate) => candidate.id === resolution.referenceId && candidate.prepared);
   return reference?.id ?? null;
 }
+
+/** Questões efetivamente resolvidas para um bloco editorial da leitura. */
+export function continuousQuestionIdsForReference(referenceId: string, resolutions: QuestionReferenceResolution[]) {
+  return new Set(resolutions
+    .filter((resolution) => resolution.referenceId === referenceId && (resolution.status === "manual" || resolution.status === "hierarchy"))
+    .map((resolution) => resolution.questionId));
+}

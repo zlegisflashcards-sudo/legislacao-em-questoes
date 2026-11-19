@@ -23,8 +23,8 @@ describe("questões no contexto do LegisBot", () => {
     expect(tabs).not.toContain('aria-label="Abrir Lei Interativa neste dispositivo"');
   });
 
-  it("consulta somente as questões do slug, ordem e recorte autorizados", () => {
-    expect(questions).toContain('new URLSearchParams({ ordem })');
+  it("consulta questões pelo bloco editorial ou pela Ordem legada dentro do recorte autorizado", () => {
+    expect(questions).toContain('new URLSearchParams(referenceId ? { reference_id: referenceId } : { ordem })');
     expect(questions).toContain('query.set("recorte_id", recorteId)');
     expect(questions).toContain('/api/questoes/${encodeURIComponent(slug.toLowerCase())}/estudar?${query}');
     expect(questions).toContain("Authorization: `Bearer ${token}`");

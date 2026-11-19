@@ -84,7 +84,12 @@ function parseHistory(value: unknown): LawStudyHistoryItem[] {
  * como atalho para um recorte.
  */
 export async function authenticateLawStudent(request: Request, slug: string) {
-  if (!isValidLawSlug(slug)) throw new LawStudyApiError(400, "Identificador de lei inválido.");
+  // URLs são insensíveis ao caso para o aluno. O catálogo guarda os slugs em
+  // minúsculas, mas alguns consumidores exibem o código da lei em caixa alta
+  // (por exemplo, CTB) e o reutilizam nas rotas auxiliares de áudio e HTML.
+  // Normalizar aqui mantém todos esses consumidores no mesmo contrato.
+  const normalizedSlug = slug.trim().toLowerCase();
+  if (!isValidLawSlug(normalizedSlug)) throw new LawStudyApiError(400, "Identificador de lei inválido.");
   const url = new URL(request.url);
   if (url.searchParams.has("aluno_id") || url.searchParams.has("lei_id")) throw new LawStudyApiError(400, "Parâmetro não permitido.");
 
@@ -100,7 +105,7 @@ export async function authenticateLawStudent(request: Request, slug: string) {
     // study surface authenticates through this function, so a second serial
     // query here delayed the law page, Anki and LegisCast alike.
     supabase.from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle(),
-    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
+    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", normalizedSlug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
   ]);
   if (studentError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
   const student = record(studentData);

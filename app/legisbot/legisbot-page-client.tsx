@@ -54,6 +54,7 @@ type LegisBotPageClientProps = {
   /** Atualidade editorial é independente da incidência e recebe a bandeira azul. */
   articleRecent?: boolean;
   showArticleQuestions?: boolean;
+  questionsReferenceId?: string | null;
   questionsRecorteId?: string | null;
   onPersonalHighlightsChange?: (highlights: LegisBotHighlight[]) => void;
   onPreviousArticle?: () => void;
@@ -128,6 +129,7 @@ export default function LegisBotPageClient({
   mappingIncidence,
   articleRecent = false,
   showArticleQuestions = false,
+  questionsReferenceId = null,
   questionsRecorteId = null,
   onPersonalHighlightsChange,
   onPreviousArticle,
@@ -481,7 +483,7 @@ export default function LegisBotPageClient({
         ordem={ordemNormalizada}
         communityCount={communityCount}
         initialTab={initialTab}
-        questionsContent={showArticleQuestions ? <LegisBotArticleQuestions slug={slugNormalizado} ordem={ordemNormalizada} recorteId={questionsRecorteId} /> : undefined}
+        questionsContent={showArticleQuestions ? <LegisBotArticleQuestions slug={slugNormalizado} ordem={ordemNormalizada} referenceId={questionsReferenceId} recorteId={questionsRecorteId} /> : undefined}
         onActiveTabChange={changeStudyTab}
         legisBotContent={conversationContent}
         communityContent={

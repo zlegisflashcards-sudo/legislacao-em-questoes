@@ -248,7 +248,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading" }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, administrativeAccess = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading" }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
@@ -314,6 +314,9 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   }, [partialMode, scopedReading, selectedStructureId, selectedStudyUnitId]);
 
   const loadPage = useCallback(async (page: number) => {
+    // A leitura pública aguarda o token; a prévia administrativa é autorizada
+    // pelo cookie de administrador no servidor.
+    if (!administrativeAccess && highlightAccessToken === undefined) return;
     if (!canLoadContinuousPage({ page, preparedCount: visiblePrepared.length, pageSize: PAGE_SIZE, loadedPages, loadingPages })) return;
     if (requestedPagesRef.current.has(page)) return;
     const offset = page * PAGE_SIZE;
@@ -332,7 +335,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       const scope = partialMode && selectedStudyUnitId !== null
         ? `&study_unit_id=${encodeURIComponent(selectedStudyUnitId)}`
         : partialMode && selectedStructureId !== null ? `&structure_id=${encodeURIComponent(String(selectedStructureId))}` : "";
-      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`, { cache: "no-store" });
+      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`, { cache: "no-store", headers: administrativeAccess || !highlightAccessToken ? undefined : { Authorization: `Bearer ${highlightAccessToken}` } });
       const result = await response.json() as { blocks?: BlockText[] };
       if (!response.ok || !result.blocks) throw new Error("load_failed");
       if (scopeVersion !== scopeVersionRef.current) return;
@@ -351,7 +354,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [loadedPages, loadingPages, partialMode, preparedById, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
+  }, [administrativeAccess, highlightAccessToken, loadedPages, loadingPages, partialMode, preparedById, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
 
   useEffect(() => {
     if ((!partialMode && selectedStudyUnitId === null) || !visiblePrepared.length || loadedPages.has(0)) return;
@@ -694,6 +697,6 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
         </div>
       </>}
     </main>
-    {selected && !adminPreview ? <LegisBotOverlay slug={slug} question={{ ordem: selected.ordem, titulo: title, assunto: selected.identificacao, legislacao: selected.legislation }} initialTab={initialTab} onHighlightsChange={updateBlockHighlights} onClose={closeOverlay} /> : null}
+    {selected && !adminPreview ? <LegisBotOverlay slug={slug} question={{ referenceId: selected.id, ordem: selected.ordem, titulo: title, assunto: selected.identificacao, legislacao: selected.legislation }} initialTab={initialTab} onHighlightsChange={updateBlockHighlights} onClose={closeOverlay} /> : null}
   </div>;
 }
