@@ -103,6 +103,15 @@ describe("validação da administração comercial", () => {
     expect(validation).toContain("Informe a identificação e a data da última alteração incorporada.");
   });
 
+  it("impede ativar uma lei quando os dados obrigatórios armazenados ainda estão incompletos", () => {
+    const validation = server.slice(server.indexOf("function validateLawData"), server.indexOf("function validateMaterialData"));
+    expect(validation).toContain("function missingLawActivationFields");
+    expect(validation).toContain("async function assertLawCanBeActivated");
+    expect(validation).toContain("Preencha os campos obrigatórios antes de ativar a lei");
+    expect(server).toContain("await assertLawCanBeActivated(lawId, data)");
+    expect(lawDataFields).toContain("Ative somente após preencher todos os campos com");
+  });
+
   it("aceita URLs normais do YouTube e as normaliza para o player", () => {
     for (const url of [
       "https://www.youtube.com/watch?v=LDa1zANCIQY",

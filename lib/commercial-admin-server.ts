@@ -624,6 +624,80 @@ function validateLawData(raw: unknown, update = false) {
   return result;
 }
 
+function missingLawActivationFields(data: JsonObject) {
+  const missing: string[] = [];
+  const requiredText = [
+    ["Slug", "slug"],
+    ["Título", "titulo"],
+    ["Nome curto", "nome_curto"],
+    ["Código", "codigo"],
+    ["Tipo de lei", "categoria"],
+  ] as const;
+  for (const [label, key] of requiredText) {
+    if (typeof data[key] !== "string" || !data[key].trim()) missing.push(label);
+  }
+  if (!Number.isSafeInteger(data.ordem) || Number(data.ordem) < 0)
+    missing.push("Ordem");
+  if (!Number.isSafeInteger(data.total_artigos) || Number(data.total_artigos) < 1)
+    missing.push("Total de artigos para Anki");
+
+  const contentType = data.tipo_conteudo;
+  if (contentType !== "legislacao" && contentType !== "doutrina") {
+    missing.push("Tipo de conteúdo");
+    return missing;
+  }
+  if (contentType === "doutrina") return missing;
+
+  if (
+    typeof data.norma_originaria_referencia !== "string" ||
+    !data.norma_originaria_referencia.trim()
+  )
+    missing.push("Norma originária");
+  if (
+    typeof data.norma_originaria_data !== "string" ||
+    !data.norma_originaria_data.trim()
+  )
+    missing.push("Data da norma originária");
+  if (typeof data.houve_alteracao_legislativa !== "boolean")
+    missing.push("Houve alteração legislativa?");
+  if (
+    typeof data.situacao_atualizacao !== "string" ||
+    !data.situacao_atualizacao.trim()
+  )
+    missing.push("Situação de atualização");
+  if (data.houve_alteracao_legislativa === true) {
+    if (
+      typeof data.ultima_alteracao_referencia !== "string" ||
+      !data.ultima_alteracao_referencia.trim()
+    )
+      missing.push("Última alteração incorporada");
+    if (
+      typeof data.ultima_alteracao_data !== "string" ||
+      !data.ultima_alteracao_data.trim()
+    )
+      missing.push("Data da última alteração");
+  }
+  return missing;
+}
+
+async function assertLawCanBeActivated(lawId: number, changes: JsonObject) {
+  if (changes.status_publicacao !== "ativa") return;
+  const current = await getSupabaseServerClient()
+    .from("leis")
+    .select("slug,titulo,nome_curto,codigo,categoria,tipo_conteudo,ordem,total_artigos,norma_originaria_referencia,norma_originaria_data,houve_alteracao_legislativa,ultima_alteracao_referencia,ultima_alteracao_data,situacao_atualizacao")
+    .eq("id", lawId)
+    .maybeSingle();
+  assertQuery(current);
+  if (!current.data) throw new CommercialHttpError(404, "Lei não encontrada.");
+  const missing = missingLawActivationFields({ ...current.data, ...changes });
+  if (missing.length) {
+    throw new CommercialHttpError(
+      422,
+      `Preencha os campos obrigatórios antes de ativar a lei: ${missing.join(", ")}.`,
+    );
+  }
+}
+
 function validateMaterialData(raw: unknown, update = false) {
   const allowed = [
     "lei_id", "tipo", "titulo", "descricao", "provedor", "url_externa", "acao", "ordem", "ativo",
@@ -1266,10 +1340,12 @@ export async function mutateCommercialResource(resource: CommercialResource, req
     if (action === "criar") {
       const data = validateLawData(body.data);
       if (data.tipo_conteudo === "doutrina") throw new CommercialHttpError(409, "Use a prévia de importação de doutrina para preservar UUIDs e estruturas.");
+      const missing = data.status_publicacao === "ativa" ? missingLawActivationFields(data) : [];
+      if (missing.length) throw new CommercialHttpError(422, `Preencha os campos obrigatórios antes de ativar a lei: ${missing.join(", ")}.`);
       delete data.tipo_conteudo;
       return rpc("admin_criar_lei", { p_ator_user_id: actor, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [`p_${key}`, value])) });
     }
-    if (action === "atualizar") { const lawId=positiveIntegerId(body.id,"Lei"); const data=validateLawData(body.data,true); if (data.tipo_conteudo) throw new CommercialHttpError(409, "O tipo de conteúdo é definido somente na importação de doutrina aprovada."); return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: lawId, p_dados: data }); }
+    if (action === "atualizar") { const lawId=positiveIntegerId(body.id,"Lei"); const data=validateLawData(body.data,true); if (data.tipo_conteudo) throw new CommercialHttpError(409, "O tipo de conteúdo é definido somente na importação de doutrina aprovada."); await assertLawCanBeActivated(lawId, data); return rpc("admin_atualizar_lei", { p_ator_user_id: actor, p_lei_id: lawId, p_dados: data }); }
     if (action === "resumo_exclusao") { const lawId=positiveIntegerId(body.id,"Lei"); return rpc("admin_delete_law_definitively", { p_lei_id: lawId, p_actor_user_id: actor, p_confirmation: null, p_execute: false }); }
     if (action === "excluir_definitivamente") { const lawId=positiveIntegerId(body.id,"Lei"); const data=asObject(body.data); if (data.confirmacao !== "EXCLUIR") throw new CommercialHttpError(400, "Digite EXCLUIR para confirmar a exclusão definitiva da lei."); return rpc("admin_delete_law_definitively", { p_lei_id: lawId, p_actor_user_id: actor, p_confirmation: "EXCLUIR", p_execute: true }); }
   }
