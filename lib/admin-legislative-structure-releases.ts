@@ -2,7 +2,7 @@ import "server-only";
 
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getAdminLegislativeStructureIntegrity } from "@/lib/admin-legislative-structure-integrity";
-import { canReleaseStructure, structureReleaseViewStatus, type StructureReleaseRecord } from "@/lib/legisbot/continuous-reading-structure-release-core";
+import { canReleaseEntireLaw, canReleaseStructure, structureReleaseViewStatus, type StructureReleaseRecord } from "@/lib/legisbot/continuous-reading-structure-release-core";
 import { continuousReadingIntegrityFingerprint } from "@/lib/legisbot/continuous-reading-integrity-fingerprint";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -149,6 +149,36 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
   });
   if (audit.error) console.error("Falha ao auditar liberação estrutural", { structureId, code: audit.error.code });
   return { status: saved.data.status as "released" | "blocked", changed: true };
+}
+
+/** Libera todos os recortes prontos numa só transação, sem ativar o modo parcial. */
+export async function releaseEntireLegislativeLaw(input: { lawSlug: unknown }) {
+  const admin = await requireAdmin();
+  const slug = typeof input.lawSlug === "string" ? input.lawSlug.trim().toLowerCase() : "";
+  if (!slug) throw new LegislativeStructureReleaseError("invalid_structure", "Legislação inválida.");
+  const current = await getAdminLegislativeStructureIntegrity(slug);
+  if (!current) throw new LegislativeStructureReleaseError("invalid_structure", "Legislação não encontrada.");
+  if (!current.law.ativo || current.law.status_publicacao !== "ativa") throw new LegislativeStructureReleaseError("law_unavailable", "A lei não está ativa para disponibilização pública.");
+  const releases = await readReleases(current.law.id);
+  const decision = canReleaseEntireLaw({ reports: current.integrity.reports, records: compactRecords(releases) });
+  if (!decision.allowed) throw new LegislativeStructureReleaseError(decision.reason === "blocked_structure" ? "blocked_descendant" : "not_ready", "A lei possui estruturas pendentes ou bloqueadas; nenhuma liberação foi gravada.");
+  const structureIds = current.integrity.reports.map((report) => report.structureId).sort((left, right) => left - right);
+  const allReleased = structureIds.every((structureId) => releases.some((release) => Number(release.structure_id) === structureId && release.status === "released"));
+  if (allReleased) return { released: 0, idempotent: true };
+  const committed = await getSupabaseServerClient().rpc("liberar_lei_interativa_completa", {
+    p_lei_id: current.law.id,
+    p_structure_ids: structureIds,
+    p_snapshot: current.integritySnapshot,
+    p_ator_user_id: admin.id,
+  });
+  if (migrationPending(committed.error)) throw new LegislativeStructureReleaseError("migration_pending", "A migration de liberação integral ainda não foi aplicada.");
+  if (committed.error) {
+    const message = committed.error.message ?? "";
+    if (/diagnóstico mudou/i.test(message)) throw new LegislativeStructureReleaseError("stale_integrity", message);
+    if (/bloquead/i.test(message)) throw new LegislativeStructureReleaseError("blocked_descendant", message);
+    throw new LegislativeStructureReleaseError("database", "A liberação integral não foi concluída; nenhuma estrutura foi alterada.");
+  }
+  return { released: Number((committed.data as { released?: unknown } | null)?.released ?? structureIds.length), idempotent: false };
 }
 
 /**

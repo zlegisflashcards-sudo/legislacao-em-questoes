@@ -57,6 +57,39 @@ function LegisBotGuide({ title, mode, adminPreview }: { title: string; mode: "ma
   </header>;
 }
 
+function LegiscastPdfDownload({ slug, title, accessToken }: { slug: string; title: string; accessToken: string | null | undefined }) {
+  const [materialId, setMaterialId] = useState<number | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  useEffect(() => {
+    if (!accessToken) { setMaterialId(null); return; }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/pdf-material`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: controller.signal });
+        const body = await response.json().catch(() => ({})) as { materialId?: unknown };
+        if (!controller.signal.aborted) setMaterialId(response.ok && typeof body.materialId === "number" ? body.materialId : null);
+      } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) setMaterialId(null); }
+    })();
+    return () => controller.abort();
+  }, [accessToken, slug]);
+  async function download() {
+    if (!accessToken || materialId === null) return;
+    setDownloading(true);
+    try {
+      const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/materiais/${materialId}/download`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+      if (!response.ok) throw new Error("PDF indisponível");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title.replace(/[\\/:*?"<>|]/g, "-") || "Legislacao-esquematizada"}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally { setDownloading(false); }
+  }
+  if (materialId === null) return null;
+  return <button type="button" className={styles.mapPdfDownload} disabled={downloading} onClick={() => void download()}>📄 {downloading ? "Baixando PDF…" : "Baixar PDF esquematizado"}</button>;
+}
+
 function structureTree(structures: StructureCatalogItem[], references: Reference[]): TocNode[] {
   const roots: TocNode[] = [];
   const byId = new Map<number, TocNode>();
@@ -638,6 +671,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       <LegisBotGuide title={title} mode={studyMode} adminPreview={adminPreview} />
       {!adminPreview ? <div className={styles.mapSoon}>
         <button type="button" disabled title="O mapeamento por prioridade será disponibilizado em breve.">🔥 Mapear lei</button>
+        <LegiscastPdfDownload slug={slug.toLowerCase()} title={lawTitle} accessToken={highlightAccessToken} />
       </div> : null}
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}

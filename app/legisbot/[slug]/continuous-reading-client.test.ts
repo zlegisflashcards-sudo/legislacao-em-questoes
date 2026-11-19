@@ -18,6 +18,8 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("Vamos percorrer a lei inteira");
     expect(client).toContain("Mapa de prioridade");
     expect(client).toContain("🔥 Mapear lei");
+    expect(client).toContain("Baixar PDF esquematizado");
+    expect(client).toContain("/pdf-material");
     expect(client).toContain("disabled title=\"O mapeamento por prioridade será disponibilizado em breve.\"");
     expect(client).not.toContain('role="tablist" aria-label="Modos da Lei Interativa"');
     expect(client).toContain("FlameIcon");

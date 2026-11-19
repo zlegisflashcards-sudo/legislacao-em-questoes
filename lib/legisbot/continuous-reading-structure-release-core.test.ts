@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canReleaseStructure, hasExplicitBlockedDescendant, isStructureEffectivelyReleased, structureReleaseViewStatus } from "./continuous-reading-structure-release-core";
+import { canReleaseEntireLaw, canReleaseStructure, hasExplicitBlockedDescendant, isStructureEffectivelyReleased, structureReleaseViewStatus } from "./continuous-reading-structure-release-core";
 
 const structures = [
   { id: 1, parentId: null, ordem: 1 },
@@ -32,5 +32,13 @@ describe("política de liberação estrutural", () => {
 
   it("não considera uma lei sem estruturas como liberada", () => {
     expect(isStructureEffectivelyReleased(1, [], [])).toBe(false);
+  });
+
+  it("só oferece liberação integral quando todos os recortes estão íntegros e sem bloqueio", () => {
+    const reports = [ready, { ...ready, structureId: 2 }, { ...ready, structureId: 3 }];
+    expect(canReleaseEntireLaw({ reports, records: [] })).toEqual({ allowed: true, reason: null });
+    expect(canReleaseEntireLaw({ reports: [ready, pending], records: [] })).toEqual({ allowed: false, reason: "integrity_not_ready" });
+    expect(canReleaseEntireLaw({ reports, records: [{ structureId: 2, status: "blocked" }] })).toEqual({ allowed: false, reason: "blocked_structure" });
+    expect(canReleaseEntireLaw({ reports: [], records: [] })).toEqual({ allowed: false, reason: "no_structures" });
   });
 });

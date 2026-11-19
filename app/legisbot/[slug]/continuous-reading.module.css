@@ -91,6 +91,7 @@
 
 .mapSoon {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   margin: -10px 0 14px;
 }
@@ -106,6 +107,16 @@
   font-weight: 800;
   cursor: not-allowed;
 }
+
+.mapSoon .mapPdfDownload {
+  border-color: #93c5fd;
+  background: #fff;
+  color: #075bc1;
+  cursor: pointer;
+}
+
+.mapSoon .mapPdfDownload:hover { background: #eff6ff; }
+.mapSoon .mapPdfDownload:disabled { cursor: wait; opacity: .65; }
 
 .studyModes {
   display: grid;

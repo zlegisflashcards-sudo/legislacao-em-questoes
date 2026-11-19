@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { archiveLegislativeReference, changeLegislativeReferenceOrder, clearLegislativeReferences, importQuestionLegislationToReferences, repairLegislativeReferenceIdentifiers, resolveLegislativeReferenceShadow, saveLegislativeReference, seedLegislativeReferences, setLegislativeReferenceInactive } from "@/lib/admin-legislative-references";
 import { confirmSuggestedLegislativeReferenceStructureAssociations, setAdminLegislativeReferenceStructureAssociation } from "@/lib/admin-legislative-reference-structures";
-import { confirmAndReleaseLegislativeStructure, LegislativeStructureReleaseError, setAdminLegislativeStructureRelease } from "@/lib/admin-legislative-structure-releases";
+import { confirmAndReleaseLegislativeStructure, LegislativeStructureReleaseError, releaseEntireLegislativeLaw, setAdminLegislativeStructureRelease } from "@/lib/admin-legislative-structure-releases";
 
 const value = (formData: FormData, field: string) => String(formData.get(field) ?? "").trim();
 
@@ -135,6 +135,18 @@ export async function setLegislativeStructureRelease(formData: FormData) {
     redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao_erro=${encodeURIComponent(message)}`);
   }
   redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao=${result.changed ? result.status === "released" ? "liberada" : "bloqueada" : "sem_alteracao"}`);
+}
+
+export async function releaseEntireLegislativeLawAction(formData: FormData) {
+  const slug = value(formData, "slug").toLowerCase();
+  try {
+    const result = await releaseEntireLegislativeLaw({ lawSlug: slug });
+    revalidatePath("/admin/artigos/legisbot-preview");
+    redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao=${result.idempotent ? "lei_sem_alteracao" : "lei_liberada"}`);
+  } catch (error) {
+    const code = error instanceof LegislativeStructureReleaseError ? error.code : "database";
+    redirect(`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&liberacao_erro=${encodeURIComponent(code)}`);
+  }
 }
 
 export async function confirmAndReleaseLegislativeStructureAction(formData: FormData) {

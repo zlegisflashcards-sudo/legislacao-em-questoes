@@ -25,6 +25,21 @@ export function canReleaseStructure(input: {
   return { allowed: true, reason: null };
 }
 
+/**
+ * A liberação integral continua sendo uma decisão manual, mas só pode ser
+ * oferecida quando a lei inteira estiver pronta. Um bloqueio explícito vence
+ * inclusive nesta operação geral: nunca o apagamos silenciosamente.
+ */
+export function canReleaseEntireLaw(input: {
+  reports: readonly ContinuousReadingStructureIntegrity[];
+  records: readonly StructureReleaseRecord[];
+}) {
+  if (!input.reports.length) return { allowed: false, reason: "no_structures" as const };
+  if (input.reports.some((report) => report.status !== "ready")) return { allowed: false, reason: "integrity_not_ready" as const };
+  if (input.records.some((record) => record.status === "blocked")) return { allowed: false, reason: "blocked_structure" as const };
+  return { allowed: true, reason: null };
+}
+
 /** Estado para administração; bloqueado é exibido como pendente com explicação. */
 export function structureReleaseViewStatus(input: {
   report: ContinuousReadingStructureIntegrity;
