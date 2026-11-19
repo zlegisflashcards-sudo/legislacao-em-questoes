@@ -639,7 +639,7 @@ export async function applyBulkQuestionEdit(body: Record<string, unknown>) {
   const expected = Array.isArray(body.expected) ? body.expected : [];
   if (JSON.stringify(expected) !== JSON.stringify(resolved.preview.expected)) throw new AdminQuestoesError(409, "As questões mudaram desde a prévia. Gere uma nova prévia.");
   const result = await db().rpc("admin_bulk_update_law_questions", { p_lei_id: resolved.current.id, p_question_ids: resolved.ids, p_field: resolved.parsed.field, p_value: resolved.parsed.value, p_expected: resolved.preview.expected, p_actor_user_id: resolved.user.id });
-  if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : result.error.code === "40001" ? 409 : 422, result.error.message);
+  if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : ["PT409", "40001"].includes(result.error.code ?? "") ? 409 : 422, result.error.message);
   return result.data;
 }
 
@@ -667,7 +667,7 @@ export async function applyBulkQuestionTextReplacement(body: Record<string, unkn
   const expected = Array.isArray(body.expected) ? body.expected : [];
   if (JSON.stringify(expected) !== JSON.stringify(resolved.preview.expected)) throw new AdminQuestoesError(409, "As questões mudaram desde a prévia. Gere uma nova prévia.");
   const result = await db().rpc("admin_bulk_replace_law_question_text", { p_lei_id: resolved.current.id, p_question_ids: resolved.ids, p_field: resolved.parsed.field, p_find: resolved.parsed.find, p_replace: resolved.parsed.replace, p_expected: resolved.preview.expected, p_actor_user_id: resolved.user.id });
-  if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : result.error.code === "40001" ? 409 : 422, result.error.message);
+  if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : ["PT409", "40001"].includes(result.error.code ?? "") ? 409 : 422, result.error.message);
   return result.data;
 }
 export async function bulkQuestionDeletionSummary(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const ids = await bulkQuestionIds(current, body); if (!ids.length) throw new AdminQuestoesError(422, "Não há questões para excluir neste escopo."); return deleteContentRpc(current, user.id, ids, null, false); }
