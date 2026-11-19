@@ -12,6 +12,7 @@ import {
 const highlightsComponent = readFileSync("components/legisbot-personal-highlights.tsx", "utf8");
 const legisBotPage = readFileSync("app/legisbot/legisbot-page-client.tsx", "utf8");
 const overlay = readFileSync("components/legisbot-overlay.tsx", "utf8");
+const highlightsServer = readFileSync("lib/legisbot-highlights-server.ts", "utf8");
 const canonicalValidationMigration = readFileSync(
   "supabase/migrations/20261019150000_canonicalize_legisbot_interactions.sql",
   "utf8",
@@ -43,12 +44,13 @@ describe("destaques pessoais do LegisBot", () => {
     expect(isHighlightColor(color)).toBe(false);
   });
 
-  it("usa um único seletor modal com a seleção nativa da legislação", () => {
+  it("usa um seletor canônico com offsets compatíveis com a validação do servidor", () => {
     expect(highlightsComponent).toContain("selectionArea.current");
-    expect(highlightsComponent).toContain("window.getSelection()");
-    expect(highlightsComponent).toContain('document.addEventListener("selectionchange"');
-    expect(highlightsComponent).toContain("prefixRange.toString().length");
-    expect(highlightsComponent).toContain("legislationText.slice(start, end)");
+    expect(highlightsComponent).toContain("HTMLTextAreaElement");
+    expect(highlightsComponent).toContain("area.selectionStart");
+    expect(highlightsComponent).toContain("area.selectionEnd");
+    expect(highlightsComponent).toContain('readOnly value={legislationText}');
+    expect(highlightsComponent).toContain("onSelect={captureSelectorSelection}");
     expect(legisBotPage).toContain("legislationText={textoLegal}");
     expect(legisBotPage).not.toContain("selectionEnabled");
   });
@@ -72,6 +74,8 @@ describe("destaques pessoais do LegisBot", () => {
     expect(canonicalValidationMigration).toContain("new.reference_id := reference.id");
     expect(canonicalValidationMigration).toContain("legislation_text := public.legisbot_destaques_plain_legal(reference.legislacao)");
     expect(canonicalValidationMigration).not.toContain("coalesce(");
+    expect(highlightsServer).toContain("normalizeLegalText(source.legislacao)");
+    expect(highlightsServer).not.toContain("normalizeLegalText(source.promptLegislacao)");
   });
 
   it("desfaz todos os destaques do artigo pelas exclusões existentes", () => {

@@ -4,6 +4,7 @@ import ContinuousReadingClient from "@/app/legisbot/[slug]/continuous-reading-cl
 import styles from "@/app/legisbot/[slug]/continuous-reading.module.css";
 import { exigirAdministrador } from "@/lib/admin-auth";
 import { getContinuousReadingBlockTextsForLaw, getContinuousReadingModel } from "@/lib/legisbot/continuous-reading-server";
+import { getLegiscastAudioForLaw } from "@/lib/legiscast-audios-server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,10 @@ export default async function AdministrativeStudentStructureView({ searchParams 
     return referenceStructureId !== undefined && scopedStructureIds.has(referenceStructureId);
   });
   const preparedIds = initialReferences.filter((reference) => reference.prepared).slice(0, 30).map((reference) => reference.id);
-  const texts = await getContinuousReadingBlockTextsForLaw(slug, preparedIds);
+  const [texts, initialAudioResult] = await Promise.all([
+    getContinuousReadingBlockTextsForLaw(slug, preparedIds),
+    getLegiscastAudioForLaw(model.law.id, String(structureId)).catch(() => ({ audio: null, status: "unavailable" as const })),
+  ]);
   const legislationById = new Map((texts ?? []).map((block) => [block.id, block.legislation]));
   const initialBlocks = initialReferences.flatMap((reference) => {
     const legislation = legislationById.get(reference.id);
@@ -39,7 +43,7 @@ export default async function AdministrativeStudentStructureView({ searchParams 
         <p>Esta leitura usa somente os blocos do recorte selecionado. Ela não habilita a Lei Interativa pública nem altera a liberação parcial.</p>
         <Link className="admin-button secondary" href={`/admin/artigos/legisbot-preview?lei=${encodeURIComponent(slug)}&estrutura=${encodeURIComponent(String(structureId))}`}>← Voltar à conferência</Link>
       </header>
-      {initialBlocks.length ? <ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} initialStructureId={structureId} initialStudyUnitId={initialStudyUnit?.id ?? null} initialBlocks={initialBlocks} initialTab="legisbot" scopedReading audioEndpoint={`/api/admin/legisbot/${encodeURIComponent(slug)}/legiscast`} /> : <section className={styles.empty}><h2>Nenhum bloco preparado neste recorte</h2><p>Associe ou prepare os blocos da estrutura antes de validar a leitura.</p></section>}
+      {initialBlocks.length ? <ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} initialStructureId={structureId} initialStudyUnitId={initialStudyUnit?.id ?? null} initialBlocks={initialBlocks} initialTab="legisbot" scopedReading audioEndpoint={`/api/admin/legisbot/${encodeURIComponent(slug)}/legiscast`} initialAudio={initialAudioResult.audio} initialAudioStatus={initialAudioResult.status} /> : <section className={styles.empty}><h2>Nenhum bloco preparado neste recorte</h2><p>Associe ou prepare os blocos da estrutura antes de validar a leitura.</p></section>}
     </section>
   </main>;
 }

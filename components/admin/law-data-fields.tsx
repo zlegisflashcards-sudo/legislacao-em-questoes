@@ -38,6 +38,7 @@ export function LawDataFields({ law, showFreeAccess = false }: { law: AdminLawDa
         <label>Código<input name="codigo" defaultValue={text(law?.codigo)} placeholder="Código" /></label>
         <label>Tipo de lei<select name="categoria" defaultValue={text(law?.categoria)}><option value="">Selecione o tipo</option>{lawCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
         <label>Ordem<input name="ordem" type="number" min="0" defaultValue={text(law?.ordem) || "0"} required /></label>
+        <label>Total de artigos para Anki<input name="total_artigos" type="number" min="1" defaultValue={text(law?.total_artigos)} placeholder="Ex.: 312" /><span>Valor único usado em todos os cards exportados desta lei.</span></label>
         <label className="law-data-wide">URL da miniatura<input name="thumbnail_url" defaultValue={text(law?.thumbnail_url)} placeholder="URL da miniatura" /></label>
         <label className="law-data-wide">Descrição<textarea name="descricao" defaultValue={text(law?.descricao)} placeholder="Descrição" /></label>
       </div>

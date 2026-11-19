@@ -180,6 +180,8 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(list).toContain("Exigem correção");
     expect(list).toContain("Exigem revisão editorial");
     expect(list).toContain('tone="error" label="Conflitos estruturais"');
+    expect(list).toContain('tone="error" label="Questões sem estrutura"');
+    expect(list).toContain('href={hrefForType("sem_estrutura")}');
     expect(list).toContain('href={hrefForType("estrutural")}');
     expect(list).toContain('params.set("tipo", type)');
     expect(list).toContain('params.set("tipo_exato", "0")');
@@ -210,7 +212,10 @@ describe("Central do Artigo — administração de conflitos", () => {
     expect(server).toContain("const orphanQuestions = await articleBlockOrphans(activeRows)");
     expect(server).toContain("resolveContinuousReadingIntegrity");
     expect(server).toContain('"sem_bloco_artigo"');
-    expect(server).toContain('reviewTypes: [orphanReviewType(status).label]');
+    expect(server).toContain('"sem_estrutura"');
+    expect(server).toContain('const unstructuredQuestions = activeRows.filter((question) => question.structure_id === null);');
+    expect(server).toContain('reviewTypes: [status === "unstructured" ? "Questão sem estrutura"');
+    expect(server).toContain('reviewTypes: [status === "unstructured" ? "Questão sem estrutura" : orphanReviewType(status).label]');
     expect(server).toContain('if (status === "missing") return { code: "sem_bloco_artigo", label: "Sem bloco de artigo", editorial: true }');
     expect(server).toContain('if (status === "invalid_order") return { code: "ordem_invalida", label: "Ordem inválida", editorial: false }');
     expect(server).toContain('if (status === "invalid_manual") return { code: "vinculo_manual_invalido", label: "Vínculo manual inválido", editorial: false }');

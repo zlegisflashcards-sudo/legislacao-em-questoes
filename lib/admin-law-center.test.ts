@@ -22,6 +22,8 @@ describe("Central administrativa por lei", () => {
     expect(shell).toContain("Legislação");
     expect(shell).toContain('href={`${base}/recortes`}');
     expect(shell).toContain('href={`${base}/anki`}');
+    expect(shell).toContain("getAdminLawAnkiWarningSummary");
+    expect(shell).toContain("missingTotalArtigos");
   });
 
   it("usa somente métricas reais das tabelas existentes", () => {
@@ -124,7 +126,7 @@ describe("Central administrativa por lei", () => {
     expect(commercial).not.toContain("LawDataFields");
     expect(newPanel).toContain("<LawDataFields law={law} showFreeAccess={Boolean(law)} />");
     expect(newPanel).toContain('fetch("/api/admin/comercial/leis"');
-    for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "status_publicacao", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
+    for (const name of ["slug", "titulo", "nome_curto", "codigo", "categoria", "thumbnail_url", "descricao", "ordem", "total_artigos", "status_publicacao", "acesso_gratuito", "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa", "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao"]) expect(fields).toContain(`name="${name}"`);
   });
 
   it("organiza dados, publicação e atualização legislativa em blocos independentes", () => {

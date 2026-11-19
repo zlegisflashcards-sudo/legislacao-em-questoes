@@ -231,15 +231,23 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
     }
   }, [highlights, html]);
 
-  return <div ref={containerRef} className={styles.legalHtml} dangerouslySetInnerHTML={{ __html: html }} />;
+  // O efeito acima é a única fonte que escreve o HTML do bloco. Se este JSX
+  // também usasse `dangerouslySetInnerHTML`, uma atualização do player (tempo,
+  // velocidade etc.) reescreveria o HTML original e apagaria os <mark>s que já
+  // foram inseridos para os destaques pessoais.
+  return <div ref={containerRef} className={styles.legalHtml} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, scopedReading = false, audioEndpoint }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; scopedReading?: boolean; audioEndpoint?: string }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading" }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
+  // A sessão é restaurada de forma assíncrona no cliente. Guardar o token em
+  // estado faz a leitura tentar novamente quando o aluno já está autenticado,
+  // em vez de perder a única tentativa feita antes da restauração.
+  const [highlightAccessToken, setHighlightAccessToken] = useState<string | null | undefined>(undefined);
   const [loadingPages, setLoadingPages] = useState<Set<number>>(() => new Set());
   const initialLoadedPages = useCallback(() => {
     if (!initialBlocks.length) return new Set<number>();
@@ -257,8 +265,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const [missingTarget, setMissingTarget] = useState(false);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(initialStructureId);
   const [selectedStudyUnitId, setSelectedStudyUnitId] = useState<string | null>(initialStudyUnitId);
-  const [suggestedAudio, setSuggestedAudio] = useState<LegiscastAudioTrack | null>(null);
-  const [suggestedAudioStatus, setSuggestedAudioStatus] = useState<"direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading">("loading");
+  const [suggestedAudio, setSuggestedAudio] = useState<LegiscastAudioTrack | null>(initialAudio);
+  const [suggestedAudioStatus, setSuggestedAudioStatus] = useState<"direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading">(initialAudioStatus);
   const [playingAudio, setPlayingAudio] = useState<LegiscastAudioTrack | null>(null);
   const [playerCondensed, setPlayerCondensed] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -271,7 +279,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const scopeVersionRef = useRef(0);
   const scopeInitializedRef = useRef(false);
   const audioRequestRef = useRef(0);
-  const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" }>());
+  const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" }>(initialAudio && initialAudioStatus !== "loading" ? [[initialStructureId === null ? "law" : String(initialStructureId), { at: Date.now(), audio: initialAudio, status: initialAudioStatus }]] : []));
   const toggleStructure = useCallback((key: string) => setCollapsedStructures((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; }), []);
   const studyUnitByStructureId = useMemo(() => new Map(studyUnits.flatMap((unit) => unit.structureIds.map((structureId) => [structureId, unit] as const))), [studyUnits]);
   const selectedStudyUnit = useMemo(() => selectedStudyUnitId === null ? null : studyUnits.find((unit) => unit.id === selectedStudyUnitId) ?? null, [selectedStudyUnitId, studyUnits]);
@@ -345,15 +353,31 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   }, [initialBlocks, initialLoadedPages]);
 
   useEffect(() => {
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) setHighlightAccessToken(data.session?.access_token ?? null);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) setHighlightAccessToken(session?.access_token ?? null);
+    });
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    loadedHighlightReferencesRef.current.clear();
+    setBlockHighlights(new Map());
+  }, [highlightAccessToken]);
+
+  useEffect(() => {
     const referenceIds = [...blocks.keys()].filter((id) => !loadedHighlightReferencesRef.current.has(id)).slice(0, PAGE_SIZE);
-    if (!referenceIds.length || adminPreview) return;
+    if (!referenceIds.length || adminPreview || !highlightAccessToken) return;
     let active = true;
     const controller = new AbortController();
     void (async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) return;
-      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/destaques?reference_ids=${encodeURIComponent(referenceIds.join(","))}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
+      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/destaques?reference_ids=${encodeURIComponent(referenceIds.join(","))}`, { cache: "no-store", headers: { Authorization: `Bearer ${highlightAccessToken}` }, signal: controller.signal });
       const result = await response.json().catch(() => null) as { success?: boolean; highlights?: Array<LegisBotHighlight & { referenceId: string }> } | null;
       if (!active || !response.ok || !result?.success) return;
       for (const id of referenceIds) loadedHighlightReferencesRef.current.add(id);
@@ -364,7 +388,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       });
     })();
     return () => { active = false; controller.abort(); };
-  }, [adminPreview, blocks, slug]);
+  }, [adminPreview, blocks, highlightAccessToken, slug]);
 
   const navigate = useCallback((reference: Reference) => {
     const structureId = reference.hierarchy.at(-1)?.id ?? null;
@@ -552,6 +576,10 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
 
   useEffect(() => {
     if (adminPreview) return;
+    // A leitura pública precisa aguardar a restauração assíncrona da sessão.
+    // Sem isso, a primeira tentativa acontece sem Bearer token, é marcada como
+    // "sem áudio" e não é refeita quando o aluno já está autenticado.
+    if (!audioEndpoint && highlightAccessToken === undefined) return;
     const requestId = ++audioRequestRef.current;
     const controller = new AbortController();
     const cacheKey = visibleStructureId === null ? "law" : String(visibleStructureId);
@@ -565,13 +593,11 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     setSuggestedAudio(null);
     setSuggestedAudioStatus("loading");
     void (async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!audioEndpoint && !token) { if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); return; }
+      if (!audioEndpoint && !highlightAccessToken) { if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); return; }
       const query = visibleStructureId === null ? "" : `?structure_id=${encodeURIComponent(String(visibleStructureId))}`;
       try {
         const endpoint = audioEndpoint ?? `/api/legisbot/${encodeURIComponent(slug)}/legiscast`;
-        const response = await fetch(`${endpoint}${query}`, { cache: "no-store", headers: audioEndpoint ? undefined : { Authorization: `Bearer ${token}` }, signal: controller.signal });
+        const response = await fetch(`${endpoint}${query}`, { cache: "no-store", headers: audioEndpoint ? undefined : { Authorization: `Bearer ${highlightAccessToken}` }, signal: controller.signal });
         const body = await response.json().catch(() => ({})) as { audio?: LegiscastAudioTrack | null; status?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" };
         if (requestId !== audioRequestRef.current) return;
         const value = { at: Date.now(), audio: response.ok && body.audio ? body.audio : null, status: response.ok && body.status ? body.status : "unavailable" as const };
@@ -581,7 +607,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       } catch (error) { if (error instanceof DOMException && error.name === "AbortError") return; if (requestId === audioRequestRef.current) setSuggestedAudioStatus("unavailable"); }
     })();
     return () => controller.abort();
-  }, [adminPreview, audioEndpoint, slug, visibleStructureId]);
+  }, [adminPreview, audioEndpoint, highlightAccessToken, slug, visibleStructureId]);
 
   useEffect(() => {
     if (adminPreview) return;
@@ -597,9 +623,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   return <div className={styles.page}>
     <main className={styles.shell}>
       <LegisBotGuide title={title} mode={studyMode} adminPreview={adminPreview} />
-      {!adminPreview ? <div className={styles.studyModes} role="tablist" aria-label="Modos da Lei Interativa">
-        <button type="button" role="tab" aria-selected={studyMode === "leitura"} className={studyMode === "leitura" ? styles.studyModeActive : undefined} onClick={() => setStudyMode("leitura")}><span className={styles.modeIcon}><ScannerIcon active={studyMode === "leitura"} /></span><span><strong>Leitura</strong><small>Estude toda a lei</small></span></button>
-        <button type="button" role="tab" aria-selected={studyMode === "mapa"} className={studyMode === "mapa" ? styles.studyModeActive : undefined} onClick={showMap}><span className={styles.modeIcon}><FlameIcon /></span><span><strong>Mapa</strong><small>Estudo por prioridade</small></span></button>
+      {!adminPreview ? <div className={styles.mapSoon}>
+        <button type="button" disabled title="O mapeamento por prioridade será disponibilizado em breve.">🔥 Mapear lei</button>
       </div> : null}
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
@@ -618,7 +643,10 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
                 <div className={styles.audioHeading}>
                   <span className={styles.audioLabel}>LegisCast · {title}</span>
                   <strong>{visibleStructureName}</strong>
-                  {playingAudio && playingAudio.id !== suggestedAudio?.id ? <em>Reproduzindo: {playingAudio.title}</em> : null}
+                  {playingAudio && suggestedAudio && playingAudio.id !== suggestedAudio.id ? <>
+                    <em>Reproduzindo: {playingAudio.title}</em>
+                    <button type="button" className={styles.audioSwitch} onClick={() => setPlayingAudio(suggestedAudio)}>Usar áudio desta unidade</button>
+                  </> : null}
                 </div>
                 <LegiscastAudioTransport track={playingAudio ?? suggestedAudio!} compact hideTitle onStart={(track) => setPlayingAudio((current) => current ?? track)} />
               </> : suggestedAudioStatus === "loading" ? <small>Carregando áudio desta unidade…</small> : suggestedAudioStatus === "ambiguous" ? <small>Áudio requer revisão editorial</small> : null}

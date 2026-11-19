@@ -253,7 +253,7 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const legalByKey = new Map(groups.map((group) => [group.key, group]));
   const contextKeys = [...new Set([...legalByKey.keys(), ...structural.keys()])];
   const laws = lawsForValidation;
-  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada", "sem_bloco_artigo", "ordem_invalida", "vinculo_manual_invalido", "referencia_ambigua"].includes(value)));
+  const selectedTypes = new Set(safeFilter(filters.type, 160).split(",").filter((value) => ["estrutural", "possivel_estrutural", "legislacao", "pergunta_duplicada", "sem_estrutura", "sem_bloco_artigo", "ordem_invalida", "vinculo_manual_invalido", "referencia_ambigua"].includes(value)));
   const hasTypeFilter = selectedTypes.size > 0;
   const typeMode = filters.typeMode === "all" ? "all" : "any";
   const selectedType = selectedTypes.size === 1 ? [...selectedTypes][0] : null;
@@ -284,6 +284,9 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     return (!law || slug.toLocaleLowerCase("pt-BR") === law) && matchesSelectedTypes(new Set(["pergunta_duplicada"]));
   });
   const filteredOrphans = orphanQuestions.filter(({ question, status }) => {
+    // Sem estrutura é um erro próprio. Não o repita também como aviso de bloco
+    // editorial pendente na mesma lista.
+    if (question.structure_id === null) return false;
     const key = `${question.slug.trim().toUpperCase()}\u0000${question.ordem.trim()}`;
     const structuralGroup = structural.get(key);
     const matchingTypes = new Set([
@@ -294,6 +297,11 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     ].filter((value): value is string => Boolean(value)));
     return (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && matchesOrphanSelectedType(matchingTypes, orphanReviewType(status).code);
   });
+  const unstructuredQuestions = activeRows.filter((question) => question.structure_id === null);
+  const filteredUnstructured = unstructuredQuestions.filter((question) =>
+    (!law || question.slug.toLocaleLowerCase("pt-BR") === law) &&
+    matchesSelectedTypes(new Set(["sem_estrutura"])),
+  );
   // Os totais por tipo sempre respeitam a lei selecionada, mas não o tipo
   // atualmente escolhido no filtro. Assim o quadro funciona como um placar
   // de avisos pendentes para a lei.
@@ -316,7 +324,8 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     possibleStructural: contextsForLaw.filter((key) => structural.get(key)?.provenance.hasPossibleConflict).length,
     legislation: contextsForLaw.filter((key) => legalByKey.has(key)).length,
     duplicateStatements: duplicateStatements.filter((group) => !law || group.questions[0]?.slug.toLocaleLowerCase("pt-BR") === law).length,
-    orphanQuestions: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).editorial).length,
+    unstructuredQuestions: unstructuredQuestions.filter((question) => !law || question.slug.toLocaleLowerCase("pt-BR") === law).length,
+    orphanQuestions: orphanQuestions.filter(({ question, status }) => question.structure_id !== null && (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).editorial).length,
     invalidOrders: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && orphanReviewType(status).code === "ordem_invalida").length,
     invalidReferences: orphanQuestions.filter(({ question, status }) => (!law || question.slug.toLocaleLowerCase("pt-BR") === law) && !orphanReviewType(status).editorial && orphanReviewType(status).code !== "ordem_invalida").length,
     subjectWarnings: subjectWarningTotal,
@@ -325,12 +334,15 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     ...filtered.map((key) => ({ kind: "context" as const, key })),
     ...filteredDuplicates.map((group) => ({ kind: "duplicate" as const, group })),
     ...filteredOrphans.map((orphan) => ({ kind: "orphan" as const, orphan })),
+    ...filteredUnstructured.map((question) => ({ kind: "unstructured" as const, question })),
   ].sort((left, right) => {
     const identifiers = (entry: typeof left) => entry.kind === "context"
       ? (() => { const item = legalByKey.get(entry.key) ?? structural.get(entry.key)!; return { slug: item.slug, ordem: item.ordem }; })()
       : entry.kind === "duplicate"
         ? { slug: entry.group.questions[0]?.slug ?? "", ordem: entry.group.questions[0]?.ordem ?? "" }
-        : { slug: entry.orphan.question.slug, ordem: entry.orphan.question.ordem };
+        : entry.kind === "orphan"
+          ? { slug: entry.orphan.question.slug, ordem: entry.orphan.question.ordem }
+          : { slug: entry.question.slug, ordem: entry.question.ordem };
     const first = identifiers(left); const second = identifiers(right);
     const compared = first.slug.localeCompare(second.slug) || first.ordem.localeCompare(second.ordem);
     return filters.orderDirection === "desc" ? -compared : compared;
@@ -340,8 +352,10 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
   const page = Math.min(pages, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
   const start = (page - 1) * PAGE_SIZE;
   const items = entries.slice(start, start + PAGE_SIZE).map((entry) => {
-    if (entry.kind === "orphan") {
-      const { question, reason, status } = entry.orphan;
+    if (entry.kind === "orphan" || entry.kind === "unstructured") {
+      const { question, reason, status } = entry.kind === "orphan"
+        ? entry.orphan
+        : { question: entry.question, reason: "A questão não está vinculada a nenhum bloco estrutural desta lei.", status: "unstructured" };
       const metadata = laws.get(question.slug.toUpperCase());
       return {
         slug: question.slug.toUpperCase(),
@@ -356,10 +370,10 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
         structuralValidation: null,
         structuralQuestions: [], structuralTotal: 0, structuralBatchEligible: false,
         editorialGranularityPending: false,
-        reviewTypes: [orphanReviewType(status).label],
+        reviewTypes: [status === "unstructured" ? "Questão sem estrutura" : orphanReviewType(status).label],
         duplicateQuestions: [],
         orphanQuestion: { id: question.id, pergunta: question.pergunta, reason, status },
-        editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos&tipo=sem_bloco_artigo`)}`,
+        editorUrl: `/admin/leis/${encodeURIComponent(question.slug.toLowerCase())}/questoes?question_id=${encodeURIComponent(question.id)}&retorno=${encodeURIComponent(`/admin/leis/${question.slug.toLowerCase()}/questoes?visao=conflitos&tipo=${status === "unstructured" ? "sem_estrutura" : "sem_bloco_artigo"}`)}`,
       };
     }
     if (entry.kind === "duplicate") {
@@ -442,9 +456,9 @@ export async function listArticleSourceConflicts(filters: ArticleConflictFilters
     pages,
     total: entries.length,
     indicators: {
-      pending: filteredContexts.length + filteredDuplicates.length + filteredOrphans.length,
-      laws: new Set([...filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? ""), ...filteredDuplicates.map((group) => group.questions[0]?.slug ?? ""), ...filteredOrphans.map(({ question }) => question.slug)]).size,
-      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? []).length, 0) + filteredDuplicates.reduce((sum, group) => sum + group.questions.length, 0) + filteredOrphans.length,
+      pending: filteredContexts.length + filteredDuplicates.length + filteredOrphans.length + filteredUnstructured.length,
+      laws: new Set([...filteredContexts.map((item) => item.group?.slug ?? item.structural?.slug ?? ""), ...filteredDuplicates.map((group) => group.questions[0]?.slug ?? ""), ...filteredOrphans.map(({ question }) => question.slug), ...filteredUnstructured.map((question) => question.slug)]).size,
+      flashcards: filteredContexts.reduce((sum, item) => sum + (item.group?.questions ?? item.structural?.questions ?? []).length, 0) + filteredDuplicates.reduce((sum, group) => sum + group.questions.length, 0) + filteredOrphans.length + filteredUnstructured.length,
     },
     typeCounts,
   };

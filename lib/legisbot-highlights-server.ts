@@ -12,7 +12,11 @@ export async function getStoredLegislationText(slug: string, ordem: string) {
       getSupabaseServerClient(),
       normalizeLegisBotIdentifiers(slug, ordem),
     );
-    return normalizeLegalText(source.promptLegislacao);
+    // Destaques são posicionados no texto exibido ao aluno. Ele usa a
+    // conversão simples de HTML para texto, que também é a base do trigger
+    // canônico de destaques. `promptLegislacao` preserva uma estrutura extra
+    // para a geração por IA e pode produzir quebras diferentes.
+    return normalizeLegalText(source.legislacao);
   } catch (error) {
     if (error instanceof LegisBotSourceError) {
       throw new CommunityApiError(error.kind === "not_found" ? 404 : 409, error.publicMessage);
@@ -30,7 +34,7 @@ export async function getStoredLegislationSource(slug: string, ordem: string) {
     if (!source.referenceId) {
       throw new CommunityApiError(404, "A referência legislativa deste dispositivo não foi identificada.");
     }
-    return { referenceId: source.referenceId, text: normalizeLegalText(source.promptLegislacao) };
+    return { referenceId: source.referenceId, text: normalizeLegalText(source.legislacao) };
   } catch (error) {
     if (error instanceof CommunityApiError) throw error;
     if (error instanceof LegisBotSourceError) {

@@ -561,6 +561,7 @@ function allowedUpdate(data: unknown, allowed: readonly string[]): JsonObject {
 function validateLawData(raw: unknown, update = false) {
   const commonAllowed = [
     "slug", "titulo", "nome_curto", "descricao", "codigo", "categoria", "tipo_conteudo", "ativo", "status_publicacao", "ordem", "thumbnail_url",
+    "total_artigos",
     "norma_originaria_referencia", "norma_originaria_data", "houve_alteracao_legislativa",
     "ultima_alteracao_referencia", "ultima_alteracao_data", "situacao_atualizacao", "situacao_conferencia",
   ] as const;
@@ -583,6 +584,14 @@ function validateLawData(raw: unknown, update = false) {
   if (!update) result.ativo = result.status_publicacao !== "inativa";
   if (update && "acesso_gratuito" in data) result.acesso_gratuito = booleanValue(data.acesso_gratuito, "Acesso gratuito");
   if (!update || "ordem" in data) result.ordem = nonNegativeInteger(data.ordem, "Ordem", 0);
+  if ("total_artigos" in data) {
+    const value = data.total_artigos;
+    if (value === null || value === "") result.total_artigos = null;
+    else {
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new CommercialValidationError("Total de artigos para Anki deve ser um número inteiro maior que zero.");
+      result.total_artigos = value;
+    }
+  }
   if (!update || "norma_originaria_referencia" in data) result.norma_originaria_referencia = optionalString(data.norma_originaria_referencia, "Norma originária", 500) ?? null;
   if (!update || "norma_originaria_data" in data) result.norma_originaria_data = optionalIsoDate(data.norma_originaria_data, "Data da norma originária") ?? null;
   if (!update || "houve_alteracao_legislativa" in data) result.houve_alteracao_legislativa = booleanValue(data.houve_alteracao_legislativa ?? false, "Alteração legislativa");

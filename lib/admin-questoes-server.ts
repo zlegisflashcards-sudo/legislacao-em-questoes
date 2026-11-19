@@ -24,7 +24,7 @@ import { structurePath, validateStructureReparenting, type ReparentStructureNode
 
 export class AdminQuestoesError extends Error { constructor(public status: number, message: string) { super(message); } }
 type StructureType = CreatableQuestionStructureType;
-type Law = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null; ultima_alteracao_referencia: string | null; houve_alteracao_legislativa: boolean | null };
+type Law = { id: number; slug: string; titulo: string; nome_curto: string | null; codigo: string | null; total_artigos: number | null; ultima_alteracao_referencia: string | null; houve_alteracao_legislativa: boolean | null };
 const types: StructureType[] = creatableQuestionStructureTypes;
 const questionFields = "id,lei_id,structure_id,pergunta,resposta,justificativa,assunto,legislacao,ordem,titulo,total_artigos,slug,ultima_alteracao_legislativa,capitulo,secao,subsecao,artigo,ativo,created_at,updated_at";
 const questionExportPageSize = 500;
@@ -48,7 +48,7 @@ function reparentExpected(value: unknown) {
 }
 function structureOrder(value: unknown) { if (!Number.isSafeInteger(Number(value)) || Number(value) < 0) throw new AdminQuestoesError(400, "Posição estrutural inválida."); return Number(value); }
 function draft(value: unknown) { try { return parseQuestionDraft(value as Record<string, unknown>); } catch (error) { throw new AdminQuestoesError(400, error instanceof Error ? error.message : "Dados da questão inválidos."); } }
-async function law(lawSlug: string): Promise<Law> { const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug(lawSlug)).eq("ativo", true).maybeSingle(); if (r.error) fail("carregar_lei", r.error); if (!r.data) throw new AdminQuestoesError(404, "Lei ativa não encontrada no banco principal."); return r.data as Law; }
+async function law(lawSlug: string): Promise<Law> { const r = await db().from("leis").select("id,slug,titulo,nome_curto,codigo,total_artigos,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", slug(lawSlug)).eq("ativo", true).maybeSingle(); if (r.error) fail("carregar_lei", r.error); if (!r.data) throw new AdminQuestoesError(404, "Lei ativa não encontrada no banco principal."); return r.data as Law; }
 async function structure(leiId: number) { const r = await db().from("law_structure").select("id,lei_id,parent_id,tipo,nome,ordem,pdf_page,ativo,created_at,updated_at").eq("lei_id", leiId).eq("ativo", true).order("ordem").order("id"); if (r.error) fail("listar_estrutura", r.error); return [...(r.data ?? [])].sort(compareQuestionStructureNames) as QuestionStructureNode[]; }
 async function validateStructure(leiId: number, structureId: number | null) { if (!structureId) return; const r = await db().from("law_structure").select("id").eq("id", structureId).eq("lei_id", leiId).eq("ativo", true).maybeSingle(); if (r.error) fail("validar_estrutura", r.error); if (!r.data) throw new AdminQuestoesError(422, "A estrutura selecionada não pertence à lei ativa."); }
 function values(law: Law, d: QuestionDraft) { return { lei_id: law.id, structure_id: d.structure_id, pergunta: d.pergunta, resposta: d.resposta, justificativa: d.justificativa, assunto: d.assunto, legislacao: d.legislacao, ordem: d.ordem, titulo: d.titulo, total_artigos: d.total_artigos, slug: law.slug, capitulo: d.capitulo, secao: d.secao, subsecao: d.subsecao, artigo: d.artigo }; }
@@ -131,6 +131,11 @@ export async function listQuestionContent(lawSlug: string) {
   return { law: current, questions, structure: nodes, questionCount };
 }
 export async function listAdminQuestions(lawSlug: string) { await requireAdmin(); return listQuestionContent(lawSlug); }
+export async function getAdminLawAnkiWarningSummary(lawSlug: string) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  return { missingTotalArtigos: !Number.isSafeInteger(current.total_artigos) || Number(current.total_artigos) < 1 };
+}
 export async function searchAdminQuestions(input: { lawSlug: string; query?: unknown; filter?: unknown; sort?: unknown; page?: unknown; limit?: unknown; structureId?: unknown; article?: unknown; scopeId?: unknown }) {
   await requireAdmin(); const current = await law(input.lawSlug); const questionId = adminQuestionSearchId(input.query); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const sort = parseAdminQuestionSearchSort(input.sort); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit; const nodes = await structure(current.id); const structureId = input.structureId ? id(input.structureId) : null; const selectedStructureIds = structureId ? descendantStructureIds(nodes, structureId) : null; const recorteStructureIds = await scopeStructureIds(current, input.scopeId, nodes); const structureIds = recorteStructureIds === null ? selectedStructureIds : selectedStructureIds === null ? recorteStructureIds : selectedStructureIds.filter((nodeId) => recorteStructureIds.includes(nodeId));
   let request = db().from("questions").select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,ativo,updated_at", { count: "exact" }).eq("lei_id", current.id).eq("ativo", true);
@@ -509,7 +514,7 @@ async function getLawQuestionDeckDefaults(current: Law) {
     }, questionExportPageSize),
   ]);
   const defaults = questionDeckDefaults(rows);
-  return { ...defaults, total_artigos: totalArticlesFromReferenceOrders(references) ?? defaults.total_artigos };
+  return { ...defaults, total_artigos: Number.isSafeInteger(current.total_artigos) && Number(current.total_artigos) > 0 ? current.total_artigos : totalArticlesFromReferenceOrders(references) ?? defaults.total_artigos };
 }
 
 /** Valores exibidos antes de criar ou duplicar uma questão; não grava nada. */

@@ -15,8 +15,9 @@ export function LawDataAdmin({ law }: { law: (AdminLawData & { id: number }) | n
     event.preventDefault(); setBusy(true); setMessage(""); setError("");
     const raw = Object.fromEntries(new FormData(event.currentTarget));
     if (raw.tipo_conteudo === "doutrina") { setError("Doutrina deve ser cadastrada pela prévia de importação, para preservar UUIDs e estruturas em uma única transação."); setBusy(false); return; }
-    const { tipo_conteudo: _tipoConteudo, ...lawFields } = raw;
-    const data = { ...lawFields, ordem: Number(raw.ordem), ...(law ? { acesso_gratuito: raw.acesso_gratuito === "true" } : {}), houve_alteracao_legislativa: raw.houve_alteracao_legislativa === "true" };
+    const { tipo_conteudo: _tipoConteudo, total_artigos: rawTotalArtigos, ...lawFields } = raw;
+    const totalArtigosText = String(rawTotalArtigos ?? "").trim();
+    const data = { ...lawFields, ordem: Number(raw.ordem), ...(totalArtigosText ? { total_artigos: Number(totalArtigosText) } : law ? { total_artigos: null } : {}), ...(law ? { acesso_gratuito: raw.acesso_gratuito === "true" } : {}), houve_alteracao_legislativa: raw.houve_alteracao_legislativa === "true" };
     try {
       const response = await fetch("/api/admin/comercial/leis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: law ? "atualizar" : "criar", id: law?.id, data }) });
       const result = await response.json().catch(() => ({}));

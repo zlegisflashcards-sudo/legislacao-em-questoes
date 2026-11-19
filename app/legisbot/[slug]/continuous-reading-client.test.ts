@@ -5,6 +5,7 @@ const client = readFileSync("app/legisbot/[slug]/continuous-reading-client.tsx",
 const styles = readFileSync("app/legisbot/[slug]/continuous-reading.module.css", "utf8");
 const page = readFileSync("app/legisbot/[slug]/page.tsx", "utf8");
 const server = readFileSync("lib/legisbot/continuous-reading-server.ts", "utf8");
+const adminPreview = readFileSync("app/admin/artigos/legisbot-preview/page.tsx", "utf8");
 
 describe("leitura contínua pública", () => {
   it("apresenta a Lei Interativa como ambiente conduzido pelo LegisBot", () => {
@@ -13,9 +14,9 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("Organizei os dispositivos por prioridade estatística");
     expect(client).toContain("Vamos percorrer a lei inteira");
     expect(client).toContain("Mapa de prioridade");
-    expect(client).toContain("Estudo por prioridade");
-    expect(client).toContain("<strong>Leitura</strong>");
-    expect(client).toContain("Estude toda a lei");
+    expect(client).toContain("🔥 Mapear lei");
+    expect(client).toContain("disabled title=\"O mapeamento por prioridade será disponibilizado em breve.\"");
+    expect(client).not.toContain('role="tablist" aria-label="Modos da Lei Interativa"');
     expect(client).toContain("FlameIcon");
     expect(client).toContain("ScannerIcon");
     expect(client).toContain("reference.linkedQuestions > 0");
@@ -120,8 +121,24 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("onHighlightsChange={updateBlockHighlights}");
     expect(client).toContain("reference_ids=");
     expect(client).toContain("loadedHighlightReferencesRef");
+    expect(client).toContain("highlightAccessToken");
+    expect(client).toContain("supabase.auth.onAuthStateChange");
+    expect(client).toContain("uma atualização do player");
+    expect(client).not.toContain("dangerouslySetInnerHTML={{ __html: html }}");
     expect(client).toContain("controller.abort()");
     expect(client).toContain("personal-highlight ${highlight.color}");
+  });
+
+  it("espera a sessão autenticada antes de consultar o áudio público", () => {
+    expect(client).toContain('if (!audioEndpoint && highlightAccessToken === undefined) return;');
+    expect(client).toContain('Authorization: `Bearer ${highlightAccessToken}`');
+    expect(client).toContain('[adminPreview, audioEndpoint, highlightAccessToken, slug, visibleStructureId]');
+  });
+
+  it("aceita uma faixa inicial segura para a prévia administrativa", () => {
+    expect(client).toContain("initialAudio = null");
+    expect(client).toContain("initialAudioStatus = \"loading\"");
+    expect(client).toContain("initialAudio && initialAudioStatus !== \"loading\"");
   });
 
   it("mantém as cores de prioridade no mapa e usa barra neutra na leitura", () => {
@@ -139,5 +156,10 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("adminPreview = false");
     expect(client).toContain("/admin/artigos/${encodeURIComponent(slug.toLowerCase())}/${encodeURIComponent(block.ordem)}?aba=artigo");
     expect(client).toContain("<ReadingStructureHeadings nodes={introducedHierarchy} />");
+  });
+
+  it("mantém a abertura da visão do aluno dentro da simulação administrativa", () => {
+    expect(adminPreview).toContain("/admin/artigos/legisbot-preview/visao-aluno?lei=");
+    expect(adminPreview).not.toContain('href={`/legisbot/${encodeURIComponent(slug)}`}');
   });
 });

@@ -68,6 +68,10 @@ describe("administração de Legis Questões", () => {
     expect(server).toContain('.from("law_structure")');
     expect(server).toContain('.from("recortes_leis")');
     expect(server).toContain('.from("recortes_leis_estrutura")');
+    expect(server).toContain("getAdminLawAnkiWarningSummary");
+    expect(server).toContain("total_artigos,ultima_alteracao_referencia");
+    expect(server).toContain("Number.isSafeInteger(current.total_artigos)");
+    expect(server).not.toContain("total_artigos.is.null,total_artigos.lt.1");
     expect(server).not.toContain('recortes_leis_estrutura(structure_id)');
     expect(server).toContain('.eq("lei_id", current.id)');
     expect(server).not.toContain("getSupabaseQuestoesClient");

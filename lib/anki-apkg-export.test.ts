@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { parseLegisApkg } from "./anki-apkg-import";
-import { buildLawApkg } from "./anki-apkg-export";
+import { buildLawApkg, summarizeLawApkgQuestions } from "./anki-apkg-export";
 
 describe("exportação APKG", () => {
+  it("avisa quando o Total de artigos da lei estiver vazio ou inválido, sem excluir a questão da exportação", () => {
+    const questions = [
+      { id: "questao-1", structure_id: null, pergunta: "A", resposta: "Certo", total_artigos: 10 },
+      { id: "questao-2", structure_id: null, pergunta: "B", resposta: "Errado", total_artigos: null },
+      { id: "questao-3", structure_id: null, pergunta: "C", resposta: "Certo", total_artigos: 0 },
+    ];
+    expect(summarizeLawApkgQuestions(questions, 3, null)).toEqual({ found: 3, exported: 3, complete: true, missingTotalArtigos: 3 });
+    expect(summarizeLawApkgQuestions(questions, 3, 87)).toEqual({ found: 3, exported: 3, complete: true, missingTotalArtigos: 0 });
+  });
+
+  it("usa o total cadastrado na lei em todos os cards, sem depender dos valores antigos das questões", async () => {
+    const exported = await buildLawApkg({ slug: "lei-total", titulo: "Lei total", total_artigos: 87 }, [
+      { id: "questao-a", structure_id: null, pergunta: "A", resposta: "Certo", ordem: "0001", total_artigos: 1 },
+      { id: "questao-b", structure_id: null, pergunta: "B", resposta: "Errado", ordem: "0002", total_artigos: null },
+    ], []);
+    const parsed = await parseLegisApkg(Buffer.from(exported.bytes));
+    expect(parsed.rows.map((row) => row.total_artigos)).toEqual(["87", "87"]);
+  });
   it("usa os templates 4.0 versionados no projeto, sem caminho local do desenvolvedor", () => {
     const exporter = readFileSync("lib/anki-apkg-export.ts", "utf8");
     expect(exporter).toContain('join(process.cwd(), "public", "anki-templates")');

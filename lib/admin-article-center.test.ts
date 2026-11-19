@@ -46,9 +46,10 @@ describe("Central do Artigo administrativa", () => {
     expect(read("components/admin/admin-law-questions.tsx")).toContain("Conflitos de questões");
   });
 
-  it("carrega conflitos apenas na visão correspondente da gestão de questões", () => {
+  it("carrega o resumo de conflitos para sinalizar erros em qualquer visão da gestão de questões", () => {
     const questionsPage = read("app/admin/leis/[slug]/questoes/page.tsx");
-    expect(questionsPage).toContain('initialView === "conflitos" ? await listArticleSourceConflicts');
+    expect(questionsPage).toContain('const conflicts = await listArticleSourceConflicts');
+    expect(questionsPage).toContain('O resumo também alimenta o aviso da aba de conflitos nas demais visões.');
     expect(questionsPage).toContain('initialView={initialView} conflicts={conflicts}');
     expect(questionsPage).toContain('const clientStateKey = [initialView, questionId, legisBotId, contextQuestionId].join(":")');
     expect(questionsPage).toContain('key={clientStateKey}');

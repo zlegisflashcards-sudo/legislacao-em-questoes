@@ -34,7 +34,7 @@ describe("Lei Interativa · áudio LegisCast", () => {
   });
 
   it("mantém estrutura visível e faixa em reprodução como estados distintos", () => {
-    for (const expected of ["visibleStructureId", "playingAudio", "playingAudio ?? suggestedAudio", "onStart={(track) => setPlayingAudio", "LegiscastAudioTransport", "AbortController", "audioRequestRef", "audioLabel", "hideTitle", "styles.srOnly", "playerCondensed", "updatePlayerDensity"]) expect(client).toContain(expected);
+    for (const expected of ["visibleStructureId", "playingAudio", "playingAudio ?? suggestedAudio", "onStart={(track) => setPlayingAudio", "LegiscastAudioTransport", "AbortController", "audioRequestRef", "audioLabel", "audioSwitch", "Usar áudio desta unidade", "hideTitle", "styles.srOnly", "playerCondensed", "updatePlayerDensity"]) expect(client).toContain(expected);
     expect(player).toContain("legiscast-audio:${track.id}");
     expect(player).toContain("LegiscastAudioTransport");
     expect(player).toContain("onStart?.(track)");

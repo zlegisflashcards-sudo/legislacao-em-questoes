@@ -41,7 +41,8 @@ export default async function AdminLawQuestionsPage({ params, searchParams }: { 
   const returnHref = requestedReturn.startsWith("/admin/artigos/") && !requestedReturn.startsWith("//") ? requestedReturn : "";
   const initialView = one(query.visao) === "conflitos" ? "conflitos" as const : "ativas" as const;
   const conflictFilters: { law: string; type: string; typeMode: "any" | "all"; typeExact: boolean; ordem_sort: "asc" | "desc" } = { law: law.slug, type: many(query.tipo), typeMode: one(query.tipo_modo) === "all" ? "all" : "any", typeExact: one(query.tipo_exato) !== "0", ordem_sort: one(query.ordem_sort) === "desc" ? "desc" : "asc" };
-  const conflicts = initialView === "conflitos" ? await listArticleSourceConflicts({ ...conflictFilters, orderDirection: conflictFilters.ordem_sort, page: Number(one(query.pagina)) || 1 }) : null;
+  // O resumo também alimenta o aviso da aba de conflitos nas demais visões.
+  const conflicts = await listArticleSourceConflicts({ ...conflictFilters, orderDirection: conflictFilters.ordem_sort, page: Number(one(query.pagina)) || 1 });
   const clientStateKey = [initialView, questionId, legisBotId, contextQuestionId].join(":");
   return <div data-law-area="questoes"><AdminLawQuestions key={clientStateKey} law={{ id: law.id, slug: law.slug, titulo: law.titulo }} initialStructure={structure as AdminQuestionStructureNode[]} initialStructureSummary={structureCounts} initialScopeFilters={scopeFilters} initialDeckDefaults={deckDefaults} initialQuestion={initialQuestion} initialDraft={initialDraft} sourceLegisBotId={legisBotId ? Number(legisBotId) : null} returnHref={returnHref} initialView={initialView} conflicts={conflicts} conflictFilters={conflictFilters} /></div>;
 }

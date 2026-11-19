@@ -13,6 +13,8 @@ describe("Questões na Central da Lei", () => {
     const page = "app/admin/leis/[slug]/questoes/page.tsx";
     expect(existsSync(page)).toBe(true);
     expect(read(page)).toContain("<AdminLawQuestions");
+    expect(read("components/admin/admin-law-questions.tsx")).toContain('const conflictErrorCount = conflicts ?');
+    expect(read("components/admin/admin-law-questions.tsx")).toContain('Há erros que exigem correção');
     expect(central).not.toContain("LawSearchSelect");
   });
 

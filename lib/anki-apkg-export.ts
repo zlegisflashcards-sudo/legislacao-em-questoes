@@ -8,7 +8,7 @@ import { ankiLastLegislativeUpdate } from "./law-anki-legislative-update";
 const templateDirectory = join(process.cwd(), "public", "anki-templates");
 const fieldNames = ["pergunta", "resposta", "justificativa", "assunto", "legislação", "titulo", "TotalArtigos", "ordem", "slug", "ultimaAlteracaoLegislativa", "IDQuestao", "legisbotUrl"];
 
-type ExportLaw = { slug: string; titulo: string; ultima_alteracao_referencia?: string | null; houve_alteracao_legislativa?: boolean | null };
+type ExportLaw = { slug: string; titulo: string; total_artigos?: number | null; ultima_alteracao_referencia?: string | null; houve_alteracao_legislativa?: boolean | null };
 type ExportQuestion = { id: string; structure_id: number | null; pergunta: string; resposta: string; justificativa?: string | null; assunto?: string | null; legislacao?: string | null; titulo?: string | null; total_artigos?: number | null; ordem?: string | null; slug?: string | null; ultima_alteracao_legislativa?: string | null; created_at?: string | null };
 type ExportStructure = { id: number; parent_id: number | null; nome: string };
 
@@ -81,6 +81,7 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
   const decks = new Map<string, Deck>();
   const pathForStructure = structurePathResolver(structure);
   const lastLegislativeUpdate = ankiLastLegislativeUpdate(law);
+  const totalArtigosDaLei = Number.isSafeInteger(law.total_artigos) && Number(law.total_artigos) > 0 ? String(law.total_artigos) : "";
   const deckFor = (path: string[]) => {
     const name = [law.titulo, ...path].join("::");
     const existing = decks.get(name);
@@ -95,7 +96,7 @@ export async function buildLawApkg(law: ExportLaw, questions: ExportQuestion[], 
     if (pedagogicalFields.some((value) => /<img\b|\[sound:/i.test(value))) throw new Error(`A questão ${question.ordem ?? question.id} contém mídia. A exportação de mídia ainda não é suportada.`);
     // Campo 12 é mantido vazio para compatibilidade com o modelo 4.0 já
     // importado. O template novo resolve pelo IDQuestao, slug e ordem.
-    deckFor(pathForStructure(question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, question.total_artigos?.toString() ?? "", question.ordem ?? "", question.slug ?? law.slug, lastLegislativeUpdate, question.id, ""] }));
+    deckFor(pathForStructure(question.structure_id)).addNote(new Note({ notetype, guid: stableAnkiGuid(law.slug, question.id), fields: [...pedagogicalFields, question.titulo ?? law.titulo, totalArtigosDaLei, question.ordem ?? "", question.slug ?? law.slug, lastLegislativeUpdate, question.id, ""] }));
   }
 
   const packageFile = new Package();
@@ -112,10 +113,15 @@ export async function exportLawApkg(slug: string) {
   return { ...exported, found: questionCount, exported: exported.notes };
 }
 
+export function summarizeLawApkgQuestions(questions: ExportQuestion[], questionCount: number, totalArtigosDaLei?: unknown) {
+  const missingTotalArtigos = !Number.isSafeInteger(totalArtigosDaLei) || Number(totalArtigosDaLei) < 1 ? questions.length : 0;
+  return { found: questionCount, exported: questions.length, complete: questionCount > 0 && questionCount === questions.length, missingTotalArtigos };
+}
+
 export async function summarizeLawApkgExport(slug: string) {
   const { listAdminQuestions } = await import("./admin-questoes-server");
-  const { questions, questionCount } = await listAdminQuestions(slug);
-  return { found: questionCount, exported: questions.length, complete: questionCount > 0 && questionCount === questions.length };
+  const { law, questions, questionCount } = await listAdminQuestions(slug);
+  return summarizeLawApkgQuestions(questions, questionCount, law.total_artigos);
 }
 
 export async function exportLawContentApkg(slug: string) {
