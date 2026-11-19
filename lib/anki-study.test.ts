@@ -14,6 +14,7 @@ import {
 
 const page = readFileSync("app/estudar/anki/page.tsx", "utf8");
 const client = readFileSync("components/anki-study-page-client.tsx", "utf8");
+const lawClient = readFileSync("components/law-anki-page-client.tsx", "utf8");
 const tabs = readFileSync("components/student-area-tabs.tsx", "utf8");
 
 function memoryStorage(initial?: Record<string, string>) {
@@ -106,12 +107,17 @@ describe("página autenticada do Anki", () => {
     for (const forbidden of ["public.leis", "liberacoes_leis", "lei_id", "service_role", "/api/"]) expect(client.toLowerCase()).not.toContain(forbidden);
   });
 
-  it("reutiliza as abas padronizadas sem botão Voltar", () => {
+  it("reutiliza as abas padronizadas", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
     expect(tabs).toContain('>Meus Atalhos</Link>');
     expect(tabs).toContain('>Todas as leis adquiridas</Link>');
     expect(tabs).toContain('meusAtalhosHref = "/minhas-leis?aba=atalhos"');
-    expect(client).not.toContain("Voltar");
+  });
+
+  it("retorna da página de Anki da lei ao Legis Questões no mesmo contexto", () => {
+    expect(lawClient).toContain('const legisQuestionsHref = (slug: string, scope: string | null) => `/estudar/lei/${encodeURIComponent(slug)}${scope ? `?recorte_id=${encodeURIComponent(scope)}` : "?contexto=completo"}`;');
+    expect(lawClient).toContain('href={legisQuestionsHref(slug, recorteId)}');
+    expect(lawClient).toContain('← Voltar para Legis Questões');
   });
 
   it("exibe cabeçalho, plataformas e instruções acessíveis", () => {

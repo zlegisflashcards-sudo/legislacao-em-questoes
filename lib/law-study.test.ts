@@ -95,6 +95,8 @@ describe("interface de estudo", () => {
     expect(client).toContain("/conta?modo=login&retorno=");
     expect(cards).toContain('const lawHref = isScope ?');
     expect(cards).toContain('?contexto=completo');
+    expect(client).toContain('const ankiHref = `/estudar/lei/${encodeURIComponent(slug)}/anki${selectedContext?.recorteId ? `?recorte_id=${encodeURIComponent(selectedContext.recorteId)}` : ""}`');
+    expect(client).toContain("Baixar arquivo para Anki");
     expect(cards).toContain('?recorte_id=');
     expect(cards).toContain("href={lawHref}");
     expect(cards).toContain('href={lawHref}'); expect(cards).toContain('>Legis Questões</Link>');

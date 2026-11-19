@@ -5,20 +5,23 @@ const source = readFileSync("components/law-study-bottom-nav.tsx", "utf8");
 const questionPage = readFileSync("app/estudar/lei/[slug]/page.tsx", "utf8");
 const ankiPage = readFileSync("app/estudar/lei/[slug]/anki/page.tsx", "utf8");
 const legiscastPage = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", "utf8");
-const interactiveLawPage = readFileSync("app/legisbot/[slug]/page.tsx", "utf8");
+const interactiveLawClient = readFileSync("app/legisbot/[slug]/continuous-reading-authorized-client.tsx", "utf8");
 
 describe("navegação responsiva dos modos da lei", () => {
-  it("monta as quatro rotas e preserva recorte_id apenas para Questões e Anki", () => {
+  it("mantém apenas Questões e Lei Interativa na barra", () => {
     expect(source).toContain('suffix: ""');
-    expect(source).toContain('suffix: "/anki"');
-    expect(source).toContain('suffix: "/legiscast"');
+    expect(source).not.toContain('suffix: "/anki"');
+    expect(source).not.toContain('label: "LegisCast"');
     expect(source).toContain('label: "Lei Interativa"');
     expect(source).toContain('mode: "lei_interativa"');
     expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}`');
     expect(source).toContain('if (mode === "legiscast") return `/estudar/lei/${encodeURIComponent(slug)}${suffix}`;');
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
-    expect(source).toContain("grid-cols-4");
-    expect(source).toContain('<ScannerIcon className={mobile ? "h-6 w-6"');
+    expect(source).toContain("grid-cols-2");
+    expect(source).not.toContain('label: "Anki"');
+    expect(source).toContain('icon: "/icons/anki.png"');
+    expect(source).toContain('icon: "🎧"');
+    expect(source).toContain('item.mode === "questoes" ? <Image');
   });
 
   it("mantém a barra inferior no mobile e unifica a pill lateral em tablet e desktop", () => {
@@ -34,11 +37,11 @@ describe("navegação responsiva dos modos da lei", () => {
     expect(source).toContain("env(safe-area-inset-bottom)");
   });
 
-  it("é reutilizada nos quatro modos", () => {
+  it("continua presente nas páginas de estudo, inclusive na página do Anki", () => {
     expect(questionPage).toContain('activeMode="questoes"');
     expect(ankiPage).toContain('activeMode="anki"');
     expect(legiscastPage).toContain('activeMode="legiscast"');
-    expect(interactiveLawPage).toContain('activeMode="lei_interativa"');
-    expect(interactiveLawPage).toContain("<LawStudyBottomNav");
+    expect(interactiveLawClient).toContain('activeMode="lei_interativa"');
+    expect(interactiveLawClient).toContain("<LawStudyBottomNav");
   });
 });
