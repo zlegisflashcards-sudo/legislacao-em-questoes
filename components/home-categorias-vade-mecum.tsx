@@ -13,6 +13,8 @@ type CatalogProduct = {
   id: string;
   nome: string;
   slug: string;
+  tipoProduto: string;
+  imagemUrl: string | null;
   leisIncluidas: number;
   totalFlashcards: number | null;
   modules: CatalogModuleAvailability;
@@ -84,8 +86,11 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
 }
 
 function HomeProductCard({ produto }: { produto: CatalogProduct }) {
+  const isDeck = produto.tipoProduto === "combo" || produto.tipoProduto === "edital";
   return (
-    <article className="relative flex min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_46px_rgba(0,104,237,0.25)]">
+    <div className={`relative ${isDeck ? "pb-3 pr-3" : ""}`} data-product-type={produto.tipoProduto}>
+      {isDeck ? <><div aria-hidden="true" className="absolute inset-x-3 bottom-1 top-4 overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)]"><div className="h-16 bg-gradient-to-r from-[#123c74] to-[#07172d]" /></div><div aria-hidden="true" className="absolute bottom-0 left-1 right-1 top-7 overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)]"><div className="h-16 bg-gradient-to-r from-[#123c74] to-[#07172d]" /></div></> : null}
+    <article className="relative z-10 flex min-h-[320px] flex-col overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_46px_rgba(0,104,237,0.25)]">
       <div className="flex min-h-[64px] items-center justify-between gap-3 bg-gradient-to-r from-[#123c74] to-[#07172d] px-5 py-3 text-white">
         <div className="flex min-w-0 items-center gap-3">
           <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#1683ff] bg-[#062a5f] text-base text-[#28b7ff] shadow-[0_0_14px_rgba(40,183,255,0.28)]">
@@ -101,7 +106,7 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
           <h3 className="text-xl font-extrabold leading-snug text-[#0868ed] sm:text-2xl">
             {produto.nome}
           </h3>
-          <div className="min-w-0 space-y-3 text-sm font-bold text-[#062a5f]">
+          {isDeck && produto.imagemUrl ? <img src={produto.imagemUrl} alt={`Imagem de ${produto.nome}`} className="aspect-video w-full rounded-xl border border-blue-100 object-cover shadow-sm" /> : <div className="min-w-0 space-y-3 text-sm font-bold text-[#062a5f]">
             {([
               ["questoes", "Legis Questões"],
               ["anki", "Flashcards Anki"],
@@ -114,7 +119,7 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
                 <span className="min-w-0 break-words">{label}{available ? null : <span className="text-slate-500"> · Em produção</span>}</span>
               </span>
             })}
-          </div>
+          </div>}
         </div>
 
         <div className="mt-7 grid grid-cols-2 gap-3">
@@ -136,6 +141,7 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
         </div>
       </div>
     </article>
+    </div>
   );
 }
 

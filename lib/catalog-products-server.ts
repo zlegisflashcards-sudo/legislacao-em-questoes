@@ -9,6 +9,8 @@ export type CatalogProduct = {
   id: string;
   nome: string;
   slug: string;
+  tipoProduto: string;
+  imagemUrl: string | null;
   leisIncluidas: number;
   totalFlashcards: number | null;
   modules: CatalogModuleAvailability;
@@ -35,7 +37,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
     const supabase = getSupabaseServerClient();
     let productsQuery = supabase
       .from("produtos")
-      .select("id,nome,slug,ordem,tipo_produto,destaque", { count: "exact" })
+      .select("id,nome,slug,ordem,tipo_produto,destaque,imagem_url", { count: "exact" })
       .eq("ativo", true)
       .not("slug", "is", null)
       .order("ordem", { ascending: true })
@@ -87,6 +89,8 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         id: product.id,
         nome: product.nome,
         slug: product.slug,
+        tipoProduto: product.tipo_produto,
+        imagemUrl: typeof product.imagem_url === "string" && product.imagem_url.trim() ? product.imagem_url : null,
         destaque: product.destaque === true,
         leisIncluidas: productLawIds.length,
         totalFlashcards: productLawIds.length

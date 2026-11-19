@@ -72,7 +72,7 @@ describe("cards comerciais do catálogo", () => {
     expect(loader).toContain('from("produto_leis")');
     expect(loader).toContain('leis(slug,status_publicacao)');
     expect(loader).toContain('select("lei_id,item")');
-    expect(loader).toContain('select("id,nome,slug,ordem,tipo_produto,destaque", { count: "exact" })');
+    expect(loader).toContain('select("id,nome,slug,ordem,tipo_produto,destaque,imagem_url", { count: "exact" })');
     expect(loader).toContain('recorte_id');
     expect(loader).toContain('aggregateCatalogModuleAvailability');
     expect(loader).not.toContain('product.tipo_produto === "lei_avulsa"');
@@ -99,6 +99,10 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("min-w-0 space-y-3 text-sm font-bold");
     expect(cards).toContain('className="min-w-0 break-words"');
     expect(cards).toContain("Saber mais");
+    expect(cards).toContain('produto.tipoProduto === "combo" || produto.tipoProduto === "edital"');
+    expect(cards).toContain('data-product-type={produto.tipoProduto}');
+    expect(cards).toContain("isDeck && produto.imagemUrl");
+    expect(cards).toContain("Imagem de ${produto.nome}");
     expect(cards).not.toContain("Ver produto");
     expect(cards).toContain("/leisflashcards/${produto.slug}");
     expect(cards).toContain("/leisflashcards/${legislacao.slug}");
@@ -124,12 +128,12 @@ describe("cards comerciais do catálogo", () => {
   it("deriva a vitrine da mesma lista sem alterar os cards do catálogo", () => {
     const modules = { questoes: true, anki: true, legiscast: false, materiais: false };
     const result = splitHomeCatalogProducts([
-      { id: "1", nome: "Produto destacado", slug: "destacado", leisIncluidas: 1, totalFlashcards: 10, modules, destaque: true },
-      { id: "2", nome: "Produto normal", slug: "normal", leisIncluidas: 2, totalFlashcards: 20, modules, destaque: false },
+      { id: "1", nome: "Produto destacado", slug: "destacado", tipoProduto: "combo", imagemUrl: null, leisIncluidas: 1, totalFlashcards: 10, modules, destaque: true },
+      { id: "2", nome: "Produto normal", slug: "normal", tipoProduto: "lei_avulsa", imagemUrl: null, leisIncluidas: 2, totalFlashcards: 20, modules, destaque: false },
     ]);
     expect(result.products).toEqual([
-      { id: "1", nome: "Produto destacado", slug: "destacado", leisIncluidas: 1, totalFlashcards: 10, modules },
-      { id: "2", nome: "Produto normal", slug: "normal", leisIncluidas: 2, totalFlashcards: 20, modules },
+      { id: "1", nome: "Produto destacado", slug: "destacado", tipoProduto: "combo", imagemUrl: null, leisIncluidas: 1, totalFlashcards: 10, modules },
+      { id: "2", nome: "Produto normal", slug: "normal", tipoProduto: "lei_avulsa", imagemUrl: null, leisIncluidas: 2, totalFlashcards: 20, modules },
     ]);
     expect(result.highlightedProducts).toEqual([result.products[0]]);
   });
