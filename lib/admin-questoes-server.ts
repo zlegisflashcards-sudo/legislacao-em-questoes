@@ -428,11 +428,19 @@ export async function setAdminQuestionStructureReview(body: Record<string, unkno
     return { structure_id: null, reviewed: body.reviewed };
   }
   await validateStructure(current.id, structureId);
+  const [nodes, questionResult] = await Promise.all([
+    structure(current.id),
+    db().from("questions").select("structure_id").eq("lei_id", current.id).eq("ativo", true),
+  ]);
+  if (questionResult.error) fail("contar_questoes_revisao_estrutural", questionResult.error);
+  const counts = questionCountsByStructure(nodes, questionResult.data ?? []);
+  const affectedStructureIds = descendantStructureIds(nodes, structureId).filter((id) => (counts[id] ?? 0) > 0);
+  if (!affectedStructureIds.length) throw new AdminQuestoesError(422, "Esta estrutura não possui questões para conferir.");
   const result = body.reviewed
-    ? await db().from("admin_question_structure_reviews").upsert({ lei_id: current.id, structure_id: structureId, reviewed_at: new Date().toISOString(), reviewed_by: admin.id }, { onConflict: "lei_id,structure_id" })
-    : await db().from("admin_question_structure_reviews").delete().eq("lei_id", current.id).eq("structure_id", structureId);
+    ? await db().from("admin_question_structure_reviews").upsert(affectedStructureIds.map((id) => ({ lei_id: current.id, structure_id: id, reviewed_at: new Date().toISOString(), reviewed_by: admin.id })), { onConflict: "lei_id,structure_id" })
+    : await db().from("admin_question_structure_reviews").delete().eq("lei_id", current.id).in("structure_id", affectedStructureIds);
   if (result.error) fail("salvar_revisao_estrutural", result.error);
-  return { structure_id: structureId, reviewed: body.reviewed };
+  return { structure_id: structureId, reviewed: body.reviewed, affected_structure_ids: affectedStructureIds };
 }
 export async function conferenceArticleContext(lawSlug: string, orderValue: unknown) {
   await requireAdmin();

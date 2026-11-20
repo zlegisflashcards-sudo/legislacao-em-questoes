@@ -1017,7 +1017,7 @@ export function AdminQuestionConference({
               type="button"
               className={`admin-button ${structureReview.reviewed ? "secondary" : "primary"}`}
               disabled={saving || structureReview.saving}
-              title="Registra somente esta estrutura; as subestruturas não são marcadas automaticamente."
+              title="Registra esta estrutura e suas subestruturas que possuem questões."
               onClick={() => void toggleCurrentStructureReview()}
             >
               {structureReview.saving

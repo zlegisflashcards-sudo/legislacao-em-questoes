@@ -123,13 +123,21 @@ describe("modo conferência administrativo", () => {
     expect(questionsPage).toContain("Marcar como conferido");
     expect(questionsPage).toContain("✓ Conferido");
     expect(questionsPage).toContain("stopPropagation");
+    expect(questionsPage).toContain("bg-emerald-50 shadow-sm shadow-emerald-100");
+    expect(questionsPage).toContain("bg-red-50 shadow-sm shadow-red-100");
+    expect(questionsPage).toContain("const canReview = questionCount > 0");
+    expect(questionsPage).toContain("Sem questões");
+    expect(questionsPage).toContain("descendantStructureIds(nodes, structure.id)");
+    expect(questionsPage).toContain("affectedStructureIds.every");
+    expect(server).toContain("descendantStructureIds(nodes, structureId)");
+    expect(server).toContain("affectedStructureIds");
   });
 
   it("permite marcar apenas a estrutura aberta diretamente no modo conferência", () => {
     expect(client).toContain("Marcar estrutura como conferida");
     expect(client).toContain("✓ Estrutura conferida");
     expect(client).toContain(
-      "as subestruturas não são marcadas automaticamente",
+      "suas subestruturas que possuem questões",
     );
     expect(client).toContain("toggleCurrentStructureReview");
     expect(questionsPage).toContain("structureReview={!conferenceList && structureId");
