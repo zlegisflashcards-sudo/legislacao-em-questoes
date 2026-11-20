@@ -34,21 +34,20 @@ export async function getLegiscastAudioForLaw(lawId: number, rawStructureId: str
   const db = getSupabaseServerClient();
   const [tracksResult, structuresResult] = await Promise.all([
     db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,storage_path").eq("lei_id", lawId).eq("ativo", true),
-    db.from("law_structure").select("id,nome,audio_not_applicable").eq("lei_id", lawId).eq("ativo", true),
+    db.from("law_structure").select("id,parent_id,nome,audio_not_applicable").eq("lei_id", lawId).eq("ativo", true),
   ]);
   if (tracksResult.error || structuresResult.error) throw new LawStudyApiError(503, "Não foi possível consultar o áudio desta estrutura.");
   const structures = structuresResult.data ?? [];
   const requestedStructure = structureId === null ? null : structures.find((structure) => Number(structure.id) === structureId);
   if (structureId !== null && !requestedStructure) throw new LawStudyApiError(404, "Estrutura não encontrada nesta legislação.");
-  if (requestedStructure?.audio_not_applicable === true) return { audio: null, status: "not_applicable" as const };
   const coverageResult = await db.from("legiscast_audio_structure_coverage").select("audio_id,structure_id,lei_id").eq("lei_id", lawId);
   if (coverageResult.error && !coverageMigrationPending(coverageResult.error)) throw new LawStudyApiError(503, "Não foi possível verificar a cobertura editorial do áudio.");
   const tracks = attachConfirmedLegiscastAudioCoverage(
     (tracksResult.data ?? []).map((track) => ({ id: String(track.id), structureId: track.structure_id === null ? null : Number(track.structure_id), active: true })),
     coverageResult.error ? [] : (coverageResult.data ?? []).map((coverage) => ({ audioId: String(coverage.audio_id), structureId: Number(coverage.structure_id) })),
   );
-  const resolution = resolveLegiscastTrackForStructure({ structureId, tracks });
-  if (!resolution) return { audio: null, status: "unavailable" as const };
+  const resolution = resolveLegiscastTrackForStructure({ structureId, tracks, structures: structures.map((structure) => ({ id: Number(structure.id), parentId: structure.parent_id === null ? null : Number(structure.parent_id) })) });
+  if (!resolution) return { audio: null, status: requestedStructure?.audio_not_applicable === true ? "not_applicable" as const : "unavailable" as const };
   if ("pending" in resolution) return { audio: null, status: "ambiguous" as const };
   const row = (tracksResult.data ?? []).find((track) => String(track.id) === resolution.track.id);
   if (!row) throw new LawStudyApiError(503, "Não foi possível preparar o áudio desta estrutura.");

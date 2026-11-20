@@ -16,18 +16,19 @@ describe("unidades de estudo do LegisCast", () => {
     expect(resolveLegiscastStudyUnitForStructure(3, result.units)?.id).toBe("audio:chapter");
   });
 
-  it("mantém seções com faixas distintas como unidades separadas e o capítulo como unidade textual quando possui conteúdo próprio", () => {
+  it("mantém seções com faixas distintas como unidades separadas e inclui a subseção na faixa da sua seção", () => {
     const result = resolveLegiscastStudyUnits({ structures, tracks: [
       { id: "section-one", structureId: 2, active: true },
       { id: "section-two", structureId: 3, active: true },
     ] });
-    expect(result.units.map((unit) => unit.id)).toEqual(["text:1", "audio:section-one", "text:4", "audio:section-two"]);
+    expect(result.units.map((unit) => unit.id)).toEqual(["text:1", "audio:section-one", "audio:section-two"]);
+    expect(resolveLegiscastStudyUnitForStructure(4, result.units)?.id).toBe("audio:section-one");
   });
 
-  it("não presume que uma faixa cobre descendentes e cria leitura textual segura para estruturas sem áudio", () => {
+  it("usa a faixa do capítulo para cobrir seções e subseções sem áudio próprio", () => {
     const result = resolveLegiscastStudyUnits({ structures, tracks: [{ id: "chapter", structureId: 1, active: true }] });
-    expect(result.units.find((unit) => unit.id === "audio:chapter")?.structureIds).toEqual([1]);
-    expect(result.units.find((unit) => unit.id === "text:2")).toBeTruthy();
+    expect(result.units.find((unit) => unit.id === "audio:chapter")?.structureIds).toEqual([1, 2, 4, 3]);
+    expect(result.units.find((unit) => unit.id === "text:2")).toBeFalsy();
   });
 
   it("não escolhe uma faixa quando duas cobrem a mesma estrutura", () => {
@@ -46,12 +47,12 @@ describe("unidades de estudo do LegisCast", () => {
     expect(resolveLegiscastStudyUnitForStructure(3, result.units)?.id).toBe("audio:one");
   });
 
-  it("preserva a estrutura marcada como áudio não se aplica como leitura textual", () => {
+  it("considera cobertura ancestral mesmo em nó anteriormente marcado como não aplicável", () => {
     const result = resolveLegiscastStudyUnits({
       structures,
       tracks: [{ id: "chapter", structureId: 1, active: true, coveredStructureIds: [2] }],
       notApplicableStructureIds: [2],
     });
-    expect(resolveLegiscastStudyUnitForStructure(2, result.units)).toMatchObject({ id: "text:2", kind: "text" });
+    expect(resolveLegiscastStudyUnitForStructure(2, result.units)).toMatchObject({ id: "audio:chapter", kind: "audio" });
   });
 });

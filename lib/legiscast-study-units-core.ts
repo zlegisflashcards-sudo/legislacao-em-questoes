@@ -40,10 +40,9 @@ function structuralOrder(left: number, right: number, structures: readonly Legis
 }
 
 /**
- * Converte somente a cobertura editorial explícita em unidades de estudo.
- * A hierarquia serve para ordenar a experiência, jamais para aumentar a
- * cobertura de uma faixa. Um conflito retira a estrutura das unidades até a
- * decisão editorial, em vez de escolher uma das faixas por suposição.
+ * Converte as faixas em unidades de estudo. A faixa de um nó cobre seus
+ * descendentes sem faixa própria; uma cobertura explícita sempre vence a
+ * cobertura herdada. Conflitos explícitos seguem sem escolha automática.
  */
 export function resolveLegiscastStudyUnits(input: {
   structures: readonly LegiscastStudyStructure[];
@@ -63,6 +62,25 @@ export function resolveLegiscastStudyUnits(input: {
     if (!covered.length) continue;
     coveredByTrack.set(track.id, covered);
     for (const structureId of covered) claims.set(structureId, [...(claims.get(structureId) ?? []), track.id]);
+  }
+
+  const byId = new Map(input.structures.map((structure) => [structure.id, structure]));
+  const inheritedClaims = new Map<number, string>();
+  for (const structure of input.structures) {
+    if (claims.has(structure.id)) continue;
+    const visited = new Set<number>([structure.id]);
+    for (let parentId = structure.parentId; parentId !== null && !visited.has(parentId); parentId = byId.get(parentId)?.parentId ?? null) {
+      visited.add(parentId);
+      const parentAudioIds = claims.get(parentId) ?? [];
+      if (parentAudioIds.length === 1) {
+        inheritedClaims.set(structure.id, parentAudioIds[0]);
+        break;
+      }
+      if (parentAudioIds.length > 1) break;
+    }
+  }
+  for (const [structureId, audioId] of inheritedClaims) {
+    coveredByTrack.set(audioId, [...(coveredByTrack.get(audioId) ?? []), structureId]);
   }
 
   const conflicts = [...claims.entries()]

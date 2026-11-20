@@ -6,13 +6,18 @@ export type LegiscastCoverageTrack = {
   coveredStructureIds?: readonly number[];
 };
 
+export type LegiscastCoverageStructure = {
+  id: number;
+  parentId: number | null;
+};
+
 export type ConfirmedLegiscastAudioCoverage = {
   audioId: string;
   structureId: number;
 };
 
 export type LegiscastTrackResolution =
-  | { track: LegiscastCoverageTrack; source: "direct" | "editorial" }
+  | { track: LegiscastCoverageTrack; source: "direct" | "editorial" | "ancestor"; coveredByStructureId?: number }
   | { pending: "ambiguous"; source: "direct" | "editorial"; trackIds: string[] }
   | null;
 
@@ -41,6 +46,8 @@ export function attachConfirmedLegiscastAudioCoverage(
 export function resolveLegiscastTrackForStructure(input: {
   structureId: number | null;
   tracks: readonly LegiscastCoverageTrack[];
+  /** A faixa do nó-pai também cobre seus filhos, salvo uma faixa específica. */
+  structures?: readonly LegiscastCoverageStructure[];
 }): LegiscastTrackResolution {
   if (input.structureId === null) {
     const general = input.tracks.filter((track) => track.active && track.structureId === null);
@@ -55,6 +62,15 @@ export function resolveLegiscastTrackForStructure(input: {
     source: direct.length ? "direct" : "editorial",
     trackIds: candidates.map((track) => track.id).sort(),
   };
-  if (!candidates.length) return null;
-  return { track: candidates[0], source: direct.some((track) => track.id === candidates[0].id) ? "direct" : "editorial" };
+  if (candidates.length) return { track: candidates[0], source: direct.some((track) => track.id === candidates[0].id) ? "direct" : "editorial" };
+
+  const byId = new Map((input.structures ?? []).map((structure) => [structure.id, structure]));
+  const visited = new Set<number>([structureId]);
+  for (let parentId = byId.get(structureId)?.parentId ?? null; parentId !== null && !visited.has(parentId); parentId = byId.get(parentId)?.parentId ?? null) {
+    visited.add(parentId);
+    const parentTracks = input.tracks.filter((track) => track.active && track.structureId === parentId);
+    if (parentTracks.length === 1) return { track: parentTracks[0], source: "ancestor", coveredByStructureId: parentId };
+    if (parentTracks.length > 1) return { pending: "ambiguous", source: "direct", trackIds: parentTracks.map((track) => track.id).sort() };
+  }
+  return null;
 }

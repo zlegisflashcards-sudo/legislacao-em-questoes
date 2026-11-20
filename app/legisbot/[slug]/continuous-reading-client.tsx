@@ -15,6 +15,7 @@ type Reference = { id: string; slug: string; ordem: string; identificacao: strin
 type StructureCatalogItem = { id: number; parentId: number | null; type: string; name: string; order: number; status: "accessible" | "pending" | "blocked" };
 type StudyUnit = { id: string; kind: "audio" | "text"; audioId: string | null; titleStructureId: number; structureIds: number[] };
 type StructureAudioCoverage = { kind: "direct" | "covered"; sourceName: string };
+type AudioStatus = "direct" | "editorial" | "ancestor" | "unavailable" | "ambiguous" | "not_applicable" | "loading";
 type Block = Reference & { legislation: string };
 type BlockText = Pick<Block, "id" | "legislation">;
 type TocNode = { key: string; structure: StructureCatalogItem; reference: Reference | null; children: TocNode[]; referenceIds: string[] };
@@ -281,7 +282,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, administrativeAccess = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading" }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, administrativeAccess = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: AudioStatus }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
@@ -309,7 +310,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(initialStructureId);
   const [selectedStudyUnitId, setSelectedStudyUnitId] = useState<string | null>(initialStudyUnitId);
   const [suggestedAudio, setSuggestedAudio] = useState<LegiscastAudioTrack | null>(initialAudio);
-  const [suggestedAudioStatus, setSuggestedAudioStatus] = useState<"direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" | "loading">(initialAudioStatus);
+  const [suggestedAudioStatus, setSuggestedAudioStatus] = useState<AudioStatus>(initialAudioStatus);
   const [playingAudio, setPlayingAudio] = useState<LegiscastAudioTrack | null>(null);
   const [playerCondensed, setPlayerCondensed] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -322,7 +323,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const scopeVersionRef = useRef(0);
   const scopeInitializedRef = useRef(false);
   const audioRequestRef = useRef(0);
-  const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" }>(initialAudio && initialAudioStatus !== "loading" ? [[initialStructureId === null ? "law" : String(initialStructureId), { at: Date.now(), audio: initialAudio, status: initialAudioStatus }]] : []));
+  const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: Exclude<AudioStatus, "loading"> }>(initialAudio && initialAudioStatus !== "loading" ? [[initialStructureId === null ? "law" : String(initialStructureId), { at: Date.now(), audio: initialAudio, status: initialAudioStatus }]] : []));
   const toggleStructure = useCallback((key: string) => setCollapsedStructures((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; }), []);
   const studyUnitByStructureId = useMemo(() => new Map(studyUnits.flatMap((unit) => unit.structureIds.map((structureId) => [structureId, unit] as const))), [studyUnits]);
   const selectedStudyUnit = useMemo(() => selectedStudyUnitId === null ? null : studyUnits.find((unit) => unit.id === selectedStudyUnitId) ?? null, [selectedStudyUnitId, studyUnits]);
@@ -644,7 +645,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       try {
         const endpoint = audioEndpoint ?? `/api/legisbot/${encodeURIComponent(slug)}/legiscast`;
         const response = await fetch(`${endpoint}${query}`, { cache: "no-store", headers: audioEndpoint ? undefined : { Authorization: `Bearer ${highlightAccessToken}` }, signal: controller.signal });
-        const body = await response.json().catch(() => ({})) as { audio?: LegiscastAudioTrack | null; status?: "direct" | "editorial" | "unavailable" | "ambiguous" | "not_applicable" };
+        const body = await response.json().catch(() => ({})) as { audio?: LegiscastAudioTrack | null; status?: Exclude<AudioStatus, "loading"> };
         if (requestId !== audioRequestRef.current) return;
         const value = { at: Date.now(), audio: response.ok && body.audio ? body.audio : null, status: response.ok && body.status ? body.status : "unavailable" as const };
         audioByStructureRef.current.set(cacheKey, value);

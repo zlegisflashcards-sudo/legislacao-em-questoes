@@ -9,6 +9,20 @@ describe("cobertura segura do áudio LegisCast", () => {
     expect(resolveLegiscastTrackForStructure({ structureId: 2, tracks: [{ id: "parent", structureId: 1, active: true, coveredStructureIds: [2] }] })).toMatchObject({ source: "editorial" });
     expect(resolveLegiscastTrackForStructure({ structureId: 2, tracks: [{ id: "parent", structureId: 1, active: true }] })).toBeNull();
   });
+  it("reconhece a cobertura da faixa do ancestral quando não há uma faixa mais específica", () => {
+    const structures = [{ id: 1, parentId: null }, { id: 2, parentId: 1 }, { id: 3, parentId: 2 }];
+    expect(resolveLegiscastTrackForStructure({ structureId: 3, structures, tracks: [{ id: "chapter", structureId: 1, active: true }] })).toEqual({
+      track: { id: "chapter", structureId: 1, active: true },
+      source: "ancestor",
+      coveredByStructureId: 1,
+    });
+  });
+  it("prioriza a faixa específica à cobertura do ancestral", () => {
+    const structures = [{ id: 1, parentId: null }, { id: 2, parentId: 1 }];
+    expect(resolveLegiscastTrackForStructure({ structureId: 2, structures, tracks: [{ id: "chapter", structureId: 1, active: true }, { id: "section", structureId: 2, active: true }] })).toMatchObject({
+      track: { id: "section" }, source: "direct",
+    });
+  });
   it("ignora faixa inativa e mantém lei sem estrutura em áudio geral direto", () => {
     expect(resolveLegiscastTrackForStructure({ structureId: 2, tracks: [{ id: "off", structureId: 2, active: false }] })).toBeNull();
     expect(resolveLegiscastTrackForStructure({ structureId: null, tracks: [{ id: "law", structureId: null, active: true }] })).toMatchObject({ source: "direct", track: { id: "law" } });

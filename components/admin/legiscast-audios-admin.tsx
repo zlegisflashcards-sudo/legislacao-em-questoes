@@ -8,7 +8,7 @@ import {
 } from "@/lib/legiscast-audio-processing";
 import { legiscastAudioDisplayTitle } from "@/lib/legiscast-audio-title";
 import { filterLegiscastAdminLaws } from "@/lib/legiscast-audios-admin-form";
-import { attachConfirmedLegiscastAudioCoverage } from "@/lib/legiscast-audio-coverage-core";
+import { attachConfirmedLegiscastAudioCoverage, resolveLegiscastTrackForStructure } from "@/lib/legiscast-audio-coverage-core";
 import {
   legiscastStructureFreshness,
   legiscastTrackFreshness,
@@ -224,6 +224,18 @@ function manualFreshnessLabel(audio: Audio) {
 function tracksCoveringStructure(tracks: Audio[], coverages: Coverage[], structureId: number) {
   return tracks.filter((audio) => audio.structure_id === structureId || coverages.some((coverage) => coverage.audio_id === audio.id && coverage.structure_id === structureId));
 }
+function resolvedTracksCoveringStructure(tracks: Audio[], coverages: Coverage[], structures: Structure[], structureId: number) {
+  const resolution = resolveLegiscastTrackForStructure({
+    structureId,
+    structures: structures.map((structure) => ({ id: structure.id, parentId: structure.parent_id })),
+    tracks: attachConfirmedLegiscastAudioCoverage(
+      tracks.map((audio) => ({ id: audio.id, structureId: audio.structure_id, active: audio.ativo })),
+      coverages.map((coverage) => ({ audioId: coverage.audio_id, structureId: coverage.structure_id })),
+    ),
+  });
+  if (!resolution || "pending" in resolution) return { tracks: tracksCoveringStructure(tracks, coverages, structureId), inherited: false, sourceStructureId: null };
+  return { tracks: tracks.filter((audio) => audio.id === resolution.track.id), inherited: resolution.source === "ancestor", sourceStructureId: resolution.source === "ancestor" ? resolution.coveredByStructureId ?? null : null };
+}
 function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], coverages: Coverage[], changes: BlockChange[], law: Law): LegiscastCoverage {
   const lawStructures = structuresForLaw(structures, law.id);
   const lawTracks = tracksForLaw(audios, law.id);
@@ -248,7 +260,8 @@ function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], cover
   let notApplicable = 0;
   let outdated = 0;
   lawStructures.forEach((structure) => {
-    const status = audioStatusForTracks(tracksCoveringStructure(lawTracks, coverages, structure.id), law, latestBlockChange(changes, law.id, [structure.id]));
+    const coverage = resolvedTracksCoveringStructure(lawTracks, coverages, lawStructures, structure.id);
+    const status = audioStatusForTracks(coverage.tracks, law, latestBlockChange(changes, law.id, [structure.id]));
     if (status === "current") withAudio += 1;
     else if (status === "outdated") outdated += 1;
     else if (structure.audio_not_applicable) notApplicable += 1;
@@ -899,7 +912,9 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
             <label className="grid w-fit gap-1 text-sm font-bold text-slate-700">Filtrar estruturas<select value={structureFilter} onChange={(event) => setStructureFilter(event.target.value === "duplicates" ? "duplicates" : "all")}><option value="all">Todos</option><option value="duplicates">Com duplicidade</option></select><small className="font-normal text-slate-500">Inclui sobreposições editoriais explícitas.</small></label>
             {visibleStructureOptions.map(
               ({ structure, depth }) => {
-                const tracks = tracksCoveringStructure(selectedTracks, coverages, structure.id);
+                const resolvedCoverage = resolvedTracksCoveringStructure(selectedTracks, coverages, structuresForLaw(structures, selectedLaw.id), structure.id);
+                const tracks = resolvedCoverage.tracks;
+                const coverageSourceName = resolvedCoverage.sourceStructureId === null ? null : structures.find((candidate) => candidate.id === resolvedCoverage.sourceStructureId)?.nome ?? "estrutura superior";
                 const structureBlockChange = latestBlockChange(blockChanges, selectedLaw.id, [structure.id]);
                 const audioStatus = audioStatusForTracks(tracks, selectedLaw, structureBlockChange);
                 const groupId = `structure:${structure.id}`;
@@ -919,15 +934,15 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                         </h5>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
                           <span className={audioStatus === "current" ? "rounded-full bg-emerald-100 px-2 py-1 text-emerald-800" : audioStatus === "outdated" ? "rounded-full bg-red-100 px-2 py-1 text-red-800" : structure.audio_not_applicable ? "rounded-full bg-slate-200 px-2 py-1 text-slate-600" : "rounded-full bg-amber-100 px-2 py-1 text-amber-800"}>
-                            {audioStatus === "current" ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Com áudio` : audioStatus === "outdated" ? `⚠ ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Desatualizado` : structure.audio_not_applicable ? "Áudio não se aplica" : "Sem áudio"}
+                            {audioStatus === "current" ? `🎧 ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · ${resolvedCoverage.inherited ? `Coberto por ${coverageSourceName}` : "Com áudio"}` : audioStatus === "outdated" ? `⚠ ${tracks.length} ${tracks.length === 1 ? "áudio" : "áudios"} · Desatualizado` : structure.audio_not_applicable ? "Áudio não se aplica" : "Sem áudio"}
                           </span>
                           {directConflict ? <span className="rounded-full bg-amber-200 px-2 py-1 text-amber-950">⚠ {directConflict.audioIds.length} áudios diretos</span> : null}
                           {coverageConflict ? <span className="rounded-full bg-orange-200 px-2 py-1 text-orange-950">⚠ Sobreposição editorial · {coverageConflict.audioIds.length} áudios</span> : null}
                         </div>
                         {directConflict ? <p className="mt-2 text-xs font-bold text-amber-900">⚠ Possível duplicidade: esta estrutura possui {directConflict.audioIds.length} áudios ativos vinculados.</p> : null}
-                        {tracks.length ? <span className="mt-2 block text-xs font-bold text-blue-700">{expandedAudioGroup === groupId ? "Ocultar áudio" : tracks.length === 1 ? "Ver áudio" : `Ver ${tracks.length} áudios`}</span> : null}
+                        {tracks.length ? <span className="mt-2 block text-xs font-bold text-blue-700">{resolvedCoverage.inherited ? `Coberto pelo áudio de ${coverageSourceName}` : expandedAudioGroup === groupId ? "Ocultar áudio" : tracks.length === 1 ? "Ver áudio" : `Ver ${tracks.length} áudios`}</span> : null}
                       </button>
-                      {audioStatus === "current" ? <span className="flex items-center gap-2 text-xs font-bold text-emerald-800" role="status"><span aria-hidden="true">✓</span> Com áudio</span> : audioStatus === "outdated" ? <span className="flex items-center gap-2 text-xs font-bold text-red-800" role="status"><span aria-hidden="true">⚠</span> Áudio desatualizado</span> : <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                      {audioStatus === "current" ? <span className="flex items-center gap-2 text-xs font-bold text-emerald-800" role="status"><span aria-hidden="true">✓</span> {resolvedCoverage.inherited ? "Coberto" : "Com áudio"}</span> : audioStatus === "outdated" ? <span className="flex items-center gap-2 text-xs font-bold text-red-800" role="status"><span aria-hidden="true">⚠</span> Áudio desatualizado</span> : <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
                         <input
                           type="checkbox"
                           checked={structure.audio_not_applicable}
