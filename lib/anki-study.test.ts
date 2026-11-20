@@ -110,7 +110,7 @@ describe("página autenticada do Anki", () => {
   it("reutiliza as abas padronizadas", () => {
     expect(client).toContain('<StudentAreaTabs activeTab="leis" minhasLeisHref="/minhas-leis" />');
     expect(tabs).toContain('>Meus Atalhos</Link>');
-    expect(tabs).toContain('>Todas as leis adquiridas</Link>');
+    expect(tabs).toContain('>Meu Vade Mecum</Link>');
     expect(tabs).toContain('meusAtalhosHref = "/minhas-leis?aba=atalhos"');
   });
 

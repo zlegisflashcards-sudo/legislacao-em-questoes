@@ -35,7 +35,7 @@ describe("cabeçalho único", () => {
     expect(source).toContain('event.key === "Escape"');
     expect(source).toContain("const legisQuestions = legisQuestionsNavigation(authenticated)");
     expect(source).toContain('href={legisQuestions.href}');
-    expect(source).toContain(">Meus Estudos</Link>");
+    expect(source).toContain(">Minhas leis</Link>");
     expect(source).toContain('<WhatsAppIcon /><span className="hidden xl:inline">WhatsApp</span>');
   });
 

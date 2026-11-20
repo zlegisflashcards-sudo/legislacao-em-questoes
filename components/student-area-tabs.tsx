@@ -11,6 +11,6 @@ export function StudentAreaTabs({ activeTab, minhasLeisHref = "/minhas-leis", me
   const inactiveClass = "border-transparent text-slate-600 hover:text-blue-700";
   return <div role="tablist" aria-label="Área de estudo" className="mb-6 flex gap-2 border-b border-slate-200">
     <Link href={meusAtalhosHref} role="tab" aria-selected={activeTab === "atalhos"} className={`${tabClass} ${activeTab === "atalhos" ? activeClass : inactiveClass}`}>Meus Atalhos</Link>
-    <Link href={minhasLeisHref} role="tab" aria-selected={activeTab === "leis"} className={`${tabClass} ${activeTab === "leis" ? activeClass : inactiveClass}`}>Todas as leis adquiridas</Link>
+    <Link href={minhasLeisHref} role="tab" aria-selected={activeTab === "leis"} className={`${tabClass} ${activeTab === "leis" ? activeClass : inactiveClass}`}>Meu Vade Mecum</Link>
   </div>;
 }

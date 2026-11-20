@@ -19,7 +19,7 @@ export function StudentStudyHub({ loading, error, onRetry, library, tab, onTabCh
 
     <div role="tablist" aria-label="Meus Estudos" className="mt-7 flex gap-2 border-b border-slate-200">
       <button type="button" role="tab" aria-selected={tab === "shortcuts"} onClick={() => onTabChange("shortcuts")} className={`min-h-11 border-b-2 px-4 font-black ${tab === "shortcuts" ? "border-blue-700 text-blue-700" : "border-transparent text-slate-600 hover:text-blue-700"}`}>Meus Atalhos</button>
-      <button type="button" role="tab" aria-selected={tab === "library"} onClick={() => onTabChange("library")} className={`min-h-11 border-b-2 px-4 font-black ${tab === "library" ? "border-blue-700 text-blue-700" : "border-transparent text-slate-600 hover:text-blue-700"}`}>Todas as leis adquiridas</button>
+      <button type="button" role="tab" aria-selected={tab === "library"} onClick={() => onTabChange("library")} className={`min-h-11 border-b-2 px-4 font-black ${tab === "library" ? "border-blue-700 text-blue-700" : "border-transparent text-slate-600 hover:text-blue-700"}`}>Meu Vade Mecum</button>
     </div>
 
     {tab === "library" ? <>{loading ? <p role="status" className="mt-6 rounded-2xl border border-blue-100 bg-white p-8 text-slate-600 shadow-sm">Carregando suas leis.</p> : null}{!loading && error ? <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-white p-8 text-red-700 shadow-sm"><p>{error}</p><button type="button" onClick={onRetry} className="mt-4 rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Tentar novamente</button></div> : null}{!loading && !error ? library : null}</> : null}

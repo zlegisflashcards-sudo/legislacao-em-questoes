@@ -197,11 +197,10 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("mantém os cards de lei responsivos no mobile", () => {
-    expect(card).toContain("grid min-w-0 gap-4");
+    expect(card).toContain("grid min-w-0 gap-5");
     expect(card).toContain("w-full");
-    expect(card).toContain("sm:w-auto");
     expect(card).toContain("break-words text-xl font-black leading-6");
-    expect(card).toContain("grid grid-cols-2 gap-3 sm:flex sm:flex-wrap");
+    expect(card).toContain("grid gap-3 sm:grid-cols-2");
   });
 
   it("lista somente as leis liberadas, sem estado local de configuração do Anki", () => {
@@ -211,8 +210,8 @@ describe("interface das leis adquiridas", () => {
     expect(client).not.toContain("laws.length + 1");
   });
 
-  it("simplifica o card sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", "campaignProgress", ">Legis Questões</Link>", 'src="/icons/anki.png"', ">Anki</Link>", ">🎧 LegisCast</Link>", '<ScannerIcon className="h-5 w-5" />', ">Lei Interativa</span>", "interactiveLawHref"]) expect(card).toContain(expected);
+  it("simplifica o card em dois acessos sem exibir metadados editoriais ou campos privados", () => {
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", 'src="/icons/anki.png"', ">Legis Questões", ">🎧</span>Lei Interativa</Link>", "interactiveLawHref"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
@@ -233,10 +232,9 @@ describe("interface das leis adquiridas", () => {
     expect(card).not.toContain('"Lei completa"');
   });
 
-  it("exibe apenas barra e percentual real de progresso, sem score", () => {
-    expect(card).toContain("const progress = Math.max(0, Math.min(100, law.campaignProgress ?? 0));");
-    expect(card).toContain('aria-label={`${progress}% concluído`}');
-    expect(card).toContain('>{progress}%</p>');
+  it("não exibe barra ou percentual de progresso nos cards", () => {
+    expect(card).not.toContain("campaignProgress");
+    expect(card).not.toContain("% concluído");
     expect(card).not.toContain('score');
   });
 
@@ -246,13 +244,12 @@ describe("interface das leis adquiridas", () => {
     }
   });
 
-  it("ativa as rotas seguras de estudo, Anki e LegisCast integral sem alterar o edital", () => {
+  it("ativa as rotas seguras de estudo e Lei Interativa sem alterar o edital", () => {
     expect(client).toContain('const lawHref = isScope ?');
-    expect(client).toContain('const ankiHref =');
-    expect(client).toContain('}/anki${scopeId ?');
-    expect(client).toContain('const legiscastHref =');
-    expect(client).toContain('const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast`;');
-    expect(client).toContain('href={legiscastHref}');
+    expect(client).toContain('const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}`;');
+    expect(client).toContain('href={interactiveLawHref}');
+    expect(card).not.toContain('ankiHref');
+    expect(card).not.toContain('legiscastHref');
     expect(client).not.toContain('/api/aluno/editais');
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
       expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());
