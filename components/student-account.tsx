@@ -18,6 +18,7 @@ export function validatePublicName(value: string) {
 export function StudentAccount() {
   const params = useSearchParams();
   const returnPath = safeReturnPath(params.get("retorno"));
+  const freeStudyFlow = params.get("gratis") === "1";
   const initialMode: Mode = params.get("primeiro-acesso") === "1"
     ? "firstAccess"
     : params.get("recuperar") === "1"
@@ -173,6 +174,23 @@ export function StudentAccount() {
     } finally { setPending(false); }
   }
 
+  async function signInWithGoogle() {
+    setPending(true);
+    setMessage("");
+    const callback = new URL("/conta", window.location.origin);
+    callback.searchParams.set("modo", "login");
+    callback.searchParams.set("retorno", returnPath);
+    if (freeStudyFlow) callback.searchParams.set("gratis", "1");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: callback.toString() },
+    });
+    if (error) {
+      setMessage("Não foi possível iniciar a entrada com Google. Tente novamente.");
+      setPending(false);
+    }
+  }
+
   async function sendRecovery(formData: FormData) {
     setPending(true); setMessage("");
     const authEmail = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -297,7 +315,7 @@ export function StudentAccount() {
 
   if (mode === "forgot") return <AccountCard title="Recuperar senha" description="Enviaremos um link seguro para o e-mail cadastrado."><form action={sendRecovery} className="space-y-4"><Field label="E-mail" name="email" type="email" /><PrimaryButton pending={pending}>Enviar link de recuperação</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="mt-5 font-bold text-blue-700 hover:underline">← Voltar ao login</button></AccountCard>;
 
-  return <AccountCard title={mode === "signup" ? "Criar conta" : "Entrar na sua conta"} description={mode === "signup" ? "Crie sua conta para acessar a plataforma." : "Informe seus dados de acesso para continuar."}><form action={authenticate} className="space-y-4"><input type="hidden" name="form_mode" value={mode === "signup" ? "signup" : "login"} />{mode === "signup" ? <><Field label="Nome completo" name="nome" placeholder="Ex.: Gustavo Santos" /><Field label="Nome público (opcional)" name="public_name" placeholder="Ex.: Gustavo" hint="É o nome que poderá aparecer para outras pessoas na plataforma. Se deixar em branco, criaremos um nome automaticamente." required={false} /><Field label="Telefone / WhatsApp" name="telefone" placeholder="(00) 00000-0000" /></> : null}<Field label="E-mail" name="email" type="email" /><Field label="Senha" name="password" type="password" minLength={8} /><PrimaryButton pending={pending}>{mode === "signup" ? "Criar conta" : "Entrar"}</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><div className="mt-5 flex flex-wrap gap-5 text-sm">{mode === "login" ? <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Criar uma conta</button> : <button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Já tenho uma conta</button>}{mode === "login" ? <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }} className="font-bold text-slate-600 hover:text-blue-700 hover:underline">Esqueci minha senha</button> : null}</div></AccountCard>;
+  return <AccountCard title={mode === "signup" ? "Criar conta" : "Entrar na sua conta"} description={freeStudyFlow ? "Entre ou crie sua conta para estudar gratuitamente." : mode === "signup" ? "Crie sua conta para acessar a plataforma." : "Informe seus dados de acesso para continuar."}><form action={authenticate} className="space-y-4"><input type="hidden" name="form_mode" value={mode === "signup" ? "signup" : "login"} />{mode === "signup" ? <><Field label="Nome completo" name="nome" placeholder="Ex.: Gustavo Santos" /><Field label="Nome público (opcional)" name="public_name" placeholder="Ex.: Gustavo" hint="É o nome que poderá aparecer para outras pessoas na plataforma. Se deixar em branco, criaremos um nome automaticamente." required={false} /><Field label="Telefone / WhatsApp" name="telefone" placeholder="(00) 00000-0000" /></> : null}<Field label="E-mail" name="email" type="email" /><Field label="Senha" name="password" type="password" minLength={8} /><PrimaryButton pending={pending}>{mode === "signup" ? "Criar conta" : "Entrar"}</PrimaryButton>{message ? <Status>{message}</Status> : null}</form><div className="my-5 flex items-center gap-3 text-xs font-bold uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div><button type="button" disabled={pending} onClick={() => void signInWithGoogle()} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-5 font-black text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60"><span aria-hidden="true" className="text-lg">G</span>Entrar com Google</button><div className="mt-5 flex flex-wrap gap-5 text-sm">{mode === "login" ? <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Criar uma conta</button> : <button type="button" onClick={() => { setMode("login"); setMessage(""); }} className="font-bold text-blue-700 hover:underline">Já tenho uma conta</button>}{mode === "login" ? <button type="button" onClick={() => { setMode("forgot"); setMessage(""); }} className="font-bold text-slate-600 hover:text-blue-700 hover:underline">Esqueci minha senha</button> : null}</div></AccountCard>;
 }
 
 function AccountCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {

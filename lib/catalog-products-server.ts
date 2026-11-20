@@ -11,6 +11,7 @@ export type CatalogProduct = {
   slug: string;
   tipoProduto: string;
   imagemUrl: string | null;
+  freeStudyHref: string | null;
   leisIncluidas: number;
   totalFlashcards: number | null;
   modules: CatalogModuleAvailability;
@@ -51,15 +52,20 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
     const productIds = products.map((product) => product.id);
     const { data: links, error: linksError } = await supabase
       .from("produto_leis")
-      .select("produto_id,lei_id,recorte_id,leis(slug,status_publicacao)")
+      .select("produto_id,lei_id,recorte_id,leis(slug,status_publicacao,acesso_gratuito)")
       .in("produto_id", productIds);
 
     if (linksError) return { products: [], incomplete: true };
 
     const lawSlugById = new Map<string, string>();
+    const freeLawIds = new Set<string>();
     for (const link of links ?? []) {
       const law = Array.isArray(link.leis) ? link.leis[0] : link.leis;
-      if (law?.slug && law.status_publicacao === "ativa") lawSlugById.set(String(link.lei_id), law.slug);
+      if (law?.slug && law.status_publicacao === "ativa") {
+        const lawId = String(link.lei_id);
+        lawSlugById.set(lawId, law.slug);
+        if (law.acesso_gratuito === true) freeLawIds.add(lawId);
+      }
     }
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
     const activeLawIds = [...lawSlugById.keys()];
@@ -83,6 +89,13 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         .filter((link) => lawSlugById.has(String(link.lei_id)));
       const productLawIds = productLinks.map((link) => String(link.lei_id));
       const allProductLinks = (links ?? []).filter((link) => link.produto_id === product.id);
+      const soleLaw = productLinks.length === 1 ? productLinks[0] : null;
+      const soleLawId = soleLaw ? String(soleLaw.lei_id) : null;
+      // A gratuidade é cadastrada na lei. Um CTA comercial só pode abrir um
+      // estudo específico quando o produto avulso possui uma única lei ativa.
+      const freeStudyHref = product.tipo_produto === "lei_avulsa" && soleLawId && freeLawIds.has(soleLawId)
+        ? `/estudar/lei/${encodeURIComponent(lawSlugById.get(soleLawId) ?? "")}${typeof soleLaw?.recorte_id === "string" ? `?recorte_id=${encodeURIComponent(soleLaw.recorte_id)}` : ""}`
+        : null;
       if (!allProductLinks.length) console.warn(`[catalog] Produto ${product.id} não possui vínculo com lei; módulos exibidos como Em produção.`);
 
       return {
@@ -91,6 +104,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         slug: product.slug,
         tipoProduto: product.tipo_produto,
         imagemUrl: typeof product.imagem_url === "string" && product.imagem_url.trim() ? product.imagem_url : null,
+        freeStudyHref,
         destaque: product.destaque === true,
         leisIncluidas: productLawIds.length,
         totalFlashcards: productLawIds.length

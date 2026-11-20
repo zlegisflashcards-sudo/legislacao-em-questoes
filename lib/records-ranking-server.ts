@@ -11,8 +11,8 @@ type ProductRow = Record<string, unknown> & { id: string; slug: string; nome: st
 type RawLawScore = { lei_id: number | string; slug: string; titulo: string; score: number | string; recorte_id?: string | null; status_publicacao?: "ativa" | "em_breve" };
 type DetailsPayload = { top10?: RankingRow[]; current_user?: RankingRow | null; nearby?: RankingRow[]; laws?: RawLawScore[] };
 export type RecordsEntry = { position: number; publicName: string; score: number; isCurrentUser: boolean };
-export type RecordsPublicLaw = { slug: string; name: string; href: string; status: "ativa" | "em_breve"; actionLabel: "Adquirir" | "Ver pacote do concurso" | "Em breve" };
-export type RecordsLaw = Omit<RecordsPublicLaw, "actionLabel"> & { score: number; hasAccess: boolean; actionLabel: "Estudar" | "Adquirir" | "Ver pacote do concurso" | "Em breve" };
+export type RecordsPublicLaw = { slug: string; name: string; href: string; status: "ativa" | "em_breve"; isFree: boolean; actionLabel: "Estudar grátis" | "Adquirir" | "Ver pacote do concurso" | "Em breve" };
+export type RecordsLaw = Omit<RecordsPublicLaw, "actionLabel"> & { score: number; hasAccess: boolean; actionLabel: "Estudar grátis" | "Estudar" | "Adquirir" | "Ver pacote do concurso" | "Em breve" };
 type RecordsRankingBase = {
   contest: { productSlug: string; productType: string; shortName: string; productName: string; name: string; description: string | null; contestImageUrl: string | null; rankingHref: string; productHref: string };
   ranking: RecordsEntry[];
@@ -47,20 +47,21 @@ async function hydrateEntries(rows: RankingRow[], studentId: string | null) {
   return parsed.map((entry) => ({ position: entry.position, publicName: publicStudentName({ nome_publico: nameByUser.get(String(studentById.get(entry.studentId)?.user_id ?? "")), nome: studentById.get(entry.studentId)?.nome }), score: entry.score, isCurrentUser: entry.studentId === studentId }));
 }
 
-type ResolvedLaw = { lawId: number; slug: string; name: string; score: number; recorteId: string | null; status: "ativa" | "em_breve" };
+type ResolvedLaw = { lawId: number; slug: string; name: string; score: number; recorteId: string | null; status: "ativa" | "em_breve"; isFree: boolean };
 
 async function lawsWithProducts(rows: unknown, recordProductId: string, recordProductName: string): Promise<{ laws: ResolvedLaw[]; purchaseHrefByLaw: Map<number, string> }> {
   if (!Array.isArray(rows)) return { laws: [], purchaseHrefByLaw: new Map() };
-  const rawLaws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); const status: ResolvedLaw["status"] = value.status_publicacao === "em_breve" ? "em_breve" : "ativa"; const recorteId = typeof value.recorte_id === "string" && /^[0-9a-f-]{36}$/i.test(value.recorte_id) ? value.recorte_id : null; return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score, recorteId, status }] : []; });
-  const lawIds = rawLaws.map((law) => law.lawId); const supabase = getSupabaseServerClient(); const { data: products, error } = lawIds.length ? await supabase.from("produto_leis").select("produto_id,lei_id,recorte_id,produtos(slug,tipo_produto,ativo)").in("lei_id", lawIds) : { data: [], error: null };
+  const rawLaws = rows.flatMap((row) => { const value = row as Partial<RawLawScore>; const lawId = numberValue(value.lei_id); const score = numberValue(value.score); const status: ResolvedLaw["status"] = value.status_publicacao === "em_breve" ? "em_breve" : "ativa"; const recorteId = typeof value.recorte_id === "string" && /^[0-9a-f-]{36}$/i.test(value.recorte_id) ? value.recorte_id : null; return lawId && typeof value.slug === "string" && typeof value.titulo === "string" && score !== null ? [{ lawId, slug: value.slug, name: value.titulo, score, recorteId, status, isFree: false }] : []; });
+  const lawIds = rawLaws.map((law) => law.lawId); const supabase = getSupabaseServerClient(); const { data: products, error } = lawIds.length ? await supabase.from("produto_leis").select("produto_id,lei_id,recorte_id,produtos(slug,tipo_produto,ativo),leis(acesso_gratuito)").in("lei_id", lawIds) : { data: [], error: null };
   if (error) throw new Error(`Não foi possível localizar os produtos das leis: ${error.message}`);
   const purchaseHrefByLaw = new Map<number, string>();
   const scopeIdByLaw = new Map<number, string>();
-  for (const link of products ?? []) { const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos; if (String(link.produto_id) === recordProductId && typeof link.recorte_id === "string") scopeIdByLaw.set(Number(link.lei_id), link.recorte_id); if (product?.ativo && product.tipo_produto === "lei_avulsa" && typeof product.slug === "string" && !purchaseHrefByLaw.has(Number(link.lei_id))) purchaseHrefByLaw.set(Number(link.lei_id), `/leisflashcards/${encodeURIComponent(product.slug)}`); }
+  const freeLawIds = new Set<number>();
+  for (const link of products ?? []) { const product = Array.isArray(link.produtos) ? link.produtos[0] : link.produtos; const law = Array.isArray(link.leis) ? link.leis[0] : link.leis; if (law?.acesso_gratuito === true) freeLawIds.add(Number(link.lei_id)); if (String(link.produto_id) === recordProductId && typeof link.recorte_id === "string") scopeIdByLaw.set(Number(link.lei_id), link.recorte_id); if (product?.ativo && product.tipo_produto === "lei_avulsa" && typeof product.slug === "string" && !purchaseHrefByLaw.has(Number(link.lei_id))) purchaseHrefByLaw.set(Number(link.lei_id), `/leisflashcards/${encodeURIComponent(product.slug)}`); }
   const scopeIds = [...new Set(scopeIdByLaw.values())]; const { data: scopes, error: scopesError } = scopeIds.length ? await supabase.from("recortes_leis").select("id,nome").in("id", scopeIds) : { data: [], error: null };
   if (scopesError) throw new Error(`Não foi possível localizar os recortes das leis: ${scopesError.message}`);
   const scopeNameById = new Map((scopes ?? []).map((scope) => [String(scope.id), String(scope.nome ?? "").trim()]));
-  const laws = rawLaws.map((law) => { const scopeName = scopeNameById.get(scopeIdByLaw.get(law.lawId) ?? ""); const suffix = scopeName ? ` — ${scopeName}` : ""; return { ...law, recorteId: scopeIdByLaw.get(law.lawId) ?? law.recorteId, name: suffix && law.name.endsWith(suffix) ? `${law.name.slice(0, -suffix.length)} — ${recordProductName}` : law.name }; });
+  const laws = rawLaws.map((law) => { const scopeName = scopeNameById.get(scopeIdByLaw.get(law.lawId) ?? ""); const suffix = scopeName ? ` — ${scopeName}` : ""; return { ...law, isFree: freeLawIds.has(law.lawId), recorteId: scopeIdByLaw.get(law.lawId) ?? law.recorteId, name: suffix && law.name.endsWith(suffix) ? `${law.name.slice(0, -suffix.length)} — ${recordProductName}` : law.name }; });
   return { laws, purchaseHrefByLaw };
 }
 
@@ -68,7 +69,8 @@ async function recordsLaws(rows: unknown, fallbackHref: string, recordProductId:
   const resolved = await lawsWithProducts(rows, recordProductId, recordProductName);
   return resolved.laws.map((law) => {
     const purchaseHref = resolved.purchaseHrefByLaw.get(law.lawId);
-    return { slug: law.slug, name: law.name, status: law.status, href: law.status === "ativa" ? purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "ativa" ? purchaseHref ? "Adquirir" : "Ver pacote do concurso" : "Em breve" };
+    const freeHref = recordsStudyHref(law.slug, law.recorteId ? [{ recorteId: law.recorteId }] : [{ recorteId: null }], law.recorteId);
+    return { slug: law.slug, name: law.name, status: law.status, isFree: law.isFree, href: law.status === "ativa" ? law.isFree ? freeHref ?? fallbackHref : purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "ativa" ? law.isFree ? "Estudar grátis" : purchaseHref ? "Adquirir" : "Ver pacote do concurso" : "Em breve" };
   });
 }
 
@@ -79,7 +81,8 @@ async function personalizedRecordsLaws(rows: unknown, studentId: string, fallbac
     const studyHref = law.status === "ativa" ? recordsStudyHref(law.slug, contexts.get(law.lawId) ?? [], law.recorteId) : null;
     const hasAccess = studyHref !== null;
     const purchaseHref = resolved.purchaseHrefByLaw.get(law.lawId);
-    return { slug: law.slug, name: law.name, score: law.score, status: law.status, hasAccess, href: law.status === "ativa" ? studyHref ?? purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "em_breve" ? "Em breve" : hasAccess ? "Estudar" : purchaseHref ? "Adquirir" : "Ver pacote do concurso" };
+    const freeHref = recordsStudyHref(law.slug, law.recorteId ? [{ recorteId: law.recorteId }] : [{ recorteId: null }], law.recorteId);
+    return { slug: law.slug, name: law.name, score: law.score, status: law.status, isFree: law.isFree, hasAccess: hasAccess || law.isFree, href: law.status === "ativa" ? law.isFree ? freeHref ?? fallbackHref : studyHref ?? purchaseHref ?? fallbackHref : "#", actionLabel: law.status === "em_breve" ? "Em breve" : law.isFree ? "Estudar grátis" : hasAccess ? "Estudar" : purchaseHref ? "Adquirir" : "Ver pacote do concurso" };
   });
 }
 

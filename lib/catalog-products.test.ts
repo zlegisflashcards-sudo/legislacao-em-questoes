@@ -44,9 +44,9 @@ function configureCatalogQueries(productCount: number | null = 2) {
       { id: "p-2", nome: "Destaque", slug: "destaque", tipo_produto: "lei_avulsa", destaque: true },
     ],
     produto_leis: [
-      { produto_id: "p-1", lei_id: 10, recorte_id: null, leis: { slug: "lei-a", status_publicacao: "ativa" } },
-      { produto_id: "p-1", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa" } },
-      { produto_id: "p-2", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa" } },
+      { produto_id: "p-1", lei_id: 10, recorte_id: null, leis: { slug: "lei-a", status_publicacao: "ativa", acesso_gratuito: false } },
+      { produto_id: "p-1", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
+      { produto_id: "p-2", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
     ],
     admin_law_overview_checks: [
       { lei_id: 10, item: "questoes" },
@@ -70,12 +70,13 @@ describe("cards comerciais do catálogo", () => {
   it("busca produtos ativos para pesquisa e limita destaque à vitrine", () => {
     expect(loader).toContain('from("produtos")');
     expect(loader).toContain('from("produto_leis")');
-    expect(loader).toContain('leis(slug,status_publicacao)');
+    expect(loader).toContain('leis(slug,status_publicacao,acesso_gratuito)');
     expect(loader).toContain('select("lei_id,item")');
     expect(loader).toContain('select("id,nome,slug,ordem,tipo_produto,destaque,imagem_url", { count: "exact" })');
     expect(loader).toContain('recorte_id');
+    expect(loader).toContain("freeStudyHref");
     expect(loader).toContain('aggregateCatalogModuleAvailability');
-    expect(loader).not.toContain('product.tipo_produto === "lei_avulsa"');
+    expect(loader).toContain('product.tipo_produto === "lei_avulsa"');
     expect(loader).toContain("activeQuestionCountsBySlug");
     expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
     expect(loader).toContain('export async function getHomeCatalogProducts()');
@@ -99,6 +100,8 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("min-w-0 space-y-3 text-sm font-bold");
     expect(cards).toContain('className="min-w-0 break-words"');
     expect(cards).toContain("Saber mais");
+    expect(cards).toContain("Estudar grátis");
+    expect(cards).toContain("FreeStudyLink");
     expect(cards).toContain('produto.tipoProduto === "combo" || produto.tipoProduto === "edital"');
     expect(cards).toContain('data-product-type={produto.tipoProduto}');
     expect(cards).toContain("isDeck && produto.imagemUrl");
@@ -128,12 +131,12 @@ describe("cards comerciais do catálogo", () => {
   it("deriva a vitrine da mesma lista sem alterar os cards do catálogo", () => {
     const modules = { questoes: true, anki: true, legiscast: false, materiais: false };
     const result = splitHomeCatalogProducts([
-      { id: "1", nome: "Produto destacado", slug: "destacado", tipoProduto: "combo", imagemUrl: null, leisIncluidas: 1, totalFlashcards: 10, modules, destaque: true },
-      { id: "2", nome: "Produto normal", slug: "normal", tipoProduto: "lei_avulsa", imagemUrl: null, leisIncluidas: 2, totalFlashcards: 20, modules, destaque: false },
+      { id: "1", nome: "Produto destacado", slug: "destacado", tipoProduto: "combo", imagemUrl: null, freeStudyHref: null, leisIncluidas: 1, totalFlashcards: 10, modules, destaque: true },
+      { id: "2", nome: "Produto normal", slug: "normal", tipoProduto: "lei_avulsa", imagemUrl: null, freeStudyHref: null, leisIncluidas: 2, totalFlashcards: 20, modules, destaque: false },
     ]);
     expect(result.products).toEqual([
-      { id: "1", nome: "Produto destacado", slug: "destacado", tipoProduto: "combo", imagemUrl: null, leisIncluidas: 1, totalFlashcards: 10, modules },
-      { id: "2", nome: "Produto normal", slug: "normal", tipoProduto: "lei_avulsa", imagemUrl: null, leisIncluidas: 2, totalFlashcards: 20, modules },
+      { id: "1", nome: "Produto destacado", slug: "destacado", tipoProduto: "combo", imagemUrl: null, freeStudyHref: null, leisIncluidas: 1, totalFlashcards: 10, modules },
+      { id: "2", nome: "Produto normal", slug: "normal", tipoProduto: "lei_avulsa", imagemUrl: null, freeStudyHref: null, leisIncluidas: 2, totalFlashcards: 20, modules },
     ]);
     expect(result.highlightedProducts).toEqual([result.products[0]]);
   });
@@ -147,6 +150,7 @@ describe("cards comerciais do catálogo", () => {
       ["destaque", 10, 1],
     ]);
     expect(result.highlightedProducts.map((product) => product.slug)).toEqual(["destaque"]);
+    expect(result.highlightedProducts[0]?.freeStudyHref).toBe("/estudar/lei/lei-b");
   });
 
   it("mantém os chamadores públicos com os mesmos recortes de catálogo", async () => {

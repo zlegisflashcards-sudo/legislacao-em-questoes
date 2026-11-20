@@ -8,6 +8,7 @@ import {
 } from "@/lib/legislacoes";
 import { siteConfig } from "@/lib/site-config";
 import type { CatalogModuleAvailability } from "@/lib/catalog-module-availability";
+import { FreeStudyLink } from "@/components/free-study-link";
 
 type CatalogProduct = {
   id: string;
@@ -15,6 +16,7 @@ type CatalogProduct = {
   slug: string;
   tipoProduto: string;
   imagemUrl: string | null;
+  freeStudyHref: string | null;
   leisIncluidas: number;
   totalFlashcards: number | null;
   modules: CatalogModuleAvailability;
@@ -132,12 +134,19 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
               Flashcards em atualização
             </span>
           )}
-          <a
-            href={`/leisflashcards/${produto.slug}`}
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
-          >
-            Saber mais
-          </a>
+          {produto.freeStudyHref ? (
+            <FreeStudyLink
+              studyHref={produto.freeStudyHref}
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-600 px-3 text-center text-sm font-extrabold text-white shadow-[0_10px_20px_rgba(5,150,105,.24)] transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+            >
+              Estudar grátis
+            </FreeStudyLink>
+          ) : <a
+              href={`/leisflashcards/${produto.slug}`}
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#0877ff] px-3 text-center text-sm font-bold text-[#0868ed] transition hover:bg-[#0868ed] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0868ed]"
+            >
+              Saber mais
+            </a>}
         </div>
       </div>
     </article>

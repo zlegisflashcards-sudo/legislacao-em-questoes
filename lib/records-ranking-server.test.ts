@@ -29,7 +29,7 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain("resolveRecordsContestImage");
     expect(loader).toContain("productHref: `/leisflashcards/");
     expect(loader).toContain("async function recordsLaws");
-    expect(loader).toContain('select("produto_id,lei_id,recorte_id,produtos(slug,tipo_produto,ativo)")');
+    expect(loader).toContain('produtos(slug,tipo_produto,ativo),leis(acesso_gratuito)');
     expect(loader).toContain('from("recortes_leis").select("id,nome")');
     expect(loader).toContain(' — ${recordProductName}');
     expect(loader).not.toContain("if (!studentId || !Array.isArray(rows)) return []");
@@ -66,8 +66,10 @@ describe("Records por produto habilitado", () => {
     expect(loader).toContain("export type RecordsPublicLaw");
     expect(loader).toContain("async function recordsLaws");
     expect(loader).toContain("if (!studentId)");
-    expect(loader).toContain('actionLabel: "Adquirir"');
+    expect(loader).toContain('purchaseHref ? "Adquirir"');
+    expect(loader).toContain('actionLabel: "Estudar grátis"');
     expect(loader).toContain('"Ver pacote do concurso"');
+    expect(recordsPage).toContain("FreeStudyLink");
     expect(recordsPage).toContain('"score" in law');
     expect(recordsApi).toContain('"Cache-Control": "private, no-store"');
   });
