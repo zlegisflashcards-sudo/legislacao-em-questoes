@@ -35,6 +35,9 @@ describe("Meus Atalhos", () => {
     expect(client).toContain("🔒");
     expect(client).toContain("shortcut.produtoHref");
     expect(client).toContain("Ver ${label} no catálogo");
+    expect(client).toContain('role="combobox"');
+    expect(client).toContain("Pesquisar lei ou recorte…");
+    expect(client).toContain("filteredOptions");
     expect(client).toContain("confirmReplace: Boolean(existing)");
     expect(client).toContain('updatePersonal("rename", { nome: name })');
     expect(client).toContain("Sugestões de organização:");

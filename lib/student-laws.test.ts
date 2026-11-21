@@ -246,7 +246,7 @@ describe("interface das leis adquiridas", () => {
 
   it("ativa as rotas seguras de estudo e Lei Interativa sem alterar o edital", () => {
     expect(client).toContain('const lawHref = isScope ?');
-    expect(client).toContain('const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}`;');
+    expect(client).toContain('const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}${scopeId ?');
     expect(client).toContain('href={interactiveLawHref}');
     expect(card).not.toContain('ankiHref');
     expect(card).not.toContain('legiscastHref');

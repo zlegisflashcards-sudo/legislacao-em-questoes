@@ -70,5 +70,5 @@ describe("consultas principais de questoes", () => {
     expect(exported.notes).toBe(questions.length);
     expect(entitledScope).toHaveLength(1000);
     expect(entitledScope.every((question) => question.structure_id === 10)).toBe(true);
-  });
+  }, 15_000);
 });

@@ -41,6 +41,49 @@ export function canonicalStructureName(value: string) {
   );
 }
 
+export type DocumentStructureNode = { id: number; parent_id: number | null; nome: string };
+export type DocumentStructureMatch = {
+  status: "sem_marcador" | "documento" | "caminho_incompleto" | "nao_encontrado" | "ambiguo";
+  structureId: number | null;
+  candidatePaths: string[];
+};
+
+/**
+ * Matches only the complete registered structural path.  A loose chapter name
+ * is evidence for review, never a reason to guess an editorial association.
+ */
+export function matchDocumentStructureTrail(trail: string[] | undefined, structures: DocumentStructureNode[]): DocumentStructureMatch {
+  if (!trail?.length) return { status: "sem_marcador", structureId: null, candidatePaths: [] };
+  const byId = new Map(structures.map((structure) => [structure.id, structure]));
+  const pathOf = (structure: DocumentStructureNode) => {
+    const path: DocumentStructureNode[] = [];
+    const visited = new Set<number>();
+    for (let current: DocumentStructureNode | undefined = structure; current && !visited.has(current.id); current = current.parent_id === null ? undefined : byId.get(current.parent_id)) {
+      visited.add(current.id);
+      path.unshift(current);
+    }
+    return path;
+  };
+  const markers = trail.map(canonicalStructureName);
+  const exact = structures.filter((structure) => {
+    const path = pathOf(structure).map((item) => canonicalStructureName(item.nome));
+    return path.length === markers.length && path.every((item, index) => item === markers[index]);
+  });
+  const candidatePaths = exact.map((structure) => pathOf(structure).map((item) => item.nome).join(" › "));
+  if (exact.length === 1) return { status: "documento", structureId: exact[0].id, candidatePaths };
+  if (exact.length > 1) return { status: "ambiguo", structureId: null, candidatePaths };
+
+  const hasLooseMatch = structures.some((structure) => {
+    const path = pathOf(structure).map((item) => canonicalStructureName(item.nome));
+    return path.at(-1) === markers.at(-1);
+  });
+  return {
+    status: hasLooseMatch ? "caminho_incompleto" : "nao_encontrado",
+    structureId: null,
+    candidatePaths: [],
+  };
+}
+
 function bodyAlreadyIdentified(legislation: string, identification: string) {
   const expected = normalizedIdentifier(identification);
   const received = normalizedIdentifier(plain(legislation).slice(0, Math.max(identification.length + 24, 80)));

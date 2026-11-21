@@ -21,10 +21,18 @@ describe("superfícies de preparação da Lei Interativa", () => {
   });
 
   it("mantém erro técnico fora do cartão editorial e cobre a rota antiga", () => {
-    const page = read("app/legisbot/[slug]/page.tsx");
+    const authorized = read("app/legisbot/[slug]/continuous-reading-authorized-client.tsx");
     const legacy = read("app/legisbot/[slug]/[ordem]/page.tsx");
-    expect(page).toContain("Leitura temporariamente indisponível");
-    expect(legacy).toContain("continuousModel && !continuousModel.integrity.readingAvailable");
+    expect(authorized).toContain("Acesso indisponível");
+    expect(legacy).toContain("!continuousModel.structureReadiness.ready");
     expect(legacy).toContain("Falha ao verificar a preparação da leitura contínua");
+  });
+
+  it("não apresenta a prévia como pronta quando o diagnóstico estrutural ainda bloqueia a leitura", () => {
+    const preview = read("app/admin/artigos/legisbot-preview/page.tsx");
+    expect(preview).toContain("const structuresReady");
+    expect(preview).toContain('releaseDashboard.integrity.reports.every((report) => report.status === "ready")');
+    expect(preview).toContain("a leitura continua bloqueada por pendências atuais");
+    expect(preview).toContain("query.confirmacao_liberada");
   });
 });

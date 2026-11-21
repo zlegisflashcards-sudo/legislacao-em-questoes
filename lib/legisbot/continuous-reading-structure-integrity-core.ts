@@ -1,5 +1,5 @@
 import type { QuestionReferenceResolution } from "./continuous-reading-core";
-import { continuousReadingStructureDescendantIds, continuousReadingStructurePath, type ContinuousReadingReferenceStructureAssociation, type ContinuousReadingStructureNode } from "./continuous-reading-structure-core";
+import { continuousReadingStructureDescendantIds, continuousReadingStructurePath, orderContinuousReadingStructures, type ContinuousReadingReferenceStructureAssociation, type ContinuousReadingStructureNode } from "./continuous-reading-structure-core";
 import { resolveContinuousReadingArticleContinuity, type ArticleContinuity } from "./continuous-reading-article-continuity-core";
 
 export type StructureIntegrityStatus = "ready" | "pending_blocks" | "orphan_questions" | "ambiguous" | "empty";
@@ -85,6 +85,11 @@ export function resolveContinuousReadingStructureIntegrity(input: {
     return { hasStructures: false, reports: [], unassigned: { orphanQuestionIds: [], referenceIds: [], inventoryOrders: [] } };
   }
   const knownStructureIds = new Set(input.structures.map((node) => node.id));
+  const childrenByParent = new Map<number, ContinuousReadingStructureNode[]>();
+  for (const structure of input.structures) {
+    if (structure.parentId === null || !knownStructureIds.has(structure.parentId)) continue;
+    childrenByParent.set(structure.parentId, [...(childrenByParent.get(structure.parentId) ?? []), structure]);
+  }
   const associationByReference = new Map(input.associations.map((association) => [association.referenceId, association]));
   const referenceById = new Map(input.references.map((reference) => [reference.id, reference]));
   const resolutionByQuestion = new Map(input.resolutions.map((resolution) => [resolution.questionId, resolution]));
@@ -121,7 +126,11 @@ export function resolveContinuousReadingStructureIntegrity(input: {
     if (resolution && unresolved.has(resolution.status) && !scopes.length) unassignedOrphanQuestionIds.push(question.id);
   }
 
-  const reports = input.structures.map((structure) => {
+  // O painel de liberação é uma leitura do sumário: a ordem devolvida pelo
+  // banco não é suficiente, pois pode intercalar pais e filhos. Mantemos o
+  // mesmo percurso pré-ordem usado pela estrutura (pai → descendentes; irmãos
+  // por Ordem/ID), sem alterar nenhum vínculo ou estado de liberação.
+  const reports = orderContinuousReadingStructures(input.structures).map((structure) => {
     const descendants = continuousReadingStructureDescendantIds(structure.id, input.structures);
     const scope = new Set(descendants);
     const questionIds = input.questions.filter((question) => (questionStructureIds.get(question.id) ?? []).some((id) => scope.has(id))).map((question) => question.id);
@@ -147,9 +156,15 @@ export function resolveContinuousReadingStructureIntegrity(input: {
     if (articleContinuity.confirmedMissingArticles.length) reasons.push("article_gap_confirmed");
     if (unassignedReferenceIds.length) reasons.push("reference_unattributed");
     if (unassignedOrphanQuestionIds.length) reasons.push("orphan_question_unattributed");
-    // A estrutura superior só fica pronta se todos os seus ramos também têm
-    // evidência suficiente; um ramo vazio não é convertido em cobertura.
-    if (descendants.some((id) => id !== structure.id && !hasDirectElement(id))) reasons.push("descendant_empty");
+    // O conteúdo de um dispositivo é agregado pelos seus ancestrais reais.
+    // Portanto, um capítulo intermediário sem bloco próprio não torna o título
+    // vazio se houver conteúdo nos seus filhos. A lacuna continua bloqueando
+    // quando alcança uma folha da árvore ativa, isto é, um destino que não
+    // possui filhos e também não tem evidência direta de conteúdo.
+    const uncoveredLeaf = descendants
+      .filter((id) => (childrenByParent.get(id)?.length ?? 0) === 0)
+      .some((id) => !hasDirectElement(id));
+    if (uncoveredLeaf) reasons.push("descendant_empty");
     const hasElements = questionIds.length > 0 || referenceIds.length > 0;
     const path = continuousReadingStructurePath(structure.id, input.structures).map((item) => (item as ContinuousReadingStructureNode & { nome?: string }).nome ?? String(item.id));
     return {

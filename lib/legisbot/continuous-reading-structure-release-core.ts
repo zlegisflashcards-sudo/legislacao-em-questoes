@@ -8,6 +8,10 @@ function recordsByStructure(records: readonly StructureReleaseRecord[]) {
   return new Map(records.map((record) => [record.structureId, record]));
 }
 
+function isRootStructure(structureId: number, structures: readonly ContinuousReadingStructureNode[]) {
+  return structures.find((structure) => structure.id === structureId)?.parentId === null;
+}
+
 /** Uma liberação de recorte nunca ignora bloqueio explícito de descendente. */
 export function hasExplicitBlockedDescendant(structureId: number, structures: readonly ContinuousReadingStructureNode[], records: readonly StructureReleaseRecord[]) {
   const byStructure = recordsByStructure(records);
@@ -20,8 +24,10 @@ export function canReleaseStructure(input: {
   structures: readonly ContinuousReadingStructureNode[];
   records: readonly StructureReleaseRecord[];
 }) {
+  // A unidade de publicação é a raiz do sumário (normalmente, o Título).
+  // Filhos só descrevem a navegação e nunca recebem uma liberação própria.
+  if (!isRootStructure(input.report.structureId, input.structures)) return { allowed: false, reason: "root_required" as const };
   if (input.report.status !== "ready") return { allowed: false, reason: "integrity_not_ready" as const };
-  if (hasExplicitBlockedDescendant(input.report.structureId, input.structures, input.records)) return { allowed: false, reason: "blocked_descendant" as const };
   return { allowed: true, reason: null };
 }
 
@@ -47,25 +53,26 @@ export function structureReleaseViewStatus(input: {
   records: readonly StructureReleaseRecord[];
 }): StructureReleaseViewStatus {
   const current = recordsByStructure(input.records).get(input.report.structureId);
+  // A liberação é uma intenção administrativa persistida, não uma garantia de
+  // que a leitura ainda pode ser exposta. Se texto, associação ou cobertura
+  // mudarem depois dela, a tela não pode continuar verde até nova revisão.
+  if (input.report.status !== "ready") return "pending";
+  // Registros legados em filhos não têm efeito de publicação e também não
+  // podem pintar uma subdivisão como liberada na administração.
+  if (!isRootStructure(input.report.structureId, input.structures)) return "ready";
   if (current?.status === "blocked") return "pending";
-  if (current?.status === "released") return hasExplicitBlockedDescendant(input.report.structureId, input.structures, input.records) ? "pending" : "released";
-  return input.report.status === "ready" ? "ready" : "pending";
+  if (current?.status === "released") return "released";
+  return "ready";
 }
 
 /**
- * Política para a futura rota pública: um registro liberado cobre seu recorte,
- * mas qualquer bloqueio no caminho raiz→nó ou no próprio nó o interrompe.
- * Ela não cria registros para descendentes.
+ * A abertura é decidida exclusivamente na raiz. Assim uma liberação legada
+ * gravada em um filho não expõe um capítulo de um Título fechado, e fechar o
+ * Título remove todo o seu ramo do sumário do aluno.
  */
 export function isStructureEffectivelyReleased(structureId: number, structures: readonly ContinuousReadingStructureNode[], records: readonly StructureReleaseRecord[]) {
   const byStructure = recordsByStructure(records);
   const path = continuousReadingStructurePath(structureId, structures);
   if (!path.length) return false;
-  let released = false;
-  for (const node of path) {
-    const record = byStructure.get(node.id);
-    if (record?.status === "blocked") return false;
-    if (record?.status === "released") released = true;
-  }
-  return released;
+  return byStructure.get(path[0].id)?.status === "released";
 }

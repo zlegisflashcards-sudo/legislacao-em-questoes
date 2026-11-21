@@ -155,6 +155,7 @@ export default function LegisBotPageClient({
   const [activeStudyTab, setActiveStudyTab] = useState<LegisBotStudyTab>(initialTab);
   const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
   const [selectedHighlight, setSelectedHighlight] = useState<LegisBotHighlight | null>(null);
+  const [highlightModeActive, setHighlightModeActive] = useState(false);
   const [conversationPhase, setConversationPhase] = useState<ConversationPhase>("idle");
   const [typedQuestion, setTypedQuestion] = useState("");
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -196,6 +197,7 @@ export default function LegisBotPageClient({
     setResolvedArticleRecent(articleRecent);
     setHighlights([]);
     setSelectedHighlight(null);
+    setHighlightModeActive(false);
     setConversationPhase("idle");
     setTypedQuestion("");
     setCommunityCount(initialCommunityCount);
@@ -408,8 +410,10 @@ export default function LegisBotPageClient({
     setActiveStudyTab(tab);
     if (tab !== "highlights") {
       setSelectedHighlight(null);
+      setHighlightModeActive(false);
     }
   }, []);
+  const legalSelectionRootId = `legisbot-legal-selection-${slugNormalizado}-${ordemNormalizada}`.replace(/[^A-Za-z0-9_-]/g, "-");
 
   const legisBotContent = <>
     {!isPublicArticle ? <section className="question-block" aria-label="Pergunta feita ao LegisBot">
@@ -477,7 +481,7 @@ export default function LegisBotPageClient({
         <h1>{assunto}</h1>
       </header>
 
-      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2>{highlights.length ? <HighlightedLegalText text={textoLegal} highlights={highlights} onHighlightClick={selectHighlight} /> : <div className="legisbot-legal-html" dangerouslySetInnerHTML={{ __html: dadosLegislacao.legislacao }} />}</section> : null}
+      {textoLegal ? <section className="legisbot-legal-text" aria-labelledby="legal-text-title"><h2 id="legal-text-title">Texto legal</h2><div id={legalSelectionRootId} className={highlightModeActive ? "highlight-selection-enabled" : undefined} data-highlight-mode={highlightModeActive ? "active" : "inactive"}>{highlights.length ? <HighlightedLegalText text={textoLegal} highlights={highlights} onHighlightClick={selectHighlight} /> : <div className="legisbot-legal-html" dangerouslySetInnerHTML={{ __html: dadosLegislacao.legislacao }} />}</div></section> : null}
       <LegisBotStudyTabs
         slug={slugNormalizado}
         ordem={ordemNormalizada}
@@ -485,6 +489,8 @@ export default function LegisBotPageClient({
         initialTab={initialTab}
         questionsContent={showArticleQuestions ? <LegisBotArticleQuestions slug={slugNormalizado} ordem={ordemNormalizada} referenceId={questionsReferenceId} recorteId={questionsRecorteId} /> : undefined}
         onActiveTabChange={changeStudyTab}
+        highlightModeActive={highlightModeActive}
+        onHighlightModeChange={setHighlightModeActive}
         legisBotContent={conversationContent}
         communityContent={
           <LegisBotCommunity
@@ -499,6 +505,9 @@ export default function LegisBotPageClient({
             ordem={ordemNormalizada}
             legislationText={textoLegal}
             selectedHighlight={selectedHighlight}
+            selectionRootId={legalSelectionRootId}
+            markerModeActive={highlightModeActive}
+            onMarkerModeChange={setHighlightModeActive}
             onHighlightsChange={updateHighlights}
             onSelectedHighlightClear={() => setSelectedHighlight(null)}
           />

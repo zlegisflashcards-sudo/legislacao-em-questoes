@@ -15,15 +15,18 @@ describe("leitura contínua pública", () => {
     expect(client).toContain("Lei Interativa");
     expect(client).toContain("LegisBotGuide");
     expect(client).toContain("Organizei os dispositivos por prioridade estatística");
-    expect(client).toContain("Vamos percorrer a lei inteira");
+    expect(client).toContain("Os apresentadores do LegisCast vão acompanhar você nessa jornada");
+    expect(client).toContain("LegisCast + Lei Interativa");
+    expect(client).toContain('src="/images/legiscast-hosts.png"');
+    expect(client).toContain("Mérvia e Tício, apresentadores do LegisCast");
     expect(client).toContain("Mapa de prioridade");
     expect(client).toContain("🔥 Mapear lei");
     expect(client).toContain("Baixar PDF esquematizado");
     expect(client).toContain("/pdf-material");
     expect(client).toContain("disabled title=\"O mapeamento por prioridade será disponibilizado em breve.\"");
     expect(client).not.toContain('role="tablist" aria-label="Modos da Lei Interativa"');
-    expect(client).toContain("FlameIcon");
-    expect(client).toContain("ScannerIcon");
+    expect(client).not.toContain("botAvatar");
+    expect(client).toContain("legiscastHosts");
     expect(client).toContain("reference.linkedQuestions > 0");
     expect(client).toContain('reference.priority !== "nao_mapeado"');
     expect(client).not.toContain('reference.hierarchy.at(-1)?.name');
@@ -49,6 +52,7 @@ describe("leitura contínua pública", () => {
     expect(styles).toContain(".incidence_laranja");
     expect(styles).toContain(".incidence_vermelho");
     expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(styles).toContain(".legiscastHosts");
     expect(client).toContain('className={styles.cardRecentFlag}');
     expect(client).toContain('aria-label="Conteúdo recente"');
     expect(server).toContain("priority: publicPriority(linkedQuestions)");
@@ -69,7 +73,7 @@ describe("leitura contínua pública", () => {
   });
 
   it("remove diagnósticos técnicos e orienta o aluno pela voz do LegisBot", () => {
-    expect(client).toContain("Toque em qualquer dispositivo para grifar, comentar ou pedir minha explicação");
+    expect(client).toContain("tornando o estudo da lei mais leve, dinâmico e eficiente");
     expect(client).not.toContain("% das questões vinculadas");
     expect(client).not.toContain("Completude não verificada");
     expect(client).not.toContain("Legislação em construção");
@@ -108,6 +112,47 @@ describe("leitura contínua pública", () => {
     expect(styles).toContain("env(safe-area-inset-bottom)");
   });
 
+  it("permite ajustar o divisor e ampliar somente o sumário no desktop", () => {
+    expect(client).toContain("TOC_WIDTH_STORAGE_KEY");
+    expect(client).toContain("beginTocResize");
+    expect(client).toContain('aria-label="Ajustar largura do sumário"');
+    expect(client).toContain("isTocExpanded");
+    expect(client).toContain('aria-label="Sumário ampliado"');
+    expect(client).toContain("⤢ Expandir");
+    expect(styles).toContain("grid-template-columns: minmax(220px, var(--toc-width, 280px)) 12px minmax(0, 1fr)");
+    expect(styles).toContain(".tocResize");
+    expect(styles).toContain("cursor: col-resize");
+    expect(styles).toContain(".expandedTocPanel");
+    expect(styles).toContain(".tocResize, .expandTocToggle { display: none; }");
+  });
+
+  it("mostra avanço estrutural e salva a retomada somente no navegador", () => {
+    expect(client).toContain("continuousReadingAdvances(prepared)");
+    expect(client).toContain("Avançar →");
+    expect(client).toContain("Próximo trecho disponível");
+    expect(client).toContain("advanceTo(advance.nextReferenceId)");
+    expect(client).toContain("continuousReadingResumeStorageKey");
+    expect(client).toContain("resolveContinuousReadingResume");
+    expect(authorizedClient).toContain("recorteId={recorteId}");
+    expect(client).toContain("preserveAudioOnNextNavigationRef");
+    expect(styles).toContain(".advance");
+  });
+
+  it("mostra a parada na divisória e a retoma pelo bloco seguinte", () => {
+    expect(client).toContain("continuousReadingMarkerStorageKey");
+    expect(client).toContain("saveContinuousReadingMarker");
+    expect(client).toContain('"Marcar como parei aqui"');
+    expect(client).toContain('"Remover parei aqui"');
+    expect(client).toContain('"✓ Parei aqui"');
+    expect(client).toContain("canMarkPause");
+    expect(client).toContain("pausedAfterReferenceId");
+    expect(client).toContain("resolveContinuousReadingPauseTarget");
+    expect(client).toContain("Continuar de onde parei");
+    expect(client).toContain("continueFromPause");
+    expect(styles).toContain(".readingPause");
+    expect(styles).toContain(".tocContinue");
+  });
+
   it("não redireciona silenciosamente quando a âncora não existe", () => {
     expect(client).toContain("setMissingTarget(true)");
     expect(client).toContain("Este dispositivo não está disponível nesta versão da legislação");
@@ -122,6 +167,10 @@ describe("leitura contínua pública", () => {
     expect(readingRoute).toContain("await authorizeLawStudy(request, slug)");
     expect(readingRoute).toContain("const initialBlocks = model.integrity.readingAvailable");
     expect(referencesRoute).toContain("await authorizeLawStudy(request, slug)");
+    expect(readingRoute).toContain("preparation: \"structure_pending\"");
+    expect(readingRoute).toContain("!model.structureReadiness.ready");
+    expect(referencesRoute).toContain("!structureReadiness.ready");
+    expect(authorizedClient).toContain("Estamos organizando os artigos por capítulo e seção.");
     expect(client).toContain("Authorization: `Bearer ${highlightAccessToken}`");
   });
 

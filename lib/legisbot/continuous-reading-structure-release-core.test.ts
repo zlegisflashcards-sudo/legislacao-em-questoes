@@ -10,24 +10,31 @@ const ready = { structureId: 1, name: "Título", path: ["Título"], descendantSt
 const pending = { ...ready, structureId: 2, status: "pending_blocks" as const, reasons: ["reference_unprepared" as const] };
 
 describe("política de liberação estrutural", () => {
-  it("permite liberar somente estrutura pronta", () => {
+  it("permite liberar somente a estrutura raiz pronta", () => {
     expect(canReleaseStructure({ report: ready, structures, records: [] })).toEqual({ allowed: true, reason: null });
-    expect(canReleaseStructure({ report: pending, structures, records: [] })).toEqual({ allowed: false, reason: "integrity_not_ready" });
+    expect(canReleaseStructure({ report: { ...pending, structureId: 1 }, structures, records: [] })).toEqual({ allowed: false, reason: "integrity_not_ready" });
     expect(canReleaseStructure({ report: { ...ready, status: "orphan_questions", reasons: ["orphan_question"] }, structures, records: [] })).toEqual({ allowed: false, reason: "integrity_not_ready" });
     expect(canReleaseStructure({ report: { ...ready, status: "ambiguous", reasons: ["reference_ambiguous"] }, structures, records: [] })).toEqual({ allowed: false, reason: "integrity_not_ready" });
+    expect(canReleaseStructure({ report: { ...ready, structureId: 2, path: ["Título", "Capítulo"] }, structures, records: [] })).toEqual({ allowed: false, reason: "root_required" });
   });
 
-  it("não permite ancestral liberado ignorar bloqueio explícito de descendente", () => {
+  it("mantém o diagnóstico de bloqueio legado sem permitir liberação em filhos", () => {
     const records = [{ structureId: 3, status: "blocked" as const }];
     expect(hasExplicitBlockedDescendant(1, structures, records)).toBe(true);
-    expect(canReleaseStructure({ report: ready, structures, records })).toEqual({ allowed: false, reason: "blocked_descendant" });
+    expect(canReleaseStructure({ report: { ...ready, structureId: 3 }, structures, records })).toEqual({ allowed: false, reason: "root_required" });
   });
 
-  it("mantém bloqueio idempotente e mascara a herança de liberação", () => {
+  it("usa exclusivamente a raiz para decidir abertura do ramo", () => {
     const records = [{ structureId: 1, status: "released" as const }, { structureId: 2, status: "blocked" as const }];
     expect(isStructureEffectivelyReleased(3, structures, records)).toBe(true);
-    expect(isStructureEffectivelyReleased(2, structures, records)).toBe(false);
-    expect(structureReleaseViewStatus({ report: ready, structures, records })).toBe("pending");
+    expect(isStructureEffectivelyReleased(2, structures, records)).toBe(true);
+    expect(structureReleaseViewStatus({ report: ready, structures, records })).toBe("released");
+    expect(isStructureEffectivelyReleased(2, structures, [{ structureId: 2, status: "released" }])).toBe(false);
+    expect(structureReleaseViewStatus({ report: { ...ready, structureId: 2 }, structures, records: [{ structureId: 2, status: "released" }] })).toBe("ready");
+  });
+
+  it("não mantém indicador liberado quando a integridade ficou pendente depois da liberação", () => {
+    expect(structureReleaseViewStatus({ report: pending, structures, records: [{ structureId: 2, status: "released" }] })).toBe("pending");
   });
 
   it("não considera uma lei sem estruturas como liberada", () => {

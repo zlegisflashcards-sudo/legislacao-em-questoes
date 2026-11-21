@@ -7,6 +7,7 @@ import {
   orderContinuousReadingReferences,
   orderContinuousReadingStructures,
   resolveContinuousReadingReferenceStructureAssociations,
+  resolveContinuousReadingStructureReadiness,
 } from "./continuous-reading-structure-core";
 
 const structures = [
@@ -73,6 +74,70 @@ describe("estrutura da leitura contínua", () => {
     expect(resolveContinuousReadingReferenceStructureAssociations({ ...input, references: [{ ...input.references[0], structureId: null }] })).toEqual([{
       referenceId: "r-confirmado", structureId: 11, status: "associated", candidateStructureIds: [11], suggestionStatus: "associated", suggestedStructureId: 11,
     }]);
+  });
+
+  it("só trava a leitura do aluno para bloco preparado sem resolução segura", () => {
+    const associations = resolveContinuousReadingReferenceStructureAssociations({
+      references: [
+        { id: "manual", sourceQuestionId: null, structureId: 11 },
+        { id: "inferido", sourceQuestionId: null, structureId: null },
+        { id: "ambiguo", sourceQuestionId: null, structureId: null },
+        { id: "sem-destino", sourceQuestionId: null, structureId: null },
+        { id: "nao-preparado", sourceQuestionId: null, structureId: null },
+      ],
+      questions: [{ id: "q-unica", structureId: 11 }, { id: "q-a", structureId: 11 }, { id: "q-b", structureId: 12 }],
+      resolutions: [
+        { questionId: "q-unica", referenceId: "inferido" },
+        { questionId: "q-a", referenceId: "ambiguo" },
+        { questionId: "q-b", referenceId: "ambiguo" },
+      ],
+      structures,
+    });
+    expect(resolveContinuousReadingStructureReadiness({
+      structures,
+      references: [
+        { id: "manual", prepared: true },
+        { id: "inferido", prepared: true },
+        { id: "ambiguo", prepared: true },
+        { id: "sem-destino", prepared: true },
+        { id: "nao-preparado", prepared: false },
+      ],
+      associations,
+    })).toEqual({ ready: false, unresolvedPreparedReferenceIds: ["ambiguo", "sem-destino"] });
+  });
+
+  it("preserva leis sem hierarquia e não trata bloco arquivado como pendência", () => {
+    expect(resolveContinuousReadingStructureReadiness({
+      structures: [],
+      references: [{ id: "legado", prepared: true }],
+      associations: [],
+    })).toEqual({ ready: true, unresolvedPreparedReferenceIds: [] });
+    expect(resolveContinuousReadingStructureReadiness({
+      structures,
+      references: [{ id: "arquivado", prepared: true, archived: true }],
+      associations: [],
+    })).toEqual({ ready: true, unresolvedPreparedReferenceIds: [] });
+  });
+
+  it("mantém o Plano Diretor de Contagem acessível quando todos os blocos estão resolvidos", () => {
+    // Contrato de regressão para lcp362comg: a ausência de structure_id em um
+    // bloco não basta para bloquear a lei se as evidências apontarem para um
+    // único nó do sumário.
+    const planoDiretorStructures = [{ id: 362, parentId: null, ordem: 1 }];
+    const associations = resolveContinuousReadingReferenceStructureAssociations({
+      references: [
+        { id: "vinculo-editorial", sourceQuestionId: null, structureId: 362 },
+        { id: "vinculo-inferido", sourceQuestionId: null, structureId: null },
+      ],
+      questions: [{ id: "questao-plano-diretor", structureId: 362 }],
+      resolutions: [{ questionId: "questao-plano-diretor", referenceId: "vinculo-inferido" }],
+      structures: planoDiretorStructures,
+    });
+    expect(resolveContinuousReadingStructureReadiness({
+      structures: planoDiretorStructures,
+      references: [{ id: "vinculo-editorial", prepared: true }, { id: "vinculo-inferido", prepared: true }],
+      associations,
+    })).toEqual({ ready: true, unresolvedPreparedReferenceIds: [] });
   });
 
   it("mantém a sequência legislativa previsível", () => {

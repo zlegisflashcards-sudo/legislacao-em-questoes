@@ -159,7 +159,7 @@ describe("contextos autorizados no Meu Edital", () => {
     const server = readFileSync("lib/student-exams-server.ts", "utf8");
     const exam = readFileSync("components/student-exam-client.tsx", "utf8");
     expect(laws).toContain('recorte_id=${encodeURIComponent(scopeId)}');
-    expect(laws).toContain('}/anki${scopeId ?');
+    expect(laws).toContain('const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}${scopeId ?');
     expect(server).toContain('fn: "definir_contexto_lei_meu_edital"');
     expect(exam).toContain("law.recorteId ? `/questoes/${encodeURIComponent(law.slug)}/estudar?livre=1&recorte_id=${encodeURIComponent(law.recorteId)}`");
     expect(exam).toContain("/api/aluno/minhas-leis?include_contexts=1");

@@ -37,15 +37,10 @@ describe("liberação administrativa por estrutura", () => {
     expect(migration).toContain("revoke all on table public.legislative_structure_releases from anon, authenticated");
   });
 
-  it("libera a lei completa apenas por RPC transacional com fotografia atual", () => {
+  it("desativa a liberação geral e exige decisão explícita no Título raiz", () => {
     expect(server).toContain("releaseEntireLegislativeLaw");
-    expect(server).toContain("canReleaseEntireLaw");
-    expect(server).toContain('rpc("liberar_lei_interativa_completa"');
-    expect(wholeLawMigration).toContain("pg_advisory_xact_lock(p_lei_id)");
-    expect(wholeLawMigration).toContain("O diagnóstico mudou desde a conferência.");
-    expect(wholeLawMigration).toContain("status = 'blocked'");
-    expect(wholeLawMigration).toContain("admin_comercial_auditar");
-    expect(wholeLawMigration).toContain("revoke all on function");
-    expect(wholeLawMigration).toContain("to service_role");
+    expect(server).toContain("A liberação geral foi desativada.");
+    expect(server).toContain("parentId !== null");
+    expect(server).not.toContain('rpc("liberar_lei_interativa_completa"');
   });
 });

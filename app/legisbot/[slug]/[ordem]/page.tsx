@@ -46,8 +46,9 @@ export default async function LegisBotPage({ params, searchParams }: LegisBotPag
     console.error("[LegisBot] Falha ao verificar a preparação da leitura contínua.", { slug, ordem, tipo: error instanceof Error ? error.name : "unknown" });
     return null;
   });
-  if (continuousModel && !continuousModel.integrity.readingAvailable) {
-    return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={continuousModel.law.nome_curto || continuousModel.law.titulo} /></main><LawStudyBottomNav slug={continuousModel.law.slug} recorteId={primeiroValor(query.recorte_id) || null} activeMode="lei_interativa" /></div>;
+  if (continuousModel && (!continuousModel.integrity.readingAvailable || !continuousModel.structureReadiness.ready)) {
+    const structurePending = !continuousModel.structureReadiness.ready;
+    return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={continuousModel.law.nome_curto || continuousModel.law.titulo} title={structurePending ? "Lei Interativa em preparação" : undefined} description={structurePending ? "Estamos organizando os artigos por capítulo e seção." : undefined} /></main><LawStudyBottomNav slug={continuousModel.law.slug} recorteId={primeiroValor(query.recorte_id) || null} activeMode="lei_interativa" /></div>;
   }
   const continuousReference = await resolveContinuousReference(slug, ordem).catch((error) => {
     console.error("[LegisBot] Falha ao verificar a leitura contínua; mantendo a página compatível.", {

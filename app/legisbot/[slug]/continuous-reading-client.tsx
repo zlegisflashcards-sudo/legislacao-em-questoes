@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LegisBotOverlay } from "@/components/legisbot-overlay";
 import { LegiscastAudioTransport, type LegiscastAudioTrack } from "@/components/legiscast-audio-player";
 import { continuousBlockAnchor, referenceIdFromHash } from "@/lib/legisbot/continuous-reading-core";
+import { continuousReadingAdvances, continuousReadingMarkerStorageKey, continuousReadingResumeStorageKey, readContinuousReadingMarker, resolveContinuousReadingPauseTarget, resolveContinuousReadingResume, saveContinuousReadingMarker } from "@/lib/legisbot/continuous-reading-navigation-core";
 import { canLoadContinuousPage, completedContinuousPage } from "@/lib/legisbot/continuous-reading-pagination";
 import type { LegisBotHighlight } from "@/lib/legisbot-highlights";
 import { supabase } from "@/lib/supabase";
@@ -21,6 +22,10 @@ type BlockText = Pick<Block, "id" | "legislation">;
 type TocNode = { key: string; structure: StructureCatalogItem; reference: Reference | null; children: TocNode[]; referenceIds: string[] };
 
 const PAGE_SIZE = 30;
+const TOC_MIN_WIDTH = 220;
+const TOC_DEFAULT_WIDTH = 280;
+const TOC_MAX_WIDTH = 480;
+const TOC_WIDTH_STORAGE_KEY = "legisbot:continuous-reading:toc-width";
 const PRIORITY_ORDER: Priority[] = ["muito_alta", "alta", "media", "baixa", "nao_mapeado"];
 const PRIORITY_LABELS: Record<Priority, string> = {
   muito_alta: "Prioridade muito alta",
@@ -37,23 +42,17 @@ function incidenceBand(linkedQuestions: number): IncidenceBand {
   return "cinza";
 }
 
-function FlameIcon() {
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M18.3 3.5c1.1 5.3-2.2 7.3-3.8 10.1-1.2-1.1-1.8-2.5-1.7-4.3-4 3.2-6.3 7-5.4 11.1.8 4 4.2 7.1 8.6 7.1 4.8 0 8.7-3.8 8.7-8.5 0-5.6-3.8-10.6-6.4-15.5Z"/><path d="M17.3 16.4c.4 2-1.2 3-2.1 4.2-.6-.6-1-1.4-1-2.2-1.6 1.4-2.4 3-2 4.8.4 1.8 1.9 3.1 3.9 3.1 2.2 0 4-1.7 4-3.8 0-2.5-1.5-4.6-2.8-6.1Z"/></svg>;
-}
-
-function ScannerIcon({ active = false }: { active?: boolean }) {
-  return <span className={`${styles.scannerIcon} ${active ? styles.scannerIconActive : ""}`} aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 11V6h5M20 6h5v5M25 21v5h-5M12 26H7v-5"/><path d="M11 10h10v12H11z"/><path d="M13.5 14h5M13.5 17h5"/></svg><i /></span>;
-}
-
-function LegisBotGuide({ title, mode, adminPreview }: { title: string; mode: "mapa" | "leitura"; adminPreview: boolean }) {
-  if (adminPreview) return <header className={styles.hero}><p className={styles.eyebrow}>Base Legislativa · Prévia</p><h1>{title}</h1><p>Revise os dispositivos preparados e abra cada bloco na Base Legislativa.</p></header>;
+function LegisBotGuide({ lawTitle, mode, adminPreview }: { lawTitle: string; mode: "mapa" | "leitura"; adminPreview: boolean }) {
+  if (adminPreview) return <header className={styles.hero}><p className={styles.eyebrow}>Base Legislativa · Prévia</p><h1>{lawTitle}</h1><p>Revise os dispositivos preparados e abra cada bloco na Base Legislativa.</p></header>;
   const mapMode = mode === "mapa";
   return <header className={`${styles.hero} ${styles.botHero}`}>
-    <div className={styles.botAvatar} aria-hidden="true"><span>🤖</span><i>{mapMode ? <FlameIcon /> : <ScannerIcon active />}</i></div>
+    <figure className={styles.legiscastHosts}>
+      <img src="/images/legiscast-hosts.png" alt="Mérvia e Tício, apresentadores do LegisCast" />
+    </figure>
     <div className={styles.botSpeech}>
-      <p className={styles.eyebrow}>Lei Interativa · LegisBot</p>
-      <h1>{title}</h1>
-      <p>{mapMode ? "Organizei os dispositivos por prioridade estatística. Comece pelos pontos mais quentes e toque em um artigo para aprofundar." : "Vamos percorrer a lei inteira. Toque em qualquer dispositivo para grifar, comentar ou pedir minha explicação."}</p>
+      <p className={styles.eyebrow}>LegisCast + Lei Interativa</p>
+      <h1>{lawTitle}</h1>
+      <p>{mapMode ? "Organizei os dispositivos por prioridade estatística. Comece pelos pontos mais quentes e toque em um artigo para aprofundar." : "Os apresentadores do LegisCast vão acompanhar você nessa jornada, tornando o estudo da lei mais leve, dinâmico e eficiente."}</p>
     </div>
   </header>;
 }
@@ -131,7 +130,7 @@ function StructureItems({ nodes, activeId, onNavigate, collapsed, onToggle, audi
   })}</ol>;
 }
 
-function TableOfContents({ structures, references, studyUnits, lawTitle, rootHref, activeId, onNavigate, collapsed, onToggle }: { structures: StructureCatalogItem[]; references: Reference[]; studyUnits: StudyUnit[]; lawTitle: string; rootHref: string; activeId: string | null; onNavigate: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
+function TableOfContents({ structures, references, studyUnits, lawTitle, rootHref, activeId, onNavigate, pauseContinuationReference = null, onContinueFromPause, collapsed, onToggle }: { structures: StructureCatalogItem[]; references: Reference[]; studyUnits: StudyUnit[]; lawTitle: string; rootHref: string; activeId: string | null; onNavigate: (reference: Reference) => void; pauseContinuationReference?: Reference | null; onContinueFromPause?: (reference: Reference) => void; collapsed: Set<string>; onToggle: (key: string) => void }) {
   const nodes = structureTree(structures, references);
   const audioCoverageByStructureId = new Map<number, StructureAudioCoverage>();
   const structureNames = new Map(structures.map((structure) => [structure.id, structure.name]));
@@ -143,6 +142,7 @@ function TableOfContents({ structures, references, studyUnits, lawTitle, rootHre
   return <div className={styles.tocLawRoot}>
     <a href={rootHref} className={styles.tocLawRootLink} title="Voltar ao início da lei">{lawTitle}</a>
     {audioCoverageByStructureId.size ? <p className={styles.tocAudioLegend}><span>🎧 faixa própria</span><span>↳ estrutura abrangida</span></p> : null}
+    {pauseContinuationReference && onContinueFromPause ? <button type="button" className={styles.tocContinue} onClick={() => onContinueFromPause(pauseContinuationReference)}>Continuar de onde parei</button> : null}
     {nodes.length ? <StructureItems nodes={nodes} activeId={activeId} onNavigate={onNavigate} collapsed={collapsed} onToggle={onToggle} audioCoverageByStructureId={audioCoverageByStructureId} /> : <p>Sem subdivisões estruturais cadastradas.</p>}
   </div>;
 }
@@ -282,9 +282,10 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, adminPreview = false, administrativeAccess = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: AudioStatus }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, recorteId = null, adminPreview = false, administrativeAccess = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; recorteId?: string | null; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: AudioStatus }) {
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
+  const readingAdvances = useMemo(() => continuousReadingAdvances(prepared), [prepared]);
   const [studyMode, setStudyMode] = useState<"mapa" | "leitura">("leitura");
   const [blocks, setBlocks] = useState(() => new Map(initialBlocks.map((block) => [block.id, block])));
   const [blockHighlights, setBlockHighlights] = useState<Map<string, LegisBotHighlight[]>>(() => new Map());
@@ -292,6 +293,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   // estado faz a leitura tentar novamente quando o aluno já está autenticado,
   // em vez de perder a única tentativa feita antes da restauração.
   const [highlightAccessToken, setHighlightAccessToken] = useState<string | null | undefined>(undefined);
+  const [studentId, setStudentId] = useState<string | null | undefined>(undefined);
+  const [markerReferenceId, setMarkerReferenceId] = useState<string | null>(null);
   const [loadingPages, setLoadingPages] = useState<Set<number>>(() => new Set());
   const initialLoadedPages = useCallback(() => {
     if (!initialBlocks.length) return new Set<number>();
@@ -304,6 +307,9 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [desktopTocOpen, setDesktopTocOpen] = useState(true);
+  const [tocWidth, setTocWidth] = useState(TOC_DEFAULT_WIDTH);
+  const [isResizingToc, setIsResizingToc] = useState(false);
+  const [isTocExpanded, setIsTocExpanded] = useState(false);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const [collapsedStructures, setCollapsedStructures] = useState<Set<string>>(() => new Set());
   const [missingTarget, setMissingTarget] = useState(false);
@@ -323,9 +329,79 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   const scopeVersionRef = useRef(0);
   const scopeInitializedRef = useRef(false);
   const audioRequestRef = useRef(0);
+  // undefined = navegação normal; null também é um destino válido (raiz da lei).
+  const preserveAudioOnNextNavigationRef = useRef<number | null | undefined>(undefined);
+  const resumeAttemptedRef = useRef(false);
+  const tocResizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
   const audioByStructureRef = useRef(new Map<string, { at: number; audio: LegiscastAudioTrack | null; status: Exclude<AudioStatus, "loading"> }>(initialAudio && initialAudioStatus !== "loading" ? [[initialStructureId === null ? "law" : String(initialStructureId), { at: Date.now(), audio: initialAudio, status: initialAudioStatus }]] : []));
   const toggleStructure = useCallback((key: string) => setCollapsedStructures((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; }), []);
+  const clampTocWidth = useCallback((width: number) => {
+    const viewportLimit = typeof window === "undefined" ? TOC_MAX_WIDTH : Math.max(TOC_MIN_WIDTH, Math.min(TOC_MAX_WIDTH, Math.floor(window.innerWidth * 0.48)));
+    return Math.max(TOC_MIN_WIDTH, Math.min(viewportLimit, Math.round(width)));
+  }, []);
+  const updateTocWidth = useCallback((width: number, persist = false) => {
+    const nextWidth = clampTocWidth(width);
+    setTocWidth(nextWidth);
+    if (persist) {
+      try { window.localStorage.setItem(TOC_WIDTH_STORAGE_KEY, String(nextWidth)); } catch { /* sem persistência */ }
+    }
+  }, [clampTocWidth]);
+  const beginTocResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    tocResizeStartRef.current = { pointerX: event.clientX, width: tocWidth };
+    setIsResizingToc(true);
+  }, [tocWidth]);
+  const handleTocResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") { event.preventDefault(); updateTocWidth(tocWidth - 16, true); }
+    if (event.key === "ArrowRight") { event.preventDefault(); updateTocWidth(tocWidth + 16, true); }
+    if (event.key === "Home") { event.preventDefault(); updateTocWidth(TOC_MIN_WIDTH, true); }
+    if (event.key === "End") { event.preventDefault(); updateTocWidth(TOC_MAX_WIDTH, true); }
+  }, [tocWidth, updateTocWidth]);
+  useEffect(() => {
+    try {
+      const savedWidth = Number(window.localStorage.getItem(TOC_WIDTH_STORAGE_KEY));
+      if (Number.isFinite(savedWidth)) setTocWidth(clampTocWidth(savedWidth));
+    } catch { /* A leitura continua utilizável se o navegador bloquear armazenamento. */ }
+  }, [clampTocWidth]);
+  useEffect(() => {
+    if (!isResizingToc) return;
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
+      const start = tocResizeStartRef.current;
+      if (start) updateTocWidth(start.width + event.clientX - start.pointerX);
+    };
+    const finishResize = () => {
+      const start = tocResizeStartRef.current;
+      tocResizeStartRef.current = null;
+      setIsResizingToc(false);
+      if (start) {
+        setTocWidth((current) => {
+          const nextWidth = clampTocWidth(current);
+          try { window.localStorage.setItem(TOC_WIDTH_STORAGE_KEY, String(nextWidth)); } catch { /* sem persistência */ }
+          return nextWidth;
+        });
+      }
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishResize);
+    window.addEventListener("pointercancel", finishResize);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishResize);
+      window.removeEventListener("pointercancel", finishResize);
+    };
+  }, [clampTocWidth, isResizingToc, updateTocWidth]);
+  useEffect(() => {
+    if (!isTocExpanded) return;
+    const closeWithEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setIsTocExpanded(false);
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [isTocExpanded]);
   const studyUnitByStructureId = useMemo(() => new Map(studyUnits.flatMap((unit) => unit.structureIds.map((structureId) => [structureId, unit] as const))), [studyUnits]);
+  const preparedIndexById = useMemo(() => new Map(prepared.map((reference, index) => [reference.id, index])), [prepared]);
+  const pauseContinuationReference = useMemo(() => resolveContinuousReadingPauseTarget({ references: prepared, pausedAfterReferenceId: markerReferenceId }), [markerReferenceId, prepared]);
   const selectedStudyUnit = useMemo(() => selectedStudyUnitId === null ? null : studyUnits.find((unit) => unit.id === selectedStudyUnitId) ?? null, [selectedStudyUnitId, studyUnits]);
   const visiblePrepared = useMemo(() => {
     if (selectedStudyUnit) {
@@ -402,16 +478,30 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
   useEffect(() => {
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
-      if (active) setHighlightAccessToken(data.session?.access_token ?? null);
+      if (active) {
+        setHighlightAccessToken(data.session?.access_token ?? null);
+        setStudentId(data.session?.user.id ?? null);
+      }
     });
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) setHighlightAccessToken(session?.access_token ?? null);
+      if (active) {
+        setHighlightAccessToken(session?.access_token ?? null);
+        setStudentId(session?.user.id ?? null);
+      }
     });
     return () => {
       active = false;
       data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (adminPreview || !studentId) { setMarkerReferenceId(null); return; }
+    try {
+      const key = continuousReadingMarkerStorageKey({ accountId: studentId, lawSlug: slug, recorteId });
+      setMarkerReferenceId(readContinuousReadingMarker(window.localStorage, key));
+    } catch { setMarkerReferenceId(null); }
+  }, [adminPreview, recorteId, slug, studentId]);
 
   useEffect(() => {
     loadedHighlightReferencesRef.current.clear();
@@ -458,12 +548,83 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     navigate(reference);
   }, [navigate]);
 
+  const navigatePreservingAudio = useCallback((reference: Reference) => {
+    preserveAudioOnNextNavigationRef.current = reference.hierarchy.at(-1)?.id ?? null;
+    navigate(reference);
+  }, [navigate]);
+
+  const advanceTo = useCallback((referenceId: string) => {
+    const reference = preparedById.get(referenceId);
+    if (!reference) return;
+    // A mudança de trecho só movimenta a leitura. Não toca no estado do
+    // player: uma faixa em execução continua sob controle explícito do aluno.
+    window.history.replaceState(window.history.state, "", `#${continuousBlockAnchor(reference.id)}`);
+    setMissingTarget(false);
+    navigatePreservingAudio(reference);
+  }, [navigatePreservingAudio, preparedById]);
+
+  const continueFromPause = useCallback((reference: Reference) => {
+    advanceTo(reference.id);
+  }, [advanceTo]);
+
+  const toggleMarker = useCallback((reference: Reference) => {
+    if (!studentId) return;
+    const nextMarkerId = markerReferenceId === reference.id ? null : reference.id;
+    try {
+      const key = continuousReadingMarkerStorageKey({ accountId: studentId, lawSlug: slug, recorteId });
+      saveContinuousReadingMarker(window.localStorage, key, nextMarkerId);
+      setMarkerReferenceId(nextMarkerId);
+    } catch { /* O artigo continua legível se o navegador bloquear armazenamento. */ }
+  }, [markerReferenceId, recorteId, slug, studentId]);
+
   const showMap = useCallback(() => {
     ignoreHashRef.current = true;
     window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
     setMissingTarget(false);
     setStudyMode("mapa");
   }, []);
+
+  useEffect(() => {
+    resumeAttemptedRef.current = false;
+  }, [recorteId, slug, studentId]);
+
+  useEffect(() => {
+    if (adminPreview || studentId === undefined || resumeAttemptedRef.current) return;
+    resumeAttemptedRef.current = true;
+    // A URL (inclusive um UUID inválido) é uma decisão explícita do aluno e
+    // não pode ser trocada silenciosamente pela retomada local.
+    if (window.location.hash) return;
+    const storageKey = studentId
+      ? continuousReadingResumeStorageKey({ accountId: studentId, lawSlug: slug, recorteId })
+      : null;
+    let savedReferenceId: string | null = null;
+    let pausedAfterReferenceId: string | null = null;
+    if (studentId && storageKey) {
+      try {
+        savedReferenceId = window.localStorage.getItem(storageKey);
+        pausedAfterReferenceId = readContinuousReadingMarker(window.localStorage, continuousReadingMarkerStorageKey({ accountId: studentId, lawSlug: slug, recorteId }));
+      } catch { /* sem retomada persistida */ }
+    }
+    const target = resolveContinuousReadingResume({ references: prepared, savedReferenceId, pausedAfterReferenceId, hasExplicitDestination: false });
+    if (!target) return;
+    const structureId = target.hierarchy.at(-1)?.id ?? null;
+    if (partialMode && structureId !== null) setSelectedStructureId(structureId);
+    const unit = structureId === null ? null : studyUnitByStructureId.get(structureId) ?? null;
+    if (unit) setSelectedStudyUnitId(unit.id);
+    preserveAudioOnNextNavigationRef.current = structureId;
+    scrollBehaviorRef.current = "auto";
+    setMissingTarget(false);
+    setFocusedId(target.id);
+    setActiveId(target.id);
+  }, [adminPreview, partialMode, prepared, recorteId, slug, studentId, studyUnitByStructureId]);
+
+  useEffect(() => {
+    if (adminPreview || !studentId || !activeId || !preparedById.has(activeId)) return;
+    try {
+      const storageKey = continuousReadingResumeStorageKey({ accountId: studentId, lawSlug: slug, recorteId });
+      window.localStorage.setItem(storageKey, activeId);
+    } catch { /* sem persistência local */ }
+  }, [activeId, adminPreview, preparedById, recorteId, slug, studentId]);
 
   useEffect(() => {
     if (ignoreHashRef.current) return;
@@ -623,6 +784,14 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
 
   useEffect(() => {
     if (adminPreview) return;
+    const preservedStructureId = preserveAudioOnNextNavigationRef.current;
+    if (preservedStructureId !== undefined) {
+      // A troca interna de unidade pode renderizar uma vez antes de o artigo
+      // de destino entrar em foco. Não consulte nem troque áudio nesse meio.
+      if (preservedStructureId !== visibleStructureId) return;
+      preserveAudioOnNextNavigationRef.current = undefined;
+      return;
+    }
     // A leitura pública precisa aguardar a restauração assíncrona da sessão.
     // Sem isso, a primeira tentativa acontece sem Bearer token, é marcada como
     // "sem áudio" e não é refeita quando o aluno já está autenticado.
@@ -669,7 +838,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
 
   return <div className={styles.page}>
     <main className={styles.shell}>
-      <LegisBotGuide title={title} mode={studyMode} adminPreview={adminPreview} />
+      <LegisBotGuide lawTitle={lawTitle} mode={studyMode} adminPreview={adminPreview} />
       {!adminPreview ? <div className={styles.mapSoon}>
         <button type="button" disabled title="O mapeamento por prioridade será disponibilizado em breve.">🔥 Mapear lei</button>
         <LegiscastPdfDownload slug={slug.toLowerCase()} title={lawTitle} accessToken={highlightAccessToken} />
@@ -677,9 +846,11 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       {!adminPreview && studyMode === "mapa" ? <InteractiveLawMap references={prepared} lawShortName={title} onOpen={openFromMap} /> : <>
         {adminPreview ? <aside className={styles.guidance} aria-label="Orientação de uso"><strong>Revise a legislação</strong><span>Toque em um bloco para abrir sua edição na Base Legislativa.</span></aside> : null}
         {missingTarget ? <p className={styles.targetNotice} role="status">Este dispositivo não está disponível nesta versão da legislação. Continue pelo sumário.</p> : null}
-        {mobileTocOpen && hasStructureNavigation ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Escolha uma estrutura disponível.</p></div><button type="button" aria-label="Fechar sumário" autoFocus onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
-        <div className={`${styles.layout} ${hasStructureNavigation ? (desktopTocOpen ? "" : styles.layoutTocClosed) : styles.layoutNoToc}`}>
-        {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
+        {mobileTocOpen && hasStructureNavigation ? <div className={styles.mobileTocBackdrop} onClick={() => setMobileTocOpen(false)}><nav id="legisbot-mobile-toc" className={styles.mobileTocPanel} aria-label="Sumário da legislação" onClick={(event) => event.stopPropagation()}><header><div><h2>Sumário</h2><p>Escolha uma estrutura disponível.</p></div><button type="button" aria-label="Fechar sumário" autoFocus onClick={() => setMobileTocOpen(false)}>×</button></header><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} pauseContinuationReference={pauseContinuationReference} onContinueFromPause={(reference) => { continueFromPause(reference); setMobileTocOpen(false); }} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
+        {isTocExpanded && hasStructureNavigation ? <div className={styles.expandedTocBackdrop} role="presentation" onClick={() => setIsTocExpanded(false)}><nav className={styles.expandedTocPanel} role="dialog" aria-modal="true" aria-label="Sumário ampliado" onClick={(event) => event.stopPropagation()}><header><div><p className={styles.eyebrow}>Navegação da lei</p><h2>Sumário</h2></div><button type="button" autoFocus onClick={() => setIsTocExpanded(false)}>Fechar <span aria-hidden="true">×</span></button></header><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={(reference) => { navigate(reference); setIsTocExpanded(false); }} pauseContinuationReference={pauseContinuationReference} onContinueFromPause={(reference) => { continueFromPause(reference); setIsTocExpanded(false); }} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav></div> : null}
+        <div className={`${styles.layout} ${hasStructureNavigation ? (desktopTocOpen ? "" : styles.layoutTocClosed) : styles.layoutNoToc} ${isResizingToc ? styles.layoutResizing : ""}`} style={{ "--toc-width": `${tocWidth}px` } as CSSProperties}>
+        {hasStructureNavigation ? <aside className={`${styles.tocShell} ${desktopTocOpen ? "" : styles.tocShellClosed}`}><div className={styles.tocActions}><button type="button" className={styles.tocToggle} aria-expanded={desktopTocOpen} onClick={() => setDesktopTocOpen((open) => !open)}>{desktopTocOpen ? "← Recolher" : "☰"}<span className={styles.srOnly}> sumário</span></button>{!adminPreview ? <button type="button" className={styles.expandTocToggle} aria-expanded={isTocExpanded} title="Abrir sumário ampliado" onClick={() => setIsTocExpanded(true)}>⤢ Expandir</button> : null}</div>{desktopTocOpen ? <nav className={styles.toc} aria-label="Sumário da legislação"><h2>Sumário</h2><TableOfContents structures={structures} references={prepared} studyUnits={studyUnits} lawTitle={lawTitle} rootHref={`/legisbot/${encodeURIComponent(slug.toLowerCase())}`} activeId={activeId} onNavigate={navigate} pauseContinuationReference={pauseContinuationReference} onContinueFromPause={continueFromPause} collapsed={collapsedStructures} onToggle={toggleStructure} /></nav> : null}</aside> : null}
+        {hasStructureNavigation && desktopTocOpen ? <div className={styles.tocResize} role="separator" aria-orientation="vertical" aria-label="Ajustar largura do sumário" aria-valuemin={TOC_MIN_WIDTH} aria-valuemax={TOC_MAX_WIDTH} aria-valuenow={tocWidth} tabIndex={0} onPointerDown={beginTocResize} onKeyDown={handleTocResizeKeyDown} /> : null}
         <section ref={contentRef} className={styles.content} aria-label="Texto da legislação">
           {!adminPreview ? <header ref={playerHeaderRef} className={`${styles.stickyStructureHeader} ${playerCondensed ? styles.stickyStructureHeaderCompact : ""}`}>
             {hasStructureNavigation ? <div className={styles.headerMobileToc}>
@@ -705,6 +876,9 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
             const block = blocks.get(reference.id);
             const canOpenLegisBot = Boolean(block) && !reference.inactive;
             const page = Math.floor(index / PAGE_SIZE);
+            const advance = readingAdvances.get(reference.id) ?? null;
+            const preparedIndex = preparedIndexById.get(reference.id) ?? -1;
+            const canMarkPause = preparedIndex >= 0 && preparedIndex < prepared.length - 1;
             const introducedHierarchy = hierarchyIntroducedBy(reference, visiblePrepared[index - 1]);
             return <Fragment key={reference.id}>
               <ReadingStructureHeadings nodes={introducedHierarchy} />
@@ -726,6 +900,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
             >
               {block ? <ContinuousLegalHtml html={block.legislation} highlights={blockHighlights.get(reference.id) ?? []} /> : <div className={styles.placeholder} aria-busy={loadingPages.has(page)}><span className={styles.srOnly}>{failedPages.has(page) ? "Não foi possível carregar este bloco." : "Carregando texto legislativo"}</span><div className={styles.placeholderLine}/><div className={styles.placeholderLine}/>{failedPages.has(page) ? <button type="button" className={styles.retry} onClick={() => void loadPage(page)}>Tentar carregar novamente</button> : null}</div>}
               </article>
+              {!adminPreview && studentId && block && canMarkPause ? <div className={styles.readingPause}><button type="button" className={markerReferenceId === reference.id ? styles.readingPauseActive : ""} aria-label={markerReferenceId === reference.id ? "Remover parei aqui" : "Marcar como parei aqui"} aria-pressed={markerReferenceId === reference.id} onClick={() => toggleMarker(reference)}>{markerReferenceId === reference.id ? "✓ Parei aqui" : "Parei aqui"}</button></div> : null}
+              {!adminPreview && block && advance ? <section className={styles.advance} aria-label="Próximo trecho da lei"><small>Próximo trecho disponível</small><button type="button" onClick={() => advanceTo(advance.nextReferenceId)}><span>Avançar →</span><strong>{advance.nextName}</strong></button></section> : null}
             </Fragment>;
           })}
         </section>

@@ -7,6 +7,6 @@ export default defineConfig({
   test: {
     // A Central da Lei é um repositório Git independente, já publicado pelo
     // próprio pipeline. Ela não é importada por esta aplicação principal.
-    exclude: ["**/node_modules/**", "**/legislacao-em-questoes/**"],
+    exclude: ["**/node_modules/**", "**/legislacao-em-questoes/**", "**/.codex-attachments/**"],
   },
 });

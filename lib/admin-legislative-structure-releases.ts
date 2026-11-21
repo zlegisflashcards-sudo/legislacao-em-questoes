@@ -2,7 +2,7 @@ import "server-only";
 
 import { obterAdministrador } from "@/lib/admin-auth";
 import { getAdminLegislativeStructureIntegrity } from "@/lib/admin-legislative-structure-integrity";
-import { canReleaseEntireLaw, canReleaseStructure, structureReleaseViewStatus, type StructureReleaseRecord } from "@/lib/legisbot/continuous-reading-structure-release-core";
+import { canReleaseStructure, structureReleaseViewStatus, type StructureReleaseRecord } from "@/lib/legisbot/continuous-reading-structure-release-core";
 import { continuousReadingIntegrityFingerprint } from "@/lib/legisbot/continuous-reading-integrity-fingerprint";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -19,7 +19,7 @@ type ReleaseRow = {
 };
 
 export class LegislativeStructureReleaseError extends Error {
-  constructor(readonly code: "migration_pending" | "stale_integrity" | "not_ready" | "law_unavailable" | "blocked_descendant" | "invalid_structure" | "invalid_candidates" | "database", message: string) {
+  constructor(readonly code: "migration_pending" | "stale_integrity" | "not_ready" | "root_required" | "law_unavailable" | "blocked_descendant" | "invalid_structure" | "invalid_candidates" | "database", message: string) {
     super(message);
     this.name = "LegislativeStructureReleaseError";
   }
@@ -87,6 +87,7 @@ export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: stri
       releases: rows,
       structures: report.integrity.reports.map((item) => ({
         ...item,
+        isRoot: report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null,
         suggestedAssociationCount: report.referenceAssociations.filter((association) => association.pending && association.suggestionStatus === "associated" && association.suggestedStructureId === item.structureId).length,
         integrityFingerprint: continuousReadingIntegrityFingerprint(item),
         releaseStatus: structureReleaseViewStatus({ report: item, structures: report.structureNodes, records }),
@@ -114,6 +115,7 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
   if (!diagnostic) throw new LegislativeStructureReleaseError("invalid_structure", "Legislação não encontrada.");
   const target = diagnostic.integrity.reports.find((item) => item.structureId === structureId);
   if (!target) throw new LegislativeStructureReleaseError("invalid_structure", "A estrutura não pertence a esta lei.");
+  if (diagnostic.structureNodes.find((item) => item.id === structureId)?.parentId !== null) throw new LegislativeStructureReleaseError("root_required", "Somente uma estrutura sem pai pode ser liberada ou fechada. Escolha o Título raiz correspondente.");
   if (action === "release" && (!diagnostic.law.ativo || diagnostic.law.status_publicacao !== "ativa")) {
     throw new LegislativeStructureReleaseError("law_unavailable", "A lei não está ativa para disponibilização pública.");
   }
@@ -132,7 +134,7 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
     }
     const decision = canReleaseStructure({ report: freshTarget, structures: fresh.structureNodes, records: compactRecords(currentRows) });
     if (!decision.allowed) {
-      throw new LegislativeStructureReleaseError(decision.reason === "blocked_descendant" ? "blocked_descendant" : "not_ready", decision.reason === "blocked_descendant" ? "Existe descendente bloqueado explicitamente; revise-o antes de liberar este recorte." : "A estrutura não está pronta para liberação. Atualize o diagnóstico e resolva as pendências.");
+      throw new LegislativeStructureReleaseError(decision.reason === "root_required" ? "root_required" : "not_ready", decision.reason === "root_required" ? "Somente uma estrutura sem pai pode ser liberada. Libere o Título que contém este recorte." : "A estrutura não está pronta para liberação. Atualize o diagnóstico e resolva as pendências.");
     }
   }
 
@@ -151,34 +153,15 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
   return { status: saved.data.status as "released" | "blocked", changed: true };
 }
 
-/** Libera todos os recortes prontos numa só transação, sem ativar o modo parcial. */
-export async function releaseEntireLegislativeLaw(input: { lawSlug: unknown }) {
-  const admin = await requireAdmin();
+/**
+ * O atalho legado liberava filhos em massa. A política atual exige decisão
+ * explícita no Título raiz e não chama a RPC antiga que gravaria os filhos.
+ */
+export async function releaseEntireLegislativeLaw(input: { lawSlug: unknown }): Promise<{ released: number; idempotent: boolean }> {
+  await requireAdmin();
   const slug = typeof input.lawSlug === "string" ? input.lawSlug.trim().toLowerCase() : "";
   if (!slug) throw new LegislativeStructureReleaseError("invalid_structure", "Legislação inválida.");
-  const current = await getAdminLegislativeStructureIntegrity(slug);
-  if (!current) throw new LegislativeStructureReleaseError("invalid_structure", "Legislação não encontrada.");
-  if (!current.law.ativo || current.law.status_publicacao !== "ativa") throw new LegislativeStructureReleaseError("law_unavailable", "A lei não está ativa para disponibilização pública.");
-  const releases = await readReleases(current.law.id);
-  const decision = canReleaseEntireLaw({ reports: current.integrity.reports, records: compactRecords(releases) });
-  if (!decision.allowed) throw new LegislativeStructureReleaseError(decision.reason === "blocked_structure" ? "blocked_descendant" : "not_ready", "A lei possui estruturas pendentes ou bloqueadas; nenhuma liberação foi gravada.");
-  const structureIds = current.integrity.reports.map((report) => report.structureId).sort((left, right) => left - right);
-  const allReleased = structureIds.every((structureId) => releases.some((release) => Number(release.structure_id) === structureId && release.status === "released"));
-  if (allReleased) return { released: 0, idempotent: true };
-  const committed = await getSupabaseServerClient().rpc("liberar_lei_interativa_completa", {
-    p_lei_id: current.law.id,
-    p_structure_ids: structureIds,
-    p_snapshot: current.integritySnapshot,
-    p_ator_user_id: admin.id,
-  });
-  if (migrationPending(committed.error)) throw new LegislativeStructureReleaseError("migration_pending", "A migration de liberação integral ainda não foi aplicada.");
-  if (committed.error) {
-    const message = committed.error.message ?? "";
-    if (/diagnóstico mudou/i.test(message)) throw new LegislativeStructureReleaseError("stale_integrity", message);
-    if (/bloquead/i.test(message)) throw new LegislativeStructureReleaseError("blocked_descendant", message);
-    throw new LegislativeStructureReleaseError("database", "A liberação integral não foi concluída; nenhuma estrutura foi alterada.");
-  }
-  return { released: Number((committed.data as { released?: unknown } | null)?.released ?? structureIds.length), idempotent: false };
+  throw new LegislativeStructureReleaseError("root_required", "A liberação geral foi desativada. Libere cada Título raiz separadamente.");
 }
 
 /**
@@ -198,6 +181,7 @@ export async function confirmAndReleaseLegislativeStructure(input: { lawSlug: un
   if (!slug || !Number.isSafeInteger(structureId) || structureId <= 0) throw new LegislativeStructureReleaseError("invalid_structure", "Estrutura inválida.");
   const current = await getAdminLegislativeStructureIntegrity(slug);
   if (!current || !current.structureNodes.some((item) => item.id === structureId)) throw new LegislativeStructureReleaseError("invalid_structure", "A estrutura não pertence a esta lei.");
+  if (current.structureNodes.find((item) => item.id === structureId)?.parentId !== null) throw new LegislativeStructureReleaseError("root_required", "A confirmação só pode liberar uma estrutura sem pai. Escolha o Título raiz correspondente.");
   if (!current.law.ativo || current.law.status_publicacao !== "ativa") throw new LegislativeStructureReleaseError("law_unavailable", "A lei não está ativa para disponibilização pública.");
   const associationsByReferenceId = new Map(current.referenceAssociations.map((item) => [item.referenceId, item]));
   if (referenceIds.some((id) => {
@@ -214,7 +198,7 @@ export async function confirmAndReleaseLegislativeStructure(input: { lawSlug: un
   if (!verified || !target) throw new LegislativeStructureReleaseError("invalid_structure", "Não foi possível revalidar a estrutura.");
   const releases = currentReleases;
   const decision = canReleaseStructure({ report: target, structures: verified.structureNodes, records: compactRecords(releases) });
-  if (!decision.allowed) throw new LegislativeStructureReleaseError(decision.reason === "blocked_descendant" ? "blocked_descendant" : "not_ready", "A prévia possui pendências impeditivas; nenhuma associação foi gravada.");
+  if (!decision.allowed) throw new LegislativeStructureReleaseError(decision.reason === "root_required" ? "root_required" : "not_ready", decision.reason === "root_required" ? "A confirmação só pode liberar uma estrutura sem pai. Escolha o Título raiz correspondente." : "A prévia possui pendências impeditivas; nenhuma associação foi gravada.");
   const committed = await getSupabaseServerClient().rpc("confirmar_e_liberar_estrutura_legislativa", {
     p_lei_id: verified.law.id,
     p_structure_id: structureId,

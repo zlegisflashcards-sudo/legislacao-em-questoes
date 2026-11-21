@@ -81,15 +81,31 @@ describe("base legislativa persistente", () => {
     expect(source).toContain('from("legislative_references").insert');
   });
 
-  it("permite importar já vinculado à estrutura escolhida, sem substituir vínculo editorial", () => {
+  it("exige vínculo estrutural explícito e preserva o texto ao vincular bloco existente", () => {
     const source = readFileSync("lib/admin-legislative-references.ts", "utf8");
     const route = readFileSync("app/api/admin/artigos/importar-documento/route.ts", "utf8");
-    expect(source).toContain('from("law_structure").select("id")');
+    const component = readFileSync("components/admin/article-document-import.tsx", "utf8");
+    expect(source).toContain('from("law_structure").select("id,parent_id,nome,ordem")');
     expect(source).toContain('eq("lei_id", law.data.id).eq("ativo", true)');
-    expect(source).toContain("structureTrail");
-    expect(source).toContain("...(reference.structureId ? { structure_id: reference.structureId } : {})");
-    expect(source).toContain("!existing?.structureId ? { structure_id: reference.structureId } : {}");
-    expect(route).toContain('const structureId = String(form.get("structure_id") ?? "")');
+    expect(source).toContain("matchDocumentStructureTrail");
+    expect(source).toContain("preview.blockers.length");
+    expect(source).toContain('operation === "vincular"');
+    expect(source).toContain("is(\"structure_id\", null)");
+    expect(source).toContain("eq(\"updated_at\", reference.existingUpdatedAt!)");
+    expect(route).toContain('form.get("structure_selections")');
+    expect(route).toContain('form.get("link_existing")');
+    expect(component).toContain("Ordem {item.ordem}");
+    expect(component).toContain("Estrutura cadastrada:");
+    expect(component).toContain("Vincular sem alterar texto");
+    expect(component).toContain("disabled={busy || !preview.canConfirm}");
+  });
+
+  it("revalida a escolha da prévia contra a lei ativa e rejeita mudanças antes de gravar", () => {
+    const source = readFileSync("lib/admin-legislative-references.ts", "utf8");
+    expect(source).toContain("A estrutura escolhida não pertence a esta lei ou não está ativa.");
+    expect(source).toContain("já possui um caminho estrutural inequívoco no documento");
+    expect(source).toContain("O documento ou a base mudaram desde a prévia");
+    expect(source).toContain("Nenhum inventário ou texto foi gravado.");
   });
 
   it("registra alteração de conteúdo para atualizar o estado editorial do áudio", () => {

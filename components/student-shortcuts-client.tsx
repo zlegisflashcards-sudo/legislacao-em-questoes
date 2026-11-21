@@ -37,6 +37,8 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
   const [data, setData] = useState<Data | null>(null);
   const [selected, setSelected] = useState("pessoal");
   const [option, setOption] = useState("");
+  const [optionQuery, setOptionQuery] = useState("");
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -62,6 +64,11 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
 
   const current = useMemo(() => selected === "pessoal" ? data?.minhaSelecao ?? null : data?.selecoesProntas.find((item) => item.id === selected) ?? null, [data, selected]);
   const options = useMemo(() => data?.leisDisponiveis ?? [], [data]);
+  const filteredOptions = useMemo(() => {
+    const query = optionQuery.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return options.slice(0, 12);
+    return options.filter((law) => `${law.titulo} ${law.slug} ${law.recorteNome ?? ""}`.toLocaleLowerCase("pt-BR").includes(query)).slice(0, 12);
+  }, [optionQuery, options]);
   async function updatePersonal(action: string, payload: Record<string, unknown>) {
     setSaving(true); setError("");
     try {
@@ -95,6 +102,11 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
     if (existing && !window.confirm("Esta lei já está nos seus atalhos. Deseja trocar o contexto pelo selecionado?")) return;
     void updatePersonal("add", { leiId: shortcut.leiId, recorteId: shortcut.recorteId, confirmReplace: Boolean(existing) });
   }
+  function chooseShortcut(shortcut: Shortcut) {
+    setOption(`${shortcut.leiId}:${shortcut.recorteId ?? ""}`);
+    setOptionQuery(`${shortcut.titulo}${shortcut.recorteNome ? ` — ${shortcut.recorteNome}` : ""}`);
+    setOptionsOpen(false);
+  }
   function renamePersonal() {
     const name = selectionName.trim();
     if (!name) { setSelectionName(data?.minhaSelecao.nome ?? "Minha seleção"); return; }
@@ -110,7 +122,7 @@ export function StudentShortcutsClient({ embedded = false }: { embedded?: boolea
     <header className="rounded-3xl border border-rose-100 bg-gradient-to-br from-white via-rose-50 to-amber-50 p-5 shadow-sm sm:p-8"><p className="text-xs font-black uppercase tracking-[.18em] text-rose-700">Etiquetas</p><h1 className="mt-2 text-3xl font-black tracking-tight text-[#3b164f] sm:text-4xl">🔖 Meus Atalhos</h1><p className="mt-2 text-sm text-slate-600 sm:text-base">Organize seu estudo da sua maneira ou escolha nosso edital pronto.</p></header>
     {loading ? <p className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">Carregando seus atalhos…</p> : null}
     {error ? <p role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</p> : null}
-    {data && !loading ? <section className="mt-6"><div className="flex flex-col gap-3 sm:flex-row"><select aria-label="Adicionar lei ou recorte aos meus atalhos" value={option} onChange={(event) => setOption(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"><option value="">Adicionar lei ou recorte…</option>{options.map((law) => <option key={`${law.leiId}:${law.recorteId ?? ""}`} value={`${law.leiId}:${law.recorteId ?? ""}`}>{law.titulo}{law.recorteNome ? ` — ${law.recorteNome}` : ""}</option>)}</select><button type="button" disabled={!option || saving} onClick={add} className="min-h-11 rounded-xl bg-[#f26352] px-5 font-black text-white shadow-sm transition hover:bg-[#e55141] disabled:opacity-50">＋ Adicionar lei</button></div>
+    {data && !loading ? <section className="mt-6"><div className="flex flex-col gap-3 sm:flex-row"><div className="relative min-w-0 flex-1"><input role="combobox" aria-label="Adicionar lei ou recorte aos meus atalhos" aria-autocomplete="list" aria-controls="shortcut-options" aria-expanded={optionsOpen} value={optionQuery} onFocus={() => setOptionsOpen(true)} onChange={(event) => { setOptionQuery(event.target.value); setOption(""); setOptionsOpen(true); }} onKeyDown={(event) => { if (event.key === "Escape") setOptionsOpen(false); if (event.key === "Enter" && filteredOptions[0]) { event.preventDefault(); chooseShortcut(filteredOptions[0]); } }} placeholder="Pesquisar lei ou recorte…" className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" />{optionsOpen ? <div id="shortcut-options" role="listbox" className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl">{filteredOptions.length ? filteredOptions.map((law) => <button key={`${law.leiId}:${law.recorteId ?? ""}`} type="button" role="option" aria-selected={option === `${law.leiId}:${law.recorteId ?? ""}`} onMouseDown={(event) => event.preventDefault()} onClick={() => chooseShortcut(law)} className="flex w-full min-h-11 items-center rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-800 hover:bg-rose-50 focus:bg-rose-50 focus:outline-none">{law.titulo}{law.recorteNome ? <span className="ml-1 text-slate-500">— {law.recorteNome}</span> : null}</button>) : <p className="px-3 py-3 text-sm text-slate-500">Nenhuma lei ou recorte encontrado.</p>}</div> : null}</div><button type="button" disabled={!option || saving} onClick={add} className="min-h-11 rounded-xl bg-[#f26352] px-5 font-black text-white shadow-sm transition hover:bg-[#e55141] disabled:opacity-50">＋ Adicionar lei</button></div>
       <div className="mt-6 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-end sm:justify-between"><button type="button" aria-pressed={selected === "pessoal"} onClick={() => chooseSelection("pessoal")} className={`min-h-11 self-start border-b-2 px-4 text-sm font-black ${selected === "pessoal" ? "border-rose-500 text-rose-700" : "border-transparent text-slate-600 hover:text-rose-700"}`}>Minha seleção</button><label className="flex min-w-0 flex-col gap-1 text-sm font-black text-slate-700 sm:flex-row sm:items-center"><span className="whitespace-nowrap">Sugestões de organização:</span><select aria-label="Selecionar um edital sugerido" value={selected === "pessoal" ? "" : selected} onChange={(event) => chooseSelection(event.target.value || "pessoal")} className="min-h-11 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"><option value="">Escolher edital</option>{data.selecoesProntas.map((selection) => <option key={selection.id} value={selection.id}>{selection.nome}</option>)}</select></label></div>
       {selected === "pessoal" ? <label className="mt-4 block max-w-md text-sm font-black text-slate-700">Nome da sua seleção<input aria-label="Nome da sua seleção" value={selectionName} disabled={saving} onChange={(event) => setSelectionName(event.target.value)} onBlur={renamePersonal} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} maxLength={80} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base font-semibold text-slate-800 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100" /></label> : null}
       {current ? <div role="tabpanel" className="mt-5"><h2 className="sr-only">{current.nome}</h2><div className="grid gap-3">{current.leis.map((law, index) => <ShortcutTag key={`${law.leiId}:${law.recorteId ?? "completa"}`} shortcut={law} editable={selected === "pessoal"} first={index === 0} last={index === current.leis.length - 1} disabled={saving} onColor={setColor} onMove={move} onRemove={() => void updatePersonal("remove", { leiId: law.leiId })} />)}</div>{!current.leis.length ? <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">Escolha uma lei acima para criar seu primeiro atalho.</p> : null}</div> : null}

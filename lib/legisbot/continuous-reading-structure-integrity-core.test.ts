@@ -33,6 +33,47 @@ describe("integridade estrutural da leitura contínua", () => {
     expect(result.reports.find((item) => item.structureId === 3)?.activeQuestionCount).toBe(0);
   });
 
+  it("agrega evidência dos filhos reais sem marcar pai intermediário como vazio", () => {
+    const nested = [
+      { id: 1, parentId: null, ordem: 1 },
+      { id: 2, parentId: 1, ordem: 1 },
+      { id: 3, parentId: 2, ordem: 1 },
+    ];
+    const result = resolveContinuousReadingStructureIntegrity({
+      ...base(),
+      structures: nested,
+      questions: [{ id: "q1", structureId: 3 }],
+      associations: [editorial("r1", 3)],
+    });
+    expect(result.reports.find((item) => item.structureId === 1)).toMatchObject({ status: "ready", reasons: [] });
+    expect(result.reports.find((item) => item.structureId === 2)).toMatchObject({ status: "ready", reasons: [] });
+  });
+
+  it("mantém a falta real de uma folha como bloqueio", () => {
+    const result = resolveContinuousReadingStructureIntegrity({
+      ...base(),
+      structures: [
+        { id: 1, parentId: null, ordem: 1 },
+        { id: 2, parentId: 1, ordem: 1 },
+        { id: 3, parentId: 1, ordem: 2 },
+      ],
+      associations: [editorial("r1", 2)],
+    });
+    expect(result.reports.find((item) => item.structureId === 1)?.reasons).toContain("descendant_empty");
+  });
+
+  it("lista os relatórios na ordem do sumário, mesmo se a consulta vier embaralhada", () => {
+    const unordered = [
+      { id: 4, parentId: 2, ordem: 2, nome: "Seção II" },
+      { id: 3, parentId: 1, ordem: 2, nome: "Capítulo II" },
+      { id: 1, parentId: null, ordem: 1, nome: "Título I" },
+      { id: 2, parentId: 1, ordem: 1, nome: "Capítulo I" },
+      { id: 5, parentId: 2, ordem: 1, nome: "Seção I" },
+    ];
+    const result = resolveContinuousReadingStructureIntegrity({ ...base(), structures: unordered });
+    expect(result.reports.map((item) => item.structureId)).toEqual([1, 2, 5, 4, 3]);
+  });
+
   it("aponta questão órfã do recorte e órfã sem estrutura como pendência não atribuída", () => {
     const input = base();
     input.resolutions = [{ questionId: "q1", status: "missing", referenceId: null, ordem: null, reason: "ausente" }];

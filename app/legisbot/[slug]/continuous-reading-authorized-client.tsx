@@ -16,6 +16,8 @@ type Payload = {
   initialStudyUnitId?: string | null;
   initialBlocks?: ContinuousReadingBlock[];
   redirectTo?: string;
+  preparation?: "structure_pending";
+  lawName?: string;
   message?: string;
 };
 
@@ -50,10 +52,12 @@ export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId,
     return () => { active = false; };
   }, [ordem, questionId, router, slug]);
 
+  const studyNav = <LawStudyBottomNav slug={slug} recorteId={recorteId} activeMode="lei_interativa" />;
   if (message) return <main className={styles.page}><section className={`${styles.shell} ${styles.empty}`}><h1>Acesso indisponível</h1><p>{message}</p></section></main>;
+  if (payload?.preparation === "structure_pending") return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={payload.lawName || slug} title="Lei Interativa em preparação" description="Estamos organizando os artigos por capítulo e seção." /></main>{studyNav}</div>;
   if (!payload?.model) return <main className={styles.page}><section className={`${styles.shell} ${styles.empty}`}><p>Verificando seu acesso à lei…</p></section></main>;
   const { model } = payload;
-  const studyNav = <LawStudyBottomNav slug={model.law.slug} recorteId={recorteId} activeMode="lei_interativa" />;
-  if (!model.integrity.readingAvailable) return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={model.law.nome_curto || model.law.titulo} /></main>{studyNav}</div>;
-  return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} partialMode={model.publicAccess.mode === "partial"} initialStructureId={payload.initialStructureId ?? null} initialStudyUnitId={payload.initialStudyUnitId ?? null} initialBlocks={payload.initialBlocks ?? []} initialTab={initialTab} />{studyNav}</div>;
+  const resolvedStudyNav = <LawStudyBottomNav slug={model.law.slug} recorteId={recorteId} activeMode="lei_interativa" />;
+  if (!model.integrity.readingAvailable) return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={model.law.nome_curto || model.law.titulo} /></main>{resolvedStudyNav}</div>;
+  return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} partialMode={model.publicAccess.mode === "partial"} initialStructureId={payload.initialStructureId ?? null} initialStudyUnitId={payload.initialStudyUnitId ?? null} initialBlocks={payload.initialBlocks ?? []} initialTab={initialTab} recorteId={recorteId} />{resolvedStudyNav}</div>;
 }

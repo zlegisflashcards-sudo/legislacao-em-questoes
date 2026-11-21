@@ -1,6 +1,6 @@
 import type { ContinuousReadingStructureIntegrity } from "./continuous-reading-structure-integrity-core";
 import { isStructureEffectivelyReleased, type StructureReleaseRecord } from "./continuous-reading-structure-release-core";
-import type { ContinuousReadingStructureNode } from "./continuous-reading-structure-core";
+import { orderContinuousReadingStructures, type ContinuousReadingStructureNode } from "./continuous-reading-structure-core";
 
 export type ContinuousReadingPartialMode =
   | { requested: false; active: false; reason: "disabled" }
@@ -31,8 +31,7 @@ export function resolveContinuousReadingPartialMode(input: {
 
 /**
  * Resolve o recorte público sem criar liberações implícitas. Uma estrutura só
- * entra quando continua íntegra na leitura atual e possui liberação própria ou
- * herdada. Um bloqueio explícito interrompe a herança no caminho raiz→nó.
+ * entra quando continua íntegra e a raiz do seu ramo foi liberada.
  */
 export function resolveContinuousReadingPublicAccess(input: {
   mode: ContinuousReadingPartialMode;
@@ -43,9 +42,7 @@ export function resolveContinuousReadingPublicAccess(input: {
   if (!input.mode.active) return { mode: "global", accessibleStructureIds: [], firstAccessibleStructureId: null };
 
   const reportByStructure = new Map(input.reports.map((report) => [report.structureId, report]));
-  const accessibleStructureIds = input.structures
-    .slice()
-    .sort((left, right) => left.ordem - right.ordem || left.id - right.id)
+  const accessibleStructureIds = orderContinuousReadingStructures(input.structures)
     .filter((structure) => reportByStructure.get(structure.id)?.status === "ready")
     .filter((structure) => isStructureEffectivelyReleased(structure.id, input.structures, input.releases))
     .map((structure) => structure.id);

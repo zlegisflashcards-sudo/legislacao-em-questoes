@@ -57,6 +57,9 @@ type Props = {
   selectedHighlight: LegisBotHighlight | null;
   onHighlightsChange: (highlights: LegisBotHighlight[]) => void;
   onSelectedHighlightClear: () => void;
+  selectionRootId: string;
+  markerModeActive: boolean;
+  onMarkerModeChange: (active: boolean) => void;
 };
 
 async function authHeaders(json = false): Promise<HeadersInit> {
@@ -67,6 +70,35 @@ async function authHeaders(json = false): Promise<HeadersInit> {
   return headers;
 }
 
+function selectionFromLegalText(root: HTMLElement, legislationText: string): HighlightSelection | null {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return null;
+  const text = selection.toString().replace(/\u00a0/g, " ");
+  if (!text.trim()) return null;
+
+  // A posição visual é a melhor pista para textos repetidos. Se o HTML tiver
+  // quebras estruturais que não existem no DOM, procuramos a ocorrência mais
+  // próxima no texto canônico validado pelo servidor.
+  const before = document.createRange();
+  before.selectNodeContents(root);
+  before.setEnd(range.startContainer, range.startOffset);
+  const visualStart = before.toString().replace(/\u00a0/g, " ").length;
+  const direct = legislationText.slice(visualStart, visualStart + text.length);
+  if (direct === text) return { start: visualStart, end: visualStart + text.length, text };
+
+  const matches: number[] = [];
+  let cursor = legislationText.indexOf(text);
+  while (cursor >= 0) {
+    matches.push(cursor);
+    cursor = legislationText.indexOf(text, cursor + 1);
+  }
+  if (!matches.length) return null;
+  const start = matches.sort((first, second) => Math.abs(first - visualStart) - Math.abs(second - visualStart))[0];
+  return { start, end: start + text.length, text };
+}
+
 export default function LegisBotPersonalHighlights({
   slug,
   ordem,
@@ -74,6 +106,9 @@ export default function LegisBotPersonalHighlights({
   selectedHighlight,
   onHighlightsChange,
   onSelectedHighlightClear,
+  selectionRootId,
+  markerModeActive,
+  onMarkerModeChange,
 }: Props) {
   const [highlights, setHighlights] = useState<LegisBotHighlight[]>([]);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -166,7 +201,7 @@ export default function LegisBotPersonalHighlights({
     setSelectorSelection(null);
   }
 
-  async function createOrReplaceHighlight(targetSelection: HighlightSelection) {
+  async function createOrReplaceHighlight(targetSelection: HighlightSelection, keepMarkerMode = false) {
     if (!targetSelection || saving) return;
     setSaving(true);
     setMessage("");
@@ -187,7 +222,7 @@ export default function LegisBotPersonalHighlights({
       ]);
       setLastCreatedHighlight(response.status === 201 && !result.replaced ? result.highlight : null);
       window.getSelection()?.removeAllRanges();
-      closeSelector();
+      if (!keepMarkerMode) closeSelector();
       setMessage("Destaque salvo ✓");
     } catch {
       setMessage("Não foi possível salvar o destaque.");
@@ -195,6 +230,39 @@ export default function LegisBotPersonalHighlights({
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    const root = document.getElementById(selectionRootId);
+    if (!root) return;
+    if (markerModeActive) root.dataset.highlightColor = color;
+    else delete root.dataset.highlightColor;
+    return () => { delete root.dataset.highlightColor; };
+  }, [color, markerModeActive, selectionRootId]);
+
+  useEffect(() => {
+    if (!markerModeActive || !authenticated || saving) return;
+    let timer: number | undefined;
+    const captureInlineSelection = (event: MouseEvent | TouchEvent) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const root = document.getElementById(selectionRootId);
+        if (!root || !(event.target instanceof Node) || !root.contains(event.target)) return;
+        const selection = selectionFromLegalText(root, legislationText);
+        if (!selection) return;
+        void createOrReplaceHighlight(selection, true);
+      }, 80);
+    };
+    document.addEventListener("mouseup", captureInlineSelection);
+    document.addEventListener("touchend", captureInlineSelection, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("mouseup", captureInlineSelection);
+      document.removeEventListener("touchend", captureInlineSelection);
+    };
+    // A caneta usa a cor e a lista atuais; reinstalar o listener após salvar
+    // mantém vários grifos seguidos sem pedir uma nova abertura de menu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, color, highlights, legislationText, markerModeActive, saving, selectionRootId]);
 
   async function changeColor(nextColor: HighlightColor) {
     if (!selectedHighlight || saving) return;
@@ -312,8 +380,13 @@ export default function LegisBotPersonalHighlights({
       <div><p className="community-eyebrow">Marca-texto pessoal</p><h2 id="highlights-title">Seus destaques</h2></div>
       <span>{highlights.length} {highlights.length === 1 ? "trecho" : "trechos"}</span>
     </div>
-    <p className="highlights-instructions">Abra o seletor para marcar um trecho da legislação.</p>
-    <button type="button" className="highlights-selector-open" onClick={() => { setSelectorSelection(null); setSelectorOpen(true); }}>Selecionar trecho da legislação</button>
+    <div className="highlights-marker-toolbar">
+      <button type="button" className={markerModeActive ? "active" : ""} aria-pressed={markerModeActive} onClick={() => onMarkerModeChange(!markerModeActive)}>{markerModeActive ? "🖍️ Marca-texto ativo" : "🖍️ Ativar marca-texto"}</button>
+      <HighlightPalette value={color} onChange={setColor} disabled={saving} label="Cor da caneta marca-texto" />
+      {lastCreatedHighlight ? <button type="button" className="highlights-undo-inline" disabled={saving} onClick={() => void undoLastHighlight()}>↶ Desfazer</button> : null}
+    </div>
+    <p className="highlights-instructions">{markerModeActive ? "Arraste sobre o texto legal para grifar. No celular, segure uma palavra e arraste; tocar novamente no ícone encerra o modo." : "Ative o marca-texto para grifar diretamente no texto legal."}</p>
+    <button type="button" className="highlights-selector-open" onClick={() => { setSelectorSelection(null); setSelectorOpen(true); }}>Selecionar trecho manualmente</button>
     {selectedHighlight ? <div className="highlights-edit" role="dialog" aria-label="Editar destaque selecionado">
       <p><strong>Destaque selecionado:</strong> “{selectedHighlight.text}”</p>
       <HighlightPalette value={selectedHighlight.color} onChange={(nextColor) => void changeColor(nextColor)} disabled={saving} label="Nova cor do destaque" />

@@ -14,6 +14,8 @@ type LegisBotStudyTabsProps = {
   communityCount: number;
   initialTab?: LegisBotStudyTab;
   onActiveTabChange?: (tab: LegisBotStudyTab) => void;
+  highlightModeActive?: boolean;
+  onHighlightModeChange?: (active: boolean) => void;
 };
 
 export default function LegisBotStudyTabs({
@@ -26,6 +28,8 @@ export default function LegisBotStudyTabs({
   communityCount,
   initialTab = "legisbot",
   onActiveTabChange,
+  highlightModeActive = false,
+  onHighlightModeChange,
 }: LegisBotStudyTabsProps) {
   const [activeTab, setActiveTab] = useState<LegisBotStudyTab>(initialTab);
   const [openedTabs, setOpenedTabs] = useState<Set<LegisBotStudyTab>>(() => new Set([initialTab, "highlights"]));
@@ -39,6 +43,17 @@ export default function LegisBotStudyTabs({
   ];
 
   function selectTab(tab: LegisBotStudyTab) {
+    if (tab === "highlights" && onHighlightModeChange) {
+      const nextMode = activeTab !== "highlights" || !highlightModeActive;
+      onHighlightModeChange(nextMode);
+      if (!nextMode) {
+        setActiveTab("legisbot");
+        onActiveTabChange?.("legisbot");
+        return;
+      }
+    } else if (tab !== "highlights" && highlightModeActive) {
+      onHighlightModeChange?.(false);
+    }
     setOpenedTabs((current) => new Set(current).add(tab));
     setActiveTab(tab);
     onActiveTabChange?.(tab);

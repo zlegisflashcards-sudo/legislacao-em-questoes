@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { getContinuousReadingBlockTextsForLaw } from "@/lib/legisbot/continuous-reading-server";
+import { getContinuousReadingBlockTextsForLaw, getContinuousReadingStructureReadiness } from "@/lib/legisbot/continuous-reading-server";
 import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   try {
     // A simulação administrativa não é uma liberação comercial. Fora dela,
     // todo lote de HTML exige a mesma autorização da Lei e do LegisCast.
-    if (!await obterAdministrador()) await authorizeLawStudy(request, slug);
+    const administrator = await obterAdministrador();
+    if (!administrator) await authorizeLawStudy(request, slug);
+    // A paginação reconsulta a mesma trava do catálogo; parâmetros de UUID,
+    // estrutura ou unidade não podem reabrir conteúdo em preparação.
+    if (!administrator) {
+      const structureReadiness = await getContinuousReadingStructureReadiness(slug);
+      if (!structureReadiness) return NextResponse.json({ error: "Legislação não encontrada." }, { status: 404 });
+      if (!structureReadiness.ready) return NextResponse.json({ error: "Lei Interativa em preparação." }, { status: 409 });
+    }
     const blocks = await getContinuousReadingBlockTextsForLaw(slug, referenceIds, structureId, studyUnitId);
     if (blocks === null) return NextResponse.json({ error: "Legislação não encontrada." }, { status: 404 });
     return NextResponse.json({ blocks }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });

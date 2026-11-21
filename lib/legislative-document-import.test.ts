@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { canonicalStructureName, legislativeDocumentParagraphs, parseLegislativeDocument } from "./legislative-document-import";
+import { canonicalStructureName, legislativeDocumentParagraphs, matchDocumentStructureTrail, parseLegislativeDocument } from "./legislative-document-import";
 
 describe("importação de documento legislativo", () => {
   it("reconhece a mesma estrutura com ordinal romano ou numérico", () => {
@@ -10,6 +10,36 @@ describe("importação de documento legislativo", () => {
     expect(canonicalStructureName("Seção II — Do Processo")).toBe(
       canonicalStructureName("SEÇÃO 02 - DO PROCESSO"),
     );
+  });
+
+  it("exige o caminho estrutural completo quando capítulos têm nomes repetidos", () => {
+    const structures = [
+      { id: 1, parent_id: null, nome: "TÍTULO I — DISPOSIÇÕES GERAIS" },
+      { id: 2, parent_id: 1, nome: "CAPÍTULO I — DAS DEFINIÇÕES" },
+      { id: 3, parent_id: null, nome: "TÍTULO II — REGRAS ESPECIAIS" },
+      { id: 4, parent_id: 3, nome: "CAPÍTULO I — DAS DEFINIÇÕES" },
+    ];
+    expect(matchDocumentStructureTrail(["CAPÍTULO I — DAS DEFINIÇÕES"], structures)).toMatchObject({ status: "caminho_incompleto", structureId: null });
+    expect(matchDocumentStructureTrail(["TÍTULO II — REGRAS ESPECIAIS", "CAPÍTULO I — DAS DEFINIÇÕES"], structures)).toMatchObject({ status: "documento", structureId: 4 });
+  });
+
+  it("resolve o primeiro cenário do Plano Diretor de Contagem apenas pelo caminho completo", () => {
+    const planoDiretor = [
+      { id: 10, parent_id: null, nome: "TÍTULO I — DO PLANO DIRETOR DE CONTAGEM" },
+      { id: 11, parent_id: 10, nome: "CAPÍTULO I — DAS DIRETRIZES" },
+    ];
+    expect(matchDocumentStructureTrail(["TÍTULO I — DO PLANO DIRETOR DE CONTAGEM", "CAPÍTULO I — DAS DIRETRIZES"], planoDiretor)).toMatchObject({ status: "documento", structureId: 11 });
+  });
+
+  it("sinaliza marcador ausente ou caminho ambíguo sem escolher uma estrutura", () => {
+    const structures = [
+      { id: 1, parent_id: null, nome: "TÍTULO I" },
+      { id: 2, parent_id: 1, nome: "CAPÍTULO I" },
+      { id: 3, parent_id: null, nome: "TÍTULO I" },
+      { id: 4, parent_id: 3, nome: "CAPÍTULO I" },
+    ];
+    expect(matchDocumentStructureTrail(undefined, structures)).toMatchObject({ status: "sem_marcador", structureId: null });
+    expect(matchDocumentStructureTrail(["TÍTULO I", "CAPÍTULO I"], structures)).toMatchObject({ status: "ambiguo", structureId: null });
   });
 
   it("cria blocos independentes para artigo e parágrafo numerado, mantendo incisos no fluxo", () => {

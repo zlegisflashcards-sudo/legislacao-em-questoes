@@ -5,7 +5,7 @@ import { possuiTextoLegislacao, sanitizarHtmlLegislacao } from "@/lib/legisbot/s
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { referenceCandidatesFromQuestions, type LegislativeReferenceCandidate } from "@/lib/legislative-reference-candidates";
 import { normalizedLegisBotLegislation } from "@/lib/legisbot/source";
-import { canonicalStructureName, legislativeDocumentParagraphs, parseLegislativeDocument } from "@/lib/legislative-document-import";
+import { legislativeDocumentParagraphs, matchDocumentStructureTrail, parseLegislativeDocument } from "@/lib/legislative-document-import";
 import { planLegislativeReferenceIdentifierRepair, type LegislativeReferenceIdentifierRepair } from "@/lib/legislative-reference-identifiers";
 import { sanitizeLegalHtmlCore } from "@/lib/legisbot/sanitize-legal-html-core";
 import { formatLegalReferenceFromOrder } from "@/lib/article-order-structure";
@@ -318,7 +318,42 @@ export async function clearLegislativeReferences(lawSlug: string) {
   return { removed: existing.count ?? 0 };
 }
 
-async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8Array, rawStructureId?: unknown) {
+type DocumentImportStructureStatus = "selecionada" | "documento" | "sem_marcador" | "caminho_incompleto" | "nao_encontrado" | "ambiguo" | "conflito";
+type DocumentImportOperation = "criar" | "preencher" | "preservar" | "vincular";
+
+function documentStructureSelections(raw: unknown) {
+  if (raw === undefined || raw === null || raw === "") return new Map<string, number>();
+  if (!raw || Array.isArray(raw) || typeof raw !== "object") throw new Error("As estruturas escolhidas na prévia são inválidas.");
+  const selections = new Map<string, number>();
+  for (const [ordem, value] of Object.entries(raw as Record<string, unknown>)) {
+    const id = Number(value);
+    if (!ordem.trim() || !Number.isInteger(id) || id < 1) throw new Error("Uma estrutura escolhida na prévia é inválida.");
+    selections.set(ordem, id);
+  }
+  return selections;
+}
+
+function documentLinkExistingOrders(raw: unknown) {
+  if (raw === undefined || raw === null || raw === "") return new Set<string>();
+  if (!Array.isArray(raw) || raw.some((value) => typeof value !== "string" || !value.trim())) throw new Error("Os vínculos escolhidos na prévia são inválidos.");
+  return new Set(raw.map((value) => value.trim()));
+}
+
+function documentStructureReason(status: DocumentImportStructureStatus, trail: string[] | undefined, currentPath: string | null, expectedPath: string | null) {
+  if (status === "documento") return "Caminho estrutural reconhecido no documento.";
+  if (status === "selecionada") return "Estrutura escolhida explicitamente nesta prévia.";
+  if (status === "sem_marcador") return "O documento não informou marcador de estrutura para este bloco.";
+  if (status === "caminho_incompleto") return `O marcador “${trail?.join(" › ") || "—"}” não informa todo o caminho cadastrado; escolha a estrutura sem adivinhar pelo nome do capítulo.`;
+  if (status === "ambiguo") return "Mais de uma estrutura ativa possui este caminho; escolha uma estrutura explicitamente.";
+  if (status === "nao_encontrado") return "O caminho informado no documento não corresponde a uma estrutura ativa desta lei.";
+  return `O bloco existente já está vinculado a “${currentPath || "estrutura desconhecida"}”, diferente do caminho importado “${expectedPath || "não resolvido"}”. Revise sem sobrescrever o vínculo atual.`;
+}
+
+function stableDocumentImportPreview(preview: Awaited<ReturnType<typeof documentImportPreview>>) {
+  return preview.references.map(({ ordem, identification, legislation, operation, structureId, structureStatus, existingId, existingUpdatedAt, linkExisting }) => ({ ordem, identification, legislation, operation, structureId, structureStatus, existingId, existingUpdatedAt, linkExisting }));
+}
+
+async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8Array, rawStructureSelections?: unknown, rawLinkExisting?: unknown) {
   const slug = text(lawSlug, 160).toLowerCase();
   if (!slug) throw new Error("Escolha uma legislação antes de importar o documento.");
   const parsed = parseLegislativeDocument(legislativeDocumentParagraphs(name, bytes));
@@ -326,61 +361,81 @@ async function documentImportPreview(lawSlug: string, name: string, bytes: Uint8
   const db = getSupabaseServerClient();
   const law = await db.from("leis").select("id,slug").eq("slug", slug).maybeSingle();
   if (law.error || !law.data) throw new Error("Legislação não encontrada.");
-  const structureId = Number(rawStructureId);
-  const selectedStructureId = Number.isInteger(structureId) && structureId > 0 ? structureId : null;
-  if (rawStructureId && !selectedStructureId) throw new Error("A estrutura selecionada é inválida.");
-  if (selectedStructureId) {
-    const structure = await db.from("law_structure").select("id").eq("id", selectedStructureId).eq("lei_id", law.data.id).eq("ativo", true).maybeSingle();
-    if (structure.error || !structure.data) throw new Error("A estrutura selecionada não pertence a esta lei ou não está ativa.");
-  }
-  const structureResult = parsed.references.some((reference) => reference.structureTrail?.length)
-    ? await db.from("law_structure").select("id,parent_id,nome,ordem").eq("lei_id", law.data.id).eq("ativo", true).order("ordem").order("id")
-    : { data: [], error: null };
+  const selectedStructureIds = documentStructureSelections(rawStructureSelections);
+  const linkExistingOrders = documentLinkExistingOrders(rawLinkExisting);
+  const parsedOrders = new Set(parsed.references.map((reference) => reference.ordem));
+  if ([...selectedStructureIds.keys()].some((ordem) => !parsedOrders.has(ordem))) throw new Error("A seleção estrutural não corresponde ao documento atual. Gere uma nova prévia.");
+  if ([...linkExistingOrders].some((ordem) => !parsedOrders.has(ordem))) throw new Error("A seleção de vínculos não corresponde ao documento atual. Gere uma nova prévia.");
+  const structureResult = await db.from("law_structure").select("id,parent_id,nome,ordem").eq("lei_id", law.data.id).eq("ativo", true).order("ordem").order("id");
   if (structureResult.error) throw new Error("Não foi possível consultar as estruturas cadastradas da lei.");
   const structures = (structureResult.data ?? []) as Array<{ id: number; parent_id: number | null; nome: string; ordem: number }>;
-  const normalizeStructureName = canonicalStructureName;
   const byId = new Map(structures.map((structure) => [Number(structure.id), structure]));
   const pathOf = (structure: { id: number; parent_id: number | null; nome: string }) => {
     const path: string[] = [];
     let current: { id: number; parent_id: number | null; nome: string } | undefined = structure;
-    while (current) { path.unshift(normalizeStructureName(current.nome)); current = current.parent_id === null ? undefined : byId.get(Number(current.parent_id)); }
+    const visited = new Set<number>();
+    while (current && !visited.has(Number(current.id))) { visited.add(Number(current.id)); path.unshift(current.nome); current = current.parent_id === null ? undefined : byId.get(Number(current.parent_id)); }
     return path;
   };
-  const structureForTrail = (trail: string[] | undefined) => {
-    if (!trail?.length) return { id: selectedStructureId, status: selectedStructureId ? "selecionada" : "sem_marcador" } as const;
-    const markers = trail.map(normalizeStructureName);
-    const matches = structures.filter((structure) => {
-      const path = pathOf(structure);
-      let cursor = 0;
-      for (const marker of markers) { cursor = path.indexOf(marker, cursor); if (cursor < 0) return false; cursor += 1; }
-      return path.at(-1) === markers.at(-1);
-    });
-    return matches.length === 1 ? { id: Number(matches[0].id), status: "documento" } as const : { id: null, status: matches.length ? "ambiguo" : "nao_encontrado" } as const;
-  };
-  const stored = await db.from("legislative_references").select("ordem,legislacao,structure_id").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem)).or("situacao.is.null,situacao.neq.arquivada");
+  for (const selectedId of selectedStructureIds.values()) if (!byId.has(selectedId)) throw new Error("A estrutura escolhida não pertence a esta lei ou não está ativa.");
+  const stored = await db.from("legislative_references").select("id,ordem,legislacao,structure_id,updated_at").eq("lei_id", law.data.id).in("ordem", parsed.references.map((reference) => reference.ordem)).or("situacao.is.null,situacao.neq.arquivada");
   if (stored.error) throw new Error("Não foi possível verificar a base legislativa.");
   const existing = new Map((stored.data ?? []).map((row) => [String(row.ordem), {
+    id: String(row.id),
     hasLegislation: typeof row.legislacao === "string" && row.legislacao.trim().length > 0,
     structureId: typeof row.structure_id === "number" ? row.structure_id : null,
+    updatedAt: String(row.updated_at),
   }]));
   const candidates = parsed.references.map((reference) => {
-    const association = structureForTrail(reference.structureTrail);
-    return { ...reference, structureId: association.id, structureStatus: association.status, operation: existing.has(reference.ordem) ? existing.get(reference.ordem)?.hasLegislation ? "preservar" as const : "preencher" as const : "criar" as const };
+    const matched = matchDocumentStructureTrail(reference.structureTrail, structures);
+    const selectedStructureId = selectedStructureIds.get(reference.ordem);
+    if (selectedStructureId && matched.status === "documento" && selectedStructureId !== matched.structureId) {
+      throw new Error(`O bloco ${reference.ordem} já possui um caminho estrutural inequívoco no documento; não é permitido substituí-lo pela prévia.`);
+    }
+    const resolvedStructureId = selectedStructureId ?? matched.structureId;
+    let structureStatus: DocumentImportStructureStatus = selectedStructureId ? "selecionada" : matched.status;
+    const storedReference = existing.get(reference.ordem);
+    const existingPath = storedReference?.structureId ? pathOf(byId.get(storedReference.structureId) ?? { id: storedReference.structureId, parent_id: null, nome: "estrutura removida" }).join(" › ") : null;
+    const resolvedPath = resolvedStructureId ? pathOf(byId.get(resolvedStructureId)!).join(" › ") : null;
+    if (storedReference?.structureId && resolvedStructureId && storedReference.structureId !== resolvedStructureId) structureStatus = "conflito";
+    const linkExisting = Boolean(storedReference?.hasLegislation && !storedReference.structureId && linkExistingOrders.has(reference.ordem));
+    if (linkExisting && !resolvedStructureId) throw new Error(`Escolha uma estrutura válida antes de vincular o bloco ${reference.ordem}.`);
+    if (linkExisting && !storedReference?.hasLegislation) throw new Error(`O bloco ${reference.ordem} não possui texto existente para vincular sem alterar texto.`);
+    const operation: DocumentImportOperation = !storedReference ? "criar" : !storedReference.hasLegislation ? "preencher" : linkExisting ? "vincular" : "preservar";
+    return {
+      ...reference,
+      structureId: resolvedStructureId ?? null,
+      structureStatus,
+      structurePath: resolvedPath,
+      structureCandidates: matched.candidatePaths,
+      structureReason: documentStructureReason(structureStatus, reference.structureTrail, existingPath, resolvedPath),
+      operation,
+      linkExisting,
+      existingId: storedReference?.id ?? null,
+      existingUpdatedAt: storedReference?.updatedAt ?? null,
+      existingHasStructure: Boolean(storedReference?.structureId),
+    };
   });
-  return { slug, lawId: Number(law.data.id), structureId: selectedStructureId, existing, references: candidates, rejected: parsed.rejected };
+  const blockers = candidates.filter((reference) => !reference.structureId || ["sem_marcador", "caminho_incompleto", "nao_encontrado", "ambiguo", "conflito"].includes(reference.structureStatus));
+  return { slug, lawId: Number(law.data.id), existing, structures: structures.map((structure) => ({ id: Number(structure.id), path: pathOf(structure).join(" › ") })), references: candidates, rejected: parsed.rejected, blockers };
 }
 
-export async function previewLegislativeDocumentImport(input: { lawSlug: string; name: string; bytes: Uint8Array; structureId?: unknown }) {
+export async function previewLegislativeDocumentImport(input: { lawSlug: string; name: string; bytes: Uint8Array; structureSelections?: unknown; linkExisting?: unknown }) {
   await exigirAdministrador();
-  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes, input.structureId);
+  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes, input.structureSelections, input.linkExisting);
   // A amostra é apenas de leitura: o HTML vem do parser e é sanitizado no
   // servidor antes de seguir para o componente administrativo.
   return {
     slug: preview.slug,
     lawId: preview.lawId,
-    structureId: preview.structureId,
+    structures: preview.structures,
     references: preview.references,
     rejected: preview.rejected,
+    blockers: preview.blockers.map((reference) => ({ ordem: reference.ordem, reason: reference.structureReason })),
+    // Linhas sem título de dispositivo, Ordem repetida ou texto fora de um
+    // bloco também invalidam o lote inteiro. A prévia mostra o motivo, mas
+    // nunca deixa o servidor gravar somente a parte aparentemente válida.
+    canConfirm: preview.blockers.length === 0 && preview.rejected.length === 0,
     sample: preview.references.slice(0, 20).map((reference) => ({
       ...reference,
       displayLegislation: sanitizeLegalHtmlCore(reference.legislation),
@@ -388,12 +443,14 @@ export async function previewLegislativeDocumentImport(input: { lawSlug: string;
   };
 }
 
-export async function importLegislativeDocument(input: { lawSlug: string; name: string; bytes: Uint8Array; expected: unknown; structureId?: unknown }) {
+export async function importLegislativeDocument(input: { lawSlug: string; name: string; bytes: Uint8Array; expected: unknown; structureSelections?: unknown; linkExisting?: unknown }) {
   await exigirAdministrador();
-  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes, input.structureId);
+  const preview = await documentImportPreview(input.lawSlug, input.name, input.bytes, input.structureSelections, input.linkExisting);
   const expected = Array.isArray(input.expected) ? input.expected : [];
-  const current = preview.references.map(({ ordem, identification, legislation, operation, structureId, structureStatus }) => ({ ordem, identification, legislation, operation, structureId, structureStatus }));
+  const current = stableDocumentImportPreview(preview);
   if (JSON.stringify(expected) !== JSON.stringify(current)) throw new Error("O documento ou a base mudaram desde a prévia. Gere uma nova prévia.");
+  if (preview.rejected.length) throw new Error(`A importação está bloqueada porque ${preview.rejected.length} trecho(s) não possui(em) título ou Ordem válidos. Nenhum inventário ou texto foi gravado.`);
+  if (preview.blockers.length) throw new Error(`A importação está bloqueada até resolver a estrutura de ${preview.blockers.length} bloco(s). Nenhum inventário ou texto foi gravado.`);
   const db = getSupabaseServerClient();
   const inventory = await db.from("legislative_reference_inventory").upsert(preview.references.map((reference) => ({
     lei_id: preview.lawId,
@@ -405,21 +462,27 @@ export async function importLegislativeDocument(input: { lawSlug: string; name: 
     imported_at: new Date().toISOString(),
   })), { onConflict: "lei_id,ordem" });
   if (inventory.error) throw inventoryImportError(inventory.error);
-  let created = 0; let filled = 0; let preserved = 0;
+  let created = 0; let filled = 0; let preserved = 0; let linked = 0;
   for (const reference of preview.references) {
     if (reference.operation === "preservar") { preserved += 1; continue; }
+    if (reference.operation === "vincular") {
+      const linkedReference = await db.from("legislative_references").update({ structure_id: reference.structureId }).eq("id", reference.existingId!).is("structure_id", null).eq("updated_at", reference.existingUpdatedAt!).select("id").maybeSingle();
+      if (linkedReference.error || !linkedReference.data) throw new Error(`O bloco ${reference.ordem} mudou desde a prévia; reveja o vínculo sem alterar o texto.`);
+      linked += 1;
+      continue;
+    }
     if (reference.operation === "criar") {
-      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", ...(reference.structureId ? { structure_id: reference.structureId } : {}) }).select("id").maybeSingle();
+      const inserted = await db.from("legislative_references").insert({ lei_id: preview.lawId, slug: preview.slug, ordem: reference.ordem, identificacao: reference.identification, legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", structure_id: reference.structureId! }).select("id").maybeSingle();
       if (inserted.error || !inserted.data) throw new Error("Não foi possível criar uma referência do documento.");
       created += 1;
     } else {
       const existing = preview.existing.get(reference.ordem);
-      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", lei_revogadora: null, revogado_em: null, ...(reference.structureId && !existing?.structureId ? { structure_id: reference.structureId } : {}) }).eq("lei_id", preview.lawId).eq("ordem", reference.ordem).is("legislacao", null).select("id").maybeSingle();
+      const updated = await db.from("legislative_references").update({ legislacao: reference.legislation, preparado_em: new Date().toISOString(), situacao: "preparada", lei_revogadora: null, revogado_em: null, ...(!existing?.structureId ? { structure_id: reference.structureId! } : {}) }).eq("id", existing?.id ?? "").is("legislacao", null).eq("updated_at", existing?.updatedAt ?? "").select("id").maybeSingle();
       if (updated.error) throw new Error("Não foi possível preencher uma referência do documento.");
-      if (updated.data) filled += 1; else preserved += 1;
+      if (updated.data) filled += 1; else throw new Error(`O bloco ${reference.ordem} mudou desde a prévia; gere uma nova prévia antes de preencher.`);
     }
   }
-  return { created, filled, preserved, rejected: preview.rejected.length };
+  return { created, filled, preserved, linked, rejected: preview.rejected.length };
 }
 
 /** Resolve an official-inventory gap without ever manufacturing an empty block. */

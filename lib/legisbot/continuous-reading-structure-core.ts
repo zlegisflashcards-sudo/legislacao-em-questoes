@@ -30,6 +30,12 @@ export type ContinuousReadingReferenceStructureAssociation = {
   suggestedStructureId: number | null;
 };
 
+export type ContinuousReadingStructureReadiness = {
+  ready: boolean;
+  /** Blocos preparados e ativos que não possuem destino estrutural seguro. */
+  unresolvedPreparedReferenceIds: string[];
+};
+
 /** A lei sem nós editoriais continua sendo uma leitura única e completa. */
 export function hasContinuousReadingStructures(structures: readonly ContinuousReadingStructureNode[]) {
   return structures.length > 0;
@@ -119,6 +125,30 @@ export function resolveContinuousReadingReferenceStructureAssociations(input: {
     if (editorialStructureId !== null) return { referenceId: reference.id, structureId: editorialStructureId, status: "editorial", candidateStructureIds, suggestionStatus, suggestedStructureId };
     return { referenceId: reference.id, structureId: suggestedStructureId, status: suggestionStatus, candidateStructureIds, suggestionStatus, suggestedStructureId };
   });
+}
+
+/**
+ * Trava única da leitura do aluno. Ela usa a mesma resolução que monta o
+ * sumário: um vínculo editorial válido ou uma única evidência das questões.
+ *
+ * Leis que ainda não possuem hierarquia continuam como leitura contínua; não
+ * existe uma estrutura a resolver nesses casos. Os chamadores já removem os
+ * blocos arquivados da consulta canônica antes de chegar aqui.
+ */
+export function resolveContinuousReadingStructureReadiness(input: {
+  structures: readonly ContinuousReadingStructureNode[];
+  references: readonly { id: string; prepared: boolean; archived?: boolean }[];
+  associations: readonly ContinuousReadingReferenceStructureAssociation[];
+}): ContinuousReadingStructureReadiness {
+  if (!input.structures.length) return { ready: true, unresolvedPreparedReferenceIds: [] };
+  const associationByReference = new Map(input.associations.map((association) => [association.referenceId, association]));
+  const unresolvedPreparedReferenceIds = input.references.flatMap((reference) => {
+    if (!reference.prepared || reference.archived === true) return [];
+    const association = associationByReference.get(reference.id);
+    const resolved = association && (association.status === "editorial" || association.status === "associated") && association.structureId !== null;
+    return resolved ? [] : [reference.id];
+  });
+  return { ready: unresolvedPreparedReferenceIds.length === 0, unresolvedPreparedReferenceIds };
 }
 
 /** Seleciona somente blocos com associação estrutural segura dentro do recorte. */

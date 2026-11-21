@@ -68,7 +68,7 @@ describe("Questões na Central da Lei", () => {
 
   it("mantém a lei como raiz navegável e mostra questões sem estrutura nela", () => {
     expect(server).toContain("total: scopedQuestions.length");
-    expect(server).toContain("unstructured: scopedQuestions.filter");
+    expect(server).toContain("unstructured: nodes.length ? scopedQuestions.filter");
     expect(central).toContain("initialStructureSummary");
     expect(central).toContain("onSelectLaw={selectLawRoot}");
     expect(central).toContain(">Sem estrutura<");

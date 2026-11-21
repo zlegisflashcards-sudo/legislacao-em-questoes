@@ -17,8 +17,11 @@ import { getContinuousReadingBlockTexts, type ContinuousReadingBlockText, type C
 import {
   continuousReadingStructurePath,
   orderContinuousReadingReferences,
+  orderContinuousReadingStructures,
   resolveContinuousReadingReferenceStructureAssociations,
+  resolveContinuousReadingStructureReadiness,
   type ContinuousReadingReferenceStructureAssociation,
+  type ContinuousReadingStructureReadiness,
 } from "./continuous-reading-structure-core";
 import { resolveContinuousReadingStructureIntegrity } from "./continuous-reading-structure-integrity-core";
 import { canExposeContinuousReadingReference, resolveContinuousReadingPartialMode, resolveContinuousReadingPublicAccess, type ContinuousReadingPartialMode, type ContinuousReadingPublicAccess } from "./continuous-reading-public-access-core";
@@ -62,6 +65,8 @@ export type ContinuousReadingModel = {
   questions: ContinuousQuestion[];
   references: ContinuousReadingReference[];
   integrity: ReadingIntegrity;
+  /** Trava editorial da visão do aluno; não substitui a integridade histórica. */
+  structureReadiness: ContinuousReadingStructureReadiness;
   /** Controle server-side opt-in; não altera a leitura global enquanto inativo. */
   partialMode: ContinuousReadingPartialMode;
   publicAccess: ContinuousReadingPublicAccess;
@@ -110,6 +115,46 @@ async function allReferenceSummaries(lawId: number) {
     if ((result.data?.length ?? 0) < PAGE_SIZE) break;
   }
   return { rows, structureLinkAvailable };
+}
+
+/**
+ * Revalidação enxuta usada pelos lotes progressivos. Ela não reconstrói o
+ * catálogo, unidades de estudo, mapeamentos ou áudio a cada página, mas usa
+ * exatamente a mesma resolução editorial do sumário.
+ */
+export async function getContinuousReadingStructureReadiness(rawSlug: string): Promise<ContinuousReadingStructureReadiness | null> {
+  const slug = rawSlug.trim().toLowerCase();
+  if (!/^[a-z0-9_-]{1,50}$/.test(slug)) return null;
+  const db = getSupabaseServerClient();
+  const lawResult = await db.from("leis").select("id,slug").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();
+  if (lawResult.error) throw new Error("Não foi possível consultar a legislação.");
+  if (!lawResult.data) return null;
+  const law = lawResult.data as Pick<LawRow, "id" | "slug">;
+  const [questions, referenceResult, structure] = await Promise.all([
+    allQuestions(law.id),
+    allReferenceSummaries(law.id),
+    db.from("law_structure").select("id,parent_id,tipo,nome,ordem,audio_not_applicable").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
+  ]);
+  if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
+  const questionInput: ContinuousQuestion[] = questions.map((question) => ({ id: question.id, slug: question.slug, ordem: question.ordem, structureId: question.structure_id }));
+  const targets = await listManualQuestionReferenceTargets(questionInput.map((question) => question.id));
+  const referenceInput: ContinuousReferenceSummary[] = referenceResult.rows.map((reference) => ({
+    id: reference.id,
+    slug: reference.slug,
+    ordem: reference.ordem,
+    identificacao: reference.identificacao,
+    sourceQuestionId: reference.source_question_id,
+    prepared: Boolean(reference.preparado_em),
+  }));
+  const integrity = resolveContinuousReadingIntegrity({ lawSlug: law.slug, questions: questionInput, references: referenceInput, manualTargets: targets });
+  const readingStructure = ((structure.data ?? []) as StructureRow[]).map((node) => ({ ...node, parentId: node.parent_id }));
+  const associations = resolveContinuousReadingReferenceStructureAssociations({
+    references: referenceResult.rows.map((reference) => ({ id: reference.id, sourceQuestionId: reference.source_question_id, structureId: reference.structure_id })),
+    questions: questions.map((question) => ({ id: question.id, structureId: question.structure_id })),
+    resolutions: integrity.resolutions,
+    structures: readingStructure,
+  });
+  return resolveContinuousReadingStructureReadiness({ structures: readingStructure, references: referenceInput, associations });
 }
 
 const PARTIAL_READING_KEY_PREFIX = "lei_interativa_modo_parcial:";
@@ -177,6 +222,13 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     structures: readingStructure,
   });
   const associationByReference = new Map(structureAssociations.map((association) => [association.referenceId, association]));
+  // Deve ser calculada sobre todos os blocos preparados e não arquivados da
+  // lei, antes de qualquer recorte parcial, unidade de estudo ou paginação.
+  const structureReadiness = resolveContinuousReadingStructureReadiness({
+    structures: readingStructure,
+    references: referenceInput,
+    associations: structureAssociations,
+  });
 
   // A revalidação é feita no instante da leitura. Em caso de inventário ou
   // migration indisponível, o modo parcial não é ativado; a política global
@@ -236,8 +288,16 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     }];
   });
   const reportByStructure = new Map(structureReports.map((report) => [report.structureId, report]));
-  const releaseByStructure = new Map(releaseRecords.map((release) => [release.structureId, release.status]));
-  const structures: ContinuousReadingStructureCatalogItem[] = readingStructure.map((structure) => ({
+  // Todo consumidor do catálogo recebe o mesmo percurso do sumário. A Ordem
+  // só é única entre irmãos; ordenar a lista plana do banco pode separar pai
+  // e filho e quebra a navegação por estrutura.
+  // No modo parcial, estruturas de títulos fechados sequer chegam ao cliente.
+  // Isso evita que o sumário mostre um pai pendente, seus filhos ou âncoras
+  // mortas de um ramo que não está disponível ao aluno.
+  const visibleStructureIds = new Set(publicAccess.mode === "partial" ? publicAccess.accessibleStructureIds : readingStructure.map((structure) => structure.id));
+  const structures: ContinuousReadingStructureCatalogItem[] = orderContinuousReadingStructures(readingStructure)
+    .filter((structure) => visibleStructureIds.has(structure.id))
+    .map((structure) => ({
     id: structure.id,
     parentId: structure.parentId,
     type: structure.tipo,
@@ -245,12 +305,10 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     order: structure.ordem,
     status: publicAccess.mode === "global"
       ? "accessible"
-      : releaseByStructure.get(structure.id) === "blocked"
-        ? "blocked"
-        : publicAccess.accessibleStructureIds.includes(structure.id) && reportByStructure.get(structure.id)?.status === "ready"
-          ? "accessible"
-          : "pending",
-  }));
+      : publicAccess.accessibleStructureIds.includes(structure.id) && reportByStructure.get(structure.id)?.status === "ready"
+        ? "accessible"
+        : "pending",
+    }));
 
   // A unidade de estudo é uma projeção da mesma hierarquia da lei e das
   // coberturas explicitamente confirmadas. Se a migration de cobertura ainda
@@ -292,6 +350,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     // No modo parcial, pendências de outros recortes não derrubam a leitura
     // dos recortes liberados. No global, a regra histórica é preservada.
     integrity: publicAccess.mode === "partial" ? { ...integrity, readingAvailable: publicReferences.length > 0 } : integrity,
+    structureReadiness,
     references: publicReferences,
     partialMode,
     publicAccess,
@@ -387,7 +446,7 @@ export async function resolveContinuousReference(rawSlug: string, rawOrder: stri
 
 /** Reutiliza o snapshot já carregado pela página, sem nova consulta integral. */
 export function resolveContinuousReferenceFromModel(model: ContinuousReadingModel | null, rawOrder: string) {
-  if (!model?.integrity.readingAvailable) return null;
+  if (!model?.integrity.readingAvailable || !model.structureReadiness.ready) return null;
   const referenceId = resolveLegacyReferenceId({
     rawOrder,
     questions: model.questions,
@@ -405,7 +464,7 @@ export async function resolveContinuousQuestionReference(rawSlug: string, rawQue
 
 /** Resolve pelo UUID no snapshot já carregado, preservando o vínculo manual. */
 export function resolveContinuousQuestionReferenceFromModel(model: ContinuousReadingModel | null, rawQuestionId: string) {
-  if (!model?.integrity.readingAvailable) return null;
+  if (!model?.integrity.readingAvailable || !model.structureReadiness.ready) return null;
   const referenceId = resolveQuestionReferenceId({
     questionId: rawQuestionId,
     questions: model.questions,

@@ -16,9 +16,32 @@ describe("acesso público estrutural da leitura contínua", () => {
     expect(resolveContinuousReadingPartialMode({ requested: true, migrationsAvailable: true, structures: [] })).toMatchObject({ active: false, reason: "no_structures" });
   });
 
-  it("expõe uma estrutura liberada e encontra a primeira em ordem legislativa", () => {
+  it("expõe o ramo de uma raiz liberada e encontra a primeira em ordem legislativa", () => {
     const mode = resolveContinuousReadingPartialMode({ requested: true, migrationsAvailable: true, structures });
-    expect(resolveContinuousReadingPublicAccess({ mode, structures, reports: [ready(1), ready(2), ready(3)], releases: [{ structureId: 2, status: "released" }] })).toEqual({ mode: "partial", accessibleStructureIds: [2], firstAccessibleStructureId: 2 });
+    expect(resolveContinuousReadingPublicAccess({ mode, structures, reports: [ready(1), ready(2), ready(3)], releases: [{ structureId: 1, status: "released" }] })).toEqual({ mode: "partial", accessibleStructureIds: [1, 2, 3], firstAccessibleStructureId: 1 });
+  });
+
+  it("não expõe nem a raiz nem os filhos quando o Título está fechado", () => {
+    const mode = resolveContinuousReadingPartialMode({ requested: true, migrationsAvailable: true, structures });
+    const access = resolveContinuousReadingPublicAccess({ mode, structures, reports: [ready(1), ready(2), ready(3)], releases: [{ structureId: 2, status: "released" }] });
+    expect(access).toEqual({ mode: "partial", accessibleStructureIds: [], firstAccessibleStructureId: null });
+    expect(canExposeContinuousReadingReference({ access, associationStatus: "editorial", structureId: 2 })).toBe(false);
+  });
+
+  it("mantém a navegação pública na ordem pai-filho, e não na ordem plana dos registros", () => {
+    const nested = [
+      { id: 11, parentId: 10, ordem: 1 },
+      { id: 20, parentId: null, ordem: 2 },
+      { id: 10, parentId: null, ordem: 10 },
+    ];
+    const reports = nested.map((structure) => ready(structure.id));
+    const access = resolveContinuousReadingPublicAccess({
+      mode: resolveContinuousReadingPartialMode({ requested: true, migrationsAvailable: true, structures: nested }),
+      structures: nested,
+      reports,
+      releases: [{ structureId: 10, status: "released" }, { structureId: 20, status: "released" }],
+    });
+    expect(access).toEqual({ mode: "partial", accessibleStructureIds: [20, 10, 11], firstAccessibleStructureId: 20 });
   });
 
   it("mantém pendente sem liberação própria e rejeita UUID/Ordem fora do recorte", () => {
@@ -30,12 +53,12 @@ describe("acesso público estrutural da leitura contínua", () => {
     expect(canExposeContinuousReadingReference({ access, associationStatus: "editorial", structureId: 99 })).toBe(false);
   });
 
-  it("herda a liberação, mas nunca atravessa bloqueio explícito", () => {
+  it("fecha todo o ramo quando a raiz é bloqueada", () => {
     const mode = resolveContinuousReadingPartialMode({ requested: true, migrationsAvailable: true, structures });
-    const access = resolveContinuousReadingPublicAccess({ mode, structures, reports: [ready(1), ready(2), ready(3)], releases: [{ structureId: 1, status: "released" }, { structureId: 2, status: "blocked" }] });
-    expect(access.accessibleStructureIds).toEqual([1, 3]);
+    const access = resolveContinuousReadingPublicAccess({ mode, structures, reports: [ready(1), ready(2), ready(3)], releases: [{ structureId: 1, status: "blocked" }] });
+    expect(access.accessibleStructureIds).toEqual([]);
     expect(canExposeContinuousReadingReference({ access, associationStatus: "editorial", structureId: 2 })).toBe(false);
-    expect(canExposeContinuousReadingReference({ access, associationStatus: "editorial", structureId: 3 })).toBe(true);
+    expect(canExposeContinuousReadingReference({ access, associationStatus: "editorial", structureId: 3 })).toBe(false);
   });
 
   it("nega estrutura pendente, associação inferida e vínculo sem estrutura", () => {

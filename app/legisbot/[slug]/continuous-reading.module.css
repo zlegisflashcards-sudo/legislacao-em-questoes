@@ -44,7 +44,7 @@
 
 .botHero {
   position: relative;
-  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 236px) minmax(0, 1fr);
   align-items: center;
   overflow: hidden;
   border-color: #164777;
@@ -66,28 +66,38 @@
   content: "";
 }
 
-.botAvatar {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 76px;
-  height: 76px;
-  place-items: center;
-  border: 1px solid #67e8f955;
-  border-radius: 22px;
-  background: linear-gradient(145deg, #e0f2fe, #bfdbfe);
-  box-shadow: 0 14px 35px #02061742;
-}
-
-.botAvatar > span { font-size: 2.3rem; }
-.botAvatar > i { position: absolute; right: -7px; bottom: -7px; display: grid; width: 30px; height: 30px; place-items: center; border: 2px solid #0a315f; border-radius: 10px; background: #fff; color: #0284c7; font-style: normal; }
-.botAvatar > i svg { width: 20px; height: 20px; }
-.botAvatar > i > svg { fill: #f97316; stroke: #c2410c; stroke-width: 1.1; }
-
 .botSpeech { position: relative; z-index: 1; min-width: 0; }
 .botSpeech .eyebrow { color: #67e8f9; }
 .botSpeech h1 { color: #fff; }
-.botSpeech > p:last-child { max-width: 820px; color: #dbeafe; }
+.botSpeech > p:last-child { max-width: 700px; color: #dbeafe; }
+
+.legiscastHosts {
+  position: relative;
+  z-index: 1;
+  height: 118px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #67e8f950;
+  border-radius: 16px;
+  background: #03142d;
+  box-shadow: 0 12px 28px #0206174d;
+}
+
+.legiscastHosts::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #071f42aa 0%, transparent 45%, #03142d33 100%);
+  content: "";
+  pointer-events: none;
+}
+
+.legiscastHosts img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 63%;
+}
 
 .mapSoon {
   display: flex;
@@ -298,15 +308,14 @@
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(220px, var(--toc-width, 280px)) 12px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
-.layoutTocClosed {
-  grid-template-columns: 52px minmax(0, 1fr);
-}
+.layoutTocClosed { grid-template-columns: 52px minmax(0, 1fr); gap: 24px; }
 .layoutNoToc { grid-template-columns: minmax(0, 1fr); }
+.layoutResizing { cursor: col-resize; user-select: none; }
 
 .tocShell {
   position: sticky;
@@ -319,7 +328,10 @@
 
 .tocShellClosed { justify-items: start; }
 
+.tocActions { display: flex; gap: 8px; }
+
 .tocToggle {
+  flex: 1;
   min-height: 36px;
   border: 1px solid #cbdcf2;
   border-radius: 10px;
@@ -331,12 +343,110 @@
   cursor: pointer;
 }
 
+.expandTocToggle {
+  min-height: 36px;
+  border: 1px solid #cbdcf2;
+  border-radius: 10px;
+  background: #fff;
+  padding: 7px 10px;
+  color: #335071;
+  font-size: .78rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .tocToggle:hover,
 .tocToggle:focus-visible {
   border-color: #60a5fa;
   color: #1d4ed8;
   outline: none;
 }
+
+.expandTocToggle:hover,
+.expandTocToggle:focus-visible {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1d4ed8;
+  outline: none;
+}
+
+.tocResize {
+  position: relative;
+  align-self: stretch;
+  min-height: 220px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.tocResize::before {
+  position: absolute;
+  top: 56px;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+  transition: background .15s ease;
+}
+
+.tocResize:hover::before,
+.tocResize:focus-visible::before,
+.layoutResizing .tocResize::before { background: #60a5fa; }
+
+.tocResize:focus-visible { box-shadow: inset 0 0 0 2px #2563eb; border-radius: 8px; }
+
+.expandedTocBackdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #07152699;
+  padding: 28px;
+}
+
+.expandedTocPanel {
+  display: grid;
+  width: min(980px, 100%);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+  border: 1px solid #bfdbfe;
+  border-radius: 22px;
+  background: #fff;
+  padding: 26px;
+  box-shadow: 0 28px 80px #02061766;
+}
+
+.expandedTocPanel > header {
+  position: sticky;
+  z-index: 1;
+  top: -26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -26px -26px 20px;
+  border-bottom: 1px solid #dbe6f6;
+  background: #fff;
+  padding: 20px 26px 16px;
+}
+
+.expandedTocPanel > header h2 { margin: 2px 0 0; color: #102a56; font-size: 1.35rem; }
+.expandedTocPanel > header .eyebrow { color: #2563eb; }
+.expandedTocPanel > header button { min-height: 38px; border: 1px solid #cbdcf2; border-radius: 10px; background: #fff; padding: 7px 10px; color: #335071; font-weight: 800; cursor: pointer; }
+.expandedTocPanel > header button:hover, .expandedTocPanel > header button:focus-visible { border-color: #60a5fa; background: #eff6ff; color: #1d4ed8; outline: none; }
+.expandedTocPanel > .tocLawRoot > ol { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.expandedTocPanel ol ol { display: grid; grid-template-columns: 1fr; margin: 3px 0 7px 12px; padding-left: 10px; border-left: 1px solid #dbe6f6; }
+.expandedTocPanel a { display: block; border-radius: 9px; padding: 8px 10px; color: #475569; text-decoration: none; }
+.expandedTocPanel a:hover, .expandedTocPanel a:focus-visible, .expandedTocPanel a.tocActive { background: #eff6ff; color: #1d4ed8; outline: none; }
+.expandedTocPanel .tocLine { display: flex; align-items: stretch; gap: 3px; }
+.expandedTocPanel .tocLine > button { width: 24px; flex: none; border: 0; border-radius: 7px; background: transparent; color: #64748b; font-weight: 900; }
+.expandedTocPanel .tocLine > a, .expandedTocPanel .tocLine > span { min-width: 0; flex: 1; }
+.expandedTocPanel .tocToggleSpacer { width: 24px; flex: none; }
+.expandedTocPanel .tocSection > span { display: grid; gap: 2px; border-radius: 9px; padding: 8px 10px; color: #64748b; }
 
 .toc {
   max-height: calc(100vh - 80px);
@@ -407,6 +517,8 @@
 .tocAudioBadge { flex: none; margin-top: 1px; border-radius: 999px; padding: 2px 5px; font-size: .62rem; font-weight: 800; line-height: 1.2; white-space: nowrap; }
 .tocAudioDirect { background: #e0f2fe; color: #075985; }
 .tocAudioCovered { background: #eef2ff; color: #4338ca; }
+.tocContinue { width: 100%; margin: 2px 0 8px; border: 1px solid #bbf7d0; border-radius: 9px; background: #f0fdf4; padding: 7px 9px; color: #047857; font-size: .76rem; font-weight: 850; text-align: left; cursor: pointer; }
+.tocContinue:hover, .tocContinue:focus-visible { border-color: #34d399; background: #dcfce7; outline: none; }
 .tocSection > span { display: grid; gap: 2px; border-radius: 9px; padding: 7px 9px; font-size: .84rem; line-height: 1.35; }
 .tocSection > span small { font-size: .68rem; font-weight: 800; }
 .tocPending { background: #fffbeb; color: #92400e; }
@@ -414,7 +526,9 @@
 
 .content {
   min-width: 0;
-  overflow: hidden;
+  /* `clip` mantém o recorte do card sem criar um contêiner de rolagem.
+     Assim o player sticky acompanha a página no desktop, como no celular. */
+  overflow: clip;
   border: 1px solid #d9e4f2;
   border-radius: 20px;
   background: #fff;
@@ -485,6 +599,25 @@
 .block:last-child {
   border-bottom: 0;
 }
+
+.readingPause { display: flex; justify-content: center; border-bottom: 1px solid #eef2f7; background: transparent; padding: 2px 12px; }
+.readingPause button { border: 0; background: transparent; padding: 2px 6px; color: #94a3b8; font-size: .68rem; font-weight: 750; cursor: pointer; }
+.readingPause button:hover, .readingPause button:focus-visible { color: #475569; text-decoration: underline; text-underline-offset: 2px; outline: none; }
+.readingPause .readingPauseActive { color: #059669; }
+
+.advance {
+  display: grid;
+  gap: 5px;
+  border-bottom: 1px solid #e5edf7;
+  background: linear-gradient(180deg, #f8fbff, #fff);
+  padding: 18px 28px 22px;
+}
+
+.advance > small { color: #64748b; font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.advance button { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; padding: 11px 13px; color: #1d4ed8; text-align: left; cursor: pointer; }
+.advance button:hover, .advance button:focus-visible { border-color: #2563eb; background: #dbeafe; outline: none; }
+.advance button > span { flex: none; font-weight: 900; }
+.advance button > strong { min-width: 0; overflow: hidden; color: #335071; font-size: .78rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 
 .blockInteractive {
   cursor: pointer;
@@ -927,13 +1060,10 @@
   }
 
   .hero { padding: 20px; }
-  .botHero { grid-template-columns: 58px minmax(0, 1fr); gap: 14px; }
-  .botAvatar { width: 56px; height: 56px; border-radius: 17px; }
-  .botAvatar > span { font-size: 1.7rem; }
-  .botAvatar > i { right: -5px; bottom: -6px; width: 25px; height: 25px; border-radius: 8px; }
-  .botAvatar > i svg { width: 16px; height: 16px; }
+  .botHero { grid-template-columns: 1fr; gap: 14px; }
   .botSpeech h1 { font-size: clamp(1.25rem, 6vw, 1.75rem); }
   .botSpeech > p:last-child { font-size: .82rem; line-height: 1.45; }
+  .legiscastHosts { display: none; }
   .mapSoon { margin: -8px 0 10px; }
   .mapSoon button { min-height: 32px; padding: 5px 9px; font-size: .72rem; }
   .studyModes { position: sticky; z-index: 17; top: max(8px, env(safe-area-inset-top)); gap: 5px; padding: 5px; }
@@ -981,6 +1111,8 @@
   .confirmationChecks { grid-template-columns: 1fr; }
   .layout { grid-template-columns: 1fr; }
   .tocShell { display: none; }
+  .tocResize, .expandTocToggle { display: none; }
+  .expandedTocBackdrop { display: none; }
 
   .block { scroll-margin-top: 82px; }
 
@@ -1129,6 +1261,9 @@
   .readingStructure p { font-size: .78rem; }
   .readingStructure p + p { padding-left: 10px; font-size: .74rem; }
   .block { padding: 24px 19px; }
+  .advance { padding: 16px 19px 19px; }
+  .advance button { align-items: flex-start; flex-direction: column; }
+  .advance button > strong { width: 100%; text-align: left; }
   .blockHeader { gap: 10px; }
   .legalHtml { font-size: .98rem; }
   .retry { width: 100%; }

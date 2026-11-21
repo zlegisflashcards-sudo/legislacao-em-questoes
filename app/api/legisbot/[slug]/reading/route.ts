@@ -18,9 +18,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
     // aluno. Um administrador autenticado pode conferi-la sem precisar de
     // uma liberação comercial pessoal; os demais continuam obrigatoriamente
     // sujeitos à autorização da lei.
-    if (!await obterAdministrador()) await authorizeLawStudy(request, slug);
+    const administrator = await obterAdministrador();
+    if (!administrator) await authorizeLawStudy(request, slug);
     const model = await getContinuousReadingModel(slug);
     if (!model) return NextResponse.json({ message: "Lei não encontrada ou indisponível para sua conta." }, { status: 404 });
+
+    // Não entregamos catálogo, âncoras nem o primeiro lote enquanto existir
+    // bloco preparado sem destino estrutural seguro. A prévia administrativa
+    // continua disponível para permitir a correção editorial.
+    if (!administrator && !model.structureReadiness.ready) {
+      return NextResponse.json({ preparation: "structure_pending", lawName: model.law.nome_curto || model.law.titulo }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    }
 
     const questionId = request.nextUrl.searchParams.get("question_id") ?? "";
     const ordem = request.nextUrl.searchParams.get("ordem") ?? "";
