@@ -1,5 +1,7 @@
 import "server-only";
 
+import { exigirAdministrador } from "@/lib/admin-auth";
+
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { sanitizeLegalHtmlCore } from "./sanitize-legal-html-core";
 import {
@@ -183,6 +185,34 @@ async function readStructureReleases(lawId: number): Promise<{ available: boolea
 }
 
 export async function getContinuousReadingModel(rawSlug: string): Promise<ContinuousReadingModel | null> {
+  return loadContinuousReadingModel(rawSlug, false);
+}
+
+export async function getAdministrativeContinuousReadingScope(rawSlug: string, structureId: number) {
+  await exigirAdministrador();
+  if (!Number.isSafeInteger(structureId) || structureId <= 0) return null;
+  const model = await loadContinuousReadingModel(rawSlug, true);
+  const selectedStructure = model?.structures.find((structure) => structure.id === structureId);
+  if (!model || !selectedStructure) return null;
+  const references = model.references.filter((reference) => reference.hierarchy.some((node) => node.id === structureId));
+  const scopedIds = new Set([structureId]);
+  for (const reference of references) {
+    const start = reference.hierarchy.findIndex((node) => node.id === structureId);
+    for (const node of reference.hierarchy.slice(start)) scopedIds.add(node.id);
+  }
+  return {
+    law: model.law,
+    selectedStructure,
+    references,
+    structures: model.structures.filter((node) => scopedIds.has(node.id)),
+    studyUnits: model.studyUnits.flatMap((unit) => {
+      const structureIds = unit.structureIds.filter((id) => scopedIds.has(id));
+      return structureIds.length ? [{ ...unit, structureIds }] : [];
+    }),
+  };
+}
+
+async function loadContinuousReadingModel(rawSlug: string, administrative: boolean): Promise<ContinuousReadingModel | null> {
   const slug = rawSlug.trim().toLowerCase();
   if (!/^[a-z0-9_-]{1,50}$/.test(slug)) return null;
   const db = getSupabaseServerClient();
@@ -195,7 +225,7 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
     allReferenceSummaries(law.id),
     db.from("law_structure").select("id,parent_id,tipo,nome,ordem,audio_not_applicable").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
     db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
-    partialReadingRequested(slug),
+    administrative ? false : partialReadingRequested(slug),
   ]);
   if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
   const references = referenceResult.rows;
@@ -425,6 +455,18 @@ export async function getContinuousReadingBlockTextsForLaw(rawSlug: string, rawI
       });
     }
   }
+  return readUnscopedPreparedBlockTexts(rawSlug, rawIds);
+}
+
+export async function getAdministrativeContinuousReadingBlockTexts(rawSlug: string, structureId: number, rawIds: string[]) {
+  const scope = await getAdministrativeContinuousReadingScope(rawSlug, structureId);
+  if (!scope) return null;
+  const allowed = new Set(scope.references.filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
+  return readUnscopedPreparedBlockTexts(rawSlug, rawIds.filter((id) => allowed.has(id.trim().toLowerCase())));
+}
+
+function readUnscopedPreparedBlockTexts(rawSlug: string, rawIds: string[]) {
+  const db = getSupabaseServerClient();
   return getContinuousReadingBlockTexts(rawSlug, rawIds, {
     async findActiveLaw(slug) {
       const result = await db.from("leis").select("id").eq("slug", slug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle();

@@ -282,7 +282,7 @@ function ContinuousLegalHtml({ html, highlights }: { html: string; highlights: L
   return <div ref={containerRef} className={styles.legalHtml} />;
 }
 
-export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, recorteId = null, adminPreview = false, administrativeAccess = false, scopedReading = false, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; recorteId?: string | null; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: AudioStatus }) {
+export default function ContinuousReadingClient({ slug, title, lawTitle = title, references, structures = [], studyUnits = [], partialMode = false, initialStructureId = null, initialStudyUnitId = null, initialBlocks, initialTab, recorteId = null, adminPreview = false, administrativeAccess = false, scopedReading = false, referencesEndpoint, audioEndpoint, initialAudio = null, initialAudioStatus = "loading" }: { slug: string; title: string; lawTitle?: string; references: Reference[]; structures?: StructureCatalogItem[]; studyUnits?: StudyUnit[]; partialMode?: boolean; initialStructureId?: number | null; initialStudyUnitId?: string | null; initialBlocks: Block[]; initialTab: "legisbot" | "community" | "highlights"; recorteId?: string | null; adminPreview?: boolean; administrativeAccess?: boolean; scopedReading?: boolean; referencesEndpoint?: string; audioEndpoint?: string; initialAudio?: LegiscastAudioTrack | null; initialAudioStatus?: AudioStatus }) {
   const tocStudyUnits = adminPreview ? studyUnits : [];
   const prepared = useMemo(() => references.filter((reference) => reference.prepared), [references]);
   const preparedById = useMemo(() => new Map(prepared.map((reference) => [reference.id, reference])), [prepared]);
@@ -446,7 +446,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       const scope = partialMode && selectedStudyUnitId !== null
         ? `&study_unit_id=${encodeURIComponent(selectedStudyUnitId)}`
         : partialMode && selectedStructureId !== null ? `&structure_id=${encodeURIComponent(String(selectedStructureId))}` : "";
-      const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`, { cache: "no-store", headers: administrativeAccess || !highlightAccessToken ? undefined : { Authorization: `Bearer ${highlightAccessToken}` } });
+      const url = referencesEndpoint ? `${referencesEndpoint}&reference_ids=${encodeURIComponent(referenceIds.join(","))}` : `/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`;
+      const response = await fetch(url, { cache: "no-store", headers: administrativeAccess || !highlightAccessToken ? undefined : { Authorization: `Bearer ${highlightAccessToken}` } });
       const result = await response.json() as { blocks?: BlockText[] };
       if (!response.ok || !result.blocks) throw new Error("load_failed");
       if (scopeVersion !== scopeVersionRef.current) return;
@@ -465,7 +466,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [administrativeAccess, highlightAccessToken, loadedPages, loadingPages, partialMode, preparedById, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
+  }, [administrativeAccess, highlightAccessToken, loadedPages, loadingPages, partialMode, preparedById, referencesEndpoint, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
 
   useEffect(() => {
     if ((!partialMode && selectedStudyUnitId === null) || !visiblePrepared.length || loadedPages.has(0)) return;
