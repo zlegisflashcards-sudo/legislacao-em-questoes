@@ -8,16 +8,16 @@ const legiscastPage = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", 
 const interactiveLawClient = readFileSync("app/legisbot/[slug]/continuous-reading-authorized-client.tsx", "utf8");
 
 describe("navegação responsiva dos modos da lei", () => {
-  it("mantém apenas Questões e Lei Interativa na barra", () => {
+  it("oferece Questões, Lei Interativa e o LegisCast independente na barra", () => {
     expect(source).toContain('suffix: ""');
     expect(source).not.toContain('suffix: "/anki"');
-    expect(source).not.toContain('label: "LegisCast"');
+    expect(source).toContain('mode: "legiscast" as const, label: "LegisCast", icon: "🎙️", suffix: "/legiscast"');
     expect(source).toContain('label: "Lei Interativa"');
     expect(source).toContain('mode: "lei_interativa"');
     expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}`');
     expect(source).toContain('if (mode === "legiscast") return `/estudar/lei/${encodeURIComponent(slug)}${suffix}`;');
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
-    expect(source).toContain("grid-cols-2");
+    expect(source).toContain("grid-cols-3");
     expect(source).not.toContain('label: "Anki"');
     expect(source).toContain('icon: "/icons/anki.png"');
     expect(source).toContain('icon: "🎧"');

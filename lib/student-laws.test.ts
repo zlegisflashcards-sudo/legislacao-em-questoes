@@ -200,7 +200,7 @@ describe("interface das leis adquiridas", () => {
     expect(card).toContain("grid min-w-0 gap-5");
     expect(card).toContain("w-full");
     expect(card).toContain("break-words text-xl font-black leading-6");
-    expect(card).toContain("grid gap-3 sm:grid-cols-2");
+    expect(card).toContain("grid gap-3 sm:grid-cols-3");
   });
 
   it("lista somente as leis liberadas, sem estado local de configuração do Anki", () => {
@@ -210,10 +210,12 @@ describe("interface das leis adquiridas", () => {
     expect(client).not.toContain("laws.length + 1");
   });
 
-  it("simplifica o card em dois acessos sem exibir metadados editoriais ou campos privados", () => {
+  it("oferece os três acessos sem exibir metadados editoriais ou campos privados", () => {
     for (const expected of ["law.titulo", "studyContextName", "studyContextKind", 'src="/icons/anki.png"', ">Legis Questões", ">🎧</span>Lei Interativa</Link>", "interactiveLawHref"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
+    expect(card).toContain('const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast`;');
+    expect(card).toContain(">LegisCast</Link>");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
       expect(card).not.toContain(forbidden);
     }
@@ -244,12 +246,12 @@ describe("interface das leis adquiridas", () => {
     }
   });
 
-  it("ativa as rotas seguras de estudo e Lei Interativa sem alterar o edital", () => {
+  it("ativa as rotas seguras de estudo, Lei Interativa e LegisCast sem alterar o edital", () => {
     expect(client).toContain('const lawHref = isScope ?');
     expect(client).toContain('const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}${scopeId ?');
     expect(client).toContain('href={interactiveLawHref}');
     expect(card).not.toContain('ankiHref');
-    expect(card).not.toContain('legiscastHref');
+    expect(card).toContain('href={legiscastHref}');
     expect(client).not.toContain('/api/aluno/editais');
     for (const forbidden of ["questões respondidas", "streak atual", "progresso de estudo", "hotmart api", "mercado pago", "SUPABASE_SERVICE_ROLE_KEY"]) {
       expect(client.toLowerCase()).not.toContain(forbidden.toLowerCase());

@@ -9,6 +9,7 @@ export type LawStudyMode = "questoes" | "anki" | "legiscast" | "lei_interativa";
 const studyModes = [
   { mode: "questoes" as const, label: "Legis Questões", icon: "/icons/anki.png", suffix: "" },
   { mode: "lei_interativa" as const, label: "Lei Interativa", icon: "🎧", suffix: "" },
+  { mode: "legiscast" as const, label: "LegisCast", icon: "🎙️", suffix: "/legiscast" },
 ];
 
 function href(slug: string, mode: LawStudyMode, suffix: string, recorteId: string | null) {
@@ -28,7 +29,7 @@ export function LawStudyBottomNav({ slug, recorteId, activeMode }: { slug: strin
 
   return <>
     <nav aria-label="Modos de estudo da lei" className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,.1)] backdrop-blur md:hidden" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
-      <div className="mx-auto grid max-w-lg grid-cols-2 gap-1">
+      <div className="mx-auto grid max-w-lg grid-cols-3 gap-1">
         {studyModes.map((item) => <StudyNavLink key={item.mode} item={item} slug={slug} recorteId={recorteId} active={item.mode === activeMode} variant="mobile" />)}
       </div>
     </nav>
