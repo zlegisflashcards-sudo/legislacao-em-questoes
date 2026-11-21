@@ -556,7 +556,7 @@
 .structureAudio :global(.legiscast-transport-speed select) { min-height: 30px; border: 1px solid #bfdbfe; border-radius: 7px; background: #fff; padding: 3px 5px; color: #1d4ed8; font-size: .67rem; font-weight: 800; }
 .stickyStructureHeaderCompact { padding: 7px 14px; box-shadow: 0 5px 14px #1e3a5f10; }
 .stickyStructureHeaderCompact .structureAudio { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-.stickyStructureHeaderCompact .audioLabel, .stickyStructureHeaderCompact .audioHeading em, .stickyStructureHeaderCompact .audioSwitch { display: none; }
+.stickyStructureHeaderCompact .audioLabel, .stickyStructureHeaderCompact .audioHeading em { display: none; }
 .stickyStructureHeaderCompact .audioHeading strong { font-size: .78rem; }
 .stickyStructureHeaderCompact :global(.legiscast-transport-compact) { grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 8px; }
 .stickyStructureHeaderCompact :global(.legiscast-transport-controls) { grid-column: 1; grid-row: 1; }
