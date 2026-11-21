@@ -790,7 +790,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       // de destino entrar em foco. Não consulte nem troque áudio nesse meio.
       if (preservedStructureId !== visibleStructureId) return;
       preserveAudioOnNextNavigationRef.current = undefined;
-      return;
+      // A faixa em reprodução é independente da sugestão: resolva o destino
+      // sem trocar o player até o aluno escolher o novo áudio.
     }
     // A leitura pública precisa aguardar a restauração assíncrona da sessão.
     // Sem isso, a primeira tentativa acontece sem Bearer token, é marcada como
