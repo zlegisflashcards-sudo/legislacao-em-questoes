@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { ScannerIcon } from "@/components/scanner-icon";
 import { StudentStudyHub } from "@/components/student-study-hub";
 import { filterStudentLaws, studentLawMotherTitle, type StudentLaw } from "@/lib/student-laws";
 import { supabase } from "@/lib/supabase";
@@ -99,7 +100,7 @@ function StudentLawCard({ law }: { law: StudentLaw }) {
     <div className="flex min-w-0 items-start gap-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-50 sm:h-14 sm:w-14"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 object-contain sm:h-10 sm:w-10" /></div><div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f] sm:text-2xl">{title}</h2>{isScope && law.studyContextName?.trim() ? <span className="mt-2 inline-flex max-w-full rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-700">{law.studyContextName}</span> : null}<p className="mt-2 text-sm font-semibold text-slate-600">{contextLabel}</p></div></div>
     <div className="grid gap-3 sm:grid-cols-3">
       <Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-700 bg-white px-4 py-3 text-center text-sm font-black text-blue-700 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><Image src="/icons/anki.png" alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0 object-contain" />Legis Questões</Link>
-      <Link href={interactiveLawHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><span aria-hidden="true" className="text-lg">🎧</span>Lei Interativa</Link>
+      <Link href={interactiveLawHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><ScannerIcon className="h-5 w-5" /><span>Lei Interativa</span></Link>
       <Link href={legiscastHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-700 bg-white px-4 py-3 text-center text-sm font-black text-blue-700 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><span aria-hidden="true" className="text-lg">🎙️</span>LegisCast</Link>
     </div>
   </article>;

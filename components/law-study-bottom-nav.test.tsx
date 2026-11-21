@@ -20,7 +20,7 @@ describe("navegação responsiva dos modos da lei", () => {
     expect(source).toContain("grid-cols-3");
     expect(source).not.toContain('label: "Anki"');
     expect(source).toContain('icon: "/icons/anki.png"');
-    expect(source).toContain('icon: "🎧"');
+    expect(source).toContain('item.mode === "lei_interativa" ? <ScannerIcon className={mobile ? "h-6 w-6" : "h-[22px] w-[22px]"} />');
     expect(source).toContain('item.mode === "questoes" ? <Image');
   });
 

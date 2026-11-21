@@ -3,12 +3,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { ScannerIcon } from "@/components/scanner-icon";
 
 export type LawStudyMode = "questoes" | "anki" | "legiscast" | "lei_interativa";
 
 const studyModes = [
   { mode: "questoes" as const, label: "Legis Questões", icon: "/icons/anki.png", suffix: "" },
-  { mode: "lei_interativa" as const, label: "Lei Interativa", icon: "🎧", suffix: "" },
+  { mode: "lei_interativa" as const, label: "Lei Interativa", suffix: "" },
   { mode: "legiscast" as const, label: "LegisCast", icon: "🎙️", suffix: "/legiscast" },
 ];
 
@@ -46,7 +47,7 @@ function StudyNavLink({ item, slug, recorteId, active, variant }: { item: typeof
   const activeStyle = active ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-[#062a5f]";
   const mobile = variant === "mobile";
   return <Link href={href(slug, item.mode, item.suffix, recorteId)} aria-current={active ? "page" : undefined} className={`flex min-h-16 items-center rounded-xl px-2 py-2 font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${mobile ? "flex-col justify-center text-center text-xs" : "gap-3 text-sm"} ${activeStyle}`}>
-    {item.mode === "questoes" ? <Image src={item.icon} alt="" aria-hidden="true" width={mobile ? 24 : 22} height={mobile ? 24 : 22} className={`${mobile ? "h-6 w-6" : "h-[22px] w-[22px]"} shrink-0 object-contain`} /> : <span aria-hidden="true" className={`${mobile ? "text-xl" : "text-lg"} leading-none`}>{item.icon}</span>}
+    {item.mode === "questoes" ? <Image src={item.icon} alt="" aria-hidden="true" width={mobile ? 24 : 22} height={mobile ? 24 : 22} className={`${mobile ? "h-6 w-6" : "h-[22px] w-[22px]"} shrink-0 object-contain`} /> : item.mode === "lei_interativa" ? <ScannerIcon className={mobile ? "h-6 w-6" : "h-[22px] w-[22px]"} /> : <span aria-hidden="true" className={`${mobile ? "text-xl" : "text-lg"} leading-none`}>{item.icon}</span>}
     <span className={mobile ? "mt-1" : "min-w-0"}>{item.label}</span>
   </Link>;
 }

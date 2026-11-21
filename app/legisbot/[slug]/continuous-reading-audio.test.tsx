@@ -113,6 +113,7 @@ describe("áudio na leitura contínua do aluno", () => {
         title="Lei de teste"
         references={references}
         structures={structures}
+        studyUnits={[{ id: "cobertura", kind: "audio", audioId: tracks[0].id, titleStructureId: chapters[0].id, structureIds: chapters.map((chapter) => chapter.id) }]}
         initialStructureId={title.id}
         initialBlocks={blocks}
         partialMode
@@ -143,6 +144,25 @@ describe("áudio na leitura contínua do aluno", () => {
     expect(audioRequests).toEqual([track.structureId]);
     expect(container.textContent).not.toContain("Carregando áudio desta unidade");
     expect(container.querySelector("audio")?.getAttribute("src")).toBe(track.url);
+  });
+
+  it("mantém links e recolhimento sem marcadores de áudio nos três sumários do aluno", async () => {
+    await mount();
+    const check = (toc: HTMLElement | null) => {
+      expect(toc?.querySelector('a[href^="#"]')?.textContent).toBe(title.name);
+      expect(toc?.textContent).toContain(chapters[0].name);
+      expect(toc?.textContent).not.toMatch(/faixa própria|estrutura abrangida|Áudio/);
+    };
+    check(container.querySelector('nav[aria-label="Sumário da legislação"]'));
+    await clickButton(`Recolher ${title.name}`);
+    expect(container.querySelector('nav[aria-label="Sumário da legislação"]')?.textContent).not.toContain(chapters[0].name);
+    await clickButton(`Expandir ${title.name}`);
+    await clickButton("⤢ Expandir");
+    check(container.querySelector('nav[aria-label="Sumário ampliado"]'));
+    await clickButton("Fechar");
+    await clickButton("☰ Sumário");
+    check(container.querySelector("#legisbot-mobile-toc"));
+    expect(container.querySelector("audio")?.getAttribute("src")).toBe(tracks[0].url);
   });
 
   it("preserva faixa e posição ao avançar e só troca por escolha explícita, sem autoplay", async () => {

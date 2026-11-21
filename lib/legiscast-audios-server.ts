@@ -74,5 +74,5 @@ export async function listAuthorizedLegiscastAudios(request: Request, slug: stri
     if (signed.error || !signed.data?.signedUrl) throw new LawStudyApiError(503, "Não foi possível preparar os áudios desta lei.");
     return { id: audio.id, structureId: audio.structure_id, title: legiscastAudioDisplayTitle(audio.titulo, audio.structure_id === null ? null : structureNames.get(audio.structure_id)), description: audio.descricao, durationSeconds: audio.duracao_segundos, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
   }));
-  return { audios, structure, recorte: null };
+  return { audios, structure, recorte: null, lawTitle: context.title };
 }

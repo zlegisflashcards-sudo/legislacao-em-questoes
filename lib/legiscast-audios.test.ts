@@ -16,6 +16,7 @@ const adminClient = readFileSync("components/admin/legiscast-audios-admin.tsx", 
 const adminRoute = readFileSync("app/api/admin/legiscast-audios/route.ts", "utf8");
 const page = readFileSync("app/leis/[slug]/page.tsx", "utf8");
 const lawLegiscastPage = readFileSync("app/estudar/lei/[slug]/legiscast/page.tsx", "utf8");
+const interactiveLawClient = readFileSync("app/legisbot/[slug]/continuous-reading-client.tsx", "utf8");
 const lawLegiscastClient = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
 const pdfViewer = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
 const jobsMigration = readFileSync("supabase/migrations/20260904140000_create_legiscast_audio_jobs.sql", "utf8");
@@ -39,6 +40,13 @@ describe("LegisCast em áudio", () => {
     expect(server).toContain('createSignedUrl(audio.storage_path, 60 * 60)');
     expect(server).toContain('from(BUCKET)');
     expect(server).not.toContain("getPublicUrl");
+    const standalone = server.slice(server.indexOf("export async function listAuthorizedLegiscastAudios"));
+    const access = standalone.indexOf("await authorizeLawStudy(request, slug)");
+    expect(access).toBeGreaterThan(-1);
+    expect(standalone.indexOf('from("legiscast_audios")')).toBeGreaterThan(access);
+    expect(standalone.indexOf("createSignedUrl")).toBeGreaterThan(access);
+    expect(standalone).toContain("return { audios, structure, recorte: null, lawTitle: context.title }");
+    expect(standalone).not.toContain("legislative_structure_releases");
   });
 
   it("oferece controles de áudio e playlist sem progresso de campanha", () => {
@@ -46,7 +54,7 @@ describe("LegisCast em áudio", () => {
     for (const forbidden of ["score", "ranking", "campanha", "porcentagem"]) expect(player.toLowerCase()).not.toContain(forbidden);
     expect(page).not.toContain("LegiscastAudioPlayer");
     expect(lawLegiscastPage).toContain("LawLegiscastPageClient");
-    for (const expected of ["LegiscastPdfViewer", "<LegiscastAudioPlayer key={\`audio-${attempt}\`} slug={slug} embedded", "StudentAreaTabs", "minhasLeisHref=\"/minhas-leis\"", "/api/aluno/estudar/lei/", "/conta?modo=login"]) expect(lawLegiscastClient).toContain(expected);
+    for (const expected of ["<LegiscastAudioPlayer key={\`audio-${attempt}\`} slug={slug} embedded", "StudentAreaTabs", "minhasLeisHref=\"/minhas-leis\"", "/conta?modo=login"]) expect(lawLegiscastClient).toContain(expected);
     expect(player).toContain("embedded = false");
     expect(player).toContain("border-t border-slate-200 pt-6");
     expect(lawLegiscastPage).toContain("searchParams");
@@ -102,19 +110,18 @@ describe("LegisCast em áudio", () => {
     expect(player).not.toContain('targetStructureId) void toggle');
   });
 
-  it("coordena lei, PDF e áudio antes de revelar o LegisCast", () => {
-    const client = readFileSync("components/law-legiscast-page-client.tsx", "utf8");
-    const pdf = readFileSync("components/legiscast-pdf-viewer.tsx", "utf8");
-    expect(client).toContain("const pageReady = mobileLayout !== null && audioReady && (mobileLayout || pdfReady)");
-    expect(client).toContain("LegiscastSkeleton");
-    expect(client).toContain('pageReady ? "" : "invisible"');
-    expect(client).not.toContain("<LegiscastCommentedArticles");
-    expect(client).toContain("!pageReady ? <div");
-    expect(client).toContain("Tentar novamente");
-    expect(client).not.toContain("setTimeout");
-    expect(player).toContain("onReady?.()");
+  it("aguarda apenas o catálogo de áudio autorizado, com feedback e nova tentativa", () => {
+    expect(lawLegiscastClient).toContain("LegiscastSkeleton");
+    expect(lawLegiscastClient).toContain("hidden={lawTitle === null}");
+    expect(lawLegiscastClient).toContain("Tentar novamente");
+    expect(lawLegiscastClient).toContain("onSessionRequired={redirectToLogin}");
+    expect(lawLegiscastClient).not.toContain("fetch(");
+    expect(lawLegiscastClient).not.toContain("LegiscastPdfViewer");
+    expect(lawLegiscastClient).not.toContain("LegiscastPdfActions");
+    expect(lawLegiscastClient).not.toContain("<LegiscastCommentedArticles");
+    expect(player).toContain("/api/aluno/leis/${encodeURIComponent(slug)}/legiscast");
+    expect(player).toContain("onReady?.(typeof body.lawTitle");
     expect(player).toContain("onError?.(");
-    expect(pdf).toContain("if (status === \"ready\") onReady?.()");
   });
 
   it("envia somente o original ao Cloud Storage e mantém o limite do resultado", () => {
@@ -158,8 +165,8 @@ describe("LegisCast em áudio", () => {
     expect(mp3ReservationMigration).toContain("mp3_size_bytes > 0");
   });
 
-  it("persiste a página do PDF por lei e recorte somente no LegisCast", () => {
-    expect(lawLegiscastClient).toContain("LegiscastPdfViewer");
+  it("preserva o componente separado de PDF e sua posição por lei e recorte", () => {
+    expect(lawLegiscastClient).not.toContain("LegiscastPdfViewer");
     expect(legiscastPdfPositionKey("cdc", null)).toBe("legiscast-pdf-position:cdc:completo");
     expect(legiscastPdfPositionKey("cdc", "bc797e57-f4bc-4b2e-89d8-ee9594953b2a")).toBe("legiscast-pdf-position:cdc:bc797e57-f4bc-4b2e-89d8-ee9594953b2a");
     expect(normalizeLegiscastPdfPage(23, 30)).toBe(23);
@@ -258,14 +265,13 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).toContain("Ocultar áudio");
   });
 
-  it("navega do sumário estrutural para o PDF sem recarregar áudio ou documento", () => {
+  it("preserva navegação do componente de PDF sem ativar links de página no LegisCast separado", () => {
     expect(server).toContain("id,parent_id,tipo,nome,ordem,pdf_page");
     expect(player).toContain("node.pdf_page");
     expect(player).toContain("onNavigateToPdfPage?.(navigablePage)");
     expect(player).toContain("first || navigablePage !== null");
-    expect(lawLegiscastClient).toContain("onNavigateToPdfPage={navigateToPdfPage}");
-    expect(lawLegiscastClient).toContain("requestId: (current?.requestId ?? 0) + 1");
-    expect(lawLegiscastClient.match(/targetPage=\{targetPdfPage\}/g)).toHaveLength(2);
+    expect(player).toContain("onNavigateToPdfPage && Number.isSafeInteger(node.pdf_page)");
+    expect(lawLegiscastClient).not.toContain("onNavigateToPdfPage");
     expect(pdfViewer).toContain('canvas[data-page="${requestedPage}"]');
     expect(pdfViewer).toContain("legiscast_pdf_page_navigation_ignored");
     expect(pdfViewer).toContain("requestedPage > total");
@@ -275,46 +281,27 @@ describe("LegisCast em áudio", () => {
     expect(player.match(/<audio /g)).toHaveLength(1);
   });
 
-  it("mantém no mobile capa, player, playlist e ações do PDF sem duplicar o mapa da Lei Interativa", () => {
+  it("usa a mesma coluna de capa, player e playlist em todas as telas", () => {
     const cover = lawLegiscastClient.indexOf("Capa dos hosts do LegisCast");
-    const actions = lawLegiscastClient.indexOf("<LegiscastPdfActions");
     const playerPosition = lawLegiscastClient.indexOf("<LegiscastAudioPlayer key=");
     expect(cover).toBeGreaterThan(-1);
     expect(playerPosition).toBeGreaterThan(cover);
-    expect(actions).toBeGreaterThan(playerPosition);
-    expect(lawLegiscastClient).not.toContain("<LegiscastCommentedArticles");
+    expect(lawLegiscastClient).toContain("w-[min(100%,220px)]");
+    expect(lawLegiscastClient).toContain("max-w-2xl");
+    expect(lawLegiscastClient).not.toMatch(/lg:|matchMedia/);
     expect(player).toContain("<StructureSummary");
     expect(player.indexOf('aria-label="Posição da reprodução"')).toBeLessThan(player.lastIndexOf("<StructureSummary"));
+    const standalone = player.slice(player.indexOf("export function LegiscastAudioPlayer"));
+    expect(standalone).not.toContain("lg:");
+    for (const label of ["Reproduzir", "Voltar 15 segundos", "Avançar 15 segundos", "Velocidade"]) expect(standalone).toContain(label);
   });
 
-  it("abre o PDF autorizado em modal mobile sem desmontar o player", () => {
-    expect(lawLegiscastClient).toContain("mobilePdfOpen && pdf");
-    expect(lawLegiscastClient).toContain('role="dialog" aria-modal="true"');
-    expect(lawLegiscastClient).toContain('aria-label="Fechar PDF"');
-    expect(lawLegiscastClient).toContain("setMobilePdfOpen(false)");
+  it("mantém PDF na Lei Interativa, sem ações de PDF no LegisCast separado", () => {
+    expect(lawLegiscastClient).not.toMatch(/LegiscastPdf|pdfReady|Material em PDF/);
+    expect(interactiveLawClient).toContain("<LegiscastPdfDownload");
+    expect(interactiveLawClient).toContain("Baixar PDF esquematizado");
     expect(pdfViewer).toContain("export function LegiscastPdfActions");
     expect(pdfViewer).toContain("fetchAuthorizedLegiscastPdf(slug, materialId, recorteId)");
-  });
-
-  it("usa capa e controles compactos no mobile sem alterar os rótulos desktop", () => {
-    expect(lawLegiscastClient).toContain("w-[min(100%,220px)]");
-    expect(lawLegiscastClient).toContain("mx-auto aspect-square");
-    expect(player).toContain('aria-label={playing ? "Pausar" : "Reproduzir"}');
-    expect(player).toContain('{playing ? "⏸" : "▶"}');
-    expect(player).toContain('aria-label="Voltar 15 segundos"');
-    expect(player).toContain('aria-label="Avançar 15 segundos"');
-    expect(player).toContain('className="hidden lg:inline">{playing ? "Pausar" : "Reproduzir"}');
-    expect(player).not.toContain("overflow-x-auto");
-  });
-
-  it("separa as ações mobile em um cabeçalho de PDF sem viewer embutido", () => {
-    expect(lawLegiscastClient).toContain('aria-labelledby="mobile-pdf-title"');
-    expect(lawLegiscastClient).toContain('src="/icons/pdf.png"');
-    expect(lawLegiscastClient).toContain("Material em PDF");
-    expect(lawLegiscastClient).toContain("Acesse a legislação esquematizada desta lei.");
-    expect(pdfViewer).toContain(">Baixar</button>");
-    expect(pdfViewer).toContain(">Imprimir</button>");
-    expect(pdfViewer).toContain(">Expandir</button>");
-    expect(lawLegiscastClient).toContain("mobileLayout === false ? (pdf ? <LegiscastPdfViewer");
+    for (const label of ["Baixar", "Imprimir", "Expandir"]) expect(pdfViewer).toContain(`>${label}</button>`);
   });
 });

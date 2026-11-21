@@ -211,7 +211,7 @@ describe("interface das leis adquiridas", () => {
   });
 
   it("oferece os três acessos sem exibir metadados editoriais ou campos privados", () => {
-    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", 'src="/icons/anki.png"', ">Legis Questões", ">🎧</span>Lei Interativa</Link>", "interactiveLawHref"]) expect(card).toContain(expected);
+    for (const expected of ["law.titulo", "studyContextName", "studyContextKind", 'src="/icons/anki.png"', ">Legis Questões", '<ScannerIcon className="h-5 w-5" /><span>Lei Interativa</span>', "interactiveLawHref"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
     expect(card).toContain('const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast`;');
