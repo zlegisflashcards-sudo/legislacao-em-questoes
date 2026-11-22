@@ -12,7 +12,6 @@ import { attachConfirmedLegiscastAudioCoverage, resolveLegiscastTrackForStructur
 import {
   legiscastStructureFreshness,
   legiscastTrackFreshness,
-  legislativeChangeDateForLegiscast,
 } from "@/lib/legiscast-audio-freshness";
 import { resolveLegiscastStudyUnits } from "@/lib/legiscast-study-units-core";
 import { LawSearchSelect } from "@/components/law-search-select";
@@ -204,15 +203,7 @@ function audioBlockChange(audio: Audio, coverages: Coverage[], changes: BlockCha
     ...coverages.filter((coverage) => coverage.audio_id === audio.id).map((coverage) => coverage.structure_id),
   ]);
 }
-function audioStatusForTracks(tracks: Audio[], law: Law, blockChangedAt?: string | null) {
-  return legiscastStructureFreshness(tracks, law, blockChangedAt);
-}
-function legislativeChangeLabel(law: Law) {
-  const date = legislativeChangeDateForLegiscast(law);
-  if (!date) return "Nenhuma alteração legislativa cadastrada na lei.";
-  const reference = law.ultima_alteracao_referencia?.trim() || "Alteração legislativa sem identificação";
-  return `${reference} · ${formatPublicationDate(date)}`;
-}
+function audioStatusForTracks(tracks: Audio[], blockChangedAt?: string | null) { return legiscastStructureFreshness(tracks, blockChangedAt); }
 function manualFreshnessLabel(audio: Audio) {
   if (!audio.situacao_atualizacao_manual) return null;
   const status = audio.situacao_atualizacao_manual === "desatualizado" ? "Marcado como desatualizado" : "Revisão confirmada";
@@ -245,7 +236,6 @@ function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], cover
   if (!lawStructures.length) {
     const status = audioStatusForTracks(
       lawTracks.filter((audio) => audio.structure_id === null),
-      law,
       latestBlockChange(changes, law.id, [null]),
     );
     return {
@@ -261,7 +251,7 @@ function legiscastCoverageForLaw(structures: Structure[], audios: Audio[], cover
   let outdated = 0;
   lawStructures.forEach((structure) => {
     const coverage = resolvedTracksCoveringStructure(lawTracks, coverages, lawStructures, structure.id);
-    const status = audioStatusForTracks(coverage.tracks, law, latestBlockChange(changes, law.id, [structure.id]));
+    const status = audioStatusForTracks(coverage.tracks, latestBlockChange(changes, law.id, [structure.id]));
     if (status === "current") withAudio += 1;
     else if (status === "outdated") outdated += 1;
     else if (structure.audio_not_applicable) notApplicable += 1;
@@ -373,7 +363,7 @@ function FreshnessConfirmation({
       <dl className="grid gap-2 rounded-lg bg-slate-50 p-3 text-sm">
         <div><dt className="font-bold text-slate-700">Incluído em</dt><dd>{formatUpdatedAt(audio.created_at)}</dd></div>
         <div><dt className="font-bold text-slate-700">Publicado em</dt><dd>{formatPublicationDate(audio.publicado_em)}</dd></div>
-        <div><dt className="font-bold text-slate-700">Última alteração incorporada</dt><dd>{legislativeChangeLabel(law)}</dd></div>
+        <div><dt className="font-bold text-slate-700">Critério automático</dt><dd>Alteração registrada no bloco após a inclusão do áudio.</dd></div>
       </dl>
       <label className="grid gap-1 text-sm font-bold">Motivo ou observação (opcional)<textarea name="reason" maxLength={2000} defaultValue={audio.situacao_atualizacao_motivo ?? ""} placeholder={markingOutdated ? "Ex.: alteração ainda não gravada nesta faixa." : "Ex.: áudio revisado conforme a alteração indicada."} /></label>
       <div className="flex flex-wrap gap-2">
@@ -916,7 +906,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                 const tracks = resolvedCoverage.tracks;
                 const coverageSourceName = resolvedCoverage.sourceStructureId === null ? null : structures.find((candidate) => candidate.id === resolvedCoverage.sourceStructureId)?.nome ?? "estrutura superior";
                 const structureBlockChange = latestBlockChange(blockChanges, selectedLaw.id, [structure.id]);
-                const audioStatus = audioStatusForTracks(tracks, selectedLaw, structureBlockChange);
+                const audioStatus = audioStatusForTracks(tracks, structureBlockChange);
                 const groupId = `structure:${structure.id}`;
                 const conflicts = duplicateConflictsByStructure.get(structure.id) ?? [];
                 const directConflict = conflicts.find((conflict) => conflict.kind === "direct-duplicate");
@@ -955,7 +945,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                     {expandedAudioGroup === groupId ? <div id={`legiscast-${structure.id}`} className="grid gap-2">
                     {tracks.map((audio) => {
                       const blockChangedAt = audioBlockChange(audio, coverages, blockChanges);
-                      const freshness = legiscastTrackFreshness(audio, selectedLaw, blockChangedAt);
+                      const freshness = legiscastTrackFreshness(audio, blockChangedAt);
                       const manualLabel = manualFreshnessLabel(audio);
                       return <article
                         key={audio.id}
@@ -1090,7 +1080,7 @@ export function LegiscastAudiosAdmin({ lawContext = null }: { lawContext?: Legis
                   .filter((audio) => audio.structure_id === null)
                   .map((audio) => {
                     const blockChangedAt = audioBlockChange(audio, coverages, blockChanges);
-                    const freshness = legiscastTrackFreshness(audio, selectedLaw, blockChangedAt);
+                    const freshness = legiscastTrackFreshness(audio, blockChangedAt);
                     const manualLabel = manualFreshnessLabel(audio);
                     return <article
                       key={audio.id}

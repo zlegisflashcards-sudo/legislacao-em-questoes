@@ -66,6 +66,19 @@ describe("Central administrativa por lei", () => {
     expect(filters).toContain("requestSubmit");
   });
 
+  it("filtra leis pela composição de um edital ou combo", () => {
+    const list = read("app/admin/leis/page.tsx");
+    const server = read("lib/admin-law-center-server.ts");
+    const filters = read("components/admin/admin-law-list-filters.tsx");
+    expect(filters).toContain('name="produto"');
+    expect(filters).toContain("Edital ou combo");
+    expect(server).toContain('from("produtos")');
+    expect(server).toContain('from("produto_leis")');
+    expect(server).toContain('request = request.in("id", lawIds)');
+    expect(list).toContain("productId: params.produto");
+    expect(list).toContain("produto: result.selectedProduct?.id");
+  });
+
   it("mantém a navegação desktop e mobile na ordem operacional dos cards", () => {
     const shell = read("app/admin/leis/[slug]/layout.tsx");
     for (const [before, after] of [["estrutura", "materiais"], ["materiais", "legiscast"], ["legiscast", "questoes"], ["questoes", "anki"], ["anki", "recortes"]]) expect(shell.indexOf(`data-law-nav=\"${before}\"`)).toBeLessThan(shell.indexOf(`data-law-nav=\"${after}\"`));

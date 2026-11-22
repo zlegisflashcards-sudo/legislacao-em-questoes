@@ -197,9 +197,9 @@ describe("LegisCast em áudio", () => {
     expect(adminClient).toContain("total: 1");
   });
 
-  it("separa cobertura, falta e áudio desatualizado pela alteração legislativa da lei", () => {
+  it("separa cobertura, falta e áudio desatualizado pela alteração específica do bloco", () => {
     expect(admin).toContain("houve_alteracao_legislativa,ultima_alteracao_referencia,ultima_alteracao_data");
-    expect(adminClient).toContain("legislativeChangeDateForLegiscast");
+    expect(adminClient).toContain("latestBlockChange");
     expect(adminClient).toContain("function audioStatusForTracks");
     expect(adminClient).toContain("Desatualizados");
     expect(adminClient).toContain("Áudio desatualizado");
