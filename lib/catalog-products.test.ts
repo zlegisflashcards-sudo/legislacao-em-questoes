@@ -40,7 +40,7 @@ class Query {
   }
 }
 
-function configureCatalogQueries(productCount: number | null = 2, scope: "valid" | "missing" | "error" | "zero" | null = null) {
+function configureCatalogQueries(productCount: number | null = 2, scope: "valid" | "missing" | "error" | "zero" | "paid" | "wrong-law" | null = null) {
   const calls: string[] = [];
   const filters: Filter[] = [];
   const rows: Record<string, unknown> = {
@@ -50,9 +50,10 @@ function configureCatalogQueries(productCount: number | null = 2, scope: "valid"
     ],
     produto_leis: [
       { produto_id: "p-1", lei_id: 10, recorte_id: null, leis: { slug: "lei-a", status_publicacao: "ativa", acesso_gratuito: false } },
-      { produto_id: "p-1", lei_id: 11, recorte_id: "recorte-combo", leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
-      { produto_id: "p-2", lei_id: 11, recorte_id: scope ? "recorte-cf" : null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
+      { produto_id: "p-1", lei_id: 11, recorte_id: "recorte-combo", leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: !scope || scope === "paid" } },
+      { produto_id: "p-2", lei_id: 11, recorte_id: scope ? "recorte-cf" : null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: !scope || scope === "paid" } },
     ],
+    recortes_leis: scope === "paid" ? [] : [{ id: "recorte-cf", lei_id: scope === "wrong-law" ? 99 : 11 }],
     recortes_leis_estrutura: scope === "missing" ? [] : [
       { lei_id: 11, recorte_id: "recorte-cf", structure_id: 21 },
       { lei_id: 11, recorte_id: "recorte-cf", structure_id: 22 },
@@ -174,6 +175,7 @@ describe("cards comerciais do catálogo", () => {
       modules: { questoes: true, anki: false, legiscast: false, materiais: false },
     });
     expect(result.products[1]).toEqual(result.highlightedProducts[0]);
+    expect(filters.filter(({ table }) => table === "recortes_leis").map(({ column, value }) => [column, value])).toEqual([["id", ["recorte-cf"]], ["ativo", true], ["status_publicacao", "ativa"], ["acesso_gratuito", true]]);
     expect(filters.filter(({ table }) => table === "recortes_leis_estrutura")).toEqual([{ table: "recortes_leis_estrutura", column: "recorte_id", value: ["recorte-cf"] }]);
     expect(filters).toContainEqual({ table: "questions", column: "ativo", value: true });
     expect(filters).toContainEqual({ table: "questions", column: "lei_id", value: 11 });
@@ -186,6 +188,14 @@ describe("cards comerciais do catálogo", () => {
     expect(result.highlightedProducts[0]?.totalFlashcards).toBe(scope === "zero" ? 0 : null);
     expect(result.highlightedProducts[0]?.modules.questoes).toBe(false);
     expect(result.products[0]?.totalFlashcards).toBe(2029);
+  });
+
+  it.each(["paid", "wrong-law"] as const)("não oferece estudo grátis nem consulta a contagem para recorte não autorizado (%s)", async (scope) => {
+    const { calls } = configureCatalogQueries(2, scope);
+    const result = await getHomeCatalogProducts();
+    expect(result.highlightedProducts[0]).toMatchObject({ freeStudyHref: null, totalFlashcards: 2024 });
+    expect(calls).not.toContain("recortes_leis_estrutura");
+    expect(calls).not.toContain("questions");
   });
 
   it("mantém os chamadores públicos com os mesmos recortes de catálogo", async () => {

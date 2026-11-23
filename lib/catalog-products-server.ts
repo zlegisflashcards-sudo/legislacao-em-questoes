@@ -129,14 +129,27 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
     const activeLinksByProductId = new Map([...productLinksById].map(([productId, productLinks]) =>
       [productId, productLinks.filter((link) => lawSlugById.has(String(link.lei_id)))] as const,
     ));
-    const freeStudyLaws = new Map(products.flatMap((product) => {
+    const standaloneLaws = new Map(products.flatMap((product) => {
       const productLinks = activeLinksByProductId.get(product.id) ?? [];
-      const soleLaw = productLinks.length === 1 ? productLinks[0] : null;
-      // A gratuidade vem da lei; apenas um avulso com uma única lei ativa abre o estudo.
-      return product.tipo_produto === "lei_avulsa" && soleLaw && freeLawIds.has(String(soleLaw.lei_id))
-        ? [[product.id, soleLaw] as const]
+      return product.tipo_produto === "lei_avulsa" && productLinks.length === 1
+        ? [[product.id, productLinks[0]] as const]
         : [];
     }));
+    const candidateScopeIds = [...new Set([...standaloneLaws.values()].flatMap((link) =>
+      typeof link.recorte_id === "string" ? [link.recorte_id] : [],
+    ))];
+    const eligibleScopes = candidateScopeIds.length
+      ? await supabase.from("recortes_leis").select("id,lei_id")
+        .in("id", candidateScopeIds).eq("ativo", true).eq("status_publicacao", "ativa").eq("acesso_gratuito", true)
+      : null;
+    const freeScopeKeys = new Set(eligibleScopes?.error ? [] : (eligibleScopes?.data ?? []).map((scope) =>
+      catalogScopeKey(scope.lei_id, scope.id),
+    ));
+    const freeStudyLaws = new Map([...standaloneLaws].filter(([, link]) =>
+      typeof link.recorte_id === "string"
+        ? freeScopeKeys.has(catalogScopeKey(link.lei_id, link.recorte_id))
+        : freeLawIds.has(String(link.lei_id)),
+    ));
     const scopeTargets: CatalogScopeTarget[] = [...freeStudyLaws.values()].flatMap((link) =>
       typeof link.recorte_id === "string" ? [{ lawId: Number(link.lei_id), scopeId: link.recorte_id }] : [],
     );
