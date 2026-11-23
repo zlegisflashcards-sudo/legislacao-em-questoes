@@ -11,6 +11,8 @@ import {
 import { siteConfig } from "@/lib/site-config";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
+import { mainQuestions, mainStructure } from "@/lib/questions-main-server";
+import { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 import { PublicLawContentTree } from "@/components/public-law-content-tree";
 import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLawCommercialSummary } from "@/lib/public-law-content-tree-server";
@@ -83,15 +85,44 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       if (lei?.slug) lawSlugById.set(Number(vinculo.lei_id), lei.slug);
     }
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
+    const recorteIds = [...new Set((vinculos.data ?? []).flatMap((vinculo) => typeof vinculo.recorte_id === "string" ? [vinculo.recorte_id] : []))];
+    const flashcardsByRecorteId = new Map<string, number>();
+    if (recorteIds.length) {
+      const recorteLinks = await supabase
+        .from("recortes_leis_estrutura")
+        .select("recorte_id,structure_id,lei_id")
+        .in("recorte_id", recorteIds);
+      if (!recorteLinks.error) {
+        const recortesByLawId = new Map<number, string[]>();
+        const structureIdsByRecorteId = new Map<string, number[]>();
+        for (const link of recorteLinks.data ?? []) {
+          const recorteId = String(link.recorte_id);
+          const lawId = Number(link.lei_id);
+          recortesByLawId.set(lawId, [...(recortesByLawId.get(lawId) ?? []), recorteId]);
+          structureIdsByRecorteId.set(recorteId, [...(structureIdsByRecorteId.get(recorteId) ?? []), Number(link.structure_id)]);
+        }
+        const scopedLaws = await Promise.all([...recortesByLawId.keys()].map(async (lawId) => {
+          const [questions, structure] = await Promise.all([mainQuestions(lawId), mainStructure(lawId)]);
+          return { lawId, questions, structure };
+        }));
+        for (const { lawId, questions, structure } of scopedLaws) {
+          for (const recorteId of new Set(recortesByLawId.get(lawId) ?? [])) {
+            const structureIds = descendantsForScope(structure, structureIdsByRecorteId.get(recorteId) ?? []);
+            flashcardsByRecorteId.set(recorteId, questionsInScope(questions, structureIds).length);
+          }
+        }
+      }
+    }
     const leis = (vinculos.data ?? []).map((vinculo) => {
       const lei = Array.isArray(vinculo.leis) ? vinculo.leis[0] : vinculo.leis;
       const leiId = Number(vinculo.lei_id);
+      const recorteId = vinculo.recorte_id == null ? null : String(vinculo.recorte_id);
       return {
         id: leiId,
         slug: typeof lei?.slug === "string" ? lei.slug : null,
         titulo: lei?.titulo || lei?.nome_curto || "Lei não identificada",
-        flashcards: countsBySlug.get(lawSlugById.get(leiId) ?? "") ?? 0,
-        recorteId: vinculo.recorte_id == null ? null : String(vinculo.recorte_id),
+        flashcards: recorteId ? flashcardsByRecorteId.get(recorteId) ?? null : countsBySlug.get(lawSlugById.get(leiId) ?? "") ?? 0,
+        recorteId,
       };
     });
     const totalFlashcards = leis.length
@@ -480,7 +511,7 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
       <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{!isLeiAvulsa && resumoLeis ? <p className="font-black text-slate-200">{resumoLeis}</p> : null}</div>
         {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => {
           const lawHref = lei.slug ? `/leisflashcards/${encodeURIComponent(lei.slug)}${lei.recorteId ? `?recorte_id=${encodeURIComponent(lei.recorteId)}` : ""}` : null;
-          const content = <><h3 className="font-black">{lei.titulo}</h3><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
+          const content = <><div className="min-w-0"><h3 className="font-black">{lei.titulo}</h3>{lei.recorteId ? <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-900">Recorte de acordo com edital</span> : null}</div><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
           return isProdutoComposto && lawHref ? <a key={lei.id} href={lawHref} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950 transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300">{content}</a> : <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950">{content}</article>;
         })}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
       {avulsa && contentTree ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo disponível nesta lei</p><p className="mt-2 text-sm text-slate-300">🎧 = Possui LegisCast</p></div><PublicLawContentTree tree={contentTree} /></section> : null}
