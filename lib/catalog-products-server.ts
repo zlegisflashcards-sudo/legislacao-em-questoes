@@ -150,9 +150,9 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         ? freeScopeKeys.has(catalogScopeKey(link.lei_id, link.recorte_id))
         : freeLawIds.has(String(link.lei_id)),
     ));
-    const scopeTargets: CatalogScopeTarget[] = [...freeStudyLaws.values()].flatMap((link) =>
+    const scopeTargets: CatalogScopeTarget[] = [...activeLinksByProductId.values()].flatMap((productLinks) => productLinks.flatMap((link) =>
       typeof link.recorte_id === "string" ? [{ lawId: Number(link.lei_id), scopeId: link.recorte_id }] : [],
-    );
+    ));
     const [countsBySlug, scopeCounts, checksResult] = await Promise.all([
       activeQuestionCountsBySlug([...lawSlugById.values()]),
       countCatalogScopes(supabase, scopeTargets),
@@ -180,11 +180,12 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         ? `/estudar/lei/${encodeURIComponent(lawSlugById.get(String(freeStudyLaw.lei_id)) ?? "")}${freeStudyScope !== null ? `?recorte_id=${encodeURIComponent(freeStudyScope)}` : ""}`
         : null;
       const freeQuestionScope = freeStudyLaw && freeStudyScope !== null;
-      const totalFlashcards = freeQuestionScope
-        ? scopeCounts.get(catalogScopeKey(freeStudyLaw.lei_id, freeStudyScope)) ?? null
-        : productLinks.length
-          ? productLinks.reduce((total, link) => total + (countsBySlug.get(lawSlugById.get(String(link.lei_id)) ?? "") ?? 0), 0)
-          : null;
+      const flashcardCounts = productLinks.map((link) => typeof link.recorte_id === "string"
+        ? scopeCounts.get(catalogScopeKey(link.lei_id, link.recorte_id)) ?? null
+        : countsBySlug.get(lawSlugById.get(String(link.lei_id)) ?? "") ?? 0);
+      const totalFlashcards = flashcardCounts.length && flashcardCounts.every((count) => count !== null)
+        ? flashcardCounts.reduce((total, count) => total + count, 0)
+        : null;
       if (!allProductLinks.length) console.warn(`[catalog] Produto ${product.id} não possui vínculo com lei; módulos exibidos como Em produção.`);
 
       return {

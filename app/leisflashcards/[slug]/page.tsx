@@ -501,8 +501,8 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
   const isProdutoComposto = isCompositeLawProduct(produto.tipoProduto);
   const avulsa = isLeiAvulsa && produto.leis.length === 1 && produto.leis[0].slug ? produto.leis[0] : null;
   const [contentTree, commercialSummary] = avulsa ? await Promise.all([
-    produto.freeScope ? null : loadPublicLawContentTree({ lawId: avulsa.id, recorteId: avulsa.recorteId }),
-    loadPublicLawCommercialSummary({ lawId: avulsa.id }),
+    loadPublicLawContentTree({ lawId: avulsa.id, recorteId: avulsa.recorteId }),
+    loadPublicLawCommercialSummary({ lawId: avulsa.id, recorteId: avulsa.recorteId }),
   ]) : [null, null];
   const resumoLeis = produto.leis.length > 1
     ? `${produto.leis.length} leis${produto.totalFlashcards !== null ? ` · ${produto.totalFlashcards.toLocaleString("pt-BR")} flashcards` : ""}`
@@ -536,7 +536,7 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
           const content = <><div className="min-w-0"><h3 className="font-black">{lei.titulo}</h3>{lei.recorteId ? <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-900">{produto.freeScope ? "Recorte gratuito" : "Recorte de acordo com edital"}</span> : null}</div><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
           return isProdutoComposto && lawHref ? <a key={lei.id} href={lawHref} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950 transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300">{content}</a> : <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950">{content}</article>;
         })}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
-      {avulsa && contentTree && !produto.freeScope ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo disponível nesta lei</p><p className="mt-2 text-sm text-slate-300">🎧 = Possui LegisCast</p></div><PublicLawContentTree tree={contentTree} /></section> : null}
+      {avulsa && contentTree ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo disponível nesta lei</p><p className="mt-2 text-sm text-slate-300">🎧 = Possui LegisCast</p></div><PublicLawContentTree tree={contentTree} /></section> : null}
     </div>
   </div>;
 }
