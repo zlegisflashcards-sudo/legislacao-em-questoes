@@ -7,7 +7,7 @@ describe("página comercial de produto", () => {
   it("consulta produto e leis vinculadas no banco", () => {
     expect(source).toContain('from("produtos")');
     expect(source).toContain('from("produto_leis")');
-    expect(source).toContain('leis(id,slug,titulo,nome_curto)');
+    expect(source).toContain('leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito)');
     expect(source).toContain("activeQuestionCountsBySlug");
     expect(source).not.toContain('from("materiais_leis")');
     expect(source).toContain('export const dynamic = "force-dynamic"');
@@ -43,8 +43,17 @@ describe("página comercial de produto", () => {
     expect(source).toContain('select("id,slug,nome,descricao,hotmart_url,preco,video_demo_url,tipo_produto,records_enabled")');
   });
 
+  it("substitui aquisição por cadastro e CTA de estudo apenas no produto gratuito", () => {
+    expect(source).toContain("produto.freeStudyHref ? <FreeProductCard");
+    expect(source).toContain("Cadastre-se para acessar gratuitamente");
+    expect(source).toContain("Estudar grátis");
+    expect(source).toContain("<FreeStudyLink studyHref={studyHref}");
+    expect(source).toContain("Ver Constituição completa");
+    expect(source).toContain('produto.slug === "cf0800" && produto.freeScope && avulsa?.slug === "cf"');
+  });
+
   it("mostra a projeção estrutural somente para vínculo avulso consistente", () => {
-    expect(source).toContain('select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto)")');
+    expect(source).toContain('select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito)")');
     expect(source).toContain('tipo_produto');
     expect(source).toContain("loadPublicLawContentTree");
     expect(source).toContain("loadPublicLawCommercialSummary");

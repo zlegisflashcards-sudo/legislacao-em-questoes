@@ -19,6 +19,9 @@ import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLa
 import { isCompositeLawProduct } from "@/lib/product-types";
 import { formatProductPrice } from "@/lib/product-price";
 
+import { FreeStudyLink } from "@/components/free-study-link";
+import { freeProductDetailHref, validProductScopeId, type FreeProductLaw } from "@/lib/free-product-detail";
+
 // As quantidades comerciais dos materiais podem ser atualizadas pelo painel.
 // A página deve consultar o estado atual, em vez do snapshot do build.
 export const dynamic = "force-dynamic";
@@ -42,6 +45,8 @@ type ProdutoCatalogo = {
   preco: number | null;
   videoDemoUrl: string | null;
   recordsEnabled: boolean;
+  freeStudyHref: string | null;
+  freeScope: boolean;
   leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null }>;
   totalFlashcards: number | null;
 };
@@ -75,10 +80,25 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
 
     const vinculos = await supabase
       .from("produto_leis")
-      .select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto)")
+      .select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito)")
       .eq("produto_id", produto.data.id)
       .order("ordem");
     if (vinculos.error) return null;
+    const accessLinks: FreeProductLaw[] = (vinculos.data ?? []).map((link) => {
+      const law = Array.isArray(link.leis) ? link.leis[0] : link.leis;
+      return { lawId: Number(link.lei_id), slug: typeof law?.slug === "string" ? law.slug : "",
+        recorteId: link.recorte_id, published: law?.ativo === true && law.status_publicacao === "ativa",
+        lawFree: law?.acesso_gratuito === true };
+    });
+    const activeAccessLinks = accessLinks.filter((link) => link.published && link.slug);
+    const accessLaw = produto.data.tipo_produto === "lei_avulsa" && activeAccessLinks.length === 1 ? activeAccessLinks[0] : null;
+    const scope = accessLaw && validProductScopeId(accessLaw.recorteId)
+      ? await supabase.from("recortes_leis").select("id,lei_id,ativo,status_publicacao,acesso_gratuito")
+        .eq("id", accessLaw.recorteId).eq("lei_id", accessLaw.lawId).eq("ativo", true)
+        .eq("status_publicacao", "ativa").eq("acesso_gratuito", true).maybeSingle()
+      : null;
+    const freeStudyHref = freeProductDetailHref(produto.data.tipo_produto, accessLinks, scope?.error ? null : scope?.data ?? null);
+    const freeScope = Boolean(freeStudyHref && accessLaw?.recorteId !== null);
     const lawSlugById = new Map<number, string>();
     for (const vinculo of vinculos.data ?? []) {
       const lei = Array.isArray(vinculo.leis) ? vinculo.leis[0] : vinculo.leis;
@@ -144,6 +164,8 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       preco,
       videoDemoUrl,
       recordsEnabled,
+      freeStudyHref,
+      freeScope,
       leis,
       totalFlashcards,
     };
@@ -504,14 +526,14 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
           {avulsa && commercialSummary ? <LegislationState summary={commercialSummary} /> : null}
           {produto.descricao ? <p className="max-w-2xl text-lg leading-8 text-slate-200">{produto.descricao}</p> : null}
           {video ? <div className="overflow-hidden rounded-lg border border-slate-700 bg-black shadow-[0_18px_45px_rgba(0,0,0,0.28)]"><iframe className="aspect-video w-full" src={video} title={`Vídeo do produto: ${produto.nome}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div> : null}
-          <PurchaseCard hotmartUrl={produto.hotmartUrl} preco={produto.preco} />
+          {produto.freeStudyHref ? <FreeProductCard studyHref={produto.freeStudyHref} fullCf={produto.slug === "cf0800" && produto.freeScope && avulsa?.slug === "cf"} /> : <PurchaseCard hotmartUrl={produto.hotmartUrl} preco={produto.preco} />}
         </div>
       </section>
-      {avulsa && commercialSummary ? <LawModules summary={commercialSummary} /> : null}
+      {avulsa && commercialSummary && !produto.freeScope ? <LawModules summary={commercialSummary} /> : null}
       <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{!isLeiAvulsa && resumoLeis ? <p className="font-black text-slate-200">{resumoLeis}</p> : null}</div>
         {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => {
           const lawHref = lei.slug ? `/leisflashcards/${encodeURIComponent(lei.slug)}${lei.recorteId ? `?recorte_id=${encodeURIComponent(lei.recorteId)}` : ""}` : null;
-          const content = <><div className="min-w-0"><h3 className="font-black">{lei.titulo}</h3>{lei.recorteId ? <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-900">Recorte de acordo com edital</span> : null}</div><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
+          const content = <><div className="min-w-0"><h3 className="font-black">{lei.titulo}</h3>{lei.recorteId ? <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-900">{produto.freeScope ? "Recorte gratuito" : "Recorte de acordo com edital"}</span> : null}</div><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
           return isProdutoComposto && lawHref ? <a key={lei.id} href={lawHref} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950 transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300">{content}</a> : <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950">{content}</article>;
         })}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
       {avulsa && contentTree ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo disponível nesta lei</p><p className="mt-2 text-sm text-slate-300">🎧 = Possui LegisCast</p></div><PublicLawContentTree tree={contentTree} /></section> : null}
@@ -525,6 +547,15 @@ function LegislationState({ summary }: { summary: PublicLawCommercialSummary }) 
     <p className="text-sm font-semibold uppercase tracking-wide text-blue-200">Estado da legislação</p>
     <h2 id="law-update-title" className={`mt-2 text-xl font-black ${updated ? "text-emerald-200" : "text-amber-200"}`}>{updated ? "✓ Legislação atualizada" : "⚠ Atualização pendente"}</h2>
     {summary.legislation.reference ? <p className="mt-2 text-sm text-slate-100">Última alteração: {summary.legislation.reference}</p> : null}
+  </section>;
+}
+
+function FreeProductCard({ studyHref, fullCf }: { studyHref: string; fullCf: boolean }) {
+  return <section className="rounded-2xl border border-emerald-400/40 bg-emerald-950/40 p-5 sm:p-6" aria-label="Acesso gratuito">
+    <p className="text-lg font-black text-white">Cadastre-se para acessar gratuitamente</p>
+    <p className="mt-2 text-sm text-emerald-50">Já tem conta? Entre para começar a estudar.</p>
+    <FreeStudyLink studyHref={studyHref} className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-700 px-6 py-3 text-center font-black text-white transition hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 sm:w-auto">Estudar grátis</FreeStudyLink>
+    {fullCf ? <p className="mt-4"><a href="/leisflashcards/cf" className="text-sm font-semibold text-emerald-100 underline underline-offset-4 hover:text-white">Ver Constituição completa</a></p> : null}
   </section>;
 }
 
