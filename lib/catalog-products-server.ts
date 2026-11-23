@@ -125,10 +125,20 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
       }
     }
     const activeLawIds = [...lawSlugById.keys()];
-    const scopeTargets: CatalogScopeTarget[] = (links ?? []).flatMap((link) =>
-      typeof link.recorte_id === "string" && lawSlugById.has(String(link.lei_id))
-        ? [{ lawId: Number(link.lei_id), scopeId: link.recorte_id }]
-        : [],
+    const productLinksById = new Map(productIds.map((productId) => [productId, (links ?? []).filter((link) => link.produto_id === productId)]));
+    const activeLinksByProductId = new Map([...productLinksById].map(([productId, productLinks]) =>
+      [productId, productLinks.filter((link) => lawSlugById.has(String(link.lei_id)))] as const,
+    ));
+    const freeStudyLaws = new Map(products.flatMap((product) => {
+      const productLinks = activeLinksByProductId.get(product.id) ?? [];
+      const soleLaw = productLinks.length === 1 ? productLinks[0] : null;
+      // A gratuidade vem da lei; apenas um avulso com uma única lei ativa abre o estudo.
+      return product.tipo_produto === "lei_avulsa" && soleLaw && freeLawIds.has(String(soleLaw.lei_id))
+        ? [[product.id, soleLaw] as const]
+        : [];
+    }));
+    const scopeTargets: CatalogScopeTarget[] = [...freeStudyLaws.values()].flatMap((link) =>
+      typeof link.recorte_id === "string" ? [{ lawId: Number(link.lei_id), scopeId: link.recorte_id }] : [],
     );
     const [countsBySlug, scopeCounts, checksResult] = await Promise.all([
       activeQuestionCountsBySlug([...lawSlugById.values()]),
@@ -149,25 +159,19 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
     }
 
     return { products: products.map((product) => {
-      const productLinks = (links ?? [])
-        .filter((link) => link.produto_id === product.id)
-        .filter((link) => lawSlugById.has(String(link.lei_id)));
-      const productLawIds = productLinks.map((link) => String(link.lei_id));
-      const allProductLinks = (links ?? []).filter((link) => link.produto_id === product.id);
-      const soleLaw = productLinks.length === 1 ? productLinks[0] : null;
-      const soleLawId = soleLaw ? String(soleLaw.lei_id) : null;
-      // A gratuidade é cadastrada na lei. Um CTA comercial só pode abrir um
-      // estudo específico quando o produto avulso possui uma única lei ativa.
-      const freeStudyHref = product.tipo_produto === "lei_avulsa" && soleLawId && freeLawIds.has(soleLawId)
-        ? `/estudar/lei/${encodeURIComponent(lawSlugById.get(soleLawId) ?? "")}${typeof soleLaw?.recorte_id === "string" ? `?recorte_id=${encodeURIComponent(soleLaw.recorte_id)}` : ""}`
+      const productLinks = activeLinksByProductId.get(product.id) ?? [];
+      const allProductLinks = productLinksById.get(product.id) ?? [];
+      const freeStudyLaw = freeStudyLaws.get(product.id);
+      const freeStudyScope = typeof freeStudyLaw?.recorte_id === "string" ? freeStudyLaw.recorte_id : null;
+      const freeStudyHref = freeStudyLaw
+        ? `/estudar/lei/${encodeURIComponent(lawSlugById.get(String(freeStudyLaw.lei_id)) ?? "")}${freeStudyScope !== null ? `?recorte_id=${encodeURIComponent(freeStudyScope)}` : ""}`
         : null;
-      const linkCounts = productLinks.map((link) => typeof link.recorte_id === "string"
-        ? scopeCounts.get(catalogScopeKey(link.lei_id, link.recorte_id)) ?? null
-        : countsBySlug.get(lawSlugById.get(String(link.lei_id)) ?? "") ?? 0);
-      const totalFlashcards = linkCounts.length && linkCounts.every((count): count is number => count !== null)
-        ? linkCounts.reduce((total, count) => total + count, 0)
-        : null;
-      const freeQuestionScope = freeStudyHref !== null && typeof soleLaw?.recorte_id === "string";
+      const freeQuestionScope = freeStudyLaw && freeStudyScope !== null;
+      const totalFlashcards = freeQuestionScope
+        ? scopeCounts.get(catalogScopeKey(freeStudyLaw.lei_id, freeStudyScope)) ?? null
+        : productLinks.length
+          ? productLinks.reduce((total, link) => total + (countsBySlug.get(lawSlugById.get(String(link.lei_id)) ?? "") ?? 0), 0)
+          : null;
       if (!allProductLinks.length) console.warn(`[catalog] Produto ${product.id} não possui vínculo com lei; módulos exibidos como Em produção.`);
 
       return {
@@ -178,7 +182,7 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         imagemUrl: typeof product.imagem_url === "string" && product.imagem_url.trim() ? product.imagem_url : null,
         freeStudyHref,
         destaque: product.destaque === true,
-        leisIncluidas: productLawIds.length,
+        leisIncluidas: productLinks.length,
         totalFlashcards,
         modules: freeQuestionScope
           ? { ...unavailableCatalogModules(), questoes: (totalFlashcards ?? 0) > 0 }

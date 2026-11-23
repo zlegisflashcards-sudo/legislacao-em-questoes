@@ -50,7 +50,7 @@ function configureCatalogQueries(productCount: number | null = 2, scope: "valid"
     ],
     produto_leis: [
       { produto_id: "p-1", lei_id: 10, recorte_id: null, leis: { slug: "lei-a", status_publicacao: "ativa", acesso_gratuito: false } },
-      { produto_id: "p-1", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
+      { produto_id: "p-1", lei_id: 11, recorte_id: "recorte-combo", leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
       { produto_id: "p-2", lei_id: 11, recorte_id: scope ? "recorte-cf" : null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
     ],
     recortes_leis_estrutura: scope === "missing" ? [] : [
@@ -174,6 +174,7 @@ describe("cards comerciais do catálogo", () => {
       modules: { questoes: true, anki: false, legiscast: false, materiais: false },
     });
     expect(result.products[1]).toEqual(result.highlightedProducts[0]);
+    expect(filters.filter(({ table }) => table === "recortes_leis_estrutura")).toEqual([{ table: "recortes_leis_estrutura", column: "recorte_id", value: ["recorte-cf"] }]);
     expect(filters).toContainEqual({ table: "questions", column: "ativo", value: true });
     expect(filters).toContainEqual({ table: "questions", column: "lei_id", value: 11 });
     expect(filters).toContainEqual({ table: "questions", column: "structure_id", value: [21, 22] });
