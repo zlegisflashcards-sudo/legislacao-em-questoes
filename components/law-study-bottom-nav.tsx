@@ -14,11 +14,9 @@ const studyModes = [
 ];
 
 function href(slug: string, mode: LawStudyMode, suffix: string, recorteId: string | null) {
-  if (mode === "lei_interativa") return `/legisbot/${encodeURIComponent(slug)}`;
-  // LegisCast é sempre o material integral da lei. O recorte continua sendo
-  // preservado para Questões e Anki, onde ele de fato delimita o estudo.
-  if (mode === "legiscast") return `/estudar/lei/${encodeURIComponent(slug)}${suffix}`;
-  return `/estudar/lei/${encodeURIComponent(slug)}${suffix}${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`;
+  const query = recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : "";
+  if (mode === "lei_interativa") return `/legisbot/${encodeURIComponent(slug)}${query}`;
+  return `/estudar/lei/${encodeURIComponent(slug)}${suffix}${query}`;
 }
 
 export function LawStudyBottomNav({ slug, recorteId, activeMode }: { slug: string; recorteId: string | null; activeMode: LawStudyMode }) {
