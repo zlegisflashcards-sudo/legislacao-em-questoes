@@ -13,13 +13,15 @@ const studyModes = [
   { mode: "legiscast" as const, label: "LegisCast", icon: "🎙️", suffix: "/legiscast" },
 ];
 
-function href(slug: string, mode: LawStudyMode, suffix: string, recorteId: string | null) {
-  const query = recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : "";
-  if (mode === "lei_interativa") return `/legisbot/${encodeURIComponent(slug)}${query}`;
-  return `/estudar/lei/${encodeURIComponent(slug)}${suffix}${query}`;
+function href(slug: string, mode: LawStudyMode, suffix: string, recorteId: string | null, scopedReading: boolean) {
+  if (mode === "lei_interativa") return `/legisbot/${encodeURIComponent(slug)}${scopedReading && recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`;
+  // LegisCast é sempre o material integral da lei. O recorte continua sendo
+  // preservado para Questões e Anki, onde ele de fato delimita o estudo.
+  if (mode === "legiscast") return `/estudar/lei/${encodeURIComponent(slug)}${suffix}`;
+  return `/estudar/lei/${encodeURIComponent(slug)}${suffix}${recorteId ? `?recorte_id=${encodeURIComponent(recorteId)}` : ""}`;
 }
 
-export function LawStudyBottomNav({ slug, recorteId, activeMode }: { slug: string; recorteId: string | null; activeMode: LawStudyMode }) {
+export function LawStudyBottomNav({ slug, recorteId, activeMode, scopedReading = false }: { scopedReading?: boolean; slug: string; recorteId: string | null; activeMode: LawStudyMode }) {
   const [sideExpanded, setSideExpanded] = useState(false);
 
   useEffect(() => {
@@ -29,22 +31,22 @@ export function LawStudyBottomNav({ slug, recorteId, activeMode }: { slug: strin
   return <>
     <nav aria-label="Modos de estudo da lei" className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,.1)] backdrop-blur md:hidden" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
       <div className="mx-auto grid max-w-lg grid-cols-3 gap-1">
-        {studyModes.map((item) => <StudyNavLink key={item.mode} item={item} slug={slug} recorteId={recorteId} active={item.mode === activeMode} variant="mobile" />)}
+        {studyModes.map((item) => <StudyNavLink key={item.mode} item={item} slug={slug} recorteId={recorteId} scopedReading={scopedReading} active={item.mode === activeMode} variant="mobile" />)}
       </div>
     </nav>
     <aside className="fixed right-5 top-1/2 z-40 hidden -translate-y-1/2 md:block">
       {sideExpanded ? <nav aria-label="Modos de estudo da lei" className="flex w-44 flex-col gap-1 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-[0_14px_35px_rgba(15,23,42,.16)] backdrop-blur">
         <button type="button" onClick={() => setSideExpanded(false)} aria-label="Recolher modos de estudo" className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-lg font-black text-slate-500 hover:bg-slate-100 hover:text-[#062a5f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">›</button>
-        {studyModes.map((item) => <StudyNavLink key={item.mode} item={item} slug={slug} recorteId={recorteId} active={item.mode === activeMode} variant="side" />)}
+        {studyModes.map((item) => <StudyNavLink key={item.mode} item={item} slug={slug} recorteId={recorteId} scopedReading={scopedReading} active={item.mode === activeMode} variant="side" />)}
       </nav> : <button type="button" onClick={() => setSideExpanded(true)} aria-label="Expandir modos de estudo" className="flex min-h-12 items-center justify-center rounded-full border border-slate-200 bg-white/95 px-3 text-xl shadow-[0_14px_35px_rgba(15,23,42,.16)] backdrop-blur hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">‹</button>}
     </aside>
   </>;
 }
 
-function StudyNavLink({ item, slug, recorteId, active, variant }: { item: typeof studyModes[number]; slug: string; recorteId: string | null; active: boolean; variant: "mobile" | "side" }) {
+function StudyNavLink({ item, slug, recorteId, active, variant, scopedReading }: { scopedReading: boolean; item: typeof studyModes[number]; slug: string; recorteId: string | null; active: boolean; variant: "mobile" | "side" }) {
   const activeStyle = active ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-[#062a5f]";
   const mobile = variant === "mobile";
-  return <Link href={href(slug, item.mode, item.suffix, recorteId)} aria-current={active ? "page" : undefined} className={`flex min-h-16 items-center rounded-xl px-2 py-2 font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${mobile ? "flex-col justify-center text-center text-xs" : "gap-3 text-sm"} ${activeStyle}`}>
+  return <Link href={href(slug, item.mode, item.suffix, recorteId, scopedReading)} aria-current={active ? "page" : undefined} className={`flex min-h-16 items-center rounded-xl px-2 py-2 font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${mobile ? "flex-col justify-center text-center text-xs" : "gap-3 text-sm"} ${activeStyle}`}>
     {item.mode === "questoes" ? <Image src={item.icon} alt="" aria-hidden="true" width={mobile ? 24 : 22} height={mobile ? 24 : 22} className={`${mobile ? "h-6 w-6" : "h-[22px] w-[22px]"} shrink-0 object-contain`} /> : item.mode === "lei_interativa" ? <ScannerIcon className={mobile ? "h-6 w-6" : "h-[22px] w-[22px]"} /> : <span aria-hidden="true" className={`${mobile ? "text-xl" : "text-lg"} leading-none`}>{item.icon}</span>}
     <span className={mobile ? "mt-1" : "min-w-0"}>{item.label}</span>
   </Link>;

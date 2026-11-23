@@ -38,6 +38,6 @@ export function ScopedStudyMaterial({ slug, recorteId, mode }: { slug: string; r
           <div dangerouslySetInnerHTML={{ __html: block.legislation }} />
         </article>)}</> : <p>O texto preparado deste recorte ainda não está disponível.</p>)}
     </main>
-    <LawStudyBottomNav slug={slug} recorteId={recorteId} activeMode={mode === "audio" ? "legiscast" : "lei_interativa"} />
+    <LawStudyBottomNav slug={slug} recorteId={recorteId} scopedReading={mode === "reading"} activeMode={mode === "audio" ? "legiscast" : "lei_interativa"} />
   </div>;
 }

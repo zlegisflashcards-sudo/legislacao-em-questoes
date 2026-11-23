@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, afterEach, afterAll, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({ db: vi.fn(), provider: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -42,6 +42,8 @@ rows.scoped_reading_certificates = rows.legislative_references.map((r) => ({
   sha256: scopedReadingDigest({ id: String(r.id), lawId: Number(r.lei_id), structureId: Number(r.structure_id),
     order: String(r.ordem), label: String(r.identificacao), changedAt: null, rawHtml: String(r.legislacao), shippedHtml: String(r.legislacao) }),
 }));
+beforeEach(() => vi.stubEnv("SCOPED_READING_PILOTS", [free, paid, sibling, foreign, inactive, pending, sameNode].map((id) => `cf:${id}`).join(",")));
+afterEach(() => vi.unstubAllEnvs());
 const calls: string[] = [];
 fixture.provider.mockImplementation(async (token: string) => ({
   data: { user: rows.alunos.some((student) => student.id === token) ? { id: token } : null },
@@ -97,6 +99,13 @@ async function invoke(scopeId: string | null, token?: string, extra = "") {
 }
 
 describe("recorte-material em HTTP loopback com autenticação real do aplicativo", () => {
+  it("não consulta dados nem cai no integral quando a flag está desligada", async () => {
+    vi.stubEnv("SCOPED_READING_PILOTS", "");
+    calls.length = 0;
+    expect((await invoke(free, "free-student")).status).toBe(404);
+    expect(calls).toEqual([]);
+  });
+
   it("leva aluno assinado e sem compra só ao recorte grátis", async () => {
     calls.length = 0;
     const response = await invoke(free, "free-student", "&structure_id=3");

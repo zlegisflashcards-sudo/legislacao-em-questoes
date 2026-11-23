@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 const auth = vi.hoisted(() => vi.fn());
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/scoped-study-auth", () => ({ authorizeScopedStudy: auth }));
@@ -17,6 +17,8 @@ import { GET } from "@/app/api/aluno/estudar/lei/[slug]/recorte-material/route";
 
 const slug = "cf";
 const recorte = { id: "09948964-6c60-48ea-9045-1cd861ec8550", nome: "Amostra" };
+beforeEach(() => vi.stubEnv("SCOPED_READING_PILOTS", `cf:${recorte.id}`));
+afterEach(() => vi.unstubAllEnvs());
 const opts = { params: Promise.resolve({ slug }) };
 const request = (mode: string, extra = "") => new Request(`https://example.test/recorte-material?mode=${mode}&recorte_id=${recorte.id}${extra}`);
 function context() {

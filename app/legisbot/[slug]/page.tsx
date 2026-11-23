@@ -1,3 +1,4 @@
+import { scopedReadingPilotEnabled } from "@/lib/scoped-reading-pilot";
 import { ScopedStudyMaterial } from "@/components/scoped-study-material";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -17,6 +18,9 @@ export default async function ContinuousLegisBotPage({ params, searchParams }: {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   if (query.recorte_id !== undefined && (typeof query.recorte_id !== "string" || !query.recorte_id.trim())) notFound();
   const recorteId = first(query.recorte_id);
-  if (recorteId) return <ScopedStudyMaterial slug={slug} recorteId={recorteId} mode="reading" />;
+  if (recorteId) {
+    if (!scopedReadingPilotEnabled(slug, recorteId)) notFound();
+    return <ScopedStudyMaterial slug={slug} recorteId={recorteId} mode="reading" />;
+  }
   return <ContinuousReadingAuthorizedClient slug={slug} initialTab={initialTab(first(query.tab) || first(query.aba))} recorteId={first(query.recorte_id) || null} questionId={first(query.question_id)} ordem={first(query.ordem)} />;
 }

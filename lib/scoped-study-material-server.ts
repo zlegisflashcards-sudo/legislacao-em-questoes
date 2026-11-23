@@ -51,7 +51,7 @@ export async function loadScopedStudyMaterial(request: Request, slug: string, sc
     const rawHtml = String(row.legislacao ?? "");
     const legislation = sanitizeLegalHtmlCore(rawHtml).trim();
     const digestRow = { id: row.id, lawId, structureId: row.structure_id,
-      order: row.ordem, label: row.identificacao, changedAt: row.legislacao_atualizada_em ?? null, rawHtml, shippedHtml: legislation };
+      order: row.ordem, label: row.identificacao, changedAt: row.legislacao_atualizada_em ? new Date(row.legislacao_atualizada_em).toISOString() : null, rawHtml, shippedHtml: legislation };
     if (!matchesScopedReadingPin(digestRow, cert && { refId: cert.reference_id,
       lawId: cert.lei_id, structureId: cert.structure_id, sha256: cert.sha256 }, permitted)) return [];
     return legislation ? [{ id: row.id, label: row.identificacao, legislation }] : [];
