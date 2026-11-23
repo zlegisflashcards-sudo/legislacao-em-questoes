@@ -1,3 +1,4 @@
+import { scopedReadingPilotEnabled } from "@/lib/scoped-reading-pilot";
 import type { Metadata } from "next";
 import { LawStudyPageClient } from "@/components/law-study-page-client";
 import { getAnkiTutorialSettings } from "@/lib/anki-tutorial-settings-server";
@@ -16,5 +17,5 @@ export default async function LawStudyPage({ params, searchParams }: LawStudyPag
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const recorteId = typeof query.recorte_id === "string" ? query.recorte_id : null;
   const settings = await getAnkiTutorialSettings();
-  return <div className="pb-24 lg:pb-0"><LawStudyPageClient slug={slug} ankiTutorialSettings={settings} /><LawStudyBottomNav slug={slug} recorteId={recorteId} activeMode="questoes" /></div>;
+  return <div className="pb-24 lg:pb-0"><LawStudyPageClient slug={slug} ankiTutorialSettings={settings} /><LawStudyBottomNav slug={slug} recorteId={recorteId} scopedReading={scopedReadingPilotEnabled(slug, recorteId)} activeMode="questoes" /></div>;
 }
