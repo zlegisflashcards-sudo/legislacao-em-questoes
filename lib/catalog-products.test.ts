@@ -4,12 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSupabaseServerClient: vi.fn(),
   activeQuestionCountsBySlug: vi.fn(),
+  mainStructure: vi.fn(),
   isOfflineBuild: vi.fn(() => false),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServerClient: mocks.getSupabaseServerClient }));
 vi.mock("@/lib/question-counts-server", () => ({ activeQuestionCountsBySlug: mocks.activeQuestionCountsBySlug }));
+vi.mock("@/lib/questions-main-server", () => ({ mainStructure: mocks.mainStructure }));
 vi.mock("@/lib/build-mode", () => ({ isOfflineBuild: mocks.isOfflineBuild }));
 
 import { getCatalogProducts, getHighlightedCatalogProducts, getHomeCatalogProducts, splitHomeCatalogProducts } from "./catalog-products-server";
@@ -17,7 +19,7 @@ import { getCatalogProducts, getHighlightedCatalogProducts, getHomeCatalogProduc
 type Filter = { table: string; column: string; value: unknown };
 
 class Query {
-  constructor(private data: unknown, private readonly table: string, private readonly filters: Filter[], private readonly count: number | null) {}
+  constructor(private data: unknown, private readonly table: string, private readonly filters: Filter[], private readonly count: number | null, private readonly error: null | { message: string } = null) {}
   select(..._args: unknown[]) { return this; }
   eq(column: string, value: unknown) {
     this.filters.push({ table: this.table, column, value });
@@ -26,16 +28,19 @@ class Query {
   }
   not(..._args: unknown[]) { return this; }
   order(..._args: unknown[]) { return this; }
-  in(..._args: unknown[]) { return this; }
-  then<TResult1 = { data: unknown; error: null; count: number | null }, TResult2 = never>(
-    onfulfilled?: ((value: { data: unknown; error: null; count: number | null }) => TResult1 | PromiseLike<TResult1>) | null,
+  in(column: string, value: unknown) {
+    this.filters.push({ table: this.table, column, value });
+    return this;
+  }
+  then<TResult1 = { data: unknown; error: null | { message: string }; count: number | null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown; error: null | { message: string }; count: number | null }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ) {
-    return Promise.resolve({ data: this.data, error: null, count: this.count }).then(onfulfilled, onrejected);
+    return Promise.resolve({ data: this.data, error: this.error, count: this.count }).then(onfulfilled, onrejected);
   }
 }
 
-function configureCatalogQueries(productCount: number | null = 2) {
+function configureCatalogQueries(productCount: number | null = 2, scope: "valid" | "missing" | "error" | "zero" | null = null) {
   const calls: string[] = [];
   const filters: Filter[] = [];
   const rows: Record<string, unknown> = {
@@ -46,7 +51,12 @@ function configureCatalogQueries(productCount: number | null = 2) {
     produto_leis: [
       { produto_id: "p-1", lei_id: 10, recorte_id: null, leis: { slug: "lei-a", status_publicacao: "ativa", acesso_gratuito: false } },
       { produto_id: "p-1", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
-      { produto_id: "p-2", lei_id: 11, recorte_id: null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
+      { produto_id: "p-2", lei_id: 11, recorte_id: scope ? "recorte-cf" : null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: true } },
+    ],
+    recortes_leis_estrutura: scope === "missing" ? [] : [
+      { lei_id: 11, recorte_id: "recorte-cf", structure_id: 21 },
+      { lei_id: 11, recorte_id: "recorte-cf", structure_id: 22 },
+      { lei_id: 99, recorte_id: "recorte-cf", structure_id: 25 },
     ],
     admin_law_overview_checks: [
       { lei_id: 10, item: "questoes" },
@@ -56,8 +66,9 @@ function configureCatalogQueries(productCount: number | null = 2) {
       { lei_id: 11, item: "materiais" },
     ],
   };
-  mocks.getSupabaseServerClient.mockReturnValue({ from: (table: string) => { calls.push(table); return new Query(rows[table] ?? [], table, filters, table === "produtos" ? productCount : null); } });
-  mocks.activeQuestionCountsBySlug.mockResolvedValue(new Map([["lei-a", 5], ["lei-b", 10]]));
+  mocks.getSupabaseServerClient.mockReturnValue({ from: (table: string) => { calls.push(table); return new Query(rows[table] ?? [], table, filters, table === "produtos" ? productCount : table === "questions" ? (scope === "zero" ? 0 : 202) : null, table === "questions" && scope === "error" ? { message: "Timeout" } : null); } });
+  mocks.activeQuestionCountsBySlug.mockResolvedValue(new Map([["lei-a", 5], ["lei-b", scope ? 2024 : 10]]));
+  mocks.mainStructure.mockResolvedValue([{ id: 21, parent_id: null }, { id: 22, parent_id: 21 }, { id: 25, parent_id: null }]);
   return { calls, filters };
 }
 
@@ -151,6 +162,29 @@ describe("cards comerciais do catálogo", () => {
     ]);
     expect(result.highlightedProducts.map((product) => product.slug)).toEqual(["destaque"]);
     expect(result.highlightedProducts[0]?.freeStudyHref).toBe("/estudar/lei/lei-b");
+  });
+
+  it("usa só as questões ativas do recorte no card gratuito em destaque, sem alterar o produto de lei inteira", async () => {
+    const { filters } = configureCatalogQueries(2, "valid");
+    const result = await getHomeCatalogProducts();
+    expect(result.products[0]?.totalFlashcards).toBe(2029);
+    expect(result.highlightedProducts[0]).toMatchObject({
+      totalFlashcards: 202,
+      freeStudyHref: "/estudar/lei/lei-b?recorte_id=recorte-cf",
+      modules: { questoes: true, anki: false, legiscast: false, materiais: false },
+    });
+    expect(result.products[1]).toEqual(result.highlightedProducts[0]);
+    expect(filters).toContainEqual({ table: "questions", column: "ativo", value: true });
+    expect(filters).toContainEqual({ table: "questions", column: "lei_id", value: 11 });
+    expect(filters).toContainEqual({ table: "questions", column: "structure_id", value: [21, 22] });
+  });
+
+  it.each(["missing", "error", "zero"] as const)("distingue recorte indisponível de vazio, sem usar a lei inteira (%s)", async (scope) => {
+    configureCatalogQueries(2, scope);
+    const result = await getHomeCatalogProducts();
+    expect(result.highlightedProducts[0]?.totalFlashcards).toBe(scope === "zero" ? 0 : null);
+    expect(result.highlightedProducts[0]?.modules.questoes).toBe(false);
+    expect(result.products[0]?.totalFlashcards).toBe(2029);
   });
 
   it("mantém os chamadores públicos com os mesmos recortes de catálogo", async () => {

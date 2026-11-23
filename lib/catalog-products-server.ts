@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isOfflineBuild } from "@/lib/build-mode";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
+import { mainStructure } from "@/lib/questions-main-server";
+import { descendantsForScope } from "@/lib/law-question-scope-resolution";
 import { aggregateCatalogModuleAvailability, catalogModules, type CatalogModuleAvailability, unavailableCatalogModules } from "@/lib/catalog-module-availability";
 
 export type CatalogProduct = {
@@ -29,6 +31,61 @@ export function splitHomeCatalogProducts(loaded: ReadonlyArray<LoadedCatalogProd
     products: loaded.map(withoutHighlight),
     highlightedProducts: loaded.filter((product) => product.destaque).map(withoutHighlight),
   };
+}
+
+type CatalogScopeTarget = { lawId: number; scopeId: string };
+type CatalogClient = ReturnType<typeof getSupabaseServerClient>;
+
+function catalogScopeKey(lawId: string | number, scopeId: string) {
+  return `${lawId}:${scopeId}`;
+}
+
+async function countCatalogScopes(supabase: CatalogClient, targets: CatalogScopeTarget[]) {
+  const counts = new Map<string, number>();
+  if (!targets.length) return counts;
+
+  const scopeIds = [...new Set(targets.map(({ scopeId }) => scopeId))];
+  const links = await supabase
+    .from("recortes_leis_estrutura")
+    .select("recorte_id,structure_id,lei_id")
+    .in("recorte_id", scopeIds);
+  if (links.error) return counts;
+
+  const selectedByScope = new Map<string, number[]>();
+  for (const link of links.data ?? []) {
+    const key = catalogScopeKey(link.lei_id, link.recorte_id);
+    const selected = selectedByScope.get(key) ?? [];
+    selected.push(Number(link.structure_id));
+    selectedByScope.set(key, selected);
+  }
+
+  const structureByLaw = new Map<number, ReturnType<typeof mainStructure>>();
+  const uniqueTargets = new Map(targets.map((target) => [catalogScopeKey(target.lawId, target.scopeId), target]));
+  await Promise.all([...uniqueTargets].map(async ([key, { lawId }]) => {
+    const selected = selectedByScope.get(key);
+    if (!selected?.length) return;
+    try {
+      const pendingStructure = structureByLaw.get(lawId) ?? mainStructure(lawId);
+      structureByLaw.set(lawId, pendingStructure);
+      const structure = await pendingStructure;
+      const activeIds = new Set(structure.map((node) => node.id));
+      const roots = selected.filter((id) => activeIds.has(id));
+      if (!roots.length) return;
+      const ids = descendantsForScope(structure, roots);
+      let count = 0;
+      // Disjoint chunks limit the filter URL without counting descendants twice.
+      for (let start = 0; start < ids.length; start += 100) {
+        const result = await supabase.from("questions").select("id", { count: "exact", head: true })
+          .eq("lei_id", lawId).eq("ativo", true).in("structure_id", ids.slice(start, start + 100));
+        if (result.error || result.count === null) return;
+        count += result.count;
+      }
+      counts.set(key, count);
+    } catch {
+      // A missing scope count should not remove the whole catalog or inherit the full law count.
+    }
+  }));
+  return counts;
 }
 
 async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad> {
@@ -67,11 +124,19 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         if (law.acesso_gratuito === true) freeLawIds.add(lawId);
       }
     }
-    const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
     const activeLawIds = [...lawSlugById.keys()];
-    const checksResult = activeLawIds.length
-      ? await supabase.from("admin_law_overview_checks").select("lei_id,item").in("lei_id", activeLawIds)
-      : { data: [] as Array<{ lei_id: string; item: string }>, error: null };
+    const scopeTargets: CatalogScopeTarget[] = (links ?? []).flatMap((link) =>
+      typeof link.recorte_id === "string" && lawSlugById.has(String(link.lei_id))
+        ? [{ lawId: Number(link.lei_id), scopeId: link.recorte_id }]
+        : [],
+    );
+    const [countsBySlug, scopeCounts, checksResult] = await Promise.all([
+      activeQuestionCountsBySlug([...lawSlugById.values()]),
+      countCatalogScopes(supabase, scopeTargets),
+      activeLawIds.length
+        ? supabase.from("admin_law_overview_checks").select("lei_id,item").in("lei_id", activeLawIds)
+        : { data: [] as Array<{ lei_id: string; item: string }>, error: null },
+    ]);
     if (checksResult.error) console.warn("[catalog] Não foi possível carregar os checks da Central da Lei.");
     const checksByLawId = new Map<string, Set<(typeof catalogModules)[number]>>();
     for (const row of checksResult.data ?? []) {
@@ -96,6 +161,13 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
       const freeStudyHref = product.tipo_produto === "lei_avulsa" && soleLawId && freeLawIds.has(soleLawId)
         ? `/estudar/lei/${encodeURIComponent(lawSlugById.get(soleLawId) ?? "")}${typeof soleLaw?.recorte_id === "string" ? `?recorte_id=${encodeURIComponent(soleLaw.recorte_id)}` : ""}`
         : null;
+      const linkCounts = productLinks.map((link) => typeof link.recorte_id === "string"
+        ? scopeCounts.get(catalogScopeKey(link.lei_id, link.recorte_id)) ?? null
+        : countsBySlug.get(lawSlugById.get(String(link.lei_id)) ?? "") ?? 0);
+      const totalFlashcards = linkCounts.length && linkCounts.every((count): count is number => count !== null)
+        ? linkCounts.reduce((total, count) => total + count, 0)
+        : null;
+      const freeQuestionScope = freeStudyHref !== null && typeof soleLaw?.recorte_id === "string";
       if (!allProductLinks.length) console.warn(`[catalog] Produto ${product.id} não possui vínculo com lei; módulos exibidos como Em produção.`);
 
       return {
@@ -107,15 +179,12 @@ async function loadCatalogProducts(destaque = false): Promise<CatalogProductLoad
         freeStudyHref,
         destaque: product.destaque === true,
         leisIncluidas: productLawIds.length,
-        totalFlashcards: productLawIds.length
-          ? productLawIds.reduce(
-              (total, lawId) => total + (countsBySlug.get(lawSlugById.get(lawId) ?? "") ?? 0),
-              0,
-            )
-          : null,
-        modules: checksResult.error
-          ? unavailableCatalogModules()
-          : aggregateCatalogModuleAvailability(productLinks.map((link) => ({
+        totalFlashcards,
+        modules: freeQuestionScope
+          ? { ...unavailableCatalogModules(), questoes: (totalFlashcards ?? 0) > 0 }
+          : checksResult.error
+            ? unavailableCatalogModules()
+            : aggregateCatalogModuleAvailability(productLinks.map((link) => ({
               completed: checksByLawId.get(String(link.lei_id)) ?? new Set(),
             }))),
       };
