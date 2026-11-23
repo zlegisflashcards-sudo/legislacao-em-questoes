@@ -89,6 +89,7 @@ function HomeLegislacaoCard({ legislacao }: { legislacao: Legislacao }) {
 
 function HomeProductCard({ produto }: { produto: CatalogProduct }) {
   const isDeck = produto.tipoProduto === "combo" || produto.tipoProduto === "edital";
+  const hasLogo = Boolean(produto.imagemUrl);
   return (
     <div className={`relative ${isDeck ? "pb-3 pr-3" : ""}`} data-product-type={produto.tipoProduto}>
       {isDeck ? <><div aria-hidden="true" className="absolute inset-x-3 bottom-1 top-4 overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)]"><div className="h-16 bg-gradient-to-r from-[#123c74] to-[#07172d]" /></div><div aria-hidden="true" className="absolute bottom-0 left-1 right-1 top-7 overflow-hidden rounded-[22px] border border-[#1683ff] bg-white shadow-[0_16px_38px_rgba(0,104,237,0.17)]"><div className="h-16 bg-gradient-to-r from-[#123c74] to-[#07172d]" /></div></> : null}
@@ -108,7 +109,7 @@ function HomeProductCard({ produto }: { produto: CatalogProduct }) {
           <h3 className="text-xl font-extrabold leading-snug text-[#0868ed] sm:text-2xl">
             {produto.nome}
           </h3>
-          {isDeck && produto.imagemUrl ? <img src={produto.imagemUrl} alt={`Imagem de ${produto.nome}`} className="aspect-video w-full rounded-xl border border-blue-100 object-cover shadow-sm" /> : <div className="min-w-0 space-y-3 text-sm font-bold text-[#062a5f]">
+          {hasLogo ? <img src={produto.imagemUrl!} alt={`Imagem de ${produto.nome}`} className="aspect-video w-full rounded-xl border border-blue-100 object-cover shadow-sm" /> : <div className="min-w-0 space-y-3 text-sm font-bold text-[#062a5f]">
             {([
               ["questoes", "Legis Questões"],
               ["anki", "Flashcards Anki"],

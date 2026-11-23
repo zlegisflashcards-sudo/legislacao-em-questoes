@@ -48,6 +48,7 @@ describe("página comercial de produto", () => {
     expect(source).toContain('tipo_produto');
     expect(source).toContain("loadPublicLawContentTree");
     expect(source).toContain("loadPublicLawCommercialSummary");
+    expect(source).toContain("recorteId: avulsa.recorteId");
     expect(source).toContain("produto.leis.length === 1");
     expect(source).toContain("Conteúdo disponível nesta lei");
     expect(source).toContain("🎧 = Possui LegisCast");

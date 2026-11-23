@@ -50,7 +50,7 @@ function configureCatalogQueries(productCount: number | null = 2, scope: "valid"
     ],
     produto_leis: [
       { produto_id: "p-1", lei_id: 10, recorte_id: null, leis: { slug: "lei-a", status_publicacao: "ativa", acesso_gratuito: false } },
-      { produto_id: "p-1", lei_id: 11, recorte_id: "recorte-combo", leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: !scope || scope === "paid" } },
+      { produto_id: "p-1", lei_id: 11, recorte_id: scope ? "recorte-combo" : null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: !scope || scope === "paid" } },
       { produto_id: "p-2", lei_id: 11, recorte_id: scope ? "recorte-cf" : null, leis: { slug: "lei-b", status_publicacao: "ativa", acesso_gratuito: !scope || scope === "paid" } },
     ],
     recortes_leis: scope === "paid" ? [] : [{ id: "recorte-cf", lei_id: scope === "wrong-law" ? 99 : 11 }],
@@ -90,6 +90,7 @@ describe("cards comerciais do catálogo", () => {
     expect(loader).toContain('aggregateCatalogModuleAvailability');
     expect(loader).toContain('product.tipo_produto === "lei_avulsa"');
     expect(loader).toContain("activeQuestionCountsBySlug");
+    expect(loader).toContain('from("recortes_leis_estrutura")');
     expect(loader).toContain('async function loadCatalogProducts(destaque = false)');
     expect(loader).toContain('export async function getHomeCatalogProducts()');
     expect(loader).toContain('if (destaque) productsQuery = productsQuery.eq("destaque", true)');
@@ -116,7 +117,8 @@ describe("cards comerciais do catálogo", () => {
     expect(cards).toContain("FreeStudyLink");
     expect(cards).toContain('produto.tipoProduto === "combo" || produto.tipoProduto === "edital"');
     expect(cards).toContain('data-product-type={produto.tipoProduto}');
-    expect(cards).toContain("isDeck && produto.imagemUrl");
+    expect(cards).toContain("const hasLogo = Boolean(produto.imagemUrl)");
+    expect(cards).toContain("{hasLogo ? <img");
     expect(cards).toContain("Imagem de ${produto.nome}");
     expect(cards).not.toContain("Ver produto");
     expect(cards).toContain("/leisflashcards/${produto.slug}");
@@ -165,10 +167,10 @@ describe("cards comerciais do catálogo", () => {
     expect(result.highlightedProducts[0]?.freeStudyHref).toBe("/estudar/lei/lei-b");
   });
 
-  it("usa só as questões ativas do recorte no card gratuito em destaque, sem alterar o produto de lei inteira", async () => {
+  it("usa só as questões ativas do recorte em todos os cards que possuem recorte", async () => {
     const { filters } = configureCatalogQueries(2, "valid");
     const result = await getHomeCatalogProducts();
-    expect(result.products[0]?.totalFlashcards).toBe(2029);
+    expect(result.products[0]?.totalFlashcards).toBeNull();
     expect(result.highlightedProducts[0]).toMatchObject({
       totalFlashcards: 202,
       freeStudyHref: "/estudar/lei/lei-b?recorte_id=recorte-cf",
@@ -176,7 +178,7 @@ describe("cards comerciais do catálogo", () => {
     });
     expect(result.products[1]).toEqual(result.highlightedProducts[0]);
     expect(filters.filter(({ table }) => table === "recortes_leis").map(({ column, value }) => [column, value])).toEqual([["id", ["recorte-cf"]], ["ativo", true], ["status_publicacao", "ativa"], ["acesso_gratuito", true]]);
-    expect(filters.filter(({ table }) => table === "recortes_leis_estrutura")).toEqual([{ table: "recortes_leis_estrutura", column: "recorte_id", value: ["recorte-cf"] }]);
+    expect(filters.filter(({ table }) => table === "recortes_leis_estrutura")).toEqual([{ table: "recortes_leis_estrutura", column: "recorte_id", value: ["recorte-combo", "recorte-cf"] }]);
     expect(filters).toContainEqual({ table: "questions", column: "ativo", value: true });
     expect(filters).toContainEqual({ table: "questions", column: "lei_id", value: 11 });
     expect(filters).toContainEqual({ table: "questions", column: "structure_id", value: [21, 22] });
@@ -187,15 +189,15 @@ describe("cards comerciais do catálogo", () => {
     const result = await getHomeCatalogProducts();
     expect(result.highlightedProducts[0]?.totalFlashcards).toBe(scope === "zero" ? 0 : null);
     expect(result.highlightedProducts[0]?.modules.questoes).toBe(false);
-    expect(result.products[0]?.totalFlashcards).toBe(2029);
+    expect(result.products[0]?.totalFlashcards).toBeNull();
   });
 
-  it.each(["paid", "wrong-law"] as const)("não oferece estudo grátis nem consulta a contagem para recorte não autorizado (%s)", async (scope) => {
+  it.each(["paid", "wrong-law"] as const)("não oferece estudo grátis, mas preserva a contagem própria do recorte (%s)", async (scope) => {
     const { calls } = configureCatalogQueries(2, scope);
     const result = await getHomeCatalogProducts();
-    expect(result.highlightedProducts[0]).toMatchObject({ freeStudyHref: null, totalFlashcards: 2024 });
-    expect(calls).not.toContain("recortes_leis_estrutura");
-    expect(calls).not.toContain("questions");
+    expect(result.highlightedProducts[0]).toMatchObject({ freeStudyHref: null, totalFlashcards: 202 });
+    expect(calls).toContain("recortes_leis_estrutura");
+    expect(calls).toContain("questions");
   });
 
   it("mantém os chamadores públicos com os mesmos recortes de catálogo", async () => {

@@ -62,6 +62,17 @@ describe("loader público da árvore de conteúdo", () => {
     expect(summary?.legislation).toEqual({ status: "pending", reference: "Lei nº 2/2001" });
   });
 
+  it("calcula os módulos pelo conteúdo do recorte, sem reutilizar o checklist da lei inteira", async () => {
+    const summary = await loadPublicLawCommercialSummary({ lawId: 1, recorteId: "scope", db: database({
+      ...rows,
+      leis: [{ id: 1, situacao_atualizacao: "atualizado", houve_alteracao_legislativa: false }],
+      recortes_leis: [{ id: "scope", lei_id: 1 }],
+      recortes_leis_estrutura: [{ structure_id: 2 }],
+      admin_law_overview_checks: [],
+    }) });
+    expect(summary?.modules).toEqual({ materiais: true, anki: true, legiscast: true, questoes: true });
+  });
+
   it("retorna somente a projeção necessária para renderização", async () => {
     const tree = await loadPublicLawContentTree({ lawId: 1, db: database(rows) });
     expect(tree).toEqual([{

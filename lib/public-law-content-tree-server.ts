@@ -1,6 +1,7 @@
 import { buildPublicLawContentTree, type PublicLawContentTreeNode } from "@/lib/public-law-content-tree";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { collectPages } from "@/lib/law-question-pagination";
+import { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
 
 type QueryError = { message: string } | null;
 type QueryResult = { data: Record<string, unknown>[] | null; error: QueryError };
@@ -51,9 +52,11 @@ function text(value: unknown) {
 /** Resumo público da Central da Lei, sem campos comerciais redundantes. */
 export async function loadPublicLawCommercialSummary({
   lawId,
+  recorteId = null,
   db = getSupabaseServerClient() as unknown as PublicLawContentTreeDatabase,
 }: {
   lawId: number;
+  recorteId?: string | null;
   db?: PublicLawContentTreeDatabase;
 }): Promise<PublicLawCommercialSummary | null> {
   const law = await db.from("leis").select("id,houve_alteracao_legislativa,ultima_alteracao_referencia,norma_originaria_referencia,situacao_atualizacao").eq("id", lawId).eq("ativo", true).eq("status_publicacao", "ativa");
@@ -66,7 +69,7 @@ export async function loadPublicLawCommercialSummary({
   const completed = new Set((checks.data ?? []).map((check) => text(check.item)).filter((item): item is "materiais" | "anki" | "legiscast" | "questoes" => item === "materiais" || item === "anki" || item === "legiscast" || item === "questoes"));
   const updated = row.situacao_atualizacao === "atualizado";
 
-  return {
+  if (!recorteId) return {
     legislation: {
       status: updated ? "updated" : "pending",
       reference: row.houve_alteracao_legislativa === true ? text(row.ultima_alteracao_referencia) : text(row.norma_originaria_referencia),
@@ -76,6 +79,49 @@ export async function loadPublicLawCommercialSummary({
       anki: completed.has("anki"),
       legiscast: completed.has("legiscast"),
       questoes: completed.has("questoes"),
+    },
+  };
+
+  const scope = await db.from("recortes_leis").select("id").eq("id", recorteId).eq("lei_id", lawId).eq("ativo", true);
+  fail("Não foi possível validar o recorte", scope.error);
+  if (!scope.data?.length) return null;
+  const [links, structure, questions, audios] = await Promise.all([
+    db.from("recortes_leis_estrutura").select("structure_id").eq("recorte_id", recorteId).eq("lei_id", lawId),
+    collectPages(async (from, to) => {
+      const result = await db.from("law_structure").select("id,parent_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      fail("Não foi possível carregar a estrutura da lei", result.error);
+      return result.data ?? [];
+    }, PUBLIC_TREE_PAGE_SIZE),
+    collectPages(async (from, to) => {
+      const result = await db.from("questions").select("structure_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      fail("Não foi possível carregar as questões da lei", result.error);
+      return result.data ?? [];
+    }, PUBLIC_TREE_PAGE_SIZE),
+    collectPages(async (from, to) => {
+      const result = await db.from("legiscast_audios").select("structure_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      fail("Não foi possível carregar os áudios da lei", result.error);
+      return result.data ?? [];
+    }, PUBLIC_TREE_PAGE_SIZE),
+  ]);
+  fail("Não foi possível carregar a estrutura do recorte", links.error);
+  const scopeIds = descendantsForScope(structure.flatMap((item) => {
+    const id = numericId(item.id);
+    const parentId = item.parent_id === null ? null : numericId(item.parent_id);
+    return id !== null && (item.parent_id === null || parentId !== null) ? [{ id, parent_id: parentId }] : [];
+  }), structureIds(links.data ?? []));
+  const scopedQuestions = questionsInScope(questions.map((item, index) => ({ id: `question-${index}`, structure_id: numericId(item.structure_id) })), scopeIds);
+  const scopedAudios = questionsInScope(audios.map((item, index) => ({ id: `audio-${index}`, structure_id: numericId(item.structure_id) })), scopeIds);
+
+  return {
+    legislation: {
+      status: updated ? "updated" : "pending",
+      reference: row.houve_alteracao_legislativa === true ? text(row.ultima_alteracao_referencia) : text(row.norma_originaria_referencia),
+    },
+    modules: {
+      materiais: scopeIds.length > 0,
+      anki: scopedQuestions.length > 0,
+      legiscast: scopedAudios.length > 0,
+      questoes: scopedQuestions.length > 0,
     },
   };
 }

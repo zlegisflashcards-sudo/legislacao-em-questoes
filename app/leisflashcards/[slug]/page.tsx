@@ -480,7 +480,7 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
   const avulsa = isLeiAvulsa && produto.leis.length === 1 && produto.leis[0].slug ? produto.leis[0] : null;
   const [contentTree, commercialSummary] = avulsa ? await Promise.all([
     loadPublicLawContentTree({ lawId: avulsa.id, recorteId: avulsa.recorteId }),
-    loadPublicLawCommercialSummary({ lawId: avulsa.id }),
+    loadPublicLawCommercialSummary({ lawId: avulsa.id, recorteId: avulsa.recorteId }),
   ]) : [null, null];
   const resumoLeis = produto.leis.length > 1
     ? `${produto.leis.length} leis${produto.totalFlashcards !== null ? ` · ${produto.totalFlashcards.toLocaleString("pt-BR")} flashcards` : ""}`
