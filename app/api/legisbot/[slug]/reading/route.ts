@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { continuousBlockAnchor, isContinuousQuestionId } from "@/lib/legisbot/continuous-reading-core";
 import { getContinuousReadingBlocks, getContinuousReadingModel, resolveContinuousQuestionReferenceFromModel, resolveContinuousReferenceFromModel } from "@/lib/legisbot/continuous-reading-server";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
+import { lawStudyErrorResponse } from "@/lib/law-study-server";
+import { loadScopedInteractiveReading } from "@/lib/legisbot/scoped-interactive-reading-server";
+import { authorizeIntegralInteractiveReading } from "@/lib/legisbot/interactive-reading-access";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +16,32 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await context.params;
+    if (request.nextUrl.searchParams.has("recorte_id")) {
+      const headers = { "Cache-Control": "private, no-store, max-age=0" };
+      const model = await loadScopedInteractiveReading(request, slug, request.nextUrl.searchParams);
+      if (!model) return NextResponse.json({ preparation: "structure_pending", message: "Lei Interativa do recorte em preparação." }, { status: 409, headers });
+      const { law, references, structures, publicAccess } = model;
+      if (request.nextUrl.searchParams.get("availability") === "1") return NextResponse.json({ structureIds: publicAccess.accessibleStructureIds }, { headers });
+      const rawOrder = request.nextUrl.searchParams.get("ordem");
+      const reference = rawOrder ? references.find((item) => item.ordem === rawOrder) : null;
+      if (reference) return NextResponse.json({ redirectTo: `/legisbot/${encodeURIComponent(law.slug)}#${continuousBlockAnchor(reference.id)}` }, { headers });
+      const selected = request.nextUrl.searchParams.get("structure_id");
+      const initialStructureId = selected && publicAccess.accessibleStructureIds.includes(Number(selected)) ? Number(selected) : publicAccess.firstAccessibleStructureId;
+      const initialBlocks = await getContinuousReadingBlocks(model, 0, 30, initialStructureId);
+      const visible = new Set(publicAccess.accessibleStructureIds);
+      const project = <T extends typeof references[number]>(item: T): T => ({
+        ...item, sourceQuestionId: null, structureCandidateIds: [],
+        hierarchy: item.hierarchy.filter((node) => visible.has(node.id)),
+      });
+      // Retira todo o diagnóstico e os IDs das questões da resposta pública.
+      return NextResponse.json({ model: { law, references: references.map(project), structures, publicAccess, integrity: { readingAvailable: true }, studyUnits: [] }, initialStructureId, initialBlocks: initialBlocks.map(project) }, { headers });
+    }
     // A simulação administrativa usa os mesmos componentes da leitura do
     // aluno. Um administrador autenticado pode conferi-la sem precisar de
     // uma liberação comercial pessoal; os demais continuam obrigatoriamente
     // sujeitos à autorização da lei.
     const administrator = await obterAdministrador();
-    if (!administrator) await authorizeLawStudy(request, slug);
+    if (!administrator) await authorizeIntegralInteractiveReading(request, slug);
     const model = await getContinuousReadingModel(slug);
     if (!model) return NextResponse.json({ message: "Lei não encontrada ou indisponível para sua conta." }, { status: 404 });
 

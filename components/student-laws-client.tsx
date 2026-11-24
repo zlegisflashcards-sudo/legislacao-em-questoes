@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { useScopedReadingAvailability } from "@/lib/legisbot/scoped-reading-availability-client";
 import { ScannerIcon } from "@/components/scanner-icon";
 import { StudentStudyHub } from "@/components/student-study-hub";
 import { filterStudentLaws, studentLawMotherTitle, type StudentLaw } from "@/lib/student-laws";
@@ -94,13 +95,14 @@ function StudentLawCard({ law }: { law: StudentLaw }) {
   const lawHref = isScope ? `/estudar/lei/${encodeURIComponent(law.slug)}?recorte_id=${encodeURIComponent(scopeId)}` : `/estudar/lei/${encodeURIComponent(law.slug)}?contexto=completo`;
   const title = isScope ? studentLawMotherTitle(law.titulo, law.studyContextName) : law.titulo;
   const contextLabel = law.totalFlashcards === 1 ? "1 questão disponível" : `${law.totalFlashcards} questões disponíveis`;
+  const releasedReadingStructures = useScopedReadingAvailability(law.slug, scopeId ?? null);
   const interactiveLawHref = `/legisbot/${encodeURIComponent(law.slug)}${scopeId ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`;
   const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast${isScope ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`;
   return <article className="grid min-w-0 gap-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:p-6">
     <div className="flex min-w-0 items-start gap-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-50 sm:h-14 sm:w-14"><Image src="/icons/flashcards-law.png" alt="" aria-hidden="true" width={44} height={44} className="h-9 w-9 object-contain sm:h-10 sm:w-10" /></div><div className="min-w-0"><h2 className="break-words text-xl font-black leading-6 text-[#062a5f] sm:text-2xl">{title}</h2>{isScope && law.studyContextName?.trim() ? <span className="mt-2 inline-flex max-w-full rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-700">{law.studyContextName}</span> : null}<p className="mt-2 text-sm font-semibold text-slate-600">{contextLabel}</p></div></div>
     <div className="grid gap-3 sm:grid-cols-3">
       <Link href={lawHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-700 bg-white px-4 py-3 text-center text-sm font-black text-blue-700 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><Image src="/icons/anki.png" alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0 object-contain" />Legis Questões</Link>
-      <Link href={interactiveLawHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><ScannerIcon className="h-5 w-5" /><span>Lei Interativa</span></Link>
+      {isScope && !releasedReadingStructures.size ? <span aria-disabled="true" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-center text-sm font-semibold text-slate-600"><ScannerIcon className="h-5 w-5" /><span>Lei Interativa em preparação</span></span> : <Link href={interactiveLawHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><ScannerIcon className="h-5 w-5" /><span>Lei Interativa</span></Link>}
       <Link href={legiscastHref} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-700 bg-white px-4 py-3 text-center text-sm font-black text-blue-700 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><span aria-hidden="true" className="text-lg">🎙️</span>LegisCast</Link>
     </div>
   </article>;

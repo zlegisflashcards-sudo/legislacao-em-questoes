@@ -39,6 +39,10 @@ function abaInicial(valor: string): LegisBotStudyTab {
 
 export default async function LegisBotPage({ params, searchParams }: LegisBotPageProps) {
   const [{ slug, ordem }, query] = await Promise.all([params, searchParams]);
+  if (query.recorte_id !== undefined) {
+    const scope = typeof query.recorte_id === "string" && query.recorte_id ? query.recorte_id : "recorte-invalido";
+    redirect(`/legisbot/${encodeURIComponent(slug)}?recorte_id=${encodeURIComponent(scope)}&ordem=${encodeURIComponent(ordem)}`);
+  }
   // `aba` existia nos links antigos do Anki. Os dados de conteúdo presentes em
   // query strings legadas são deliberadamente ignorados, mas preservamos a aba.
   const initialTab = abaInicial(primeiroValor(query.tab) || primeiroValor(query.aba));

@@ -275,7 +275,9 @@ describe("player Legis Questões", () => {
 
   it("abre cada item estrutural em uma nova aba na Lei Interativa da lei corrente", () => {
     expect(player).toContain('const interactiveLawHref = slug ? `/legisbot/${encodeURIComponent(slug)}` : "";');
-    expect(player).toContain('href={interactiveLawHref}');
+    expect(player).toContain('href={recorteId === null ? interactiveLawHref');
+    expect(player).toContain('readingIds.has(node.id)');
+    expect(player).toContain('structure_id=${node.id}');
     expect(player).toContain('target="_blank"');
     expect(player).toContain('rel="noopener noreferrer"');
     expect(player).toContain('na Lei Interativa');

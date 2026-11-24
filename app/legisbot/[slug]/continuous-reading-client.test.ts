@@ -164,9 +164,9 @@ describe("leitura contínua pública", () => {
     expect(authorizedClient).toContain("supabase.auth.getSession()");
     expect(authorizedClient).toContain("/conta?modo=login&retorno=");
     expect(authorizedClient).toContain("/api/legisbot/${encodeURIComponent(slug)}/reading");
-    expect(readingRoute).toContain("await authorizeLawStudy(request, slug)");
+    expect(readingRoute).toContain("await authorizeIntegralInteractiveReading(request, slug)");
     expect(readingRoute).toContain("const initialBlocks = model.integrity.readingAvailable");
-    expect(referencesRoute).toContain("await authorizeLawStudy(request, slug)");
+    expect(referencesRoute).toContain("await authorizeIntegralInteractiveReading(request, slug)");
     expect(readingRoute).toContain("preparation: \"structure_pending\"");
     expect(readingRoute).toContain("!model.structureReadiness.ready");
     expect(referencesRoute).toContain("!structureReadiness.ready");

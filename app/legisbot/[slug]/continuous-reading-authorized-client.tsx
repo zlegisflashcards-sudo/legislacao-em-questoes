@@ -21,7 +21,7 @@ type Payload = {
   message?: string;
 };
 
-export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId, questionId, ordem }: { slug: string; initialTab: Exclude<LegisBotStudyTab, "questions">; recorteId: string | null; questionId: string; ordem: string }) {
+export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId, questionId, ordem, structureId = "" }: { slug: string; initialTab: Exclude<LegisBotStudyTab, "questions">; recorteId: string | null; questionId: string; ordem: string; structureId?: string }) {
   const router = useRouter();
   const [payload, setPayload] = useState<Payload | null>(null);
   const [message, setMessage] = useState("");
@@ -37,10 +37,13 @@ export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId,
         return;
       }
       const query = new URLSearchParams();
+      if (recorteId !== null) query.set("recorte_id", recorteId);
+      if (structureId) query.set("structure_id", structureId);
       if (questionId) query.set("question_id", questionId);
       if (ordem) query.set("ordem", ordem);
       const response = await fetch(`/api/legisbot/${encodeURIComponent(slug)}/reading${query.size ? `?${query}` : ""}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       const body = await response.json().catch(() => ({})) as Payload;
+      if (response.status === 409 && body.preparation === "structure_pending") { if (active) setPayload(body); return; }
       if (!response.ok) {
         if (response.status === 401) window.location.replace(`/conta?modo=login&retorno=${encodeURIComponent(target)}`);
         else if (active) setMessage(body.message || "Esta lei não está liberada para sua conta.");
@@ -55,7 +58,7 @@ export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId,
       if (active) setPayload(body);
     })().catch(() => { if (active) setMessage("Não foi possível abrir esta lei agora."); });
     return () => { active = false; };
-  }, [ordem, questionId, recorteId, router, slug]);
+  }, [ordem, questionId, recorteId, router, slug, structureId]);
 
   const studyNav = <LawStudyBottomNav slug={slug} recorteId={recorteId} activeMode="lei_interativa" />;
   if (message) return <main className={styles.page}><section className={`${styles.shell} ${styles.empty}`}><h1>Acesso indisponível</h1><p>{message}</p></section></main>;
@@ -64,5 +67,5 @@ export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId,
   const { model } = payload;
   const resolvedStudyNav = <LawStudyBottomNav slug={model.law.slug} recorteId={recorteId} activeMode="lei_interativa" />;
   if (!model.integrity.readingAvailable) return <div className="pb-24 lg:pb-0"><main className={styles.page}><PreparationNotice lawName={model.law.nome_curto || model.law.titulo} /></main>{resolvedStudyNav}</div>;
-  return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} partialMode={model.publicAccess.mode === "partial"} initialStructureId={payload.initialStructureId ?? null} initialStudyUnitId={payload.initialStudyUnitId ?? null} initialBlocks={payload.initialBlocks ?? []} initialTab={initialTab} recorteId={recorteId} />{resolvedStudyNav}</div>;
+  return <div className="pb-24 lg:pb-0"><ContinuousReadingClient slug={model.law.slug.toUpperCase()} title={model.law.nome_curto || model.law.titulo} lawTitle={model.law.titulo} references={model.references} structures={model.structures} studyUnits={model.studyUnits} partialMode={model.publicAccess.mode === "partial"} initialStructureId={payload.initialStructureId ?? null} initialStudyUnitId={payload.initialStudyUnitId ?? null} initialBlocks={payload.initialBlocks ?? []} initialTab={initialTab} scopedReading={recorteId !== null} recorteId={recorteId} />{resolvedStudyNav}</div>;
 }

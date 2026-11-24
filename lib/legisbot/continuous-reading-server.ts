@@ -27,6 +27,7 @@ import {
 } from "./continuous-reading-structure-core";
 import { resolveContinuousReadingStructureIntegrity } from "./continuous-reading-structure-integrity-core";
 import { canExposeContinuousReadingReference, resolveContinuousReadingPartialMode, resolveContinuousReadingPublicAccess, type ContinuousReadingPartialMode, type ContinuousReadingPublicAccess } from "./continuous-reading-public-access-core";
+import { scopedStructurePublication } from "./scoped-structure-publication";
 import type { StructureReleaseRecord } from "./continuous-reading-structure-release-core";
 import { attachConfirmedLegiscastAudioCoverage, type LegiscastCoverageTrack } from "@/lib/legiscast-audio-coverage-core";
 import { resolveLegiscastStudyUnits, type LegiscastStudyUnit, type LegiscastStudyCoverageConflict } from "@/lib/legiscast-study-units-core";
@@ -188,6 +189,10 @@ export async function getContinuousReadingModel(rawSlug: string): Promise<Contin
   return loadContinuousReadingModel(rawSlug, false);
 }
 
+export async function getScopedContinuousReadingModel(rawSlug: string, selectedIds: ReadonlySet<number>) {
+  return loadContinuousReadingModel(rawSlug, false, selectedIds);
+}
+
 export async function getAdministrativeContinuousReadingScope(rawSlug: string, structureId: number) {
   await exigirAdministrador();
   if (!Number.isSafeInteger(structureId) || structureId <= 0) return null;
@@ -212,7 +217,7 @@ export async function getAdministrativeContinuousReadingScope(rawSlug: string, s
   };
 }
 
-async function loadContinuousReadingModel(rawSlug: string, administrative: boolean): Promise<ContinuousReadingModel | null> {
+async function loadContinuousReadingModel(rawSlug: string, administrative: boolean, scopedStructureIds?: ReadonlySet<number>): Promise<ContinuousReadingModel | null> {
   const slug = rawSlug.trim().toLowerCase();
   if (!/^[a-z0-9_-]{1,50}$/.test(slug)) return null;
   const db = getSupabaseServerClient();
@@ -225,7 +230,7 @@ async function loadContinuousReadingModel(rawSlug: string, administrative: boole
     allReferenceSummaries(law.id),
     db.from("law_structure").select("id,parent_id,tipo,nome,ordem,audio_not_applicable").eq("lei_id", law.id).eq("ativo", true).order("ordem").order("id"),
     db.from("article_context_mappings").select("slug,ordem,artigo_recente").eq("slug", slug),
-    administrative ? false : partialReadingRequested(slug),
+    administrative ? false : scopedStructureIds ? true : partialReadingRequested(slug),
   ]);
   if (structure.error) throw new Error("Não foi possível consultar a hierarquia da legislação.");
   const references = referenceResult.rows;
@@ -264,7 +269,7 @@ async function loadContinuousReadingModel(rawSlug: string, administrative: boole
   // migration indisponível, o modo parcial não é ativado; a política global
   // previamente publicada permanece sendo a única rota possível.
   let partialMode = resolveContinuousReadingPartialMode({ requested: requestedPartialMode, migrationsAvailable: false, structures: readingStructure });
-  let publicAccess = resolveContinuousReadingPublicAccess({ mode: partialMode, structures: readingStructure, reports: [], releases: [] });
+  let publicAccess: ContinuousReadingPublicAccess = scopedStructureIds ? { mode: "partial", accessibleStructureIds: [], firstAccessibleStructureId: null } : resolveContinuousReadingPublicAccess({ mode: partialMode, structures: readingStructure, reports: [], releases: [] });
   let structureReports: ReturnType<typeof resolveContinuousReadingStructureIntegrity>["reports"] = [];
   let releaseRecords: StructureReleaseRecord[] = [];
   if (requestedPartialMode && referenceResult.structureLinkAvailable && readingStructure.length) {
@@ -286,7 +291,9 @@ async function loadContinuousReadingModel(rawSlug: string, administrative: boole
     });
     structureReports = structureIntegrity.reports;
     releaseRecords = releases.records;
-    publicAccess = resolveContinuousReadingPublicAccess({ mode: partialMode, structures: readingStructure, reports: structureIntegrity.reports, releases: releases.records });
+    publicAccess = scopedStructureIds
+      ? scopedStructurePublication({ selectedIds: scopedStructureIds, structures: readingStructure, reports: structureIntegrity.reports, releases: releases.records, inventoryAvailable: inventoryAvailable && migrationsAvailable })
+      : resolveContinuousReadingPublicAccess({ mode: partialMode, structures: readingStructure, reports: structureIntegrity.reports, releases: releases.records });
   }
 
   const questionCountByReference = new Map<string, number>();
@@ -305,6 +312,7 @@ async function loadContinuousReadingModel(rawSlug: string, administrative: boole
     const linkedQuestions = questionCountByReference.get(reference.id) ?? 0;
     const mapping = mappingByContext.get(`${reference.slug.toLowerCase()}\u0000${reference.ordem}`);
     const association = associationByReference.get(reference.id) ?? { structureId: null, status: "unassociated" as const, candidateStructureIds: [], suggestionStatus: "unassociated" as const, suggestedStructureId: null };
+    if (scopedStructureIds && !reference.prepared) return [];
     if (!canExposeContinuousReadingReference({ access: publicAccess, associationStatus: association.status, structureId: association.structureId })) return [];
     return [{
       ...reference,
@@ -463,6 +471,11 @@ export async function getAdministrativeContinuousReadingBlockTexts(rawSlug: stri
   if (!scope) return null;
   const allowed = new Set(scope.references.filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
   return readUnscopedPreparedBlockTexts(rawSlug, rawIds.filter((id) => allowed.has(id.trim().toLowerCase())));
+}
+
+export function getScopedContinuousReadingBlockTexts(model: ContinuousReadingModel, rawIds: string[]) {
+  const allowed = new Set(model.references.filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
+  return readUnscopedPreparedBlockTexts(model.law.slug, rawIds.filter((id) => allowed.has(id.trim().toLowerCase())));
 }
 
 function readUnscopedPreparedBlockTexts(rawSlug: string, rawIds: string[]) {

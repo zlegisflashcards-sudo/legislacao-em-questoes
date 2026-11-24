@@ -79,24 +79,32 @@ function titleNumber(name: string) {
   return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 }
 
+/** Somente as estruturas explicitamente selecionadas em recortes ativos podem ser liberadas sem o pai. */
+async function releaseableScopedIds(lawId: number) {
+  const db = getSupabaseServerClient();
+  const scopes = await db.from("recortes_leis").select("id").eq("lei_id", lawId).eq("ativo", true).eq("status_publicacao", "ativa");
+  if (scopes.error) throw new LegislativeStructureReleaseError("database", "Não foi possível verificar os recortes ativos.");
+  const ids = (scopes.data ?? []).map((scope) => scope.id);
+  if (!ids.length) return new Set<number>();
+  const links = await db.from("recortes_leis_estrutura").select("structure_id").eq("lei_id", lawId).in("recorte_id", ids);
+  if (links.error) throw new LegislativeStructureReleaseError("database", "Não foi possível verificar as estruturas do recorte.");
+  return new Set((links.data ?? []).map((link) => Number(link.structure_id)));
+}
+
 export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: string) {
   const report = await getAdminLegislativeStructureIntegrity(rawSlug);
   if (!report) return null;
   try {
-    const rows = await readReleases(report.law.id);
+    const [rows, scopedIds] = await Promise.all([readReleases(report.law.id), releaseableScopedIds(report.law.id)]);
     const records = compactRecords(rows);
     return {
       ...report,
       migrationAvailable: true,
       confirmationAvailable: await confirmationRpcAvailable(),
       releases: rows,
-      // Os relatórios de integridade já seguem o percurso editorial da árvore
-      // (ordem dos Títulos e, dentro deles, dos descendentes). O painel de
-      // liberação não é um diagnóstico por capítulo: a decisão é sempre do
-      // Título raiz. Preservar esse filtro aqui evita que outro consumidor
-      // apresente ações para estruturas filhas.
+      // Filhos só ganham ação própria quando selecionados num recorte ativo.
       structures: report.integrity.reports
-        .filter((item) => report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null)
+        .filter((item) => scopedIds.has(item.structureId) || report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null)
         .sort((left, right) => {
           const leftNode = report.structureNodes.find((structure) => structure.id === left.structureId);
           const rightNode = report.structureNodes.find((structure) => structure.id === right.structureId);
@@ -108,10 +116,14 @@ export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: stri
         })
         .map((item) => ({
         ...item,
-        isRoot: true,
+        isRoot: report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null,
         suggestedAssociationCount: report.referenceAssociations.filter((association) => association.pending && association.suggestionStatus === "associated" && association.suggestedStructureId === item.structureId).length,
         integrityFingerprint: continuousReadingIntegrityFingerprint(item),
-        releaseStatus: structureReleaseViewStatus({ report: item, structures: report.structureNodes, records }),
+        releaseStatus: report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null
+          ? structureReleaseViewStatus({ report: item, structures: report.structureNodes, records })
+          : item.status !== "ready" || item.preparedReferenceCount < 1
+            ? "pending" as const
+            : records.some((record) => record.structureId === item.structureId && record.status === "released") ? "released" as const : "ready" as const,
         })),
     };
   } catch (error) {
@@ -136,7 +148,10 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
   if (!diagnostic) throw new LegislativeStructureReleaseError("invalid_structure", "Legislação não encontrada.");
   const target = diagnostic.integrity.reports.find((item) => item.structureId === structureId);
   if (!target) throw new LegislativeStructureReleaseError("invalid_structure", "A estrutura não pertence a esta lei.");
-  if (diagnostic.structureNodes.find((item) => item.id === structureId)?.parentId !== null) throw new LegislativeStructureReleaseError("root_required", "Somente uma estrutura sem pai pode ser liberada ou fechada. Escolha o Título raiz correspondente.");
+  const isRoot = diagnostic.structureNodes.find((item) => item.id === structureId)?.parentId === null;
+  if (!isRoot && !(await releaseableScopedIds(diagnostic.law.id)).has(structureId)) {
+    throw new LegislativeStructureReleaseError("root_required", "A estrutura não está selecionada em um recorte ativo.");
+  }
   if (action === "release" && (!diagnostic.law.ativo || diagnostic.law.status_publicacao !== "ativa")) {
     throw new LegislativeStructureReleaseError("law_unavailable", "A lei não está ativa para disponibilização pública.");
   }
@@ -154,7 +169,10 @@ export async function setAdminLegislativeStructureRelease(input: { lawSlug: unkn
       throw new LegislativeStructureReleaseError("stale_integrity", "O diagnóstico mudou desde a prévia. Atualize a conferência antes de liberar a estrutura.");
     }
     const decision = canReleaseStructure({ report: freshTarget, structures: fresh.structureNodes, records: compactRecords(currentRows) });
-    if (!decision.allowed) {
+    if (!isRoot && (freshTarget.status !== "ready" || freshTarget.preparedReferenceCount < 1 || !(await releaseableScopedIds(diagnostic.law.id)).has(structureId))) {
+      throw new LegislativeStructureReleaseError("not_ready", "Confira o vínculo e os blocos deste recorte antes de liberar a estrutura.");
+    }
+    if (isRoot && !decision.allowed) {
       throw new LegislativeStructureReleaseError(decision.reason === "root_required" ? "root_required" : "not_ready", decision.reason === "root_required" ? "Somente uma estrutura sem pai pode ser liberada. Libere o Título que contém este recorte." : "A estrutura não está pronta para liberação. Atualize o diagnóstico e resolva as pendências.");
     }
   }
