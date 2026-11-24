@@ -191,7 +191,7 @@ describe("leitura contínua pública", () => {
   it("espera a sessão autenticada antes de consultar o áudio público", () => {
     expect(client).toContain('if (!audioEndpoint && highlightAccessToken === undefined) return;');
     expect(client).toContain('Authorization: `Bearer ${highlightAccessToken}`');
-    expect(client).toContain('[adminPreview, audioEndpoint, highlightAccessToken, slug, visibleStructureId]');
+    expect(client).toContain('[adminPreview, audioEndpoint, highlightAccessToken, slug, visibleStructureId, recorteId]');
   });
 
   it("aceita uma faixa inicial segura para a prévia administrativa", () => {

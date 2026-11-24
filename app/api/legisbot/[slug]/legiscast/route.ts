@@ -4,10 +4,14 @@ import { getAuthorizedLegiscastAudioForStructure, getLegiscastAudioForLaw } from
 import { getContinuousReadingModel } from "@/lib/legisbot/continuous-reading-server";
 import { LawStudyApiError, lawStudyErrorResponse } from "@/lib/law-study-server";
 
+import { rejectUncertifiedLegiscastScope } from "@/lib/legiscast-scope-pending";
+
 export const dynamic = "force-dynamic";
 
 /** Entrega somente a faixa resolvida e autorizada para a estrutura solicitada. */
 export async function GET(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
+  const pending = rejectUncertifiedLegiscastScope(request);
+  if (pending) return pending;
   try {
     const { slug } = await context.params;
     const structureId = request.nextUrl.searchParams.get("structure_id");
