@@ -464,7 +464,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
     const ativo = url.searchParams.get("ativo");
     if (tipoProduto) query = query.eq("tipo_produto", enumValue(tipoProduto, PRODUCT_TYPES, "Tipo do produto"));
     if (ativo === "true" || ativo === "false") query = query.eq("ativo", ativo === "true");
-    const result = await query.order("ordem").order("nome").range(from, to);
+    const result = await query.order("ordem").order("nome").order("id").range(from, to);
     assertQuery(result);
     const uniqueProducts = new Map<string, (typeof result.data extends (infer Row)[] | null ? Row : never)>();
     for (const product of result.data ?? []) {
@@ -487,7 +487,7 @@ export async function getCommercialResource(resource: CommercialResource, reques
       if (!lawIds.has(lawId)) byProduct.set(key, [...(byProduct.get(key) ?? []), link]);
       lawIds.add(lawId); lawsByProduct.set(key, lawIds);
     }
-    return pageResult(productRows.map((row) => ({ ...row, leis: byProduct.get(String(row.id)) ?? [] })), productRows.length, page, limit);
+    return pageResult(productRows.map((row) => ({ ...row, leis: byProduct.get(String(row.id)) ?? [] })), result.count, page, limit);
   }
 
   if (resource === "aquisicoes") {
