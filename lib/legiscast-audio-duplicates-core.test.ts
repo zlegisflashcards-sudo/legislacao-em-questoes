@@ -25,6 +25,22 @@ describe("avisos administrativos de duplicidade no LegisCast", () => {
     expect(conflicts).toEqual([]);
   });
 
+  it("aceita episódios sequenciais na mesma estrutura e alerta somente a posição repetida", () => {
+    expect(findLegiscastAudioConflicts([
+      { id: "episodio-1", leiId: 1, structureId: 13, order: 1, active: true },
+      { id: "episodio-2", leiId: 1, structureId: 13, order: 2, active: true },
+      { id: "episodio-3", leiId: 1, structureId: 13, order: 3, active: true },
+      { id: "episodio-4", leiId: 1, structureId: 13, order: 4, active: true },
+    ])).toEqual([]);
+
+    expect(findLegiscastAudioConflicts([
+      { id: "primeiro-a", leiId: 1, structureId: 13, order: 1, active: true },
+      { id: "primeiro-b", leiId: 1, structureId: 13, order: 1, active: true },
+    ])).toEqual([
+      { kind: "direct-duplicate", leiId: 1, structureId: 13, audioIds: ["primeiro-a", "primeiro-b"] },
+    ]);
+  });
+
   it("classifica sobreposição de cobertura explícita separadamente", () => {
     const conflicts = findLegiscastAudioConflicts([
       { id: "chapter", leiId: 1, structureId: 10, active: true, coveredStructureIds: [11] },

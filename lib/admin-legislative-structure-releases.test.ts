@@ -43,4 +43,11 @@ describe("liberação administrativa por estrutura", () => {
     expect(server).toContain("parentId !== null");
     expect(server).not.toContain('rpc("liberar_lei_interativa_completa"');
   });
+
+  it("expõe no painel somente os Títulos, na ordem editorial do diagnóstico", () => {
+    expect(server).toContain("report.integrity.reports\n        .filter");
+    expect(server).toContain("parentId === null");
+    expect(server).toContain("function titleNumber");
+    expect(server).toContain("titleNumber(left.name) - titleNumber(right.name)");
+  });
 });

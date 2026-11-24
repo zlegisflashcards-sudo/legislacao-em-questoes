@@ -134,6 +134,7 @@ export async function listAdminLegiscastAudios(lawSlug?: string | null) {
     id: audio.id,
     leiId: audio.lei_id,
     structureId: audio.structure_id,
+    order: typeof audio.ordem === "number" ? audio.ordem : null,
     active: audio.ativo,
     coveredStructureIds: coverageRows.filter((entry) => entry.audio_id === audio.id).map((entry) => entry.structure_id),
   })));

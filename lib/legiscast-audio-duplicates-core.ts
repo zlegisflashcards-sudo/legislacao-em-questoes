@@ -2,6 +2,8 @@ export type LegiscastDuplicateCandidate = {
   id: string;
   leiId: number;
   structureId: number | null;
+  /** Ordem editorial dentro da playlist da estrutura. */
+  order?: number | null;
   active: boolean;
   /** Somente coberturas editoriais persistidas; nunca inferidas pela hierarquia. */
   coveredStructureIds?: readonly number[];
@@ -45,7 +47,10 @@ export function findLegiscastAudioConflicts(
   for (const track of tracks) {
     if (!track.active) continue;
     if (track.structureId !== null) {
-      const key = `${track.leiId}:${track.structureId}`;
+      // Uma estrutura pode ter vários episódios. Só há duplicidade direta se
+      // duas faixas ativas disputam a mesma posição da playlist; faixas 1, 2,
+      // 3… são a sequência editorial normal daquele recorte.
+      const key = `${track.leiId}:${track.structureId}:${track.order ?? 0}`;
       directClaims.set(key, [...(directClaims.get(key) ?? []), track.id]);
     }
     for (const structureId of new Set(track.coveredStructureIds ?? [])) {

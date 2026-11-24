@@ -74,6 +74,11 @@ function compactRecords(rows: ReleaseRow[]): StructureReleaseRecord[] {
   return rows.map((row) => ({ structureId: Number(row.structure_id), status: row.status }));
 }
 
+function titleNumber(name: string) {
+  const match = name.trim().match(/^t[ií]tulo\s+(\d+)/i);
+  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+}
+
 export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: string) {
   const report = await getAdminLegislativeStructureIntegrity(rawSlug);
   if (!report) return null;
@@ -85,13 +90,29 @@ export async function getAdminLegislativeStructureReleaseDashboard(rawSlug: stri
       migrationAvailable: true,
       confirmationAvailable: await confirmationRpcAvailable(),
       releases: rows,
-      structures: report.integrity.reports.map((item) => ({
+      // Os relatórios de integridade já seguem o percurso editorial da árvore
+      // (ordem dos Títulos e, dentro deles, dos descendentes). O painel de
+      // liberação não é um diagnóstico por capítulo: a decisão é sempre do
+      // Título raiz. Preservar esse filtro aqui evita que outro consumidor
+      // apresente ações para estruturas filhas.
+      structures: report.integrity.reports
+        .filter((item) => report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null)
+        .sort((left, right) => {
+          const leftNode = report.structureNodes.find((structure) => structure.id === left.structureId);
+          const rightNode = report.structureNodes.find((structure) => structure.id === right.structureId);
+          const orderDifference = (leftNode?.ordem ?? 0) - (rightNode?.ordem ?? 0);
+          // Legislações legadas podem ter vários Títulos com a mesma posição.
+          // Nesse empate, a numeração editorial do Título é mais fiel à
+          // estrutura do que a ordem do ID de banco.
+          return orderDifference || titleNumber(left.name) - titleNumber(right.name) || left.structureId - right.structureId;
+        })
+        .map((item) => ({
         ...item,
-        isRoot: report.structureNodes.find((structure) => structure.id === item.structureId)?.parentId === null,
+        isRoot: true,
         suggestedAssociationCount: report.referenceAssociations.filter((association) => association.pending && association.suggestionStatus === "associated" && association.suggestedStructureId === item.structureId).length,
         integrityFingerprint: continuousReadingIntegrityFingerprint(item),
         releaseStatus: structureReleaseViewStatus({ report: item, structures: report.structureNodes, records }),
-      })),
+        })),
     };
   } catch (error) {
     if (error instanceof LegislativeStructureReleaseError && error.code === "migration_pending") return { ...report, migrationAvailable: false, confirmationAvailable: false, releases: [], structures: [] };
