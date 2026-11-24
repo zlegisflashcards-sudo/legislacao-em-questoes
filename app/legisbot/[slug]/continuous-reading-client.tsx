@@ -446,7 +446,8 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       const scope = partialMode && selectedStudyUnitId !== null
         ? `&study_unit_id=${encodeURIComponent(selectedStudyUnitId)}`
         : partialMode && selectedStructureId !== null ? `&structure_id=${encodeURIComponent(String(selectedStructureId))}` : "";
-      const url = referencesEndpoint ? `${referencesEndpoint}&reference_ids=${encodeURIComponent(referenceIds.join(","))}` : `/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}`;
+      const recorte = recorteId === null ? "" : `&recorte_id=${encodeURIComponent(recorteId)}`;
+      const url = referencesEndpoint ? `${referencesEndpoint}&reference_ids=${encodeURIComponent(referenceIds.join(","))}` : `/api/legisbot/${encodeURIComponent(slug)}/references?reference_ids=${encodeURIComponent(referenceIds.join(","))}${scope}${recorte}`;
       const response = await fetch(url, { cache: "no-store", headers: administrativeAccess || !highlightAccessToken ? undefined : { Authorization: `Bearer ${highlightAccessToken}` } });
       const result = await response.json() as { blocks?: BlockText[] };
       if (!response.ok || !result.blocks) throw new Error("load_failed");
@@ -466,7 +467,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       requestedPagesRef.current.delete(page);
       setLoadingPages((current) => { const next = new Set(current); next.delete(page); return next; });
     }
-  }, [administrativeAccess, highlightAccessToken, loadedPages, loadingPages, partialMode, preparedById, referencesEndpoint, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
+  }, [administrativeAccess, highlightAccessToken, loadedPages, loadingPages, partialMode, preparedById, recorteId, referencesEndpoint, selectedStructureId, selectedStudyUnitId, slug, visiblePrepared]);
 
   useEffect(() => {
     if ((!partialMode && selectedStudyUnitId === null) || !visiblePrepared.length || loadedPages.has(0)) return;
@@ -512,7 +513,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
 
   useEffect(() => {
     const referenceIds = [...blocks.keys()].filter((id) => !loadedHighlightReferencesRef.current.has(id)).slice(0, PAGE_SIZE);
-    if (!referenceIds.length || adminPreview || !highlightAccessToken) return;
+    if (scopedReading || !referenceIds.length || adminPreview || !highlightAccessToken) return;
     let active = true;
     const controller = new AbortController();
     void (async () => {
@@ -527,7 +528,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
       });
     })();
     return () => { active = false; controller.abort(); };
-  }, [adminPreview, blocks, highlightAccessToken, slug]);
+  }, [adminPreview, blocks, highlightAccessToken, scopedReading, slug]);
 
   const navigate = useCallback((reference: Reference) => {
     const structureId = reference.hierarchy.at(-1)?.id ?? null;
@@ -637,6 +638,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     if (index < 0) { setMissingTarget(true); return; }
     const reference = prepared[index];
     const structureId = reference.hierarchy.at(-1)?.id ?? null;
+    if (scopedReading && structureId !== null) setSelectedStructureId(structureId);
     const unit = structureId === null ? null : studyUnitByStructureId.get(structureId) ?? null;
     if (unit) setSelectedStudyUnitId(unit.id);
     setMissingTarget(false);
@@ -644,7 +646,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
     setFocusedId(referenceId);
     setActiveId(referenceId);
     if (!blocks.has(referenceId)) void loadPage(Math.floor(index / PAGE_SIZE));
-  }, [adminPreview, blocks, loadPage, prepared, studyUnitByStructureId]);
+  }, [adminPreview, blocks, loadPage, prepared, scopedReading, studyUnitByStructureId]);
 
   useEffect(() => {
     if (!focusedId) return;
@@ -877,7 +879,7 @@ export default function ContinuousReadingClient({ slug, title, lawTitle = title,
           </header> : null}
           {visiblePrepared.map((reference, index) => {
             const block = blocks.get(reference.id);
-            const canOpenLegisBot = Boolean(block) && !reference.inactive;
+            const canOpenLegisBot = !scopedReading && Boolean(block) && !reference.inactive;
             const page = Math.floor(index / PAGE_SIZE);
             const advance = readingAdvances.get(reference.id) ?? null;
             const preparedIndex = preparedIndexById.get(reference.id) ?? -1;

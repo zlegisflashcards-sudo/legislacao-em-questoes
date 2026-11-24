@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { obterAdministrador } from "@/lib/admin-auth";
-import { getContinuousReadingBlockTextsForLaw, getContinuousReadingStructureReadiness } from "@/lib/legisbot/continuous-reading-server";
-import { authorizeLawStudy, lawStudyErrorResponse } from "@/lib/law-study-server";
+import { getContinuousReadingBlockTextsForLaw, getContinuousReadingStructureReadiness, getScopedContinuousReadingBlockTexts } from "@/lib/legisbot/continuous-reading-server";
+import { lawStudyErrorResponse } from "@/lib/law-study-server";
+import { loadScopedInteractiveReading } from "@/lib/legisbot/scoped-interactive-reading-server";
+import { authorizeIntegralInteractiveReading } from "@/lib/legisbot/interactive-reading-access";
 
 export const dynamic = "force-dynamic";
 const MAXIMUM_BLOCKS = 60;
@@ -13,10 +15,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const studyUnitId = request.nextUrl.searchParams.get("study_unit_id");
   if (!referenceIds.length || !referenceIds.some(Boolean)) return NextResponse.json({ error: "Selecione os blocos da leitura." }, { status: 400 });
   try {
+    if (request.nextUrl.searchParams.has("recorte_id")) {
+      const headers = { "Cache-Control": "private, no-store, max-age=0" };
+      const model = await loadScopedInteractiveReading(request, slug, request.nextUrl.searchParams);
+      if (!model) return NextResponse.json({ message: "Lei Interativa do recorte em preparação." }, { status: 409, headers });
+      return NextResponse.json({ blocks: await getScopedContinuousReadingBlockTexts(model, referenceIds) ?? [] }, { headers });
+    }
     // A simulação administrativa não é uma liberação comercial. Fora dela,
     // todo lote de HTML exige a mesma autorização da Lei e do LegisCast.
     const administrator = await obterAdministrador();
-    if (!administrator) await authorizeLawStudy(request, slug);
+    if (!administrator) await authorizeIntegralInteractiveReading(request, slug);
     // A paginação reconsulta a mesma trava do catálogo; parâmetros de UUID,
     // estrutura ou unidade não podem reabrir conteúdo em preparação.
     if (!administrator) {
