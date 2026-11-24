@@ -27,3 +27,6 @@ supabase/.temp/
 .codex-*.log
 
 .vercel
+
+# Internal CPP-PMAL editorial snapshot; do not publish.
+/lib/legisbot/fixtures/cpp-pmal-reading-review.json
