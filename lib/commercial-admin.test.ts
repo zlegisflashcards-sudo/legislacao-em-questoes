@@ -214,6 +214,15 @@ describe("fronteira administrativa comercial", () => {
     expect(client).toContain('tab === "materiais" ? <label>Lei<LawSearchSelect');
   });
 
+  it("busca produtos pelo nome e pelo código além da primeira página de aquisições", () => {
+    expect(client).toContain("remainingProducts.flatMap");
+    expect(client).toContain("produtos?limit=50&page=");
+    expect(client).toContain('name="produto_id" options={productOptions}');
+    expect(client).toContain('placeholder="Pesquisar produto por nome ou código…"');
+    expect(client).toContain('slug: text(item.slug) || text(item.slug_opcional)');
+    expect(server).toContain('leis: byProduct.get(String(row.id)) ?? [] })), result.count, page, limit');
+  });
+
   it("identifica ao lado da lei o recorte selecionado na composição", () => {
     expect(client).toContain("const initialScopeNames = useMemo");
     expect(client).toContain("const scopeName = (id: string)");
