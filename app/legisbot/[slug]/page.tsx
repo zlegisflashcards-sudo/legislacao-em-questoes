@@ -13,5 +13,5 @@ function initialTab(value: string): Exclude<LegisBotStudyTab, "questions"> { ret
 
 export default async function ContinuousLegisBotPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
-  return <ContinuousReadingAuthorizedClient slug={slug} initialTab={initialTab(first(query.tab) || first(query.aba))} recorteId={first(query.recorte_id) || null} questionId={first(query.question_id)} ordem={first(query.ordem)} />;
+  return <ContinuousReadingAuthorizedClient slug={slug} initialTab={initialTab(first(query.tab) || first(query.aba))} recorteId={query.recorte_id === undefined ? null : typeof query.recorte_id === "string" && query.recorte_id ? query.recorte_id : "recorte-invalido"} questionId={first(query.question_id)} ordem={first(query.ordem)} />;
 }

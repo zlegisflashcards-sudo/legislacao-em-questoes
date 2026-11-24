@@ -214,7 +214,7 @@ describe("interface das leis adquiridas", () => {
     for (const expected of ["law.titulo", "studyContextName", "studyContextKind", 'src="/icons/anki.png"', ">Legis Questões", '<ScannerIcon className="h-5 w-5" /><span>Lei Interativa</span>', "interactiveLawHref"]) expect(card).toContain(expected);
     expect(card).toContain('const lawHref = isScope ?');
     expect(card).toContain("href={lawHref}");
-    expect(card).toContain('const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast`;');
+    expect(card).toContain('const legiscastHref = `/estudar/lei/${encodeURIComponent(law.slug)}/legiscast${isScope ? `?recorte_id=${encodeURIComponent(scopeId)}` : ""}`;');
     expect(card).toContain(">LegisCast</Link>");
     for (const forbidden of ["law.thumbnailUrl", "law.descricao", "law.nomeCurto", "studentLawShortNameForDisplay", "law.categoria", "studentLawStatusLabel", "situacaoAtualizacao", "versaoMaterial", "revisadoEm", "publicadoEm", "Atualizado em", "studentLawReferenceLabel", "referenciaNormativaAtual", "Norma originária", "Última alteração incorporada", "Material atualizado", "Concluída", "Não iniciada"]) {
       expect(card).not.toContain(forbidden);

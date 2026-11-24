@@ -46,11 +46,16 @@ export function ContinuousReadingAuthorizedClient({ slug, initialTab, recorteId,
         else if (active) setMessage(body.message || "Esta lei não está liberada para sua conta.");
         return;
       }
-      if (body.redirectTo) { router.replace(body.redirectTo); return; }
+      if (body.redirectTo) {
+        const [path, anchor] = body.redirectTo.split("#", 2);
+        const suffix = recorteId === null ? "" : `${path.includes("?") ? "&" : "?"}recorte_id=${encodeURIComponent(recorteId)}`;
+        router.replace(`${path}${suffix}${anchor === undefined ? "" : `#${anchor}`}`);
+        return;
+      }
       if (active) setPayload(body);
     })().catch(() => { if (active) setMessage("Não foi possível abrir esta lei agora."); });
     return () => { active = false; };
-  }, [ordem, questionId, router, slug]);
+  }, [ordem, questionId, recorteId, router, slug]);
 
   const studyNav = <LawStudyBottomNav slug={slug} recorteId={recorteId} activeMode="lei_interativa" />;
   if (message) return <main className={styles.page}><section className={`${styles.shell} ${styles.empty}`}><h1>Acesso indisponível</h1><p>{message}</p></section></main>;

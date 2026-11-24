@@ -14,8 +14,8 @@ describe("navegação responsiva dos modos da lei", () => {
     expect(source).toContain('mode: "legiscast" as const, label: "LegisCast", icon: "🎙️", suffix: "/legiscast"');
     expect(source).toContain('label: "Lei Interativa"');
     expect(source).toContain('mode: "lei_interativa"');
-    expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}`');
-    expect(source).toContain('if (mode === "legiscast") return `/estudar/lei/${encodeURIComponent(slug)}${suffix}`;');
+    expect(source).toContain('return `/legisbot/${encodeURIComponent(slug)}${recorteId ?');
+    expect(source).toContain('return `/estudar/lei/${encodeURIComponent(slug)}${suffix}${recorteId ?');
     expect(source).toContain("?recorte_id=${encodeURIComponent(recorteId)}");
     expect(source).toContain("grid-cols-3");
     expect(source).not.toContain('label: "Anki"');
