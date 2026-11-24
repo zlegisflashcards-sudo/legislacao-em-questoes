@@ -269,7 +269,9 @@ describe("LegisCast em áudio", () => {
     expect(server).toContain("id,parent_id,tipo,nome,ordem,pdf_page");
     expect(player).toContain("node.pdf_page");
     expect(player).toContain("onNavigateToPdfPage?.(navigablePage)");
-    expect(player).toContain("first || navigablePage !== null");
+    expect(player).toContain("track.order === 0");
+    expect(player).toContain("playlistTracks.map((track)");
+    expect(player).toContain("Ordem 0 preserva a faixa principal");
     expect(player).toContain("onNavigateToPdfPage && Number.isSafeInteger(node.pdf_page)");
     expect(lawLegiscastClient).not.toContain("onNavigateToPdfPage");
     expect(pdfViewer).toContain('canvas[data-page="${requestedPage}"]');

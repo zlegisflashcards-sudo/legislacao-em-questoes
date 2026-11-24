@@ -33,7 +33,7 @@ export async function getLegiscastAudioForLaw(lawId: number, rawStructureId: str
   if (!Number.isInteger(structureId) && structureId !== null) throw new LawStudyApiError(400, "Estrutura inválida.");
   const db = getSupabaseServerClient();
   const [tracksResult, structuresResult] = await Promise.all([
-    db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,storage_path").eq("lei_id", lawId).eq("ativo", true),
+    db.from("legiscast_audios").select("id,lei_id,structure_id,titulo,descricao,duracao_segundos,ordem,storage_path").eq("lei_id", lawId).eq("ativo", true),
     db.from("law_structure").select("id,parent_id,nome,audio_not_applicable").eq("lei_id", lawId).eq("ativo", true),
   ]);
   if (tracksResult.error || structuresResult.error) throw new LawStudyApiError(503, "Não foi possível consultar o áudio desta estrutura.");
@@ -53,7 +53,7 @@ export async function getLegiscastAudioForLaw(lawId: number, rawStructureId: str
   if (!row) throw new LawStudyApiError(503, "Não foi possível preparar o áudio desta estrutura.");
   const signed = await db.storage.from(BUCKET).createSignedUrl(row.storage_path, 60 * 60);
   if (signed.error || !signed.data?.signedUrl) throw new LawStudyApiError(503, "Não foi possível preparar o áudio desta estrutura.");
-  return { audio: { id: String(row.id), structureId: row.structure_id === null ? null : Number(row.structure_id), title: legiscastAudioDisplayTitle(row.titulo, row.structure_id === null ? null : structures.find((structure) => Number(structure.id) === Number(row.structure_id))?.nome), description: row.descricao, durationSeconds: row.duracao_segundos, url: signed.data.signedUrl }, status: resolution.source };
+  return { audio: { id: String(row.id), structureId: row.structure_id === null ? null : Number(row.structure_id), title: legiscastAudioDisplayTitle(row.titulo, row.structure_id === null ? null : structures.find((structure) => Number(structure.id) === Number(row.structure_id))?.nome), description: row.descricao, durationSeconds: row.duracao_segundos, order: row.ordem, url: signed.data.signedUrl }, status: resolution.source };
 }
 
 export async function listAuthorizedLegiscastAudios(request: Request, slug: string) {
@@ -72,7 +72,7 @@ export async function listAuthorizedLegiscastAudios(request: Request, slug: stri
   const audios = await Promise.all(sortLegiscastAudiosByStructure(scopedAudios, structure).map(async (audio) => {
     const signed = await db.storage.from(BUCKET).createSignedUrl(audio.storage_path, 60 * 60);
     if (signed.error || !signed.data?.signedUrl) throw new LawStudyApiError(503, "Não foi possível preparar os áudios desta lei.");
-    return { id: audio.id, structureId: audio.structure_id, title: legiscastAudioDisplayTitle(audio.titulo, audio.structure_id === null ? null : structureNames.get(audio.structure_id)), description: audio.descricao, durationSeconds: audio.duracao_segundos, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
+    return { id: audio.id, structureId: audio.structure_id, title: legiscastAudioDisplayTitle(audio.titulo, audio.structure_id === null ? null : structureNames.get(audio.structure_id)), description: audio.descricao, durationSeconds: audio.duracao_segundos, order: audio.ordem, titleGroup: audio.titleGroup, titleGroupId: audio.titleGroupId, url: signed.data.signedUrl };
   }));
   return { audios, structure, recorte: null, lawTitle: context.title };
 }
