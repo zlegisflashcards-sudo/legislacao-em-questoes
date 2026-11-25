@@ -36,6 +36,8 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy, em
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [reviewCounts, setReviewCounts] = useState<ReviewCounts | null>(null);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
 
   const request = useCallback(async (path: string, method = "GET") => {
     if (requester) return requester(path, method) as Promise<Record<string, unknown>>;
@@ -117,12 +119,46 @@ export function LawStudyPageClient({ slug, ankiTutorialSettings, publicStudy, em
   const visibleQuestions = sourceLaw && selectedContext?.structureIds ? sourceLaw.questions.filter((question) => question.structure_id !== null && selectedContext.structureIds!.includes(question.structure_id)) : sourceLaw?.questions ?? [];
   const visibleStructure = sourceLaw ? structureForStudyScope(sourceLaw.structure ?? [], selectedContext?.structureIds ?? null) : [];
   const tree = sourceLaw ? buildTree(visibleStructure, visibleQuestions, newQuestionsByStructure) : [];
+  const availablePdf = !publicStudy ? study.materials.find((item) => item.type === "pdf" && item.accessAvailable) : undefined;
+  async function downloadStudyPdf(materialId: number) {
+    setPdfDownloading(true);
+    setPdfError("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.access_token) throw new Error("Sua sessão expirou. Entre novamente para baixar o PDF.");
+      const response = await fetch(`/api/aluno/estudar/lei/${encodeURIComponent(slug)}/materiais/${materialId}/download`, {
+        headers: { Authorization: `Bearer ${data.session.access_token}` },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null);
+        throw new Error(failure?.message || "Não foi possível baixar o PDF.");
+      }
+      const blob = await response.blob();
+      const prefix = await blob.slice(0, 5).text();
+      if (prefix !== "%PDF-") throw new Error("O arquivo recebido não é um PDF válido.");
+      const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${slug}-legislacao.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (caught) {
+      setPdfError(caught instanceof Error ? caught.message : "Não foi possível baixar o PDF.");
+    } finally {
+      setPdfDownloading(false);
+    }
+  }
   if (compact) return <CompactStudyCard study={study} campaign={campaign} slug={slug} recorteId={selectedContext?.recorteId ?? recorteId} />;
   return <Frame publicMode={Boolean(publicStudy)} embedded={embedded}><div className="law-study-layout grid min-w-0 gap-5 sm:gap-6">
     <header className="min-w-0 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm sm:p-7 law-study-hero">
       {study.law.code ? <p className="text-xs font-black uppercase tracking-wide text-blue-700">{study.law.code}</p> : null}
       <h1 className="mt-2 break-words text-3xl font-black tracking-tight text-[#062a5f] sm:text-4xl">{study.law.title}</h1>
       <Link href={ankiHref} className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-blue-700 px-3 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"><span aria-hidden="true" className="mr-2">📥</span>Baixar arquivo para Anki</Link>
+      {availablePdf ? <button type="button" disabled={pdfDownloading} onClick={() => void downloadStudyPdf(availablePdf.id)} className="ml-0 mt-3 inline-flex min-h-10 items-center rounded-xl border border-blue-700 px-3 py-2 text-sm font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60 sm:ml-2">{pdfDownloading ? "Baixando PDF…" : "Baixar PDF"}</button> : null}
+      {pdfError ? <p role="alert" className="mt-2 text-sm font-semibold text-red-700">{pdfError}</p> : null}
       <section className="law-study-toolbar mt-5 grid min-w-0 gap-4 rounded-2xl bg-blue-50 p-4 sm:mt-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-5" aria-label="Estudo ativo"><div className="min-w-0"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]">Estudo ativo</p>{selectedContext ? <p className="mt-1 text-sm font-semibold text-slate-600">{selectedContext.recorteId ? `Estudo: ${selectedContext.nome}` : "Modo campanha com ranking e desempenho"}</p> : null}<p className="mt-1 text-sm text-slate-600">Status: {statusLabel}</p><div className="mt-4 h-2 overflow-hidden rounded-full bg-blue-100"><span className="block h-full rounded-full bg-blue-700" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-sm font-bold text-slate-700">{progress}% concluído</p>{completed ? <p className="mt-3 text-xs text-slate-600">Novas questões podem ser adicionadas a esta lei ao longo do tempo. Se quiser estudar apenas o conteúdo que ainda não respondeu, use o filtro {`"Não respondidas"`} no modo Teste.</p> : null}{selectedContext?.recorteId ? <p className="mt-3 text-xs font-semibold text-slate-600">Este recorte delimita o conteúdo e o contexto do edital; campanha, score e progresso pertencem à lei.</p> : null}</div>{!completed ? <Link href={`/questoes/${encodeURIComponent(slug)}/estudar${selectedContext?.recorteId ? `?recorte_id=${encodeURIComponent(selectedContext.recorteId)}` : ""}`} className="law-study-button-primary inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-700 px-5 py-3 font-black text-white hover:bg-blue-600 sm:w-auto">{campaign.status === "em_andamento" ? "Continuar estudo" : "Começar estudo"}</Link> : null}</section>
       {hasCampaignSummary ? <section className="mt-5 border-t border-slate-200 pt-5"><div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch"><div className="min-w-0 text-center"><p className="text-sm font-black uppercase tracking-wide text-[#062a5f]"><span aria-hidden="true">🏅 </span>Desempenho desta tentativa</p><p className="mt-1 text-left text-sm text-slate-600">{completed ? "Seu Estudo Ativo da Lei foi concluído. O estudo livre não altera score, ranking ou progresso histórico." : "Acompanhe o desempenho da tentativa em andamento."}</p>{currentAttempt ? <CampaignPerformanceDonut compact {...competitiveCampaignPerformance(currentAttempt.correct, currentAttempt.errors)} /> : null}</div>{!publicStudy && completed && campaign.record ? <div className="flex min-w-0 self-stretch sm:justify-end"><div className="flex min-w-[11rem] flex-col rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-center"><p className="text-xs font-black uppercase tracking-wide text-amber-900">Recorde pessoal</p><p className="mt-1 text-2xl font-black text-[#062a5f]">{campaign.record.score.toLocaleString("pt-BR")}</p><p className="mt-1 text-xs font-semibold text-slate-600">Maior pontuação entre campanhas concluídas</p><p className="mt-1 text-[11px] text-slate-500">Permanece após reiniciar o estudo.</p><div className="mt-auto pt-4"><p className="text-xs text-slate-600">Resete a tentativa para tentar bater seu recorde.</p><button type="button" onClick={() => setResetOpen(true)} className="mt-2 min-h-10 w-full rounded-xl border border-blue-700 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50">Resetar tentativa</button></div></div></div> : null}</div></section> : null}
       {!publicStudy ? <ReviewHub slug={slug} counts={reviewCounts} /> : null}

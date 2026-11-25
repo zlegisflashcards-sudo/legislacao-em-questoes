@@ -45,6 +45,26 @@ export async function downloadAuthorizedLawMaterial(request: Request, slug: stri
     throw new LawStudyApiError(404, "Material temporariamente indisponível.");
   }
 
+  // A cópia privada fica no banco, sem link público. Só é consultada
+  // depois de validar a sessão, a liberação e o vínculo material/lei.
+  if (type === "pdf") {
+    const { data: privatePdf } = await supabase.from("materiais_pdf_privados")
+      .select("conteudo_base64").eq("material_id", materialId).maybeSingle();
+    if (typeof privatePdf?.conteudo_base64 === "string") {
+      const bytes = Buffer.from(privatePdf.conteudo_base64, "base64");
+      if (bytes.length < 5 || bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+        throw new LawStudyApiError(503, "O PDF cadastrado está inválido.");
+      }
+      return new Response(new Uint8Array(bytes), { headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+        "Content-Disposition": attachmentDisposition(lawDownloadFileName(lawTitle, null, title, type)),
+        "Content-Type": "application/pdf",
+        "Content-Length": String(bytes.length),
+        "X-Content-Type-Options": "nosniff",
+      } });
+    }
+  }
+
   const upstreamUrl = googleDriveDownloadUrl(source as string);
   if (!upstreamUrl) throw new LawStudyApiError(404, "Material temporariamente indisponível.");
 
