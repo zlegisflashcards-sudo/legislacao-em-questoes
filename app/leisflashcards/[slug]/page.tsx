@@ -12,7 +12,8 @@ import { siteConfig } from "@/lib/site-config";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
 import { mainQuestions, mainStructure } from "@/lib/questions-main-server";
-import { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
+import { descendantsForScope } from "@/lib/law-question-scope-resolution";
+import { studyQuestionsInScope } from "@/lib/tjsp-question-article-filter";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 import { PublicLawContentTree } from "@/components/public-law-content-tree";
 import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLawCommercialSummary } from "@/lib/public-law-content-tree-server";
@@ -108,9 +109,10 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
     const recorteIds = [...new Set((vinculos.data ?? []).flatMap((vinculo) => typeof vinculo.recorte_id === "string" ? [vinculo.recorte_id] : []))];
     const scopeStatuses = recorteIds.length
-      ? await supabase.from("recortes_leis").select("id,status_publicacao").in("id", recorteIds)
+      ? await supabase.from("recortes_leis").select("id,status_publicacao,artigos_filtro").in("id", recorteIds)
       : { data: [], error: null };
     const soonScopeIds = new Set((scopeStatuses.data ?? []).filter((item) => item.status_publicacao === "em_breve").map((item) => String(item.id)));
+    const articleFilterByScopeId = new Map((scopeStatuses.data ?? []).map((item) => [String(item.id), item.artigos_filtro]));
     const flashcardsByRecorteId = new Map<string, number>();
     if (recorteIds.length) {
       const recorteLinks = await supabase
@@ -133,7 +135,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
         for (const { lawId, questions, structure } of scopedLaws) {
           for (const recorteId of new Set(recortesByLawId.get(lawId) ?? [])) {
             const structureIds = descendantsForScope(structure, structureIdsByRecorteId.get(recorteId) ?? []);
-            flashcardsByRecorteId.set(recorteId, questionsInScope(questions, structureIds).length);
+            flashcardsByRecorteId.set(recorteId, studyQuestionsInScope(questions, structureIds, lawId, recorteId, articleFilterByScopeId.get(recorteId)).length);
           }
         }
       }
