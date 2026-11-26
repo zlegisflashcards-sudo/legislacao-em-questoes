@@ -98,7 +98,7 @@ export async function GET(request: Request) {
       : lawSlug && searchParams.get("mode") === "conference-list"
       ? await listAdminQuestionConferenceList(lawSlug, searchParams.get("list_id"))
       : lawSlug && searchParams.get("mode") === "conference"
-      ? await listAdminQuestionConference(lawSlug, searchParams.get("structure_id"))
+      ? await listAdminQuestionConference(lawSlug, searchParams.get("structure_id"), searchParams.get("recorte_id"))
       : lawSlug && searchParams.get("mode") === "search"
       ? await searchAdminQuestions({ lawSlug, query: searchParams.get("q"), filter: searchParams.get("filter"), sort: searchParams.get("sort"), page: searchParams.get("page"), limit: searchParams.get("limit"), structureId: searchParams.get("structure_id"), article: searchParams.get("article"), scopeId: searchParams.get("recorte_id") })
       : lawSlug && searchParams.get("question_id")

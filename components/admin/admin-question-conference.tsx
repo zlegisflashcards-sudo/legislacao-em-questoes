@@ -118,6 +118,7 @@ export function AdminQuestionConference({
   law,
   nodes,
   structureId,
+  recorteId,
   structureName,
   structureReview,
   customList,
@@ -127,6 +128,7 @@ export function AdminQuestionConference({
   law: Law;
   nodes: AdminQuestionStructureNode[];
   structureId: number | null;
+  recorteId?: string | null;
   structureName: string;
   structureReview?: {
     reviewed: boolean;
@@ -233,8 +235,10 @@ export function AdminQuestionConference({
       law_slug: law.slug,
     });
     if (customListId) params.set("list_id", customListId);
-    else if (structureId !== null)
-      params.set("structure_id", String(structureId));
+    else {
+      if (structureId !== null) params.set("structure_id", String(structureId));
+      if (recorteId) params.set("recorte_id", recorteId);
+    }
     fetch(`/api/admin/questoes?${params}`, { cache: "no-store" })
       .then(readJson)
       .then(
@@ -258,7 +262,7 @@ export function AdminQuestionConference({
     return () => {
       active = false;
     };
-  }, [law.slug, structureId, customListId]);
+  }, [law.slug, structureId, recorteId, customListId]);
   useEffect(() => {
     let active = true;
     if (!currentOrder) {

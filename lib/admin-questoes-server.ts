@@ -11,7 +11,7 @@ import { apkgQuestionProposal, classifyApkgQuestion, hasMixedApkgBatch, validate
 import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
 import { compareQuestionStructureNames, creatableQuestionStructureTypes, normalizeQuestionStructureName, parseQuestionStructureTxt, planQuestionDeckStructure, questionCountsByStructure, validQuestionStructureParent, type CreatableQuestionStructureType, type QuestionStructureNode, type QuestionStructureType, type StructureImportMapping } from "@/lib/questoes-structure";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { descendantsForScope, questionsInScope, summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
+import { descendantsForScope, summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
 import { effectiveArticleFilter, parseScopeArticleFilter, studyQuestionsInScope } from "@/lib/tjsp-question-article-filter";
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, parseAdminQuestionSearchSort, plainQuestionText } from "@/lib/admin-question-search";
 import { descendantStructureIds, groupDuplicateQuestionStatements, introducedDuplicateQuestionStatementIds, sameStructureQuestionStatement } from "@/lib/admin-question-management";
@@ -74,13 +74,13 @@ export async function getAdminQuestionStructureCounts(lawSlug: string, requested
   const [nodes, questions] = await Promise.all([
     structure(current.id),
     collectPages(async (from, to) => {
-      const result = await db().from("questions").select("structure_id").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
+      const result = await db().from("questions").select("id,structure_id,ordem").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
       if (result.error) fail("contar_questoes_por_estrutura", result.error);
       return result.data ?? [];
     }, questionExportPageSize),
   ]);
-  const allowedStructureIds = await scopeStructureIds(current, requestedScopeId, nodes);
-  const scopedQuestions = questionsInScope(questions as Array<{ id: string; structure_id: number | null }>, allowedStructureIds);
+  const scope = await adminQuestionScope(current, requestedScopeId, nodes);
+  const scopedQuestions = scope ? studyQuestionsInScope(questions, scope.structureIds, current.id, scope.id, scope.articleFilter) : questions;
   return {
     counts: questionCountsByStructure(nodes, scopedQuestions),
     total: scopedQuestions.length,
@@ -101,17 +101,17 @@ export async function listAdminQuestionScopeFilters(lawSlug: string) {
   return (scopes.data ?? []).map((scope) => ({ id: String(scope.id), nome: String(scope.nome), nome_exibicao: scope.nome_exibicao === null ? null : String(scope.nome_exibicao), structure_ids: structuresByScope.get(String(scope.id)) ?? [] }));
 }
 
-async function scopeStructureIds(current: Law, requestedScopeId: unknown, nodes: QuestionStructureNode[]) {
+async function adminQuestionScope(current: Law, requestedScopeId: unknown, nodes: QuestionStructureNode[]) {
   const selectedScopeId = scopeId(requestedScopeId);
   if (!selectedScopeId) return null;
   const [selectedScope, links] = await Promise.all([
-    db().from("recortes_leis").select("id").eq("id", selectedScopeId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(),
+    db().from("recortes_leis").select("id,artigos_filtro").eq("id", selectedScopeId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(),
     db().from("recortes_leis_estrutura").select("structure_id").eq("recorte_id", selectedScopeId).eq("lei_id", current.id),
   ]);
   if (selectedScope.error) fail("validar_recorte_filtro_questoes", selectedScope.error);
   if (!selectedScope.data) throw new AdminQuestoesError(404, "Recorte ativo não encontrado para esta lei.");
   if (links.error) fail("listar_estruturas_recorte_filtro_questoes", links.error);
-  return descendantsForScope(nodes, (links.data ?? []).map((link) => Number(link.structure_id)));
+  return { id: selectedScopeId, structureIds: descendantsForScope(nodes, (links.data ?? []).map((link) => Number(link.structure_id))), articleFilter: effectiveArticleFilter(current.id, selectedScopeId, selectedScope.data.artigos_filtro ?? null) };
 }
 export async function listLawQuestionScopes(lawSlug: string) {
   await requireAdmin();
@@ -182,7 +182,7 @@ export async function getAdminLawAnkiWarningSummary(lawSlug: string) {
   return { missingTotalArtigos: !Number.isSafeInteger(current.total_artigos) || Number(current.total_artigos) < 1 };
 }
 export async function searchAdminQuestions(input: { lawSlug: string; query?: unknown; filter?: unknown; sort?: unknown; page?: unknown; limit?: unknown; structureId?: unknown; article?: unknown; scopeId?: unknown }) {
-  await requireAdmin(); const current = await law(input.lawSlug); const questionId = adminQuestionSearchId(input.query); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const sort = parseAdminQuestionSearchSort(input.sort); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit; const nodes = await structure(current.id); const structureId = input.structureId ? id(input.structureId) : null; const selectedStructureIds = structureId ? descendantStructureIds(nodes, structureId) : null; const recorteStructureIds = await scopeStructureIds(current, input.scopeId, nodes); const structureIds = recorteStructureIds === null ? selectedStructureIds : selectedStructureIds === null ? recorteStructureIds : selectedStructureIds.filter((nodeId) => recorteStructureIds.includes(nodeId));
+  await requireAdmin(); const current = await law(input.lawSlug); const questionId = adminQuestionSearchId(input.query); const terms = adminQuestionSearchTerms(input.query); const filter = parseAdminQuestionSearchFilter(input.filter); const sort = parseAdminQuestionSearchSort(input.sort); const page = Math.max(1, Number.isSafeInteger(Number(input.page)) ? Number(input.page) : 1); const requestedLimit = Number(input.limit); const limit = Number.isSafeInteger(requestedLimit) ? Math.min(ADMIN_QUESTION_SEARCH_MAX_LIMIT, Math.max(1, requestedLimit)) : ADMIN_QUESTION_SEARCH_LIMIT; const offset = (page - 1) * limit; const nodes = await structure(current.id); const structureId = input.structureId ? id(input.structureId) : null; const selectedStructureIds = structureId ? descendantStructureIds(nodes, structureId) : null; const selectedScope = await adminQuestionScope(current, input.scopeId, nodes); const recorteStructureIds = selectedScope?.structureIds ?? null; const structureIds = recorteStructureIds === null ? selectedStructureIds : selectedStructureIds === null ? recorteStructureIds : selectedStructureIds.filter((nodeId) => recorteStructureIds.includes(nodeId));
   let request = db().from("questions").select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,ativo,updated_at", { count: "exact" }).eq("lei_id", current.id).eq("ativo", true);
   if (questionId) request = request.eq("id", questionId);
   if (filter === "certo") request = request.eq("resposta", "Certo"); else if (filter === "errado") request = request.eq("resposta", "Errado"); else if (filter === "unstructured") request = nodes.length ? request.is("structure_id", null) : request.eq("structure_id", 0);
@@ -190,9 +190,8 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
   if (typeof input.article === "string" && input.article.trim()) request = request.ilike("artigo", `%${input.article.trim().slice(0, 80)}%`);
   if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); request = request.or(predicates.join(",")); }
   request = sort === "ordem_asc" ? request.order("ordem").order("id") : sort === "ordem_desc" ? request.order("ordem", { ascending: false }).order("id", { ascending: false }) : terms.length || questionId ? request.order("ordem").order("id") : request.order("updated_at", { ascending: false }).order("id");
-  const result = await request.range(offset, offset + limit - 1); if (result.error) fail("pesquisar_questoes", result.error); const total = result.count ?? 0;
-  const matchingOrders = () => {
-    let scoped = db().from("questions").select("ordem").eq("lei_id", current.id).eq("ativo", true);
+  const matchingMetadata = () => {
+    let scoped = db().from("questions").select("id,structure_id,ordem,updated_at").eq("lei_id", current.id).eq("ativo", true);
     if (questionId) scoped = scoped.eq("id", questionId);
     if (filter === "certo") scoped = scoped.eq("resposta", "Certo"); else if (filter === "errado") scoped = scoped.eq("resposta", "Errado"); else if (filter === "unstructured") scoped = nodes.length ? scoped.is("structure_id", null) : scoped.eq("structure_id", 0);
     if (structureIds !== null) scoped = structureIds.length ? scoped.in("structure_id", structureIds) : scoped.eq("structure_id", 0);
@@ -200,7 +199,26 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
     if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); scoped = scoped.or(predicates.join(",")); }
     return scoped;
   };
-  const [firstOrder, lastOrder] = await Promise.all([matchingOrders().order("ordem").order("id").limit(1), matchingOrders().order("ordem", { ascending: false }).order("id", { ascending: false }).limit(1)]);
+  if (selectedScope?.articleFilter) {
+    // Não aplicar o filtro só depois da paginação: o total, a ordem e a
+    // abrangência devem contar apenas as questões que o recorte admite.
+    const candidates = await collectPages(async (from, to) => {
+      const base = matchingMetadata();
+      const ordered = sort === "ordem_asc" ? base.order("ordem").order("id") : sort === "ordem_desc" ? base.order("ordem", { ascending: false }).order("id", { ascending: false }) : terms.length || questionId ? base.order("ordem").order("id") : base.order("updated_at", { ascending: false }).order("id");
+      const page = await ordered.range(from, to);
+      if (page.error) fail("pesquisar_metadados_recorte", page.error);
+      return page.data ?? [];
+    }, questionExportPageSize);
+    const filtered = studyQuestionsInScope(candidates, structureIds, current.id, selectedScope.id, selectedScope.articleFilter);
+    const ids = filtered.slice(offset, offset + limit).map((item) => item.id);
+    const result = ids.length ? await db().from("questions").select("id,structure_id,pergunta,resposta,artigo,assunto,ordem,ativo,updated_at").eq("lei_id", current.id).eq("ativo", true).in("id", ids) : { data: [], error: null };
+    if (result.error) fail("pesquisar_questoes_recorte", result.error);
+    const byId = new Map((result.data ?? []).map((question) => [question.id, question]));
+    const orders = filtered.map((question) => question.ordem).sort();
+    return { law: current, results: ids.flatMap((id) => { const q = byId.get(id); return q ? [{ ...q, pergunta_trecho: plainQuestionText(q.pergunta), pergunta: undefined }] : []; }), total: filtered.length, range: { first_order: orders[0] ?? null, last_order: orders[orders.length - 1] ?? null }, page, limit, pages: Math.max(1, Math.ceil(filtered.length / limit)), query: terms.join(" "), filter, sort, structure_id: structureId, scope_id: selectedScope.id };
+  }
+  const result = await request.range(offset, offset + limit - 1); if (result.error) fail("pesquisar_questoes", result.error); const total = result.count ?? 0;
+  const [firstOrder, lastOrder] = await Promise.all([matchingMetadata().order("ordem").order("id").limit(1), matchingMetadata().order("ordem", { ascending: false }).order("id", { ascending: false }).limit(1)]);
   if (firstOrder.error || lastOrder.error) fail("abrangencia_pesquisa_questoes", firstOrder.error ?? lastOrder.error);
   const range = { first_order: firstOrder.data?.[0]?.ordem ?? null, last_order: lastOrder.data?.[0]?.ordem ?? null };
   return { law: current, results: (result.data ?? []).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, range, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId, scope_id: scopeId(input.scopeId) };
@@ -283,12 +301,13 @@ export async function correctAdminQuestionLinkFromReference(body: Record<string,
     audit_reference_id: reference.id,
   });
 }
-export async function listAdminQuestionConference(lawSlug: string, structureId: unknown) {
+export async function listAdminQuestionConference(lawSlug: string, structureId: unknown, requestedScopeId?: unknown) {
   await requireAdmin();
   const current = await law(lawSlug);
   const nodes = await structure(current.id);
   const rootId = optionalId(structureId);
   if (rootId === null) {
+    if (scopeId(requestedScopeId)) throw new AdminQuestoesError(422, "Selecione um bloco estrutural para conferir este recorte.");
     if (nodes.length) throw new AdminQuestoesError(422, "Selecione um bloco estrutural para esta lei.");
     const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).order("ordem").order("id");
     if (result.error) fail("listar_questoes_conferencia_lei", result.error);
@@ -298,9 +317,16 @@ export async function listAdminQuestionConference(lawSlug: string, structureId: 
   if (!ids.length) throw new AdminQuestoesError(404, "Bloco estrutural não encontrado para esta lei.");
   const root = nodes.find((node) => node.id === rootId);
   if (!root) throw new AdminQuestoesError(404, "Bloco estrutural não encontrado para esta lei.");
-  const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).in("structure_id", ids).order("ordem").order("id");
-  if (result.error) fail("listar_questoes_conferencia", result.error);
-  return { law: current, block: { id: root.id, nome: root.nome }, questions: result.data ?? [] };
+  const selectedScope = await adminQuestionScope(current, requestedScopeId, nodes);
+  const selectedIds = selectedScope ? new Set(selectedScope.structureIds) : null;
+  const allowed = selectedIds ? ids.filter((nodeId) => selectedIds.has(nodeId)) : ids;
+  const candidates = allowed.length ? await collectPages(async (from, to) => {
+    const result = await db().from("questions").select(questionFields).eq("lei_id", current.id).eq("ativo", true).in("structure_id", allowed).order("ordem").order("id").range(from, to);
+    if (result.error) fail("listar_questoes_conferencia", result.error);
+    return result.data ?? [];
+  }, questionExportPageSize) : [];
+  const questions = selectedScope ? studyQuestionsInScope(candidates, allowed, current.id, selectedScope.id, selectedScope.articleFilter) : candidates;
+  return { law: current, block: { id: root.id, nome: root.nome }, questions };
 }
 
 type ConferenceListRow = { id: string; lei_id: number; nome: string; created_at: string; updated_at: string };
