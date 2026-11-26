@@ -8,7 +8,7 @@ vi.mock("@/lib/law-study-server", () => ({
 }));
 vi.mock("./continuous-reading-server", () => ({ getScopedContinuousReadingModel: fixtures.model }));
 
-vi.mock("./tjsp-l9099-reading-server", () => ({ loadReviewedTjspL9099: fixtures.reviewed }));
+vi.mock("./tjsp-reviewed-reading-server", () => ({ hasReviewedTjspReading: (scopeId: string) => scopeId === "01fd3157-dcc6-4c4a-92ca-e8af4b549c40", loadReviewedTjspReading: fixtures.reviewed }));
 import { TJSP_L9099_SCOPE_ID } from "./tjsp-l9099-reading-manifest";
 import { loadScopedInteractiveReading } from "./scoped-interactive-reading-server";
 
@@ -68,7 +68,7 @@ describe("leitor de recorte exige liberação comercial e estrutural", () => {
     database(TJSP_L9099_SCOPE_ID);
     fixtures.reviewed.mockResolvedValue({ integrity: { readingAvailable: true } });
     expect(await read(query)).toBeTruthy();
-    expect(fixtures.reviewed).toHaveBeenCalledWith("test-law", 77, new Set([12, 19]));
+    expect(fixtures.reviewed).toHaveBeenCalledWith(TJSP_L9099_SCOPE_ID, "test-law", 77, new Set([12, 19]));
     expect(fixtures.model).not.toHaveBeenCalled();
   });
   it("rejeita identificador repetido em vez de tratar como lei completa", async () => {

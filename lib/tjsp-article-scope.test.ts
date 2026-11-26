@@ -3,6 +3,7 @@ import { descendantsForScope, questionsInScope } from "./law-question-scope-reso
 
 const cp = "3e03d11b-cf6e-43f3-9d35-760fd3034d9b";
 const cf = "69639148-cc8b-4de1-ba87-53fe18a0a8b1";
+const cpc = "7cdac816-cdbc-487f-8a3a-ec215babe28f";
 const je = "01fd3157-dcc6-4c4a-92ca-e8af4b549c40";
 const question = (lei_id: number, structure_id: number | null, ordem: string, assunto: string) => ({ id: assunto, lei_id, structure_id, ordem, assunto });
 describe("recortes TJSP por artigo, dentro da estrutura", () => {
@@ -21,6 +22,23 @@ describe("recortes TJSP por artigo, dentro da estrutura", () => {
     const indirect = {...correct, assunto:"Art. 64 c/c art. 90"};
     const range = {...correct, assunto:"Arts. 64 a 90"};
     expect(questionsInScope([correct,wrong,indirect,range], [972], je)).toEqual([correct]);
+  });
+  it("no CPC inclui o art. 149 sem vazar os demais auxiliares da justiça", () => {
+    const context = [5480, 5481, 5482];
+    const inside = question(140, 5480, "0149.0.00.0.00.0", "Art. 149, CPC");
+    const officer = question(140, 5481, "0154.0.00.0.00.0", "Art. 154, CPC");
+    const expert = question(140, 5482, "0156.0.00.0.00.0", "Art. 156, CPC");
+    expect(questionsInScope([inside, officer, expert], context, cpc)).toEqual([inside, officer]);
+  });
+  it("interpreta ponto de milhar no CPC sem admitir artigo além do intervalo", () => {
+    const inside = question(140, 5679, "1009.0.00.0.00.0", "Art. 1.009, CPC");
+    const outside = question(140, 5682, "1027.0.00.0.00.0", "Art. 1.027, CPC");
+    expect(questionsInScope([inside, outside, { ...inside, assunto: "Arts. 1.009 e 1.027" }], [5679, 5682], cpc)).toEqual([inside]);
+  });
+  it("não inclui a nova redação do art. 529-A antes de sua vigência", () => {
+    const current = question(140, 5574, "0529.0.00.0.00.0", "Art. 529, CPC");
+    const future = question(140, 5574, "0529.a.00.0.00.0", "Art. 529-A, CPC");
+    expect(questionsInScope([current, future], [5574], cpc)).toEqual([current]);
   });
   it("ignora vínculos apontados para estruturas que não estão mais ativas", () => {
     expect(descendantsForScope([{id: 2, parent_id: 1}, {id: 3, parent_id: null}], [1, 3])).toEqual([3]);
