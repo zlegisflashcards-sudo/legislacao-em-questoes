@@ -47,7 +47,7 @@ type ProdutoCatalogo = {
   recordsEnabled: boolean;
   freeStudyHref: string | null;
   freeScope: boolean;
-  leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null }>;
+  leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null; emBreve: boolean }>;
   totalFlashcards: number | null;
   upsells: Array<{ slug: string; nome: string; tipo: string; preco: number | null }>;
 };
@@ -107,6 +107,10 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     }
     const countsBySlug = await activeQuestionCountsBySlug([...lawSlugById.values()]);
     const recorteIds = [...new Set((vinculos.data ?? []).flatMap((vinculo) => typeof vinculo.recorte_id === "string" ? [vinculo.recorte_id] : []))];
+    const scopeStatuses = recorteIds.length
+      ? await supabase.from("recortes_leis").select("id,status_publicacao").in("id", recorteIds)
+      : { data: [], error: null };
+    const soonScopeIds = new Set((scopeStatuses.data ?? []).filter((item) => item.status_publicacao === "em_breve").map((item) => String(item.id)));
     const flashcardsByRecorteId = new Map<string, number>();
     if (recorteIds.length) {
       const recorteLinks = await supabase
@@ -144,6 +148,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
         titulo: lei?.titulo || lei?.nome_curto || "Lei não identificada",
         flashcards: recorteId ? flashcardsByRecorteId.get(recorteId) ?? null : countsBySlug.get(lawSlugById.get(leiId) ?? "") ?? 0,
         recorteId,
+        emBreve: lei?.status_publicacao === "em_breve" || (recorteId !== null && soonScopeIds.has(recorteId)),
       };
     });
     const totalFlashcards = leis.length
@@ -547,7 +552,7 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
       <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{!isLeiAvulsa && resumoLeis ? <p className="font-black text-slate-200">{resumoLeis}</p> : null}</div>
         {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => {
           const lawHref = lei.slug ? `/leisflashcards/${encodeURIComponent(lei.slug)}${lei.recorteId ? `?recorte_id=${encodeURIComponent(lei.recorteId)}` : ""}` : null;
-          const content = <><div className="min-w-0"><h3 className="font-black">{lei.titulo}</h3>{lei.recorteId ? <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-900">{produto.freeScope ? "Recorte gratuito" : "Recorte de acordo com edital"}</span> : null}</div><span className="flex shrink-0 items-center gap-3">{lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
+          const content = <><div className="min-w-0"><h3 className="font-black">{lei.titulo}</h3>{lei.recorteId ? <span className="mt-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-blue-900">{produto.freeScope ? "Recorte gratuito" : "Recorte de acordo com edital"}</span> : null}</div><span className="flex shrink-0 items-center gap-3">{lei.emBreve ? <span className="text-sm font-bold text-[#062a5f]">Em breve</span> : lei.flashcards !== null ? <span className="text-sm font-bold text-[#062a5f]">{lei.flashcards.toLocaleString("pt-BR")} flashcards</span> : null}{isProdutoComposto && lawHref ? <span className="text-xl font-black text-blue-700" aria-hidden="true">→</span> : null}</span></>;
           return isProdutoComposto && lawHref ? <a key={lei.id} href={lawHref} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950 transition hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300">{content}</a> : <article key={lei.id} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950">{content}</article>;
         })}</div> : <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 text-slate-200">Este produto ainda não possui leis vinculadas.</p>}</section>
       {avulsa && contentTree ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo disponível nesta lei</p><p className="mt-2 text-sm text-slate-300">🎧 = Possui LegisCast</p></div><PublicLawContentTree tree={contentTree} /></section> : null}
