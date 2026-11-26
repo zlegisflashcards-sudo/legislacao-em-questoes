@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { questionsInScope } from "./law-question-scope-resolution";
+import { descendantsForScope, questionsInScope } from "./law-question-scope-resolution";
 
 const cp = "3e03d11b-cf6e-43f3-9d35-760fd3034d9b";
 const cf = "69639148-cc8b-4de1-ba87-53fe18a0a8b1";
@@ -21,6 +21,9 @@ describe("recortes TJSP por artigo, dentro da estrutura", () => {
     const indirect = {...correct, assunto:"Art. 64 c/c art. 90"};
     const range = {...correct, assunto:"Arts. 64 a 90"};
     expect(questionsInScope([correct,wrong,indirect,range], [972], je)).toEqual([correct]);
+  });
+  it("ignora vínculos apontados para estruturas que não estão mais ativas", () => {
+    expect(descendantsForScope([{id: 2, parent_id: 1}, {id: 3, parent_id: null}], [1, 3])).toEqual([3]);
   });
   it("não aplica o filtro à lei inteira nem a recorte de outro pacote", () => {
     const item = question(14, 450, "0093.0.00.0.00.0", "Art. 93, CF");

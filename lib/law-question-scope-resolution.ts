@@ -7,11 +7,12 @@ export type LawQuestionScopeLink = { recorte_id: string; structure_id: number };
 export type ScopeTreeNode<T extends ScopeStructureNode> = T & { children: ScopeTreeNode<T>[] };
 
 export function descendantsForScope(nodes: ScopeStructureNode[], selectedIds: number[]) {
+  const existing = new Set(nodes.map((node) => node.id));
   const children = new Map<number, number[]>();
   for (const node of nodes) if (node.parent_id !== null) children.set(node.parent_id, [...(children.get(node.parent_id) ?? []), node.id]);
   const found = new Set<number>();
   const visit = (id: number) => { if (found.has(id)) return; found.add(id); for (const child of children.get(id) ?? []) visit(child); };
-  for (const id of selectedIds) visit(id);
+  for (const id of selectedIds) if (existing.has(id)) visit(id);
   return [...found];
 }
 

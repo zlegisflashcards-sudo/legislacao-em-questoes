@@ -106,19 +106,22 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
   if (activeScopesResult.error) throw new Error(`Não foi possível carregar os recortes liberados: ${activeScopesResult.error.message}`);
   const scopes = (activeScopesResult.data ?? []) as BatchScope[];
   const activeScopeIds = new Set(scopes.map((scope) => scope.id));
-  const [questions, structureResult, scopeLinksResult, freeLawsResult] = await Promise.all([
+  const [questions, structureRows, scopeLinksResult, freeLawsResult] = await Promise.all([
     activeQuestionsForLaws(uniqueLawIds),
-    db.from("law_structure").select("id,lei_id,parent_id").in("lei_id", uniqueLawIds).eq("ativo", true),
+    collectPages(async (from, to) => {
+      const page = await db.from("law_structure").select("id,lei_id,parent_id").in("lei_id", uniqueLawIds).eq("ativo", true).order("id").range(from, to);
+      if (page.error) throw new Error(`Não foi possível carregar a estrutura dos contextos de estudo: ${page.error.message}`);
+      return page.data ?? [];
+    }, QUESTION_PAGE_SIZE),
     activeScopeIds.size ? db.from("recortes_leis_estrutura").select("recorte_id,structure_id").in("recorte_id", [...activeScopeIds]) : Promise.resolve({ data: [] as StructureLink[], error: null }),
     db.from("leis").select("id,acesso_gratuito").in("id", uniqueLawIds).eq("ativo", true).eq("status_publicacao", "ativa"),
   ]);
-  if (structureResult.error) throw new Error(`Não foi possível carregar a estrutura dos contextos de estudo: ${structureResult.error.message}`);
   if (scopeLinksResult.error || freeLawsResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error?.message ?? freeLawsResult.error?.message}`);
   const freeLawIds = new Set((freeLawsResult.data ?? []).flatMap((law) => law.acesso_gratuito === true ? [law.id] : []));
   const questionsByLaw = new Map<number, typeof questions>();
   for (const question of questions) questionsByLaw.set(question.lei_id, [...(questionsByLaw.get(question.lei_id) ?? []), question]);
   const structureByLaw = new Map<number, Array<{ id: number; parent_id: number | null }>>();
-  for (const node of structureResult.data ?? []) structureByLaw.set(node.lei_id, [...(structureByLaw.get(node.lei_id) ?? []), node]);
+  for (const node of structureRows) structureByLaw.set(node.lei_id, [...(structureByLaw.get(node.lei_id) ?? []), node]);
   const linksByLaw = new Map<number, BatchProductLaw[]>();
   for (const link of links) linksByLaw.set(link.lei_id, [...(linksByLaw.get(link.lei_id) ?? []), link]);
   const scopeLinksById = new Map<string, number[]>();
