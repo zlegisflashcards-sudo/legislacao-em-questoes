@@ -66,6 +66,8 @@ export type ContinuousReadingModel = {
   law: LawRow;
   /** Server-only snapshot used by legacy-resolution callers in this request. */
   questions: ContinuousQuestion[];
+  /** HTML validado desta requisição; nunca serialize na resposta pública. */
+  reviewedBlockTexts?: ReadonlyMap<string, string>;
   references: ContinuousReadingReference[];
   integrity: ReadingIntegrity;
   /** Trava editorial da visão do aluno; não substitui a integridade histórica. */
@@ -421,6 +423,10 @@ export async function getContinuousReadingBlocks(model: ContinuousReadingModel, 
   const prepared = selectedReferences.filter((reference) => reference.prepared);
   const selected = prepared.slice(Math.max(0, offset), Math.max(0, offset) + Math.min(100, Math.max(1, limit)));
   if (!selected.length) return [];
+  if (model.reviewedBlockTexts) return selected.flatMap((reference) => {
+    const legislation = model.reviewedBlockTexts?.get(reference.id);
+    return legislation ? [{ ...reference, legislation }] : [];
+  });
   const result = await getSupabaseServerClient().from("legislative_references").select("id,legislacao").eq("lei_id", model.law.id).in("id", selected.map((reference) => reference.id)).or("situacao.is.null,situacao.neq.arquivada");
   if (result.error) throw new Error("Não foi possível carregar os blocos legislativos.");
   const legislationById = new Map((result.data ?? []).map((row) => [String(row.id), sanitizeLegalHtmlCore(String(row.legislacao ?? "")).trim()]));
@@ -475,7 +481,12 @@ export async function getAdministrativeContinuousReadingBlockTexts(rawSlug: stri
 
 export function getScopedContinuousReadingBlockTexts(model: ContinuousReadingModel, rawIds: string[]) {
   const allowed = new Set(model.references.filter((reference) => reference.prepared).map((reference) => reference.id.toLowerCase()));
-  return readUnscopedPreparedBlockTexts(model.law.slug, rawIds.filter((id) => allowed.has(id.trim().toLowerCase())));
+  const selected = [...new Set(rawIds.map((id) => id.trim().toLowerCase()).filter((id) => allowed.has(id)))].slice(0, 60);
+  if (model.reviewedBlockTexts) return selected.flatMap((id) => {
+    const legislation = model.reviewedBlockTexts?.get(id);
+    return legislation ? [{ id, legislation }] : [];
+  });
+  return readUnscopedPreparedBlockTexts(model.law.slug, selected);
 }
 
 function readUnscopedPreparedBlockTexts(rawSlug: string, rawIds: string[]) {

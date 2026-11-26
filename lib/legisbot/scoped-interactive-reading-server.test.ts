@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixtures = vi.hoisted(() => ({ auth: vi.fn(), model: vi.fn() }));
+const fixtures = vi.hoisted(() => ({ auth: vi.fn(), model: vi.fn(), reviewed: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/law-study-server", () => ({
   authenticateLawStudent: fixtures.auth,
@@ -8,6 +8,8 @@ vi.mock("@/lib/law-study-server", () => ({
 }));
 vi.mock("./continuous-reading-server", () => ({ getScopedContinuousReadingModel: fixtures.model }));
 
+vi.mock("./tjsp-l9099-reading-server", () => ({ loadReviewedTjspL9099: fixtures.reviewed }));
+import { TJSP_L9099_SCOPE_ID } from "./tjsp-l9099-reading-manifest";
 import { loadScopedInteractiveReading } from "./scoped-interactive-reading-server";
 
 const id = "00000000-0000-4000-8000-000000000001";
@@ -56,6 +58,18 @@ describe("leitor de recorte exige liberação comercial e estrutural", () => {
     fixtures.model.mockResolvedValue({ law: { id: 77 }, integrity: { readingAvailable: true } });
     expect(await read()).toBeTruthy();
     expect(fixtures.model).toHaveBeenCalledWith("test-law", new Set([12, 19]));
+  });
+  it("só usa o catálogo conferido do TJSP após o acesso comercial", async () => {
+    vi.stubEnv("LEI_INTERATIVA_RECORTES_HABILITADOS", TJSP_L9099_SCOPE_ID);
+    const query = new URLSearchParams({ recorte_id: TJSP_L9099_SCOPE_ID });
+    database(other);
+    await expect(read(query)).rejects.toMatchObject({ status: 403 });
+    expect(fixtures.reviewed).not.toHaveBeenCalled();
+    database(TJSP_L9099_SCOPE_ID);
+    fixtures.reviewed.mockResolvedValue({ integrity: { readingAvailable: true } });
+    expect(await read(query)).toBeTruthy();
+    expect(fixtures.reviewed).toHaveBeenCalledWith("test-law", 77, new Set([12, 19]));
+    expect(fixtures.model).not.toHaveBeenCalled();
   });
   it("rejeita identificador repetido em vez de tratar como lei completa", async () => {
     await expect(read(new URLSearchParams(`recorte_id=${id}&recorte_id=${other}`))).rejects.toMatchObject({ status: 400 });
