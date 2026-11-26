@@ -2,6 +2,8 @@ import "server-only";
 
 import { authenticateLawStudent, LawStudyApiError } from "@/lib/law-study-server";
 import { availableLawStudyAccess } from "@/lib/law-question-scope-context";
+import { tjspArticleRule } from "@/lib/tjsp-article-scope";
+import { hasReviewedTjspReading, loadReviewedTjspReading } from "./tjsp-reviewed-reading-server";
 import { getScopedContinuousReadingModel } from "./continuous-reading-server";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -34,8 +36,12 @@ export async function loadScopedInteractiveReading(request: Request, slug: strin
     const access = availableLawStudyAccess(grants, pairs.data ?? []);
     if (!access.full && (!id || !access.recorteIds.includes(id))) throw new LawStudyApiError(403, "Este recorte não está liberado para sua conta.");
   }
+  // Só ativar a leitura granular quando os blocos (não apenas as referências)
+  // tiverem sido conferidos integralmente. Uma seção mista jamais pode vazar.
   const selected = new Set((links.data ?? []).map((row) => Number(row.structure_id)).filter((structureId) => Number.isSafeInteger(structureId) && structureId > 0));
   if (!selected.size) return null;
+  if (hasReviewedTjspReading(id)) return loadReviewedTjspReading(id, slug, lawId, selected);
+  if (tjspArticleRule(id)) return null;
   const model = await getScopedContinuousReadingModel(slug, selected);
   return model && model.law.id === lawId && model.integrity.readingAvailable ? model : null;
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { tjspArticleRule } from "@/lib/tjsp-article-scope";
 import { createHash } from "node:crypto";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { parseQuestionDraft, questionDeckDefaults, totalArticlesFromReferenceOrders, type QuestionDraft } from "@/lib/admin-questoes";
@@ -73,13 +74,13 @@ export async function getAdminQuestionStructureCounts(lawSlug: string, requested
   const [nodes, questions] = await Promise.all([
     structure(current.id),
     collectPages(async (from, to) => {
-      const result = await db().from("questions").select("structure_id").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
+      const result = await db().from("questions").select("id,lei_id,structure_id,ordem,assunto").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
       if (result.error) fail("contar_questoes_por_estrutura", result.error);
       return result.data ?? [];
     }, questionExportPageSize),
   ]);
   const allowedStructureIds = await scopeStructureIds(current, requestedScopeId, nodes);
-  const scopedQuestions = questionsInScope(questions as Array<{ id: string; structure_id: number | null }>, allowedStructureIds);
+  const scopedQuestions = questionsInScope(questions, allowedStructureIds, scopeId(requestedScopeId) ?? undefined);
   return {
     counts: questionCountsByStructure(nodes, scopedQuestions),
     total: scopedQuestions.length,
@@ -112,7 +113,11 @@ async function scopeStructureIds(current: Law, requestedScopeId: unknown, nodes:
   if (links.error) fail("listar_estruturas_recorte_filtro_questoes", links.error);
   return descendantsForScope(nodes, (links.data ?? []).map((link) => Number(link.structure_id)));
 }
-export async function listLawQuestionScopes(lawSlug: string) { await requireAdmin(); const current = await law(lawSlug); const [scopes, nodes, questions, links] = await Promise.all([db().from("recortes_leis").select("id,nome,nome_exibicao,descricao,ativo,status_publicacao,acesso_gratuito,created_at,updated_at").eq("lei_id", current.id).order("nome"), structure(current.id), db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true), db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id)]); if (scopes.error) fail("listar_recortes", scopes.error); if (questions.error) fail("contar_recortes", questions.error); if (links.error) fail("listar_estruturas_recortes", links.error); const scopeRows = scopes.data ?? []; const questionRows = questions.data ?? []; return { law: current, structure: nodes, questions: questionRows, unstructured_questions: nodes.length ? questionRows.filter((question) => question.structure_id === null).length : 0, recortes: summarizeLawQuestionScopes(scopeRows, links.data ?? [], nodes, questionRows) }; }
+export async function listLawQuestionScopes(lawSlug: string) { await requireAdmin(); const current = await law(lawSlug); const [scopes, nodes, questions, links] = await Promise.all([db().from("recortes_leis").select("id,nome,nome_exibicao,descricao,ativo,status_publicacao,acesso_gratuito,created_at,updated_at").eq("lei_id", current.id).order("nome"), structure(current.id), collectPages(async (from, to) => {
+  const page = await db().from("questions").select("id,lei_id,structure_id,ordem,assunto").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
+  if (page.error) fail("contar_recortes", page.error);
+  return page.data ?? [];
+}, questionExportPageSize), db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id)]); if (scopes.error) fail("listar_recortes", scopes.error); if (links.error) fail("listar_estruturas_recortes", links.error); const scopeRows = scopes.data ?? []; const questionRows = questions; return { law: current, structure: nodes, questions: questionRows, unstructured_questions: nodes.length ? questionRows.filter((question) => question.structure_id === null).length : 0, recortes: summarizeLawQuestionScopes(scopeRows, links.data ?? [], nodes, questionRows) }; }
 export async function saveLawQuestionScope(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const name = text(body.nome, "Cód. do recorte"); const displayName = typeof body.nome_exibicao === "string" ? body.nome_exibicao.trim() : ""; const description = typeof body.descricao === "string" ? body.descricao.trim() : ""; const ids = Array.isArray(body.structure_ids) ? body.structure_ids.map(Number).filter((item) => Number.isSafeInteger(item) && item > 0) : []; const suppliedId = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null; const status = body.status_publicacao === "em_breve" || body.status_publicacao === "inativa" ? body.status_publicacao : "ativa"; const free = body.acesso_gratuito === true; const result = await db().rpc("admin_salvar_recorte_lei", { p_recorte_id: suppliedId, p_lei_id: current.id, p_nome: name, p_nome_exibicao: displayName, p_descricao: description, p_ativo: status !== "inativa", p_status_publicacao: status, p_acesso_gratuito: free, p_structure_ids: ids }); if (result.error || !result.data) fail("salvar_recorte", result.error); return { id: result.data, lei_id: current.id, nome: name, nome_exibicao: displayName || null, descricao: description, status_publicacao: status, acesso_gratuito: free, structure_ids: ids }; }
 export async function listQuestionContent(lawSlug: string) {
   const current = await law(lawSlug);
@@ -145,6 +150,17 @@ export async function searchAdminQuestions(input: { lawSlug: string; query?: unk
   if (typeof input.article === "string" && input.article.trim()) request = request.ilike("artigo", `%${input.article.trim().slice(0, 80)}%`);
   if (!questionId) for (const term of terms) { const matchingStructures = nodes.filter((node) => `${node.nome}`.toLocaleLowerCase("pt-BR").includes(term.toLocaleLowerCase("pt-BR"))).map((node) => node.id); const predicates = ["pergunta", "justificativa", "artigo", "assunto", "legislacao", "ordem", "titulo", "capitulo", "secao", "subsecao"].map((field) => `${field}.ilike.%${term}%`); if (matchingStructures.length) predicates.push(`structure_id.in.(${matchingStructures.join(",")})`); request = request.or(predicates.join(",")); }
   request = sort === "ordem_asc" ? request.order("ordem").order("id") : sort === "ordem_desc" ? request.order("ordem", { ascending: false }).order("id", { ascending: false }) : terms.length || questionId ? request.order("ordem").order("id") : request.order("updated_at", { ascending: false }).order("id");
+  if (tjspArticleRule(scopeId(input.scopeId))) {
+    // Filtra antes da paginação e usa a mesma regra do aluno.
+    const candidates = await collectPages(async (from, to) => {
+      const batch = await request.range(from, to);
+      if (batch.error) fail("pesquisar_recorte_por_artigos", batch.error);
+      return (batch.data ?? []).map((row) => ({ ...row, lei_id: current.id }));
+    }, questionExportPageSize);
+    const selected = questionsInScope(candidates, structureIds, scopeId(input.scopeId) ?? undefined);
+    const total = selected.length;
+    return { law: current, results: selected.slice(offset, offset + limit).map((question) => ({ ...question, pergunta_trecho: plainQuestionText(question.pergunta), pergunta: undefined })), total, range: { first_order: selected[0]?.ordem ?? null, last_order: selected.at(-1)?.ordem ?? null }, page, limit, pages: Math.max(1, Math.ceil(total / limit)), query: terms.join(" "), filter, sort, structure_id: structureId, scope_id: scopeId(input.scopeId) };
+  }
   const result = await request.range(offset, offset + limit - 1); if (result.error) fail("pesquisar_questoes", result.error); const total = result.count ?? 0;
   const matchingOrders = () => {
     let scoped = db().from("questions").select("ordem").eq("lei_id", current.id).eq("ativo", true);

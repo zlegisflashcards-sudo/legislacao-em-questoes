@@ -133,7 +133,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
         for (const { lawId, questions, structure } of scopedLaws) {
           for (const recorteId of new Set(recortesByLawId.get(lawId) ?? [])) {
             const structureIds = descendantsForScope(structure, structureIdsByRecorteId.get(recorteId) ?? []);
-            flashcardsByRecorteId.set(recorteId, questionsInScope(questions, structureIds).length);
+            flashcardsByRecorteId.set(recorteId, questionsInScope(questions, structureIds, recorteId).length);
           }
         }
       }
