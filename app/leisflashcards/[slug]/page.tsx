@@ -12,7 +12,8 @@ import { siteConfig } from "@/lib/site-config";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
 import { mainQuestions, mainStructure } from "@/lib/questions-main-server";
-import { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
+import { descendantsForScope } from "@/lib/law-question-scope-resolution";
+import { studyQuestionsInScope } from "@/lib/tjsp-question-article-filter";
 import { withActiveQuestionCounts } from "@/lib/legislation-question-counts-server";
 import { PublicLawContentTree } from "@/components/public-law-content-tree";
 import { loadPublicLawCommercialSummary, loadPublicLawContentTree, type PublicLawCommercialSummary } from "@/lib/public-law-content-tree-server";
@@ -133,7 +134,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
         for (const { lawId, questions, structure } of scopedLaws) {
           for (const recorteId of new Set(recortesByLawId.get(lawId) ?? [])) {
             const structureIds = descendantsForScope(structure, structureIdsByRecorteId.get(recorteId) ?? []);
-            flashcardsByRecorteId.set(recorteId, questionsInScope(questions, structureIds).length);
+            flashcardsByRecorteId.set(recorteId, studyQuestionsInScope(questions, structureIds, lawId, recorteId).length);
           }
         }
       }

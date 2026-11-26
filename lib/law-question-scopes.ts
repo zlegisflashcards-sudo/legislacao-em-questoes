@@ -1,6 +1,8 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { mainQuestions, mainStructure } from "@/lib/questions-main-server";
-import { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
+import { descendantsForScope } from "@/lib/law-question-scope-resolution";
+
+import { studyQuestionsInScope } from "@/lib/tjsp-question-article-filter";
 
 export { descendantsForScope, questionsInScope } from "@/lib/law-question-scope-resolution";
 
@@ -17,5 +19,5 @@ export async function resolveQuestionsForLawScope(leiId: number, recorteId: stri
   ]);
   if (links.error) throw new Error(`Não foi possível carregar as regras do recorte: ${links.error.message}`);
   const selected = (links.data ?? []).map((row) => Number(row.structure_id)).filter(Number.isSafeInteger);
-  return questionsInScope(questions, descendantsForScope(nodes, selected));
+  return studyQuestionsInScope(questions, descendantsForScope(nodes, selected), leiId, recorteId);
 }
