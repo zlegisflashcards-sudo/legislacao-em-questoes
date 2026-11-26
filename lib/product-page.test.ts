@@ -7,7 +7,7 @@ describe("página comercial de produto", () => {
   it("consulta produto e leis vinculadas no banco", () => {
     expect(source).toContain('from("produtos")');
     expect(source).toContain('from("produto_leis")');
-    expect(source).toContain('leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito)');
+    expect(source).toContain('leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito,categoria)');
     expect(source).toContain("activeQuestionCountsBySlug");
     expect(source).not.toContain('from("materiais_leis")');
     expect(source).toContain('export const dynamic = "force-dynamic"');
@@ -53,7 +53,7 @@ describe("página comercial de produto", () => {
   });
 
   it("mostra a projeção estrutural somente para vínculo avulso consistente", () => {
-    expect(source).toContain('select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito)")');
+    expect(source).toContain('select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito,categoria)")');
     expect(source).toContain('tipo_produto');
     expect(source).toContain("loadPublicLawContentTree");
     expect(source).toContain("loadPublicLawCommercialSummary");

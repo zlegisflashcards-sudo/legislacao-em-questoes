@@ -49,6 +49,7 @@ type ProdutoCatalogo = {
   freeScope: boolean;
   leis: Array<{ id: number; slug: string | null; titulo: string; flashcards: number | null; recorteId: string | null }>;
   totalFlashcards: number | null;
+  upsells: Array<{ slug: string; nome: string; tipo: string; preco: number | null }>;
 };
 
 async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | null> {
@@ -80,7 +81,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
 
     const vinculos = await supabase
       .from("produto_leis")
-      .select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito)")
+      .select("lei_id,ordem,recorte_id,leis(id,slug,titulo,nome_curto,ativo,status_publicacao,acesso_gratuito,categoria)")
       .eq("produto_id", produto.data.id)
       .order("ordem");
     if (vinculos.error) return null;
@@ -155,6 +156,17 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
     const rawPrice = "preco" in produto.data ? produto.data.preco : null;
     const preco = typeof rawPrice === "number" && Number.isFinite(rawPrice) && rawPrice >= 0 ? rawPrice : typeof rawPrice === "string" && /^\d+(?:\.\d{1,2})?$/.test(rawPrice) ? Number(rawPrice) : null;
     const recordsEnabled = "records_enabled" in produto.data && produto.data.records_enabled === true;
+    let upsells: ProdutoCatalogo["upsells"] = [];
+    const isSpecific = (vinculos.data ?? []).some((link) => { const law = Array.isArray(link.leis) ? link.leis[0] : link.leis; return /^legisla.*espec.fic/i.test(String(law?.categoria ?? "")); });
+    if (produto.data.tipo_produto === "lei_avulsa" && isSpecific) {
+      const saved = await supabase.from("produto_upsells").select("recomendado_id,ordem").eq("produto_id", produto.data.id).order("ordem");
+      const ids = (saved.data ?? []).map((item) => String(item.recomendado_id));
+      if (!saved.error && ids.length) {
+        const recommended = await supabase.from("produtos").select("id,slug,nome,tipo_produto,preco").in("id", ids).eq("ativo", true).in("tipo_produto", ["edital", "combo"]);
+        const byId = new Map((recommended.data ?? []).map((item) => [String(item.id), item]));
+        upsells = ids.flatMap((id) => { const item = byId.get(id); if (!item?.slug || !item.nome) return []; const price = Number(item.preco); return [{ slug: String(item.slug), nome: String(item.nome), tipo: String(item.tipo_produto), preco: item.preco != null && Number.isFinite(price) && price >= 0 ? price : null }]; });
+      }
+    }
     return {
       slug: typeof produto.data.slug === "string" ? produto.data.slug : slug,
       tipoProduto: produto.data.tipo_produto,
@@ -168,6 +180,7 @@ async function carregarProdutoCatalogo(slug: string): Promise<ProdutoCatalogo | 
       freeScope,
       leis,
       totalFlashcards,
+      upsells,
     };
   } catch {
     return null;
@@ -529,6 +542,7 @@ async function PaginaProduto({ produto }: { produto: ProdutoCatalogo }) {
           {produto.freeStudyHref ? <FreeProductCard studyHref={produto.freeStudyHref} fullCf={produto.slug === "cf0800" && produto.freeScope && avulsa?.slug === "cf"} /> : <PurchaseCard hotmartUrl={produto.hotmartUrl} preco={produto.preco} />}
         </div>
       </section>
+      {produto.upsells.length ? <section className="space-y-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Amplie seus estudos</p><h2 className="mt-1 text-2xl font-black">Combos sugeridos</h2></div><div className="grid gap-3 sm:grid-cols-2">{produto.upsells.map((item) => <a key={item.slug} href={`/leisflashcards/${encodeURIComponent(item.slug)}`} className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 bg-white p-5 text-slate-950 transition hover:border-blue-400 hover:bg-blue-50"><span><span className="text-xs font-bold uppercase text-blue-700">{item.tipo === "edital" ? "Edital" : "Combo"}</span><strong className="mt-1 block">{item.nome}</strong>{item.preco !== null ? <span className="mt-2 block text-sm text-slate-600">{formatProductPrice(item.preco)}</span> : null}</span><span aria-hidden="true" className="text-xl font-black text-blue-700">→</span></a>)}</div></section> : null}
       {avulsa && commercialSummary && !produto.freeScope ? <LawModules summary={commercialSummary} /> : null}
       <section className="space-y-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold uppercase tracking-wide text-blue-300">Conteúdo incluído</p><h2 className="mt-1 text-2xl font-black">Leis do produto</h2></div>{!isLeiAvulsa && resumoLeis ? <p className="font-black text-slate-200">{resumoLeis}</p> : null}</div>
         {produto.leis.length ? <div className="grid gap-3 sm:grid-cols-2">{produto.leis.map((lei) => {

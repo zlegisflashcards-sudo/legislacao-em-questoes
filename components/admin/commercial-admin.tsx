@@ -403,7 +403,44 @@ function ProductPanel({ rows, laws, editing, setEditing, busy, mutate }: PanelPr
     <textarea name="observacao_administrativa" defaultValue={text(editing?.observacao_administrativa)} placeholder="Observação administrativa" /><input name="ordem" type="number" min="0" defaultValue={text(editing?.ordem) || "0"} required />
     <select name="ativo" defaultValue={editing?.ativo === false ? "false" : "true"}><option value="true">Ativo</option><option value="false">Inativo</option></select>
     {editing ? <CompositionEditor key={text(editing.id)} product={editing} laws={laws} busy={busy} mutate={mutate} /> : <p className="commercial-selection">Salve o produto primeiro para editar a composição de leis.</p>}
+    {editing && productType === "lei_avulsa" && Array.isArray(editing.leis) && editing.leis.some((link) => { const law = laws.find((item) => text(item.id) === text(object(link).lei_id)); return /^legisla.*espec.fic/i.test(text(law?.categoria)); }) ? <ProductUpsells key={text(editing.id)} productId={text(editing.id)} /> : null}
   </EditForm></>}</>;
+}
+
+function ProductUpsells({ productId }: { productId: string }) {
+  const [candidates, setCandidates] = useState<Array<{ id: string; nome: string; tipo_produto: string; suggested: boolean }>>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("Carregando sugestões…");
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setStatus("Carregando sugestões…"); setLoaded(false);
+    fetch(`/api/admin/comercial/produtos/${encodeURIComponent(productId)}/upsells`, { signal: controller.signal }).then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível carregar os upsells.");
+      setCandidates(data.candidates); setSelected(data.selected); setLoaded(true); setStatus("");
+    }).catch((error) => { if (!controller.signal.aborted) setStatus(error.message || "Não foi possível carregar os upsells."); });
+    return () => controller.abort();
+  }, [productId, retry]);
+  async function save() {
+    setSaving(true); setStatus("");
+    try {
+      const response = await fetch(`/api/admin/comercial/produtos/${encodeURIComponent(productId)}/upsells`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ selected }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar os upsells.");
+      setStatus("Upsells salvos. Eles aparecerão na página deste produto.");
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Não foi possível salvar os upsells."); }
+    finally { setSaving(false); }
+  }
+  return <section className="commercial-composition"><h3>Upsells: editais e combos</h3><p>Escolha um ou mais produtos para exibir nesta página. Os que incluem esta lei aparecem como sugestões.</p>
+    <input aria-label="Pesquisar editais e combos" placeholder="Pesquisar edital ou combo…" value={search} onChange={(event) => setSearch(event.target.value)} />
+    {candidates.filter((item) => item.nome.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR").trim())).map((item) => <label key={item.id} className="flex items-center gap-2"><input type="checkbox" checked={selected.includes(item.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.tipo_produto === "edital" ? "Edital" : "Combo"}: {item.nome}{item.suggested ? " · Sugestão: inclui esta lei" : ""}</span></label>)}
+    {!candidates.length && !status ? <p>Nenhum edital ou combo ativo inclui esta lei.</p> : null}
+    {status ? <p role="status">{status}</p> : null}{!loaded && status !== "Carregando sugestões…" ? <button type="button" className="admin-button secondary" onClick={() => setRetry((value) => value + 1)}>Tentar novamente</button> : null}<button type="button" className="admin-button primary" disabled={saving || !loaded} onClick={() => void save()}>{saving ? "Salvando…" : "Salvar upsells"}</button>
+  </section>;
 }
 
 function AnkiTutorialsPanel({ rows, busy, mutate }: { rows: Row[]; busy: boolean; mutate: PanelProps["mutate"] }) {
