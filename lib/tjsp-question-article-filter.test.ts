@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildLawApkg } from "./anki-apkg-export";
 import { parseLegisApkg } from "./anki-apkg-import";
-import { questionArticleIsInTjspScope, studyQuestionsInScope } from "./tjsp-question-article-filter";
+import { effectiveArticleFilter, parseScopeArticleFilter, questionArticleIsInTjspScope, studyQuestionsInScope } from "./tjsp-question-article-filter";
 
 const cpp = "7986ba0a-6707-46cd-9475-9ad5f52e3593";
 const cp = "3e03d11b-cf6e-43f3-9d35-760fd3034d9b";
@@ -60,5 +60,24 @@ describe("arts. do edital TJSP 02/2026 aplicados ao recorte de questões", () =>
     expect(read("app/api/questoes/[slug]/estudar/route.ts")).toContain("resolveQuestionsForLawScope(law.id, recorteId)");
     expect(read("lib/law-apkg-scope-download-server.ts")).toContain("resolveQuestionsForLawScope(context.lawId, recorteId)");
     expect(read("lib/law-question-scopes.ts")).toContain("studyQuestionsInScope(questions");
+  });
+});
+
+describe("campo manual de artigos do edital", () => {
+  const q = [259,260,261,267,274,275].map((a) => ({ id: String(a), structure_id: 644, ordem: ordem(a) }));
+  it("normaliza lista, faixas e artigos com sufixo", () => {
+    expect(parseScopeArticleFilter("0261–267; 274\n311-a, 5º, 5º")).toMatchObject({ok:true, value:"261-267, 274, 311-A, 5"});
+    expect(parseScopeArticleFilter("313-A a 313-B")).toMatchObject({ok:true,value:"313-A-313-B"});
+  });
+  it.each(["267-261","0", "artigos vários", "10,,12", "313-B-313-A", "1".repeat(501)])("rejeita %s", (input) => {
+    expect(parseScopeArticleFilter(input).ok).toBe(false);
+  });
+  it("mantém o padrão até salvar e deixa limpar o filtro sem mudar estruturas", () => {
+    expect(effectiveArticleFilter(61, cpp)).toContain("261-267");
+    expect(studyQuestionsInScope(q, [644], 61, cpp, "259-260").map(r=>r.id)).toEqual(["259", "260"]);
+    expect(studyQuestionsInScope(q, [644], 61, cpp, "")).toEqual(q);
+    expect(studyQuestionsInScope(q, [644], 61, "novo", "261-267, 274").map(r=>r.id)).toEqual(["261","267","274"]);
+    expect(studyQuestionsInScope(q, [999], 61, "novo", "261-267")).toEqual([]);
+    expect(studyQuestionsInScope(q, [644], 61, "novo", "inválido")).toEqual([]);
   });
 });

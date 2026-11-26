@@ -12,6 +12,7 @@ import type { ImportedQuestion, ImportIssue } from "@/lib/imported-question";
 import { compareQuestionStructureNames, creatableQuestionStructureTypes, normalizeQuestionStructureName, parseQuestionStructureTxt, planQuestionDeckStructure, questionCountsByStructure, validQuestionStructureParent, type CreatableQuestionStructureType, type QuestionStructureNode, type QuestionStructureType, type StructureImportMapping } from "@/lib/questoes-structure";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { descendantsForScope, questionsInScope, summarizeLawQuestionScopes } from "@/lib/law-question-scope-resolution";
+import { effectiveArticleFilter, parseScopeArticleFilter, studyQuestionsInScope } from "@/lib/tjsp-question-article-filter";
 import { ADMIN_QUESTION_SEARCH_LIMIT, ADMIN_QUESTION_SEARCH_MAX_LIMIT, adminQuestionSearchId, adminQuestionSearchTerms, parseAdminQuestionSearchFilter, parseAdminQuestionSearchSort, plainQuestionText } from "@/lib/admin-question-search";
 import { descendantStructureIds, groupDuplicateQuestionStatements, introducedDuplicateQuestionStatementIds, sameStructureQuestionStatement } from "@/lib/admin-question-management";
 import { groupImportSourceWarnings, importSourceKey, normalizedImportSource, validateImportSource, type ImportSourceFields } from "@/lib/legisbot/import-source";
@@ -112,8 +113,52 @@ async function scopeStructureIds(current: Law, requestedScopeId: unknown, nodes:
   if (links.error) fail("listar_estruturas_recorte_filtro_questoes", links.error);
   return descendantsForScope(nodes, (links.data ?? []).map((link) => Number(link.structure_id)));
 }
-export async function listLawQuestionScopes(lawSlug: string) { await requireAdmin(); const current = await law(lawSlug); const [scopes, nodes, questions, links] = await Promise.all([db().from("recortes_leis").select("id,nome,nome_exibicao,descricao,ativo,status_publicacao,acesso_gratuito,created_at,updated_at").eq("lei_id", current.id).order("nome"), structure(current.id), db().from("questions").select("id,structure_id").eq("lei_id", current.id).eq("ativo", true), db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id)]); if (scopes.error) fail("listar_recortes", scopes.error); if (questions.error) fail("contar_recortes", questions.error); if (links.error) fail("listar_estruturas_recortes", links.error); const scopeRows = scopes.data ?? []; const questionRows = questions.data ?? []; return { law: current, structure: nodes, questions: questionRows, unstructured_questions: nodes.length ? questionRows.filter((question) => question.structure_id === null).length : 0, recortes: summarizeLawQuestionScopes(scopeRows, links.data ?? [], nodes, questionRows) }; }
-export async function saveLawQuestionScope(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const name = text(body.nome, "Cód. do recorte"); const displayName = typeof body.nome_exibicao === "string" ? body.nome_exibicao.trim() : ""; const description = typeof body.descricao === "string" ? body.descricao.trim() : ""; const ids = Array.isArray(body.structure_ids) ? body.structure_ids.map(Number).filter((item) => Number.isSafeInteger(item) && item > 0) : []; const suppliedId = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null; const status = body.status_publicacao === "em_breve" || body.status_publicacao === "inativa" ? body.status_publicacao : "ativa"; const free = body.acesso_gratuito === true; const result = await db().rpc("admin_salvar_recorte_lei", { p_recorte_id: suppliedId, p_lei_id: current.id, p_nome: name, p_nome_exibicao: displayName, p_descricao: description, p_ativo: status !== "inativa", p_status_publicacao: status, p_acesso_gratuito: free, p_structure_ids: ids }); if (result.error || !result.data) fail("salvar_recorte", result.error); return { id: result.data, lei_id: current.id, nome: name, nome_exibicao: displayName || null, descricao: description, status_publicacao: status, acesso_gratuito: free, structure_ids: ids }; }
+export async function listLawQuestionScopes(lawSlug: string) {
+  await requireAdmin();
+  const current = await law(lawSlug);
+  const [scopes, nodes, questions, links] = await Promise.all([
+    db().from("recortes_leis").select("id,nome,nome_exibicao,descricao,ativo,status_publicacao,acesso_gratuito,artigos_filtro,created_at,updated_at").eq("lei_id", current.id).order("nome"),
+    structure(current.id),
+    collectPages(async (from, to) => {
+      const result = await db().from("questions").select("id,structure_id,ordem").eq("lei_id", current.id).eq("ativo", true).order("id").range(from, to);
+      if (result.error) fail("contar_recortes", result.error);
+      return result.data ?? [];
+    }, questionExportPageSize),
+    db().from("recortes_leis_estrutura").select("recorte_id,structure_id").eq("lei_id", current.id),
+  ]);
+  if (scopes.error) fail("listar_recortes", scopes.error);
+  if (links.error) fail("listar_estruturas_recortes", links.error);
+  const summaries = summarizeLawQuestionScopes(scopes.data ?? [], links.data ?? [], nodes, questions);
+  return { law: current, structure: nodes, questions, unstructured_questions: nodes.length ? questions.filter((question) => question.structure_id === null).length : 0,
+    recortes: summaries.map((scope) => {
+      const articleFilter = effectiveArticleFilter(current.id, scope.id, scope.artigos_filtro as string | null);
+      return { ...scope, artigos_filtro: articleFilter,
+        question_count: studyQuestionsInScope(questions, descendantsForScope(nodes, scope.structure_ids), current.id, scope.id, articleFilter).length };
+    }) };
+}
+
+export async function saveLawQuestionScope(body: Record<string, unknown>) {
+  await requireAdmin();
+  const current = await law(String(body.law_slug));
+  const name = text(body.nome, "Cód. do recorte");
+  const displayName = typeof body.nome_exibicao === "string" ? body.nome_exibicao.trim() : "";
+  const description = typeof body.descricao === "string" ? body.descricao.trim() : "";
+  const ids = Array.isArray(body.structure_ids) ? body.structure_ids.map(Number).filter((item) => Number.isSafeInteger(item) && item > 0) : [];
+  const suppliedId = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null;
+  const status = body.status_publicacao === "em_breve" || body.status_publicacao === "inativa" ? body.status_publicacao : "ativa";
+  const free = body.acesso_gratuito === true;
+  const args = { p_recorte_id: suppliedId, p_lei_id: current.id, p_nome: name, p_nome_exibicao: displayName, p_descricao: description, p_ativo: status !== "inativa", p_status_publicacao: status, p_acesso_gratuito: free, p_structure_ids: ids };
+  if (body.artigos_filtro !== undefined && typeof body.artigos_filtro !== "string") throw new AdminQuestoesError(400, "Informe os artigos como texto.");
+  const parsed = typeof body.artigos_filtro === "string" ? parseScopeArticleFilter(body.artigos_filtro) : undefined;
+  if (parsed && !parsed.ok) throw new AdminQuestoesError(400, parsed.error);
+  // Older clients may omit the field; do not overwrite a saved filter in that case.
+  const result = parsed
+    ? await db().rpc("admin_salvar_recorte_lei_com_artigos", { ...args, p_artigos_filtro: parsed.value })
+    : await db().rpc("admin_salvar_recorte_lei", args);
+  if (result.error?.code === "22023") throw new AdminQuestoesError(400, result.error.message);
+  if (result.error || !result.data) fail("salvar_recorte", result.error);
+  return { id: result.data, lei_id: current.id, nome: name, nome_exibicao: displayName || null, descricao: description, artigos_filtro: parsed?.value, status_publicacao: status, acesso_gratuito: free, structure_ids: ids };
+}
 export async function listQuestionContent(lawSlug: string) {
   const current = await law(lawSlug);
   const [questions, count, nodes] = await Promise.all([
