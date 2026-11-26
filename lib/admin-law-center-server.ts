@@ -56,10 +56,12 @@ export async function listAdminLawCenterLaws({ query = "", conference = "todas",
 export async function getAdminLawContextNavigation({ lawId, query = "", conference = "todas", productId = "", category = "" }: { lawId: number; query?: string; conference?: string; productId?: string; category?: string }) {
   await requireAdmin();
   const result = await listAdminLawCenterLaws({ query, conference, productId, category, limit: 100 });
-  const position = result.laws.findIndex((law) => law.id === lawId);
+  const remaining = await Promise.all(Array.from({ length: result.pages - 1 }, (_, index) => listAdminLawCenterLaws({ query, conference, productId, category, limit: 100, page: index + 2 })));
+  const laws = [result, ...remaining].flatMap((page) => page.laws);
+  const position = laws.findIndex((law) => law.id === lawId);
   return {
-    previous: position > 0 ? result.laws[position - 1] : null,
-    next: position >= 0 && position < result.laws.length - 1 ? result.laws[position + 1] : null,
+    previous: position > 0 ? laws[position - 1] : null,
+    next: position >= 0 && position < laws.length - 1 ? laws[position + 1] : null,
     total: result.total,
     selectedProduct: result.selectedProduct,
     selectedCategory: result.selectedCategory,
