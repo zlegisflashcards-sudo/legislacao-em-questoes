@@ -93,7 +93,7 @@ export async function loadPublicLawCommercialSummary({
       return result.data ?? [];
     }, PUBLIC_TREE_PAGE_SIZE),
     collectPages(async (from, to) => {
-      const result = await db.from("questions").select("structure_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      const result = await db.from("questions").select("structure_id,lei_id,ordem,assunto").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
       fail("Não foi possível carregar as questões da lei", result.error);
       return result.data ?? [];
     }, PUBLIC_TREE_PAGE_SIZE),
@@ -109,7 +109,7 @@ export async function loadPublicLawCommercialSummary({
     const parentId = item.parent_id === null ? null : numericId(item.parent_id);
     return id !== null && (item.parent_id === null || parentId !== null) ? [{ id, parent_id: parentId }] : [];
   }), structureIds(links.data ?? []));
-  const scopedQuestions = questionsInScope(questions.map((item, index) => ({ id: `question-${index}`, structure_id: numericId(item.structure_id) })), scopeIds);
+  const scopedQuestions = questionsInScope(questions.map((item, index) => ({ id: `question-${index}`, structure_id: numericId(item.structure_id), lei_id: numericId(item.lei_id) ?? undefined, ordem: text(item.ordem), assunto: text(item.assunto) })), scopeIds, recorteId);
   const scopedAudios = questionsInScope(audios.map((item, index) => ({ id: `audio-${index}`, structure_id: numericId(item.structure_id) })), scopeIds);
 
   return {
@@ -161,7 +161,7 @@ export async function loadPublicLawContentTree({
       return result.data ?? [];
     }, PUBLIC_TREE_PAGE_SIZE),
     collectPages(async (from, to) => {
-      const result = await db.from("questions").select("structure_id").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
+      const result = await db.from("questions").select("structure_id,lei_id,ordem,assunto").eq("lei_id", lawId).eq("ativo", true).order("id").range(from, to);
       fail("Não foi possível carregar as questões da lei", result.error);
       return result.data ?? [];
     }, PUBLIC_TREE_PAGE_SIZE),
@@ -172,9 +172,14 @@ export async function loadPublicLawContentTree({
     }, PUBLIC_TREE_PAGE_SIZE),
   ]);
 
+  const treeStructure = structureRows(structure);
+  const questionRows = questions.map((row, index) => ({ id: `question-${index}`, structure_id: numericId(row.structure_id), lei_id: numericId(row.lei_id) ?? undefined, ordem: text(row.ordem), assunto: text(row.assunto) }));
+  const filteredQuestions = recorteId && scopeStructureIds !== null
+    ? questionsInScope(questionRows, descendantsForScope(treeStructure, scopeStructureIds), recorteId)
+    : questionRows;
   return buildPublicLawContentTree({
-    structure: structureRows(structure),
-    questions: questions.map((row) => ({ structure_id: numericId(row.structure_id) })),
+    structure: treeStructure,
+    questions: filteredQuestions,
     audios: audios.map((row) => ({ structure_id: numericId(row.structure_id) })),
     scopeStructureIds,
   });

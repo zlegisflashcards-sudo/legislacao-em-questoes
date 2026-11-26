@@ -17,5 +17,5 @@ export async function resolveQuestionsForLawScope(leiId: number, recorteId: stri
   ]);
   if (links.error) throw new Error(`Não foi possível carregar as regras do recorte: ${links.error.message}`);
   const selected = (links.data ?? []).map((row) => Number(row.structure_id)).filter(Number.isSafeInteger);
-  return questionsInScope(questions, descendantsForScope(nodes, selected));
+  return questionsInScope(questions, descendantsForScope(nodes, selected), recorteId);
 }

@@ -33,8 +33,8 @@ const QUESTION_PAGE_SIZE = 200;
  */
 async function activeQuestionsForLaws(lawIds: number[]) {
   const db = getSupabaseServerClient();
-  return collectPages<{ id: string; lei_id: number; structure_id: number | null }>(async (from, to) => {
-    const result = await db.from("questions").select("id,lei_id,structure_id").in("lei_id", lawIds).eq("ativo", true).order("id").range(from, to);
+  return collectPages<{ id: string; lei_id: number; structure_id: number | null; ordem: string; assunto: string | null }>(async (from, to) => {
+    const result = await db.from("questions").select("id,lei_id,structure_id,ordem,assunto").in("lei_id", lawIds).eq("ativo", true).order("id").range(from, to);
     if (result.error) throw new Error(`Não foi possível carregar as questões dos contextos de estudo: ${result.error.message}`);
     return result.data ?? [];
   }, QUESTION_PAGE_SIZE);
@@ -78,7 +78,7 @@ export async function listLawStudyContexts(studentId: string, lawId: number): Pr
     if (!fullAccess && !scope.acesso_gratuito && !requestedScopeIds.includes(scope.id)) continue;
     const selected = linksByScope.get(scope.id) ?? [];
     const structureIds = descendantsForScope(structure, selected);
-    const scopedQuestions = questionsInScope(questions, structureIds);
+    const scopedQuestions = questionsInScope(questions, structureIds, scope.id);
     contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: scopedQuestions.length, structureIds, questionIds: scopedQuestions.map((question) => question.id), availability: scope.status_publicacao === "em_breve" ? "coming_soon" : "ready" });
   }
   return contexts;
@@ -115,7 +115,7 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
   if (structureResult.error) throw new Error(`Não foi possível carregar a estrutura dos contextos de estudo: ${structureResult.error.message}`);
   if (scopeLinksResult.error || freeLawsResult.error) throw new Error(`Não foi possível carregar a estrutura dos recortes liberados: ${scopeLinksResult.error?.message ?? freeLawsResult.error?.message}`);
   const freeLawIds = new Set((freeLawsResult.data ?? []).flatMap((law) => law.acesso_gratuito === true ? [law.id] : []));
-  const questionsByLaw = new Map<number, Array<{ id: string; structure_id: number | null }>>();
+  const questionsByLaw = new Map<number, typeof questions>();
   for (const question of questions) questionsByLaw.set(question.lei_id, [...(questionsByLaw.get(question.lei_id) ?? []), question]);
   const structureByLaw = new Map<number, Array<{ id: number; parent_id: number | null }>>();
   for (const node of structureResult.data ?? []) structureByLaw.set(node.lei_id, [...(structureByLaw.get(node.lei_id) ?? []), node]);
@@ -135,7 +135,7 @@ export async function listLawStudyContextsByLaw(studentId: string, lawIds: numbe
     for (const scope of scopesByLaw.get(lawId) ?? []) {
       if (!access.full && !scope.acesso_gratuito && !access.recorteIds.includes(scope.id)) continue;
       const structureIds = descendantsForScope(structure, scopeLinksById.get(scope.id) ?? []);
-      const scopedQuestions = questionsInScope(questions, structureIds);
+      const scopedQuestions = questionsInScope(questions, structureIds, scope.id);
       contexts.push({ recorteId: scope.id, nome: scope.nome, questionCount: scopedQuestions.length, structureIds, questionIds: scopedQuestions.map((question) => question.id), availability: scope.status_publicacao === "em_breve" ? "coming_soon" : "ready" });
     }
     contextsByLaw.set(lawId, contexts);

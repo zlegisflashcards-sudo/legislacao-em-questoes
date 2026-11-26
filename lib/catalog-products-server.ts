@@ -4,6 +4,8 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { isOfflineBuild } from "@/lib/build-mode";
 import { activeQuestionCountsBySlug } from "@/lib/question-counts-server";
 import { mainStructure } from "@/lib/questions-main-server";
+import { tjspArticleRule } from "@/lib/tjsp-article-scope";
+import { resolveQuestionsForLawScope } from "@/lib/law-question-scopes";
 import { descendantsForScope } from "@/lib/law-question-scope-resolution";
 import { aggregateCatalogModuleAvailability, catalogModules, type CatalogModuleAvailability, unavailableCatalogModules } from "@/lib/catalog-module-availability";
 
@@ -61,10 +63,14 @@ async function countCatalogScopes(supabase: CatalogClient, targets: CatalogScope
 
   const structureByLaw = new Map<number, ReturnType<typeof mainStructure>>();
   const uniqueTargets = new Map(targets.map((target) => [catalogScopeKey(target.lawId, target.scopeId), target]));
-  await Promise.all([...uniqueTargets].map(async ([key, { lawId }]) => {
+  await Promise.all([...uniqueTargets].map(async ([key, { lawId, scopeId }]) => {
     const selected = selectedByScope.get(key);
     if (!selected?.length) return;
     try {
+      if (tjspArticleRule(scopeId)) {
+        counts.set(key, (await resolveQuestionsForLawScope(lawId, scopeId)).length);
+        return;
+      }
       const pendingStructure = structureByLaw.get(lawId) ?? mainStructure(lawId);
       structureByLaw.set(lawId, pendingStructure);
       const structure = await pendingStructure;
