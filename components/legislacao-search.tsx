@@ -79,7 +79,7 @@ export function LegislacaoSearch({
         />
 
         {(sugestoesProdutos.length > 0 || sugestoes.length > 0 || shouldShowEmptyState) && (
-          <div className="absolute left-0 right-0 top-16 z-10 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+          <div className="absolute inset-x-0 top-full z-10 max-h-[min(24rem,50dvh)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white shadow-2xl">
             {sugestoesProdutos.length > 0 ? (
               <ul>
                 {sugestoesProdutos.map((produto) => (

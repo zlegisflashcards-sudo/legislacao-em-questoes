@@ -185,7 +185,7 @@ export function HomeCategoriasVadeMecum({
 
       <SiteHeroCarousel />
 
-      <section className="space-y-4 rounded-[22px] border border-blue-300/20 bg-slate-950/70 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.26)] sm:p-6">
+      <section className="relative z-10 space-y-4 rounded-[22px] border border-blue-300/20 bg-slate-950/70 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.26)] sm:p-6">
         <div className="space-y-1">
           <h2 className="text-xl font-black text-white">
             Buscar legislações e produtos
@@ -219,7 +219,7 @@ export function HomeCategoriasVadeMecum({
         </div>
       </section>
 
-      <section className="space-y-5">
+      <section className="isolate space-y-5">
         <div className="max-w-3xl space-y-2">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">
             Estes produtos estão em alta
