@@ -6,13 +6,14 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 export type AdminLaw = Record<string, unknown> & { id: number; slug: string; titulo: string; codigo?: unknown; ativo: boolean; status_publicacao: "ativa" | "em_breve" | "inativa"; situacao_conferencia: "para_conferir" | "conferido" | null };
 export type AdminLawProductFilter = { id: string; nome: string; tipo_produto: "edital" | "combo" };
+export type AdminLawCategoryFilter = { value: string; label: string };
 export { ADMIN_LAW_CONFERENCE_FILTERS, adminLawConferenceFilter, type AdminLawConferenceFilter } from "@/lib/admin-law-listing";
 
 async function requireAdmin() {
   if (!await obterAdministrador()) throw new Error("Autenticação administrativa obrigatória.");
 }
 
-export async function listAdminLawCenterLaws({ query = "", conference = "todas", productId = "", page = 1, limit = 25 }: { query?: string; conference?: string; productId?: string; page?: number; limit?: number } = {}) {
+export async function listAdminLawCenterLaws({ query = "", conference = "todas", productId = "", category = "", page = 1, limit = 25 }: { query?: string; conference?: string; productId?: string; category?: string; page?: number; limit?: number } = {}) {
   await requireAdmin();
   const db = getSupabaseServerClient();
   const selectedConference = adminLawConferenceFilter(conference);
@@ -20,16 +21,21 @@ export async function listAdminLawCenterLaws({ query = "", conference = "todas",
   if (productsResult.error) throw new Error("Não foi possível carregar os editais e combos.");
   const products = (productsResult.data ?? []) as AdminLawProductFilter[];
   const selectedProduct = products.find((product) => product.id === productId) ?? null;
+  const categoriesResult = await db.from("leis").select("categoria").not("categoria", "is", null).order("categoria");
+  if (categoriesResult.error) throw new Error("Não foi possível carregar os tipos de lei.");
+  const categories = [...new Set((categoriesResult.data ?? []).map((row) => String(row.categoria ?? "").trim()).filter(Boolean))].map((value) => ({ value, label: value }));
+  const selectedCategory = categories.some((item) => item.value === category) ? category : "";
   let request = db.from("leis").select("id,slug,titulo,nome_curto,codigo,categoria,ativo,status_publicacao,situacao_conferencia,ordem", { count: "exact" });
   const normalized = query.trim().slice(0, 120).replace(/[%_,()]/g, " ").replace(/\s+/g, " ");
   if (normalized) request = request.or(`slug.ilike.%${normalized}%,titulo.ilike.%${normalized}%,nome_curto.ilike.%${normalized}%,codigo.ilike.%${normalized}%`);
   const persistedConference = adminLawConferenceStatus(selectedConference);
   if (persistedConference) request = request.eq("situacao_conferencia", persistedConference);
+  if (selectedCategory) request = request.eq("categoria", selectedCategory);
   if (selectedProduct) {
     const links = await db.from("produto_leis").select("lei_id").eq("produto_id", selectedProduct.id);
     if (links.error) throw new Error("Não foi possível carregar as leis do edital ou combo.");
     const lawIds = [...new Set((links.data ?? []).map((link) => Number(link.lei_id)).filter(Number.isInteger))];
-    if (!lawIds.length) return { laws: [], total: 0, page: 1, pages: 1, conference: selectedConference, products, selectedProduct };
+    if (!lawIds.length) return { laws: [], total: 0, page: 1, pages: 1, conference: selectedConference, products, selectedProduct, categories, selectedCategory };
     request = request.in("id", lawIds);
   }
   const safeLimit = Math.min(Math.max(Math.trunc(limit) || 25, 1), 100);
@@ -43,7 +49,21 @@ export async function listAdminLawCenterLaws({ query = "", conference = "todas",
     result = await request.order("ordem").order("titulo").range((safePage - 1) * safeLimit, safePage * safeLimit - 1);
     if (result.error) throw new Error("Não foi possível carregar as leis.");
   }
-  return { laws: (result.data ?? []) as AdminLaw[], total, page: safePage, pages, conference: selectedConference, products, selectedProduct };
+  return { laws: (result.data ?? []) as AdminLaw[], total, page: safePage, pages, conference: selectedConference, products, selectedProduct, categories, selectedCategory };
+}
+
+/** Leis adjacentes no recorte fixado para a conferência editorial. */
+export async function getAdminLawContextNavigation({ lawId, query = "", conference = "todas", productId = "", category = "" }: { lawId: number; query?: string; conference?: string; productId?: string; category?: string }) {
+  await requireAdmin();
+  const result = await listAdminLawCenterLaws({ query, conference, productId, category, limit: 100 });
+  const position = result.laws.findIndex((law) => law.id === lawId);
+  return {
+    previous: position > 0 ? result.laws[position - 1] : null,
+    next: position >= 0 && position < result.laws.length - 1 ? result.laws[position + 1] : null,
+    total: result.total,
+    selectedProduct: result.selectedProduct,
+    selectedCategory: result.selectedCategory,
+  };
 }
 
 export async function getAdminLawBySlug(slug: string) {
