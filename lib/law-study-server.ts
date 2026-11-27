@@ -105,7 +105,7 @@ export async function authenticateLawStudent(request: Request, slug: string) {
     // study surface authenticates through this function, so a second serial
     // query here delayed the law page, Anki and LegisCast alike.
     supabase.from("alunos").select("id,deve_trocar_senha").eq("user_id", userData.user.id).maybeSingle(),
-    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito,ultima_alteracao_referencia,houve_alteracao_legislativa").eq("slug", normalizedSlug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
+    supabase.from("leis").select("id,slug,titulo,nome_curto,codigo,acesso_gratuito,ultima_alteracao_referencia,houve_alteracao_legislativa,total_artigos").eq("slug", normalizedSlug).eq("ativo", true).eq("status_publicacao", "ativa").maybeSingle(),
   ]);
   if (studentError) throw new LawStudyApiError(503, "Não foi possível verificar seu acesso agora.");
   const student = record(studentData);
