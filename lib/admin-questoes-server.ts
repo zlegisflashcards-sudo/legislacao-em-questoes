@@ -1,5 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import { buildBulkQuestionDeletionPayload, bulkDeletionConfirmationText, bulkDeletionHasSearchFilters } from "@/lib/admin-bulk-question-deletion";
+import { createBulkDeletionPreviewToken, matchesBulkDeletionPreviewToken, type BulkDeletionPreviewBinding } from "@/lib/admin-bulk-question-deletion-server";
 import { obterAdministrador } from "@/lib/admin-auth";
 import { parseQuestionDraft, questionDeckDefaults, totalArticlesFromReferenceOrders, type QuestionDraft } from "@/lib/admin-questoes";
 import { normalizeQuestionLegalReference } from "@/lib/question-legal-reference";
@@ -675,13 +677,115 @@ export async function updateQuickAdminQuestion(body: Record<string, unknown>) { 
 async function deleteContentRpc(current: Law, userId: string, questionIds: string[] | null, structureId: number | null, execute: boolean, confirmation?: unknown, jobAction?: unknown) { const result = await db().rpc("admin_delete_law_content_v3", { p_lei_id: current.id, p_question_ids: questionIds, p_structure_id: structureId, p_actor_user_id: userId, p_confirmation: typeof confirmation === "string" ? confirmation : null, p_execute: execute, p_job_action: jobAction === "detach_completed" || jobAction === "cancel_active" ? jobAction : null }); if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : 422, result.error.message); if (!result.data) throw new AdminQuestoesError(404, "Conteúdo não encontrado para exclusão."); return result.data as Record<string, unknown>; }
 export async function questionDeletionSummary(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); return deleteContentRpc(current, user.id, [qid(body.id)], null, false); }
 export async function deleteAdminQuestion(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); return deleteContentRpc(current, user.id, [qid(body.id)], null, true, body.confirmation); }
-async function bulkQuestionIds(current: Law, body: Record<string, unknown>) {
+function bulkQuestionDeletionTarget(current: Law, body: Record<string, unknown>) {
   const scope = body.scope;
-  if (scope === "all") { const result = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true); if (result.error) fail("selecionar_todas_questoes", result.error); return (result.data ?? []).map((row) => String(row.id)); }
-  if (scope === "structure") { const nodeId = id(body.structure_id); const nodes = await structure(current.id); const descendants = descendantStructureIds(nodes, nodeId); if (!descendants.length) throw new AdminQuestoesError(404, "Estrutura não encontrada para esta lei."); const result = await db().from("questions").select("id").eq("lei_id", current.id).eq("ativo", true).in("structure_id", descendants); if (result.error) fail("selecionar_questoes_estrutura", result.error); return (result.data ?? []).map((row) => String(row.id)); }
-  if (scope === "questions") { const ids = Array.isArray(body.question_ids) ? body.question_ids.map(qid) : []; if (!ids.length || new Set(ids).size !== ids.length) throw new AdminQuestoesError(400, "Informe uma lista não vazia de questões sem duplicidades."); return ids; }
-  if (scope === "results") { const ids: string[] = []; let page = 1; let pages = 1; do { const result = await searchAdminQuestions({ lawSlug: current.slug, query: body.query, filter: body.filter, article: body.article, structureId: body.structure_id, scopeId: body.recorte_id, page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT }); ids.push(...result.results.map((row) => row.id)); pages = result.pages; page += 1; } while (page <= pages); return ids; }
-  throw new AdminQuestoesError(400, "Escopo de exclusão em massa inválido.");
+  if (scope === "questions") {
+    const ids = Array.isArray(body.question_ids) ? body.question_ids.map(qid) : [];
+    if (!ids.length || new Set(ids).size !== ids.length) {
+      throw new AdminQuestoesError(400, "Informe uma lista não vazia de questões sem duplicidades.");
+    }
+    return { law_slug: current.slug, lei_id: current.id, scope, question_ids: ids.sort() } as const;
+  }
+  if (scope !== "all" && scope !== "structure" && scope !== "results") {
+    throw new AdminQuestoesError(400, "Escopo de exclusão em massa inválido.");
+  }
+  const target = buildBulkQuestionDeletionPayload({
+    lawSlug: current.slug, scope,
+    structureId: scope === "all" || body.structure_id == null || body.structure_id === "" ? null : id(body.structure_id),
+    scopeId: scope === "all" || body.recorte_id == null || body.recorte_id === "" ? null : scopeId(body.recorte_id),
+    query: typeof body.query === "string" ? body.query : "",
+    filter: parseAdminQuestionSearchFilter(body.filter),
+    article: typeof body.article === "string" ? body.article : "",
+  });
+  if (scope === "structure" && !target.structure_id) {
+    throw new AdminQuestoesError(422, "Selecione uma estrutura antes de excluir suas questões e descendentes.");
+  }
+  if (scope === "results" && !bulkDeletionHasSearchFilters(target)) {
+    throw new AdminQuestoesError(422, "Aplique um filtro ou selecione explicitamente a exclusão da lei inteira.");
+  }
+  return { ...target, lei_id: current.id };
+}
+
+async function bulkQuestionIds(target: ReturnType<typeof bulkQuestionDeletionTarget>) {
+  if (target.scope === "questions") {
+    const ids: string[] = [];
+    for (let offset = 0; offset < target.question_ids.length; offset += 100) {
+      const chunk = target.question_ids.slice(offset, offset + 100);
+      const result = await db().from("questions").select("id").eq("lei_id", target.lei_id).eq("ativo", true).in("id", chunk);
+      if (result.error) fail("validar_questoes_exclusao_lote", result.error);
+      ids.push(...(result.data ?? []).map((row) => String(row.id)));
+    }
+    if (ids.length !== target.question_ids.length) {
+      throw new AdminQuestoesError(409, "Alguma questão não está mais disponível neste escopo. Gere uma nova prévia.");
+    }
+    return ids;
+  }
+  // Reuse the listing logic, including intersection of chapter and recorte,
+  // article limits, and a stable order when the result spans multiple pages.
+  const ids: string[] = [];
+  let total: number | undefined;
+  for (let page = 1; ; page += 1) {
+    const result = await searchAdminQuestions({
+      lawSlug: target.law_slug, query: target.query, filter: target.filter, article: target.article,
+      structureId: target.structure_id, scopeId: target.recorte_id,
+      sort: "ordem_asc", page, limit: ADMIN_QUESTION_SEARCH_MAX_LIMIT,
+    });
+    total ??= result.total;
+    if (result.total !== total) throw new AdminQuestoesError(409, "O lote mudou. Gere uma nova prévia.");
+    ids.push(...result.results.map((row) => row.id));
+    if (page >= result.pages) break;
+  }
+  if (ids.length !== total || new Set(ids).size !== ids.length) {
+    throw new AdminQuestoesError(409, "Não foi possível verificar o lote inteiro. Gere uma nova prévia.");
+  }
+  if (!ids.length) throw new AdminQuestoesError(422, "Não há questões para excluir neste escopo.");
+  return ids;
+}
+
+function bulkDeletionBinding(actorId: string, target: ReturnType<typeof bulkQuestionDeletionTarget>, ids: string[], summary: Record<string, unknown>): BulkDeletionPreviewBinding {
+  const questions = summary.questions_count;
+  const answers = summary.answers_count;
+  const progress = summary.progresses_count;
+  const campaigns = Array.isArray(summary.campaigns) ? summary.campaigns.map((campaign) => String(campaign.id)) : [];
+  if (questions !== ids.length || campaigns.length !== summary.campaigns_count ||
+      typeof answers !== "number" || typeof progress !== "number") {
+    throw new AdminQuestoesError(409, "O lote mudou. Gere uma nova prévia.");
+  }
+  return { actorId, target, ids, impact: { questions, answers, progress, campaigns } };
+}
+
+function bulkDeletionPreviewSecret() {
+  // Server-only; the browser receives only the HMAC, never the signing key.
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new AdminQuestoesError(500, "Configuração de confirmação de exclusão indisponível.");
+  return secret;
+}
+
+export async function bulkQuestionDeletionSummary(body: Record<string, unknown>) {
+  const user = await requireAdmin();
+  const current = await law(String(body.law_slug));
+  const target = bulkQuestionDeletionTarget(current, body);
+  const ids = await bulkQuestionIds(target);
+  const summary = await deleteContentRpc(current, user.id, ids, null, false);
+  const previewToken = createBulkDeletionPreviewToken(bulkDeletionPreviewSecret(), bulkDeletionBinding(user.id, target, ids, summary));
+  return { ...summary, preview_token: previewToken };
+}
+
+export async function deleteBulkAdminQuestions(body: Record<string, unknown>) {
+  const user = await requireAdmin();
+  const current = await law(String(body.law_slug));
+  const target = bulkQuestionDeletionTarget(current, body);
+  const confirmation = bulkDeletionConfirmationText(target.scope === "questions" ? "results" : target.scope);
+  if (body.confirmation !== confirmation) throw new AdminQuestoesError(422, `Digite ${confirmation} para confirmar a exclusão em massa.`);
+  if (typeof body.preview_token !== "string") throw new AdminQuestoesError(409, "Gere uma prévia antes de confirmar a exclusão.");
+  const ids = await bulkQuestionIds(target);
+  const summary = await deleteContentRpc(current, user.id, ids, null, false);
+  const binding = bulkDeletionBinding(user.id, target, ids, summary);
+  if (!matchesBulkDeletionPreviewToken(bulkDeletionPreviewSecret(), body.preview_token, binding)) {
+    throw new AdminQuestoesError(409, "A prévia expirou ou o lote mudou. Confira uma nova prévia.");
+  }
+  // A transação recebe exatamente estes IDs verificados e não reabre o filtro.
+  return deleteContentRpc(current, user.id, ids, null, true, "EXCLUIR");
 }
 
 async function bulkQuestionEditIds(current: Law, body: Record<string, unknown>, scope: BulkQuestionEditScope) {
@@ -749,8 +853,6 @@ export async function applyBulkQuestionTextReplacement(body: Record<string, unkn
   if (result.error) throw new AdminQuestoesError(result.error.code === "42501" ? 403 : ["PT409", "40001"].includes(result.error.code ?? "") ? 409 : 422, result.error.message);
   return result.data;
 }
-export async function bulkQuestionDeletionSummary(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const ids = await bulkQuestionIds(current, body); if (!ids.length) throw new AdminQuestoesError(422, "Não há questões para excluir neste escopo."); return deleteContentRpc(current, user.id, ids, null, false); }
-export async function deleteBulkAdminQuestions(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); if (body.confirmation !== "EXCLUIR") throw new AdminQuestoesError(422, "Digite EXCLUIR para confirmar a exclusão em massa."); const ids = await bulkQuestionIds(current, body); if (!ids.length) throw new AdminQuestoesError(422, "Não há questões para excluir neste escopo."); return deleteContentRpc(current, user.id, ids, null, true, body.confirmation); }
 export async function deactivateAdminQuestion(body: Record<string, unknown>) { const user = await requireAdmin(); const current = await law(String(body.law_slug)); const questionId = qid(body.id); const before = await db().from("questions").select(questionFields).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).maybeSingle(); if (before.error) fail("ler_questao_antes_inativar", before.error); if (!before.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const r = await db().from("questions").update({ ativo: false }).eq("id", questionId).eq("lei_id", current.id).eq("ativo", true).select(questionFields).maybeSingle(); if (r.error) fail("desativar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada para a lei selecionada."); const audit = await db().rpc("admin_comercial_auditar", { p_ator_user_id: user.id, p_acao: "inativar", p_entidade: "questao", p_entidade_id: questionId, p_anterior: before.data, p_posterior: r.data, p_detalhes: { origem: "administracao_questoes", slug: before.data.slug, ordem: before.data.ordem } }); if (audit.error) console.error("Falha ao auditar inativação de questão", { questionId, code: audit.error.code }); return { id: r.data.id, ativo: false }; }
 export async function reactivateAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const r = await db().from("questions").update({ ativo: true }).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", false).select("id").maybeSingle(); if (r.error) fail("reativar_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão inativa não encontrada para a lei selecionada."); return { id: r.data.id, ativo: true }; }
 export async function moveAdminQuestion(body: Record<string, unknown>) { await requireAdmin(); const current = await law(String(body.law_slug)); const destination = optionalId(body.structure_id); await validateStructure(current.id, destination); const r = await db().from("questions").update({ structure_id: destination }).eq("id", qid(body.id)).eq("lei_id", current.id).eq("ativo", true).select("id").maybeSingle(); if (r.error) fail("mover_questao", r.error); if (!r.data) throw new AdminQuestoesError(404, "Questão ativa não encontrada."); return { id: r.data.id, structure_id: destination }; }
