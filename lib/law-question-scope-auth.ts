@@ -15,7 +15,9 @@ export async function authorizeLawQuestionScope(request: Request, slug: string, 
   if (!/^[0-9a-f-]{36}$/i.test(recorteId)) throw new LawStudyApiError(400, "Recorte de lei inválido.");
   const scope = contexts.find((item) => item.recorteId === recorteId);
   if (!scope || scope.availability !== "ready") throw new LawStudyApiError(403, "Este recorte não está disponível para estudo.");
-  return { ...context, recorte: { id: recorteId, nome: scope.nome }, structureIds: scope.structureIds, questionIds: scope.questionIds ?? [] };
+  // O PDF integral só aparece para quem também passa pela autorização normal da lei.
+  const includeFullPdf = contexts.some((item) => item.recorteId === null && item.availability === "ready");
+  return { ...context, recorte: { id: recorteId, nome: scope.nome }, structureIds: scope.structureIds, questionIds: scope.questionIds ?? [], includeFullPdf };
 }
 
 /** Lista os contextos disponíveis sem pressupor que a lei completa foi liberada. */

@@ -138,18 +138,22 @@ export async function authorizeLawStudy(
   return context;
 }
 
-export async function loadLawStudy(request: Request, slug: string, authorizedContext?: Awaited<ReturnType<typeof authenticateLawStudent>> & { recorte?: { id: string; nome: string } | null; questionIds?: string[] }): Promise<LawStudyData> {
+export async function loadLawStudy(request: Request, slug: string, authorizedContext?: Awaited<ReturnType<typeof authenticateLawStudent>> & { recorte?: { id: string; nome: string } | null; questionIds?: string[]; includeFullPdf?: boolean }): Promise<LawStudyData> {
   const { supabase, lawId, title, law, studentId } = authorizedContext ?? await authorizeLawStudy(request, slug);
   const scoped = authorizedContext?.recorte?.id ?? null;
+  const canShowMaterials = !scoped || authorizedContext?.includeFullPdf === true;
+  const materialsQuery = canShowMaterials
+    ? supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true)
+    : null;
   const [materialsResult, historyResult, progressResult, totalFlashcards] = await Promise.all([
-    scoped ? Promise.resolve({ data: [], error: null }) : supabase.from("materiais_leis").select("id,tipo,titulo,descricao,provedor,url_externa,acao,quantidade_itens,versao_material,data_entrega_prevista").eq("lei_id", lawId).eq("ativo", true).order("ordem", { ascending: true }).order("id", { ascending: true }),
+    (scoped ? materialsQuery?.eq("tipo", "pdf") : materialsQuery)?.order("ordem", { ascending: true }).order("id", { ascending: true }) ?? Promise.resolve({ data: [], error: null }),
     scoped ? Promise.resolve({ data: [], error: null }) : supabase.from("historico_atualizacoes_leis").select("id,tipo,importancia,titulo,descricao_resumida,referencia_normativa,versao_nova,data_publicacao,created_at").eq("lei_id", lawId).eq("visivel_aluno", true).order("data_publicacao", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }),
     scoped ? supabase.from("progresso_recortes_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).eq("recorte_id", scoped).maybeSingle() : supabase.from("progresso_leis_alunos").select("em_estudo,questoes_finalizadas").eq("aluno_id", studentId).eq("lei_id", lawId).maybeSingle(),
     scoped ? Promise.resolve(authorizedContext?.questionIds?.length ?? 0) : activeQuestionCountBySlug(slug),
   ]);
   if (materialsResult.error || historyResult.error || progressResult.error) throw new LawStudyApiError(503, "Não foi possível carregar os dados de estudo agora.");
 
-  const materials = parseLawStudyMaterials(materialsResult.data);
+  const materials = parseLawStudyMaterials(materialsResult.data).filter((item) => !scoped || item.type === "pdf");
   return {
     law: {
       id: lawId,
