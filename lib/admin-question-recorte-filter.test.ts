@@ -7,9 +7,10 @@ const client = readFileSync(new URL("../components/admin/admin-law-questions.tsx
 
 describe("filtro administrativo por recorte", () => {
   it("restringe busca, contagens e operações em lote ao recorte validado", () => {
-    expect(server).toContain("async function scopeStructureIds");
+    expect(server).toContain("async function adminQuestionScope");
     expect(server).toContain("scopeId: body.recorte_id");
-    expect(server).toContain("questionsInScope");
+    expect(server).toContain("studyQuestionsInScope");
+    expect(server).toContain("structureId: target.structure_id, scopeId: target.recorte_id");
     expect(route).toContain('searchParams.get("recorte_id")');
   });
 
