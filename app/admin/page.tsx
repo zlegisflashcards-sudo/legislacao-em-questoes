@@ -15,6 +15,12 @@ const panels = [
     title: "Gestão comercial",
     description: "Gerencie produtos, aquisições, liberações e a trilha de auditoria.",
   },
+  {
+    href: "/admin/legisdot-comercial",
+    icon: "💬",
+    title: "LegisDot Comercial",
+    description: "Teste o assistente de vendas e acompanhe o atendimento pelo WhatsApp.",
+  },
 ] as const;
 
 export default async function AdminPage() {
